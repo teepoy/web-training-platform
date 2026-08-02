@@ -57,10 +57,22 @@ test.describe("SC Reclassify warmup and sidebar @mock", () => {
     await expect(authedPage.getByText("Annotation").first()).toBeVisible();
     await expect(pom.headerSampleCount(0)).toBeVisible({ timeout: 5_000 });
 
-    await authedPage.getByRole("button", { name: "Global Filter" }).click();
-    await expect(
-      authedPage.getByRole("heading", { name: "Global Filter", exact: true }),
-    ).toBeVisible();
+    const datasetNameBox = await authedPage.getByTestId("sc-dataset-name").boundingBox();
+    const globalFilterButton = authedPage.getByTestId("sc-global-filter-trigger");
+    const globalFilterBox = await globalFilterButton.boundingBox();
+    expect(datasetNameBox).not.toBeNull();
+    expect(globalFilterBox).not.toBeNull();
+    expect(globalFilterBox!.x).toBeGreaterThan(datasetNameBox!.x + datasetNameBox!.width);
+    expect(
+      Math.abs(
+        globalFilterBox!.y +
+          globalFilterBox!.height / 2 -
+          (datasetNameBox!.y + datasetNameBox!.height / 2),
+      ),
+    ).toBeLessThan(4);
+
+    await globalFilterButton.click();
+    await expect(authedPage.getByText("Global Filters", { exact: true })).toBeVisible();
     await expect(authedPage.getByRole("button", { name: "Defect ID", exact: true })).toBeVisible();
     await expect(authedPage.getByRole("button", { name: "Confidence", exact: true })).toBeVisible();
 

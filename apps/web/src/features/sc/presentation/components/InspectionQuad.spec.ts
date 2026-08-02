@@ -22,19 +22,22 @@ const model = vi.hoisted(() => ({
   mapError: { value: null },
   mapProgressMessage: { value: "" },
   mapProgressPercent: { value: 0 },
+  retryMap: vi.fn(async () => undefined),
   sampleTableDataSource: { value: undefined as ScSampleTableDataSource | undefined },
   galleryLoading: { value: false },
   galleryQuery: { value: {} },
   mapSelectedDefectIds: { value: [] },
+  reviewMode: { value: false },
   tableSelection: { value: { kind: "ids", ids: [] } },
   loadGlobalDistinctValues: vi.fn(async () => []),
+  loadGlobalNumericRange: vi.fn(async () => null),
   setTableSelection: vi.fn(),
   setReviewMode: vi.fn(),
   queryBoxSelection: vi.fn(async () => []),
   queryLassoSelection: vi.fn(async () => []),
   queryLegendSelection: vi.fn(async () => []),
-  queryGlobalFilterCount: vi.fn(async () => 0),
-  queryRandomGlobalFilteredDefectIds: vi.fn(async () => []),
+  querySamplingCandidateCount: vi.fn(async () => 0),
+  querySamplingDefectIds: vi.fn(async () => []),
   applyMapSelection: vi.fn(async () => undefined),
   appendMapSelection: vi.fn(async () => []),
   clearMapSelection: vi.fn(async () => undefined),
@@ -61,6 +64,7 @@ vi.mock("./ScMapPanelBinned.vue", () => ({
       "zoom-in",
       "legend-group-change",
       "legend-select",
+      "retry",
     ],
     template: "<div />",
   },
@@ -68,8 +72,8 @@ vi.mock("./ScMapPanelBinned.vue", () => ({
 vi.mock("./ScGlobalFilterModal.vue", () => ({
   default: {
     name: "ScGlobalFilterModal",
-    props: ["show", "filter", "distinctValues"],
-    emits: ["update:show", "update:filter", "search-options"],
+    props: ["show", "filter", "distinctValues", "numericRanges", "numericRangeLoading"],
+    emits: ["update:show", "update:filter", "search-options", "request-range"],
     template: "<div />",
   },
 }));
@@ -95,12 +99,6 @@ vi.mock("@/features/sc/presentation/composables/useInspectionQuadData", () => ({
     return {
       workbench: {
         dataSource: { value: null },
-        error: { value: null },
-        reconnecting: { value: false },
-        reconnectFailed: { value: false },
-        reconnectAttempt: { value: 0 },
-        reconnectMaxAttempts: 2,
-        reconnect: vi.fn(),
       },
       dataReady: { value: true },
       model,
@@ -115,10 +113,34 @@ const requiredProps = {
 };
 
 describe("InspectionQuad state ownership", () => {
+  it("removes the toolbar grid row when the global filter trigger is teleported", async () => {
+    const target = document.createElement("div");
+    target.id = "global-filter-target";
+    document.body.append(target);
+    const { wrapper } = await mountWithProviders(InspectionQuad, {
+      props: {
+        variant: "reclassify",
+        datasetId: "dataset-1",
+        inspectionTime: "2026-08-01T04:00:00+08:00",
+        waferKey: 1,
+        globalFilterTriggerTarget: "#global-filter-target",
+      },
+      attachTo: document.body,
+    });
+
+    expect(wrapper.get(".iq-panel-left").attributes("style")).toContain(
+      "grid-template-rows: 55fr 10px 45fr",
+    );
+    wrapper.unmount();
+    target.remove();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     model.sampleTableDataSource.value = undefined;
+    model.reviewMode.value = false;
     model.loadGlobalDistinctValues.mockReset().mockResolvedValue([]);
+    model.loadGlobalNumericRange.mockReset().mockResolvedValue(null);
   });
 
   it("keeps the latest global-filter search result when requests finish out of order", async () => {
@@ -148,6 +170,24 @@ describe("InspectionQuad state ownership", () => {
     expect(filterModal.props("distinctValues")).toEqual({ test_id: [936] });
   });
 
+  it("loads numeric bounds when a global range filter opens", async () => {
+    model.loadGlobalNumericRange.mockResolvedValue({ min: 1.25, max: 98.5 });
+    const { wrapper } = await mountWithProviders(InspectionQuad, {
+      props: requiredProps,
+    });
+    const filterModal = wrapper.findComponent({ name: "ScGlobalFilterModal" });
+
+    filterModal.vm.$emit("request-range", "area");
+
+    await vi.waitFor(() => {
+      expect(filterModal.props("numericRanges")).toEqual({
+        area: { min: 1.25, max: 98.5 },
+      });
+    });
+    expect(model.loadGlobalNumericRange).toHaveBeenCalledWith("area");
+    expect(filterModal.props("numericRangeLoading")).toEqual({ area: false });
+  });
+
   it("owns filter updates and exposes only a cloned workflow snapshot", async () => {
     const { wrapper } = await mountWithProviders(InspectionQuad, {
       props: requiredProps,
@@ -173,6 +213,17 @@ describe("InspectionQuad state ownership", () => {
     if (snapshot.rough_bin?.filterType === "set") snapshot.rough_bin.values.push(99);
     expect(exposed.getGlobalFilter()).toEqual(filter);
     expect(wrapper.emitted("update:global-filter")).toBeUndefined();
+  });
+
+  it("retries only the failed map query from the map error action", async () => {
+    const { wrapper } = await mountWithProviders(InspectionQuad, {
+      props: requiredProps,
+    });
+
+    wrapper.findComponent({ name: "ScMapPanelBinned" }).vm.$emit("retry");
+    await wrapper.vm.$nextTick();
+
+    expect(model.retryMap).toHaveBeenCalledOnce();
   });
 
   it("clears local filter state when the inspection scope changes", async () => {
@@ -295,6 +346,20 @@ describe("InspectionQuad state ownership", () => {
     await vi.waitFor(() => {
       expect(model.applyMapSelection).toHaveBeenCalledWith([]);
     });
+    expect(wrapper.emitted("clear-gallery-random-sampling")).toHaveLength(1);
+  });
+
+  it("clears an active sampling cohort when Review mode changes", async () => {
+    const { wrapper } = await mountWithProviders(InspectionQuad, {
+      props: {
+        ...requiredProps,
+        galleryRandomSamplingDefectIds: new Set(["103"]),
+      },
+    });
+
+    wrapper.findComponent({ name: "ScBlinkVirtualTable" }).vm.$emit("mode-change", "review");
+
+    expect(model.setReviewMode).toHaveBeenCalledWith(true);
     expect(wrapper.emitted("clear-gallery-random-sampling")).toHaveLength(1);
   });
 });

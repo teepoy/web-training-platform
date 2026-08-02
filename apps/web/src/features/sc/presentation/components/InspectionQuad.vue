@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from "vue";
-import { NButton, NResult, NSelect } from "naive-ui";
+import { NButton, NSelect } from "naive-ui";
 import VChart from "vue-echarts";
 import { use } from "echarts/core";
 import { BarChart } from "echarts/charts";
@@ -26,6 +26,7 @@ import {
   type ReticleMapOptions,
 } from "@/features/sc/application/reticleMapOptions";
 import { useInspectionQuadData } from "@/features/sc/presentation/composables/useInspectionQuadData";
+import type { ScSamplingCandidateOptions } from "@/features/sc/presentation/composables/useSqlInspectionModel";
 
 use([BarChart, GridComponent, TooltipComponent, CanvasRenderer]);
 
@@ -46,6 +47,7 @@ const props = defineProps<{
   } | null;
   selectedDefectIds?: Array<number | string>;
   galleryRandomSamplingDefectIds?: Set<string>;
+  globalFilterTriggerTarget?: string;
 }>();
 
 const emit = defineEmits<{
@@ -71,7 +73,11 @@ const isColumnResizing = ref(false);
 const isRowResizing = ref(false);
 const isBarResizing = ref(false);
 const globalDistinctValues = ref<Record<string, Array<string | number>>>({});
+const globalNumericRanges = ref<Record<string, { min: number; max: number } | null>>({});
+const globalNumericRangeLoading = ref<Record<string, boolean>>({});
+const globalNumericRangeErrors = ref<Record<string, boolean>>({});
 const globalFilterSearchVersions = new Map<string, number>();
+const globalRangeVersions = new Map<string, number>();
 // Merge note for the follow-up workbench redesign: 89ae5235 kept global/table
 // filters and several map controls in ReclassifyPage. They are intentionally
 // local now because their controls and consumers all belong to this workbench.
@@ -110,6 +116,11 @@ const enabledLegendSources = computed<ScLegendSource[]>(() =>
     ? ["class", "bin", "annotation", "prediction", "final_class"]
     : ["class", "bin"],
 );
+const mapColorMapScopeKey = computed(() =>
+  props.datasetId
+    ? `dataset:${props.datasetId}`
+    : `inspection:${props.inspectionTime}:${props.waferKey}`,
+);
 const waferGeometryModel = computed(() => {
   const geometry = props.waferGeometry;
   if (!geometry) return null;
@@ -140,12 +151,23 @@ const { workbench, dataReady, model, reportDataError } = useInspectionQuadData({
   galleryRandomSamplingDefectIds: computed(() => props.galleryRandomSamplingDefectIds),
 });
 
-async function queryGlobalFilterCount(): Promise<number> {
-  return model.queryGlobalFilterCount();
+async function querySamplingCandidateCount(options: ScSamplingCandidateOptions): Promise<number> {
+  return model.querySamplingCandidateCount(options);
 }
 
-async function queryRandomGlobalFilteredDefectIds(count: number): Promise<number[]> {
-  return model.queryRandomGlobalFilteredDefectIds(count);
+async function querySamplingDefectIds(
+  count: number,
+  seed: number,
+  options: ScSamplingCandidateOptions,
+): Promise<number[]> {
+  return model.querySamplingDefectIds(count, seed, options);
+}
+
+function getSamplingContext(): { reviewMode: boolean; mapSelectionCount: number } {
+  return {
+    reviewMode: model.reviewMode.value,
+    mapSelectionCount: model.mapSelectedDefectIds.value.length,
+  };
 }
 
 function emptyMapZoomByMode(): Record<MapMode, MapViewport | null> {
@@ -203,7 +225,18 @@ function handleTableFilterChange(filter: ScSampleTableFilter): void {
   if (Object.keys(filter).length > 0) clearGalleryRandomSamplingIfActive();
 }
 
-defineExpose({ getGlobalFilter, queryGlobalFilterCount, queryRandomGlobalFilteredDefectIds });
+function handleReviewModeChange(mode: "patch" | "review"): void {
+  const nextReviewMode = mode === "review";
+  if (model.reviewMode.value !== nextReviewMode) clearGalleryRandomSamplingIfActive();
+  model.setReviewMode(nextReviewMode);
+}
+
+defineExpose({
+  getGlobalFilter,
+  getSamplingContext,
+  querySamplingCandidateCount,
+  querySamplingDefectIds,
+});
 
 watch(
   () => [props.variant ?? "preview", props.datasetId ?? "", props.inspectionTime, props.waferKey],
@@ -212,7 +245,11 @@ watch(
     globalFilter.value = {};
     globalFilterModalVisible.value = false;
     globalDistinctValues.value = {};
+    globalNumericRanges.value = {};
+    globalNumericRangeLoading.value = {};
+    globalNumericRangeErrors.value = {};
     globalFilterSearchVersions.clear();
+    globalRangeVersions.clear();
     activeMapTab.value = "wafer";
     mapZoomByMode.value = emptyMapZoomByMode();
     reticleOptions.value = normalizeReticleMapOptions(DEFAULT_RETICLE_MAP_OPTIONS);
@@ -233,25 +270,8 @@ const selectedDefectIdsModel = computed(() =>
     : props.selectedDefectIds.map(String),
 );
 const blinkHighlightIds = computed(() => new Set(selectedDefectIdsModel.value));
-const dataSourceMaskVisible = computed(
-  () => workbench.reconnecting.value || workbench.reconnectFailed.value,
-);
-const dataSourceMaskTitle = computed(() =>
-  workbench.reconnectFailed.value ? "Data connection lost" : "Restoring connection...",
-);
-const dataSourceMaskDescription = computed(() => {
-  if (workbench.reconnectFailed.value) {
-    return "Automatic reconnect failed. Try reconnecting manually, or refresh the page.";
-  }
-  const attempt = workbench.reconnectAttempt.value;
-  const maxAttempts = workbench.reconnectMaxAttempts;
-  return attempt > 0
-    ? `Restoring the data connection (${attempt}/${maxAttempts})`
-    : "Restoring the data connection";
-});
 const userFacingMapError = computed(() => {
   if (model.mapError.value) return "Map data could not be loaded. Try again.";
-  if (workbench.error.value) return "The data connection was interrupted. Try reconnecting.";
   return null;
 });
 
@@ -335,7 +355,9 @@ const quadStyle = computed(() => ({
     : `${columnPct.value}fr 12px ${100 - columnPct.value}fr`,
 }));
 const leftPanelStyle = computed(() => ({
-  gridTemplateRows: `auto ${mapPct.value}fr 10px ${100 - mapPct.value}fr`,
+  gridTemplateRows: props.globalFilterTriggerTarget
+    ? `${mapPct.value}fr 10px ${100 - mapPct.value}fr`
+    : `auto ${mapPct.value}fr 10px ${100 - mapPct.value}fr`,
 }));
 const rightPanelStyle = computed(() =>
   isReclassify.value
@@ -370,6 +392,26 @@ async function searchGlobalFilterOptions(payload: {
   const values = await model.loadGlobalDistinctValues(payload.field, payload.search);
   if (globalFilterSearchVersions.get(payload.field) !== version) return;
   globalDistinctValues.value = { ...globalDistinctValues.value, [payload.field]: values };
+}
+
+async function requestGlobalFilterRange(field: string): Promise<void> {
+  const version = (globalRangeVersions.get(field) ?? 0) + 1;
+  globalRangeVersions.set(field, version);
+  globalNumericRangeLoading.value = { ...globalNumericRangeLoading.value, [field]: true };
+  globalNumericRangeErrors.value = { ...globalNumericRangeErrors.value, [field]: false };
+  try {
+    const range = await model.loadGlobalNumericRange(field);
+    if (globalRangeVersions.get(field) !== version) return;
+    globalNumericRanges.value = { ...globalNumericRanges.value, [field]: range };
+  } catch (error) {
+    if (globalRangeVersions.get(field) !== version) return;
+    globalNumericRangeErrors.value = { ...globalNumericRangeErrors.value, [field]: true };
+    reportDataError(`Global filter range query failed for ${field}`, error);
+  } finally {
+    if (globalRangeVersions.get(field) === version) {
+      globalNumericRangeLoading.value = { ...globalNumericRangeLoading.value, [field]: false };
+    }
+  }
 }
 
 function onColumnResizeStart(e: PointerEvent): void {
@@ -493,11 +535,8 @@ function handleGallerySelection(
     mode: modifiers.selectionMode ?? (modifiers.ctrl || modifiers.meta ? "toggle" : "replace"),
   });
 }
-function reconnectDataSource(): void {
-  workbench.reconnect();
-}
-function refreshPage(): void {
-  window.location.reload();
+function retryMapQuery(): void {
+  void model.retryMap();
 }
 function selectBarChartGroup(key: string | null): void {
   selectedBarChartKey.value = key;
@@ -597,20 +636,30 @@ function useMapSelectionQueue() {
       v-model:show="globalFilterModalVisible"
       :filter="globalFilterModel"
       :distinct-values="globalDistinctValues"
+      :numeric-ranges="globalNumericRanges"
+      :numeric-range-loading="globalNumericRangeLoading"
+      :numeric-range-errors="globalNumericRangeErrors"
       :show-reclassify-columns="isReclassify"
       @update:filter="handleGlobalFilterChange"
       @search-options="searchGlobalFilterOptions"
+      @request-range="requestGlobalFilterRange"
     />
     <div ref="leftPanelEl" class="iq-panel-left" :style="leftPanelStyle">
-      <div class="iq-global-filter-toolbar">
-        <NButton
-          size="small"
-          :type="globalFilterCount > 0 ? 'primary' : 'default'"
-          @click="globalFilterModalVisible = true"
+      <Teleport :to="globalFilterTriggerTarget ?? 'body'" :disabled="!globalFilterTriggerTarget">
+        <div
+          class="iq-global-filter-toolbar"
+          :class="{ 'iq-global-filter-toolbar--external': globalFilterTriggerTarget }"
         >
-          Global Filter{{ globalFilterCount > 0 ? ` (${globalFilterCount})` : "" }}
-        </NButton>
-      </div>
+          <NButton
+            data-testid="sc-global-filter-trigger"
+            size="small"
+            :type="globalFilterCount > 0 ? 'primary' : 'default'"
+            @click="globalFilterModalVisible = true"
+          >
+            Global Filter{{ globalFilterCount > 0 ? ` (${globalFilterCount})` : "" }}
+          </NButton>
+        </div>
+      </Teleport>
       <div class="iq-wafer">
         <ScMapPanelBinned
           :active-map-tab="activeMapTab"
@@ -624,6 +673,7 @@ function useMapSelectionQueue() {
           :reticle-options="reticleOptions"
           :legend-group-by="legendGroupBy"
           :legend-sources="enabledLegendSources"
+          :color-map-scope-key="mapColorMapScopeKey"
           :zoom="zoom"
           :highlight-defect-ids="galleryHighlightDefectIds"
           :immediate-crosshair-defect-ids="mapImmediateCrosshairDefectIds"
@@ -642,7 +692,7 @@ function useMapSelectionQueue() {
           @zoom-in="handleMapZoomChange"
           @box-select="handleBoxSelect"
           @lasso-select="handleLassoSelect"
-          @retry="reconnectDataSource"
+          @retry="retryMapQuery"
         />
       </div>
       <div
@@ -694,7 +744,7 @@ function useMapSelectionQueue() {
           :wafer-key="waferKey"
           :show-prediction-badges="isReclassify"
           :annotation-drafts="annotationDrafts"
-          @mode-change="model.setReviewMode($event === 'review')"
+          @mode-change="handleReviewModeChange"
           @select-samples="handleGallerySelection"
         />
       </div>
@@ -730,23 +780,6 @@ function useMapSelectionQueue() {
       ><div class="iq-splitter iq-splitter--column" role="separator" aria-orientation="vertical" />
       <div class="iq-panel-annotation"><slot name="annotation" /></div
     ></template>
-    <div v-if="dataSourceMaskVisible" class="iq-reconnect-mask">
-      <div class="iq-reconnect-panel">
-        <div v-if="workbench.reconnecting.value" class="iq-reconnect-spinner" />
-        <NResult
-          :status="workbench.reconnectFailed.value ? 'error' : 'info'"
-          :title="dataSourceMaskTitle"
-          :description="dataSourceMaskDescription"
-        >
-          <template v-if="workbench.reconnectFailed.value" #footer>
-            <div class="iq-reconnect-actions">
-              <NButton size="small" type="primary" @click="reconnectDataSource">Reconnect</NButton>
-              <NButton size="small" quaternary @click="refreshPage">Refresh page</NButton>
-            </div>
-          </template>
-        </NResult>
-      </div>
-    </div>
   </div>
 </template>
 
@@ -760,44 +793,6 @@ function useMapSelectionQueue() {
   grid-template-rows: minmax(0, 1fr);
   gap: 0;
   overflow: hidden;
-}
-.iq-reconnect-mask {
-  position: absolute;
-  inset: 0;
-  z-index: 20;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(15, 15, 26, 0.72);
-  backdrop-filter: blur(2px);
-  pointer-events: auto;
-}
-.iq-reconnect-panel {
-  width: min(360px, calc(100% - 32px));
-  padding: 18px 16px 14px;
-  border: 1px solid var(--cv-border, rgba(255, 255, 255, 0.14));
-  border-radius: 8px;
-  background: var(--cv-card-bg, #1a1a2e);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.24);
-}
-.iq-reconnect-spinner {
-  width: 24px;
-  height: 24px;
-  margin: 0 auto 4px;
-  border: 2px solid rgba(128, 128, 128, 0.35);
-  border-top-color: var(--cv-primary, #4c80f0);
-  border-radius: 50%;
-  animation: iq-reconnect-spin 0.8s linear infinite;
-}
-.iq-reconnect-actions {
-  display: flex;
-  justify-content: center;
-  gap: 8px;
-}
-@keyframes iq-reconnect-spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 .iq-quad--column-resizing {
   cursor: col-resize;
@@ -820,6 +815,9 @@ function useMapSelectionQueue() {
   display: flex;
   justify-content: flex-start;
   padding: 0 0 8px;
+}
+.iq-global-filter-toolbar--external {
+  padding: 0;
 }
 .iq-panel-right {
   display: flex;

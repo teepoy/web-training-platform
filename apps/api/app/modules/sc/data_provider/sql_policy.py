@@ -29,6 +29,7 @@ _ALLOWED_FUNCTIONS = frozenset(
         "ENDS_WITH",
         "FLOOR",
         "GREATEST",
+        "HASH",
         "HISTOGRAM",
         "ISFINITE",
         "ISNAN",

@@ -128,7 +128,10 @@ async function startReclassifyImport(): Promise<void> {
   <FullScreenLayout>
     <div class="sc-inspection-page" :style="containerStyle">
       <div class="sc-inspection-toolbar">
-        <div class="sc-inspection-title">{{ pageTitle }}</div>
+        <div class="sc-inspection-heading">
+          <div class="sc-inspection-title">{{ pageTitle }}</div>
+          <div id="sc-inspection-global-filter-action" class="sc-inspection-global-filter-action" />
+        </div>
         <div class="sc-inspection-actions">
           <NButton size="small" quaternary @click="router.push('/sc/preview')">Summary</NButton>
           <NButton size="small" quaternary @click="router.push('/sc/handbook')">Handbook</NButton>
@@ -166,6 +169,7 @@ async function startReclassifyImport(): Promise<void> {
         :inspection-time="inspectionTime"
         :wafer-key="waferKey"
         :wafer-geometry="waferGeometry"
+        global-filter-trigger-target="#sc-inspection-global-filter-action"
       />
     </div>
   </FullScreenLayout>
@@ -194,6 +198,13 @@ async function startReclassifyImport(): Promise<void> {
   border-bottom: 1px solid var(--cv-border, rgba(255, 255, 255, 0.1));
 }
 
+.sc-inspection-heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+
 .sc-inspection-title {
   min-width: 0;
   overflow: hidden;
@@ -209,6 +220,12 @@ async function startReclassifyImport(): Promise<void> {
   flex: none;
   align-items: center;
   gap: 6px;
+}
+
+.sc-inspection-global-filter-action {
+  display: flex;
+  flex: none;
+  align-items: center;
 }
 
 .sc-inspection-state {

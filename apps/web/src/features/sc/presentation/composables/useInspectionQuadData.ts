@@ -26,7 +26,6 @@ export function useInspectionQuadData(options: InspectionQuadDataOptions) {
   function reportDataError(reason: string, err: unknown): void {
     if (disposed) return;
     console.warn("[sc-data-provider] operation failed", { reason, err });
-    workbench.requestReconnect(reason, err);
   }
 
   const model = useSqlInspectionModel({

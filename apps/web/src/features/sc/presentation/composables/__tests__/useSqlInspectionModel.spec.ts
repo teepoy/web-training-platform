@@ -14,6 +14,7 @@ function createDataSource() {
     loadRows: vi.fn(async () => ({ items: [], total: 0, nextAnchor: null })),
     loadGallery: vi.fn(async () => ({ ipc: null, total: 0, nextOffset: null })),
     loadAggregates: vi.fn(async () => ({ "1": 3 })),
+    loadNumericRange: vi.fn(async () => ({ min: 1, max: 9 })),
     loadDistinctValues: vi.fn(async () => []),
     resolveSelection: vi.fn(async () => [3, 7]),
     subscribeInvalidations: vi.fn((listener) => {
@@ -101,7 +102,7 @@ describe("useSqlInspectionModel", () => {
     await vi.waitFor(() => expect(source.loadMap).toHaveBeenCalledTimes(2));
   });
 
-  it("does not reload the unchanged map snapshot when Review mode activates", async () => {
+  it("reloads map and aggregates with the Review candidate filter", async () => {
     const { source } = createDataSource();
     const model = mount(source);
     if (!model) throw new Error("model was not created");
@@ -112,7 +113,35 @@ describe("useSqlInspectionModel", () => {
 
     model.setReviewMode(true);
 
-    await vi.waitFor(() => expect(source.loadAggregates).toHaveBeenCalledTimes(2));
-    expect(source.loadMap).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => {
+      expect(source.loadAggregates).toHaveBeenCalledTimes(2);
+      expect(source.loadMap).toHaveBeenCalledTimes(2);
+    });
+    expect(source.loadMap).toHaveBeenLastCalledWith(
+      expect.objectContaining({ filters: [["images", ">", 0]] }),
+    );
+  });
+
+  it("uses Review, map selection, and seed for deterministic sampling", async () => {
+    const { source } = createDataSource();
+    const model = mount(source);
+    if (!model) throw new Error("model was not created");
+    await model.applyMapSelection([7, 3]);
+    vi.mocked(source.resolveSelection).mockClear();
+
+    await model.querySamplingDefectIds(25, 1234, {
+      reviewOnly: true,
+      mapSelectionOnly: true,
+    });
+
+    expect(source.resolveSelection).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filters: [
+          ["images", ">", 0],
+          ["defect_id", "in", [3, 7]],
+        ],
+        constraint: { kind: "random", limit: 25, seed: 1234 },
+      }),
+    );
   });
 });

@@ -10,6 +10,7 @@ function createDataSource(): ScWorkbenchDataSource {
     loadRows: vi.fn(async () => ({ items: [], total: 0, nextAnchor: null })),
     loadGallery: vi.fn(async () => ({ ipc: new Uint8Array([1]), total: 100, nextOffset: 20 })),
     loadAggregates: vi.fn(async () => ({})),
+    loadNumericRange: vi.fn(async () => null),
     loadDistinctValues: vi.fn(async () => []),
     resolveSelection: vi.fn(async () => []),
     subscribeInvalidations: vi.fn(() => () => undefined),

@@ -11,11 +11,11 @@ from app.modules.sc.app.services.sample_filter import (
 def _samples() -> pl.LazyFrame:
     return pl.DataFrame(
         {
-            "sample_id": ["s1", "s2", "s3"],
-            "test_id": [1, 2, 2],
-            "label": ["Scratch", None, "0"],
-            "predicted_label": ["Particle", "Scratch", "Particle"],
-            "confidence": [0.4, 0.8, 0.9],
+            "sample_id": ["s1", "s2", "s3", "s4"],
+            "test_id": [1, 2, 2, 3],
+            "label": ["Scratch", None, "0", None],
+            "predicted_label": ["Particle", "Scratch", "Particle", None],
+            "confidence": [0.4, 0.8, 0.9, None],
         }
     ).lazy()
 
@@ -38,6 +38,23 @@ async def test_workflow_filter_applies_final_class_and_confidence() -> None:
     result = await filtered.collect_async()
 
     assert result["sample_id"].to_list() == ["s2"]
+
+
+@pytest.mark.asyncio
+async def test_workflow_filter_supports_missing_and_concrete_label_values() -> None:
+    filtered = parse_and_apply_workflow_sample_filter(
+        _samples(),
+        {
+            "final_class": {
+                "filterType": "set",
+                "values": ["Scratch", "__unclassified__"],
+            }
+        },
+    )
+
+    result = await filtered.collect_async()
+
+    assert result["sample_id"].to_list() == ["s1", "s2", "s4"]
 
 
 def test_workflow_filter_rejects_unknown_fields() -> None:

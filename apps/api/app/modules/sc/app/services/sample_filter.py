@@ -35,6 +35,12 @@ SAMPLE_TABLE_FILTER_COLUMNS = {
     "final_class": "final_class",
 }
 
+MISSING_FILTER_VALUES = {
+    "annotation_label": "__unlabeled__",
+    "prediction_label": "__no_prediction__",
+    "final_class": "__unclassified__",
+}
+
 
 def apply_sample_table_filter(
     lf: pl.LazyFrame,
@@ -52,11 +58,16 @@ def apply_sample_table_filter(
             values = list(getattr(filter_value, "values", []) or [])
             if not values:
                 continue
+            missing_value = MISSING_FILTER_VALUES.get(field)
+            include_missing = missing_value is not None and missing_value in values
+            concrete_values = [value for value in values if value != missing_value]
             predicate = (
                 pl.col(column).cast(pl.Utf8).is_in([str(value) for value in values])
                 if field == "defect_id"
-                else pl.col(column).is_in(values)
+                else pl.col(column).is_in(concrete_values)
             )
+            if include_missing:
+                predicate = predicate | pl.col(column).is_null()
             lf = lf.filter(predicate)
         elif (
             filter_type == "number" and getattr(filter_value, "type", None) == "inRange"

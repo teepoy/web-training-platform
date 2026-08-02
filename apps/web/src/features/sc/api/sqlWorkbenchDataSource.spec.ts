@@ -56,10 +56,11 @@ describe("SQL workbench data source", () => {
         ["defect_id", "not in", [8, 9]],
         ["prediction_label", "contains", "scratch"],
         ["annotation_label", "is null", null],
+        ["final_class", "in or null", ["Scratch"]],
       ]),
     ).toEqual({
-      sql: ' WHERE "rough_bin" = ANY(?) AND NOT ("defect_id" = ANY(?)) AND CONTAINS(CAST("prediction_label" AS VARCHAR), ?) AND "annotation_label" IS NULL',
-      parameters: [[1, 2], [8, 9], "scratch"],
+      sql: ' WHERE "rough_bin" = ANY(?) AND NOT ("defect_id" = ANY(?)) AND CONTAINS(CAST("prediction_label" AS VARCHAR), ?) AND "annotation_label" IS NULL AND ("final_class" = ANY(?) OR "final_class" IS NULL)',
+      parameters: [[1, 2], [8, 9], "scratch", ["Scratch"]],
     });
 
     expect(() => compileScWhere([["secret_path", "==", "/etc/passwd"]])).toThrow(
@@ -86,6 +87,41 @@ describe("SQL workbench data source", () => {
       sql: 'SELECT "rough_bin" AS "group_key", COUNT(*) AS "group_count" FROM samples WHERE "class_number" = ? GROUP BY "rough_bin" ORDER BY "rough_bin"',
       parameters: [7],
     });
+  });
+
+  it("retries one transient query failure before returning the result", async () => {
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    let attempts = 0;
+    server.use(
+      http.post(QUERY_URL, () => {
+        attempts += 1;
+        if (attempts === 1) {
+          return HttpResponse.json({ detail: "temporarily unavailable" }, { status: 503 });
+        }
+        return arrowResponse({ group_key: [10], group_count: [2] }, 4);
+      }),
+    );
+    const source = new SqlWorkbenchDataSource({ kind: "dataset", datasetId: "ds-1" });
+    sources.push(source);
+
+    await expect(source.loadAggregates({ field: "rough_bin" })).resolves.toEqual({ "10": 2 });
+    expect(attempts).toBe(2);
+    expect(warning).toHaveBeenCalledOnce();
+  });
+
+  it("does not retry a deterministic query failure", async () => {
+    let attempts = 0;
+    server.use(
+      http.post(QUERY_URL, () => {
+        attempts += 1;
+        return HttpResponse.json({ detail: "invalid query" }, { status: 422 });
+      }),
+    );
+    const source = new SqlWorkbenchDataSource({ kind: "dataset", datasetId: "ds-1" });
+    sources.push(source);
+
+    await expect(source.loadAggregates({ field: "rough_bin" })).rejects.toThrow("invalid query");
+    expect(attempts).toBe(1);
   });
 
   it("includes ordered defect IDs in the Arrow map snapshot", async () => {
@@ -124,6 +160,72 @@ describe("SQL workbench data source", () => {
         sort: null,
       }),
     ).resolves.toEqual([1, 2]);
+  });
+
+  it("exposes field-specific missing options for derived label fields", async () => {
+    const requests: Array<{ sql: string; parameters: unknown[] }> = [];
+    server.use(
+      http.post(QUERY_URL, async ({ request }) => {
+        requests.push((await request.json()) as (typeof requests)[number]);
+        return arrowResponse({ prediction_label: [null, "Scratch"] }, 1);
+      }),
+    );
+    const source = new SqlWorkbenchDataSource({ kind: "dataset", datasetId: "ds-1" });
+    sources.push(source);
+
+    await expect(
+      source.loadDistinctValues({
+        field: "prediction_label",
+        search: "No Prediction",
+        limit: 20,
+        filter: {},
+        sort: null,
+      }),
+    ).resolves.toEqual(["__no_prediction__", "Scratch"]);
+    expect(requests[0]?.sql).not.toContain("CONTAINS");
+  });
+
+  it("uses field-specific missing keys in legend aggregates", async () => {
+    server.use(
+      http.post(QUERY_URL, () =>
+        arrowResponse({ group_key: [null, "Scratch"], group_count: [8, 2] }, 1),
+      ),
+    );
+    const source = new SqlWorkbenchDataSource({ kind: "dataset", datasetId: "ds-1" });
+    sources.push(source);
+
+    await expect(source.loadAggregates({ field: "final_class" })).resolves.toEqual({
+      __unclassified__: 8,
+      Scratch: 2,
+    });
+  });
+
+  it("queries numeric field bounds with the active filters", async () => {
+    let rangeRequest: { description: string; sql: string; parameters: unknown[] } | null = null;
+    server.use(
+      http.post(QUERY_URL, async ({ request }) => {
+        const body = (await request.json()) as NonNullable<typeof rangeRequest>;
+        if (body.description === "sc-workbench.schema") {
+          return arrowResponse(
+            { area: Float64Array.from([]), class_number: Int32Array.from([]) },
+            1,
+          );
+        }
+        rangeRequest = body;
+        return arrowResponse({ __min: [1.25], __max: [98.5] }, 1);
+      }),
+    );
+    const source = new SqlWorkbenchDataSource({ kind: "dataset", datasetId: "ds-1" });
+    sources.push(source);
+
+    await expect(
+      source.loadNumericRange({ field: "area", filters: [["class_number", "==", 7]] }),
+    ).resolves.toEqual({ min: 1.25, max: 98.5 });
+    expect(rangeRequest).toEqual({
+      description: "sc-workbench.range.area",
+      sql: 'SELECT MIN("area") AS "__min", MAX("area") AS "__max" FROM samples WHERE "class_number" = ?',
+      parameters: [7],
+    });
   });
 
   it("loads the full backend schema and includes dynamic metadata in table rows", async () => {
@@ -320,6 +422,30 @@ describe("SQL workbench data source", () => {
     ).resolves.toEqual([3, 9]);
     expect(sql).toBe('SELECT "defect_id" FROM samples WHERE "rough_bin" = ? ORDER BY "defect_id"');
     expect(description).toBe("sc-workbench.selection.all");
+  });
+
+  it("uses the seed in deterministic random selection", async () => {
+    let requestBody: { description: string; sql: string; parameters: unknown[] } | null = null;
+    server.use(
+      http.post(QUERY_URL, async ({ request }) => {
+        requestBody = (await request.json()) as typeof requestBody;
+        return arrowResponse({ defect_id: Int32Array.from([9, 3]) }, 1);
+      }),
+    );
+    const source = new SqlWorkbenchDataSource({ kind: "dataset", datasetId: "ds-1" });
+    sources.push(source);
+
+    await expect(
+      source.resolveSelection({
+        filters: [["images", ">", 0]],
+        constraint: { kind: "random", limit: 2, seed: 42 },
+      }),
+    ).resolves.toEqual([9, 3]);
+    expect(requestBody).toEqual({
+      description: "sc-workbench.selection.random",
+      sql: 'SELECT "defect_id" FROM samples WHERE "images" > ? ORDER BY HASH("defect_id", ?) LIMIT ?',
+      parameters: [0, 42, 2],
+    });
   });
 
   it("accepts only valid invalidations for its own scope", () => {

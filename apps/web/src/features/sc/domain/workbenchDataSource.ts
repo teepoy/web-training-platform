@@ -44,6 +44,15 @@ export interface ScAggregateDataQuery extends ScDataQueryContext {
   field: string;
 }
 
+export interface ScNumericRangeQuery extends ScDataQueryContext {
+  field: string;
+}
+
+export interface ScNumericRange {
+  min: number;
+  max: number;
+}
+
 export type ScSelectionConstraint =
   | { kind: "all" }
   | { kind: "ids"; ids: readonly number[] }
@@ -61,7 +70,7 @@ export type ScSelectionConstraint =
       selection: ScMapLassoSelection;
     }
   | { kind: "legend"; field: string; value: string | number | null }
-  | { kind: "random"; limit: number };
+  | { kind: "random"; limit: number; seed: number };
 
 export interface ScSelectionQuery extends ScDataQueryContext {
   constraint: ScSelectionConstraint;
@@ -93,6 +102,7 @@ export interface ScWorkbenchDataSource {
   loadRows(query: ScSampleTableRowsQuery & ScDataQueryContext): Promise<ScSampleTableRowsPage>;
   loadGallery(query: ScGalleryDataQuery): Promise<ScGalleryPage>;
   loadAggregates(query: ScAggregateDataQuery): Promise<Record<string, number>>;
+  loadNumericRange(query: ScNumericRangeQuery): Promise<ScNumericRange | null>;
   loadDistinctValues(
     query: ScSampleTableDistinctValuesQuery & ScDataQueryContext,
   ): Promise<Array<string | number>>;

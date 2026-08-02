@@ -20,6 +20,7 @@ from app.modules.sc.data_provider.sql_policy import (
         "SELECT DISTINCT rough_bin FROM samples "
         "WHERE CONTAINS(CAST(rough_bin AS VARCHAR), ?) ORDER BY rough_bin LIMIT ?",
         "SELECT defect_id FROM samples ORDER BY RANDOM() LIMIT ?",
+        "SELECT defect_id FROM samples ORDER BY HASH(defect_id, ?) LIMIT ?",
         "SELECT count(*) FROM samples WHERE wafer_x BETWEEN ? AND ? "
         "AND wafer_y BETWEEN ? AND ?",
     ],

@@ -3,6 +3,7 @@ import { computed, onScopeDispose, ref, watch, type ComputedRef, type Ref } from
 import type { DefectList } from "@/features/sc/generated/proto/sc/v1/sample_pb";
 import { DefectListSchema } from "@/features/sc/generated/proto/sc/v1/sample_pb";
 import { buildScDataFilters } from "@/features/sc/application/workbenchDataFilter";
+import { isScMissingFilterValue } from "@/features/sc/domain/missingFilterValue";
 import type { ReticleMapOptions } from "@/features/sc/application/reticleMapOptions";
 import type { ScSampleTableFilter, ScSampleTableSort } from "@/features/sc/domain/sampleTable";
 import type {
@@ -20,6 +21,11 @@ import type { ScMapLassoSelection } from "@platform/sc-map-element";
 
 interface IdSelectionState {
   ids: number[];
+}
+
+export interface ScSamplingCandidateOptions {
+  reviewOnly: boolean;
+  mapSelectionOnly: boolean;
 }
 
 function sortedUniqueIds(ids: readonly number[]): number[] {
@@ -86,6 +92,19 @@ export function useSqlInspectionModel(args: {
     ...reviewFilters.value,
   ]);
 
+  function samplingCandidateFilters(options: ScSamplingCandidateOptions): ScDataFilter[] {
+    if (options.mapSelectionOnly && mapSelection.value.ids.length === 0) {
+      throw new Error("Current map selection is empty");
+    }
+    return [
+      ...globalFilters.value,
+      ...(options.reviewOnly ? ([["images", ">", 0]] as ScDataFilter[]) : []),
+      ...(options.mapSelectionOnly
+        ? ([["defect_id", "in", mapSelection.value.ids]] as ScDataFilter[])
+        : []),
+    ];
+  }
+
   const sampleTableDataSource = computed<ScSampleTableDataSource | undefined>(() => {
     const source = args.dataSource.value;
     if (!source) return undefined;
@@ -121,7 +140,7 @@ export function useSqlInspectionModel(args: {
     mapProgressPercent.value = 20;
     try {
       const ipc = await source.loadMap({
-        filters: globalFilters.value,
+        filters: aggregateFilters.value,
         legendColumn: mapLegendColumn.value,
         reticle: args.reticle.value,
       });
@@ -165,7 +184,7 @@ export function useSqlInspectionModel(args: {
   }
 
   watch(
-    [args.dataSource, globalFilters, mapLegendColumn, args.reticle, invalidationRevision],
+    [args.dataSource, aggregateFilters, mapLegendColumn, args.reticle, invalidationRevision],
     () => void loadMap(),
     { deep: true, immediate: true },
   );
@@ -201,7 +220,7 @@ export function useSqlInspectionModel(args: {
     const source = args.dataSource.value;
     if (!source) return [];
     return source.resolveSelection({
-      filters: globalFilters.value,
+      filters: aggregateFilters.value,
       reticle: args.reticle.value,
       constraint: {
         kind: "rectangle",
@@ -221,7 +240,7 @@ export function useSqlInspectionModel(args: {
     const source = args.dataSource.value;
     if (!source) return [];
     return source.resolveSelection({
-      filters: globalFilters.value,
+      filters: aggregateFilters.value,
       reticle: args.reticle.value,
       constraint: { kind: "polygon", mode, selection },
     });
@@ -231,34 +250,38 @@ export function useSqlInspectionModel(args: {
     const source = args.dataSource.value;
     if (!source) return [];
     return source.resolveSelection({
-      filters: globalFilters.value,
+      filters: aggregateFilters.value,
       reticle: args.reticle.value,
       constraint: {
         kind: "legend",
         field: mapLegendColumn.value,
-        value: String(key) === "__unlabeled__" ? null : key,
+        value: isScMissingFilterValue(mapLegendColumn.value, key) ? null : key,
       },
     });
   }
 
-  async function queryGlobalFilterCount(): Promise<number> {
+  async function querySamplingCandidateCount(options: ScSamplingCandidateOptions): Promise<number> {
     const source = args.dataSource.value;
     if (!source) throw new Error("SC data source is not ready");
     const groups = await source.loadAggregates({
-      filters: globalFilters.value,
+      filters: samplingCandidateFilters(options),
       field: mapLegendColumn.value,
       reticle: args.reticle.value,
     });
     return Object.values(groups).reduce((sum, count) => sum + count, 0);
   }
 
-  async function queryRandomGlobalFilteredDefectIds(count: number): Promise<number[]> {
+  async function querySamplingDefectIds(
+    count: number,
+    seed: number,
+    options: ScSamplingCandidateOptions,
+  ): Promise<number[]> {
     const source = args.dataSource.value;
     if (!source) throw new Error("SC data source is not ready");
     return source.resolveSelection({
-      filters: globalFilters.value,
+      filters: samplingCandidateFilters(options),
       reticle: args.reticle.value,
-      constraint: { kind: "random", limit: count },
+      constraint: { kind: "random", limit: count, seed },
     });
   }
 
@@ -275,6 +298,20 @@ export function useSqlInspectionModel(args: {
       filter: {},
       sort: null,
       filters: [],
+      reticle: args.reticle.value,
+    });
+  }
+
+  async function loadGlobalNumericRange(
+    field: string,
+  ): Promise<{ min: number; max: number } | null> {
+    const source = args.dataSource.value;
+    if (!source) return null;
+    const filterWithoutCurrentField = { ...args.globalFilter.value };
+    delete filterWithoutCurrentField[field];
+    return source.loadNumericRange({
+      field,
+      filters: buildScDataFilters(filterWithoutCurrentField),
       reticle: args.reticle.value,
     });
   }
@@ -316,16 +353,19 @@ export function useSqlInspectionModel(args: {
     mapError,
     mapProgressMessage,
     mapProgressPercent,
+    retryMap: loadMap,
     mapSelectedDefectIds,
+    reviewMode,
     tableSelection,
     loadGlobalDistinctValues,
+    loadGlobalNumericRange,
     setTableSelection,
     setReviewMode,
     queryBoxSelection,
     queryLassoSelection,
     queryLegendSelection,
-    queryGlobalFilterCount,
-    queryRandomGlobalFilteredDefectIds,
+    querySamplingCandidateCount,
+    querySamplingDefectIds,
     applyMapSelection,
     appendMapSelection,
     clearMapSelection,

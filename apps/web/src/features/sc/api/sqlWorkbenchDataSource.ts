@@ -1,6 +1,6 @@
 import { tableFromIPC, type Table } from "apache-arrow";
 import { pointInPolygon } from "@platform/sc-map-element";
-import { API_BASE, requestRaw, withAuthQueryParams } from "@/shared/api/client";
+import { API_BASE, isApiError, requestRaw, withAuthQueryParams } from "@/shared/api/client";
 import type {
   ScAggregateDataQuery,
   ScArrowQueryResult,
@@ -12,6 +12,8 @@ import type {
   ScGalleryPage,
   ScInvalidation,
   ScMapDataQuery,
+  ScNumericRange,
+  ScNumericRangeQuery,
   ScReticleProjection,
   ScSelectionQuery,
   ScWorkbenchDataSource,
@@ -23,12 +25,18 @@ import type {
   ScSampleTableRowsQuery,
 } from "@/features/sc/domain/workbenchInteraction";
 import type { ScSampleTableFilter, ScSampleTableSort } from "@/features/sc/domain/sampleTable";
+import {
+  scMissingFilterOption,
+  splitScSetFilterValues,
+} from "@/features/sc/domain/missingFilterValue";
 
 export type ScSqlWorkbenchScope =
   | { kind: "inspection"; inspectionTime: string; waferKey: number }
   | { kind: "dataset"; datasetId: string };
 
 const QUERY_TIMEOUT_MS = 35_000;
+const QUERY_MAX_ATTEMPTS = 2;
+const RETRYABLE_QUERY_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
 const SAMPLE_COLUMNS = [
   "defect_id",
   "rough_bin",
@@ -67,6 +75,12 @@ const DEFAULT_ALLOWED_COLUMNS = new Set<string>([
 interface CompiledWhere {
   sql: string;
   parameters: ScDataParameter[];
+}
+
+function isRetryableQueryError(error: unknown): boolean {
+  if (!isApiError(error)) return false;
+  if (error.kind === "network" || error.kind === "timeout") return true;
+  return error.status !== null && RETRYABLE_QUERY_STATUSES.has(error.status);
 }
 
 function quotedColumn(
@@ -150,6 +164,17 @@ export function compileScWhere(
       parameters.push(value as boolean[] | number[] | string[]);
       continue;
     }
+    if (operator === "in or null") {
+      if (!Array.isArray(value))
+        throw new Error(`IN OR NULL filter for ${field} requires an array`);
+      if (value.length === 0) {
+        predicates.push(`${column} IS NULL`);
+      } else {
+        predicates.push(`(${column} = ANY(?) OR ${column} IS NULL)`);
+        parameters.push(value as boolean[] | number[] | string[]);
+      }
+      continue;
+    }
     if (operator === "not in") {
       if (!Array.isArray(value)) throw new Error(`NOT IN filter for ${field} requires an array`);
       if (value.length === 0) continue;
@@ -185,7 +210,8 @@ function filtersFromTableFilter(
     if (field === omitField) continue;
     quotedColumn(field, allowedColumns);
     if (condition.filterType === "set" && condition.values.length > 0) {
-      result.push([field, "in", condition.values]);
+      const setFilter = splitScSetFilterValues(field, condition.values);
+      result.push([field, setFilter.includeMissing ? "in or null" : "in", setFilter.values]);
     } else if (condition.filterType === "number" && condition.type === "inRange") {
       result.push([field, ">=", condition.filter], [field, "<=", condition.filterTo]);
     }
@@ -432,13 +458,34 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
       compiled.parameters,
     );
     const groups: Record<string, number> = {};
+    const missingOption = scMissingFilterOption(query.field);
     for (let index = 0; index < result.table.numRows; index += 1) {
       const key = result.table.getChild("group_key")?.get(index);
-      groups[key == null || key === "" ? "__unlabeled__" : String(key)] = numeric(
-        result.table.getChild("group_count")?.get(index),
-      );
+      groups[key == null || key === "" ? (missingOption?.value ?? "__unlabeled__") : String(key)] =
+        numeric(result.table.getChild("group_count")?.get(index));
     }
     return groups;
+  }
+
+  async loadNumericRange(query: ScNumericRangeQuery): Promise<ScNumericRange | null> {
+    const allowedColumns = await this.allowedColumnsFor([
+      query.field,
+      ...(query.filters ?? []).map(([field]) => field),
+    ]);
+    const compiled = compileScWhere(query.filters ?? [], query.reticle, allowedColumns);
+    const column = filterColumn(query.field, query.reticle, allowedColumns);
+    const result = await this.query(
+      `sc-workbench.range.${query.field}`,
+      `SELECT MIN(${column}) AS "__min", MAX(${column}) AS "__max" FROM samples${compiled.sql}`,
+      compiled.parameters,
+    );
+    if (result.table.numRows === 0) return null;
+    const rawMin = result.table.getChild("__min")?.get(0);
+    const rawMax = result.table.getChild("__max")?.get(0);
+    if (rawMin == null || rawMax == null) return null;
+    const min = Number(rawMin);
+    const max = Number(rawMax);
+    return Number.isFinite(min) && Number.isFinite(max) ? { min, max } : null;
   }
 
   async loadDistinctValues(
@@ -449,10 +496,14 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
       ...Object.keys(query.filter ?? {}),
       ...(query.filters ?? []).map(([field]) => field),
     ]);
+    const missingOption = scMissingFilterOption(query.field);
+    const searchMatchesMissing =
+      missingOption !== null &&
+      missingOption.label.toLowerCase().includes(query.search.trim().toLowerCase());
     const filters = [
       ...(query.filters ?? []),
       ...filtersFromTableFilter(query.filter, query.field, allowedColumns),
-      ...(query.search.trim()
+      ...(query.search.trim() && !searchMatchesMissing
         ? ([[query.field, "contains", query.search.trim()]] as ScDataFilter[])
         : []),
     ];
@@ -466,6 +517,7 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
     );
     return Array.from({ length: result.table.numRows }, (_, index) => {
       const value = result.table.getChild(query.field)?.get(index);
+      if (value == null && missingOption) return missingOption.value;
       return typeof value === "bigint" ? Number(value) : value;
     }).filter(
       (value): value is string | number => typeof value === "string" || typeof value === "number",
@@ -487,11 +539,14 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
       if (!Number.isInteger(constraint.limit) || constraint.limit <= 0) {
         throw new Error("Random selection limit must be a positive integer");
       }
+      if (!Number.isSafeInteger(constraint.seed) || constraint.seed < 0) {
+        throw new Error("Random selection seed must be a non-negative safe integer");
+      }
       const compiled = compileScWhere(filters, query.reticle, allowedColumns);
       const result = await this.query(
         "sc-workbench.selection.random",
-        `SELECT "defect_id" FROM samples${compiled.sql} ORDER BY RANDOM() LIMIT ?`,
-        [...compiled.parameters, constraint.limit],
+        `SELECT "defect_id" FROM samples${compiled.sql} ORDER BY HASH("defect_id", ?) LIMIT ?`,
+        [...compiled.parameters, constraint.seed, constraint.limit],
       );
       return Array.from({ length: result.table.numRows }, (_, index) =>
         numeric(result.table.getChild("defect_id")?.get(index)),
@@ -572,30 +627,43 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
     const controller = new AbortController();
     this.inFlightQueries.add(controller);
     try {
-      const response = await requestRaw(
-        this.queryUrl,
-        {
-          method: "POST",
-          body: JSON.stringify({ description, sql, parameters }),
-          signal: controller.signal,
-        },
-        QUERY_TIMEOUT_MS,
-      );
-      const revision = Number(response.headers.get("X-SC-Data-Revision") ?? "0");
-      const contentType = response.headers.get("Content-Type") ?? "";
-      if (!contentType.includes("application/vnd.apache.arrow.stream")) {
-        throw new Error(
-          `SC data provider returned unsupported content type: ${contentType || "missing"}`,
-        );
+      for (let attempt = 1; attempt <= QUERY_MAX_ATTEMPTS; attempt += 1) {
+        try {
+          const response = await requestRaw(
+            this.queryUrl,
+            {
+              method: "POST",
+              body: JSON.stringify({ description, sql, parameters }),
+              signal: controller.signal,
+            },
+            QUERY_TIMEOUT_MS,
+          );
+          const revision = Number(response.headers.get("X-SC-Data-Revision") ?? "0");
+          const contentType = response.headers.get("Content-Type") ?? "";
+          if (!contentType.includes("application/vnd.apache.arrow.stream")) {
+            throw new Error(
+              `SC data provider returned unsupported content type: ${contentType || "missing"}`,
+            );
+          }
+          if (!Number.isSafeInteger(revision) || revision < 0) {
+            throw new Error("SC data provider returned an invalid revision");
+          }
+          this.assertCurrentRevision(revision);
+          const ipc = new Uint8Array(await response.arrayBuffer());
+          this.assertCurrentRevision(revision);
+          this.knownRevision = revision;
+          return { ipc, table: tableFromIPC(ipc), revision };
+        } catch (error) {
+          if (attempt >= QUERY_MAX_ATTEMPTS || this.closed || !isRetryableQueryError(error)) {
+            throw error;
+          }
+          console.warn("[sc-data-provider] transient query failed; retrying once", {
+            description,
+            error,
+          });
+        }
       }
-      if (!Number.isSafeInteger(revision) || revision < 0) {
-        throw new Error("SC data provider returned an invalid revision");
-      }
-      this.assertCurrentRevision(revision);
-      const ipc = new Uint8Array(await response.arrayBuffer());
-      this.assertCurrentRevision(revision);
-      this.knownRevision = revision;
-      return { ipc, table: tableFromIPC(ipc), revision };
+      throw new Error(`SC data query exhausted its retry attempts: ${description}`);
     } finally {
       this.inFlightQueries.delete(controller);
     }
