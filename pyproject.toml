@@ -35,6 +35,7 @@ members = [
   "services/sc-upstream",
   "libs/protos",
   "libs/ml",
+  "libs/sampling-rules",
 ]
 
 [tool.uv.sources]

@@ -18,6 +18,7 @@ members = [
     "ml-library",
     "online-finetune-platform",
     "proto-stubs",
+    "sampling-rules",
     "sc-upstream",
 ]
 
@@ -4786,6 +4787,21 @@ sdist = { url = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/packages/9b/ec/7c
 wheels = [
     { url = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/packages/87/72/c6c32d2b657fa3dad1de340254e14390b1e334ce38268b7ad51abda3c8c2/s3transfer-0.17.0-py3-none-any.whl", hash = "sha256:ce3801712acf4ad3e89fb9990df97b4972e93f4b3b0004d214be5bce12814c20", size = 86811, upload-time = "2026-04-29T22:07:34.966Z" },
 ]
+
+[[package]]
+name = "sampling-rules"
+version = "0.1.0"
+source = { editable = "libs/sampling-rules" }
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+]
+
+[package.metadata]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=9.0.2" }]
 
 [[package]]
 name = "sc-upstream"

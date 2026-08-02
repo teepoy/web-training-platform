@@ -16,4 +16,10 @@ export const sandboxRoutes: RouteRecordRaw[] = [
     component: () =>
       import("./presentation/pages/scenarios/rchannel-denoise/RChannelDenoiseSandboxView.vue"),
   },
+  {
+    path: "/sandbox/sampling-rules",
+    name: "sandbox-sampling-rules",
+    component: () =>
+      import("./presentation/pages/scenarios/sampling-rules/SamplingRuleSandbox.vue"),
+  },
 ];

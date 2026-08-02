@@ -1,0 +1,21 @@
+[build-system]
+requires = ["uv_build"]
+build-backend = "uv_build"
+
+[project]
+name = "sampling-rules"
+version = "0.1.0"
+description = "Composable allocation rules for random sampling"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
+
+[dependency-groups]
+dev = ["pytest>=9.0.2"]
+
+[tool.uv.build-backend]
+module-name = "sampling_rules"
+module-root = "src"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

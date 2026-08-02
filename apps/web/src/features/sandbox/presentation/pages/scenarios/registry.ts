@@ -18,4 +18,10 @@ export const sandboxDemos: SandboxDemo[] = [
     description: "Sandbox environment for the classify workflow",
     route: "/sandbox/classify",
   },
+  {
+    id: "sampling-rules",
+    name: "Sampling Rules",
+    description: "Rule-assisted random sampling settings and quota preview",
+    route: "/sandbox/sampling-rules",
+  },
 ];
