@@ -11,13 +11,22 @@ from app.shared.adapter.repositories.artifact_lookup_repository import (
     ArtifactSqlLookupRepository,
 )
 from app.modules.datasets.app.services.dataset_service import DatasetService
+from app.modules.datasets.app.services.dataset_deletion_guard import (
+    DatasetDeletionGuard,
+)
 from app.modules.datasets.app.services.sample_similarity import SampleSimilarityService
 from app.modules.datasets.domain.repository import (
     ArtifactLookupRepository,
     DatasetRepository,
 )
 from app.modules.datasets.port.dataset_reader import DatasetReader
-from app.modules.datasets.port.local import IDatasetService, SampleSimilarityPort
+from app.modules.datasets.port.local import (
+    DatasetDeletionGuardPort,
+    IDatasetService,
+    SampleSimilarityPort,
+)
+from app.modules.prediction.port.local import PredictionDatasetUsagePort
+from app.modules.training.port.local import TrainingDatasetUsagePort
 from app.modules.storage.container import StorageContext
 from app.shared.context import SharedInfra
 
@@ -57,6 +66,19 @@ def init_datasets(
 
 
 class DatasetsModule(Module):
+    @inject
+    @provider
+    @singleton
+    def provide_dataset_deletion_guard(
+        self,
+        training_usage: TrainingDatasetUsagePort,
+        prediction_usage: PredictionDatasetUsagePort,
+    ) -> DatasetDeletionGuardPort:
+        return DatasetDeletionGuard(
+            training_usage=training_usage,
+            prediction_usage=prediction_usage,
+        )
+
     @inject
     @provider
     @singleton

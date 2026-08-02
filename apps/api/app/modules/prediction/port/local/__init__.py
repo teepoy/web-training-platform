@@ -23,6 +23,10 @@ class PredictionExecutionPort(Protocol):
     async def cancel_job(self, job_id: str, org_id: str | None = None) -> bool: ...
 
 
+class PredictionDatasetUsagePort(Protocol):
+    async def has_active_jobs(self, *, dataset_id: str, org_id: str) -> bool: ...
+
+
 class PredictionRuntimePort(Protocol):
     async def run_prediction(
         self,
@@ -113,6 +117,7 @@ class PredictionReviewPort(Protocol):
 
 
 __all__ = [
+    "PredictionDatasetUsagePort",
     "PredictionExecutionPort",
     "PredictionCollectionPort",
     "PredictionQueryPort",

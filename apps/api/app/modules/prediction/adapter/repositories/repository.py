@@ -64,6 +64,21 @@ class PredictionRepository:
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
         self.session_factory = session_factory
 
+    async def has_active_jobs(self, *, dataset_id: str, org_id: str) -> bool:
+        async with self.session_factory() as session:
+            job_id = await session.scalar(
+                select(PredictionJobORM.id)
+                .where(
+                    PredictionJobORM.dataset_id == dataset_id,
+                    PredictionJobORM.org_id == org_id,
+                    PredictionJobORM.status.in_(
+                        [JobStatus.QUEUED.value, JobStatus.RUNNING.value]
+                    ),
+                )
+                .limit(1)
+            )
+            return job_id is not None
+
     async def create_prediction_job(
         self, job: PredictionJob, org_id: str | None = None
     ) -> PredictionJob:

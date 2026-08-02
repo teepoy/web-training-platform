@@ -9,7 +9,13 @@ export type { SeedAuthResult } from "./auth";
 
 export { createDataset, addSamples, deleteDataset } from "./datasets";
 
-export { startTrainingJob, waitForJobStatus, JobPollTimeoutError, listTrainers } from "./training";
+export {
+  cancelTrainingJobAndWait,
+  startTrainingJob,
+  waitForJobStatus,
+  JobPollTimeoutError,
+  listTrainers,
+} from "./training";
 
 export {
   runPrediction,

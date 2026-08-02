@@ -71,3 +71,9 @@ class SampleSimilarityPort(Protocol):
         org_id: str,
         k: int = 5,
     ) -> dict: ...
+
+
+class DatasetDeletionGuardPort(Protocol):
+    """Prevent deletion while runtime jobs still depend on a dataset."""
+
+    async def ensure_deletable(self, *, dataset_id: str, org_id: str) -> None: ...

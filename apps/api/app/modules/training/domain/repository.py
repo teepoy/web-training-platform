@@ -11,6 +11,8 @@ from app.shared.api.schemas import (
 
 
 class TrainingRepository(Protocol):
+    async def has_active_jobs(self, *, dataset_id: str, org_id: str) -> bool: ...
+
     async def create_job(self, job: TrainingJob) -> TrainingJob: ...
 
     async def get_job(

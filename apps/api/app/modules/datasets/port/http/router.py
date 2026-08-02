@@ -19,6 +19,7 @@ from fastapi.responses import StreamingResponse
 
 from app.modules.datasets.port.http.deps import (
     ArtifactLookupRepositoryDep,
+    DatasetDeletionGuardDep,
     DatasetServiceDep,
     LabelStudioClientDep,
     RedisEventPublisherDep,
@@ -28,6 +29,9 @@ from app.modules.datasets.port.http.deps import (
     get_dataset_payload_store,
     get_dataset_storage_factory,
     get_repository,
+)
+from app.modules.datasets.app.services.dataset_deletion_guard import (
+    DatasetDeletionConflictError,
 )
 from app.modules.storage.adapter.factory import DatasetStorageFactory
 from app.modules.datasets.domain.sample_row import BulkSampleRow
@@ -378,6 +382,7 @@ async def get_sparse_summary(
 @router.delete("/datasets/{dataset_id}", status_code=204)
 async def delete_dataset(
     dataset_id: str,
+    deletion_guard: DatasetDeletionGuardDep,
     ls_client: LabelStudioClientDep,
     factory: DatasetStorageFactoryDep,
     current_user: User = Depends(get_current_user),
@@ -394,6 +399,11 @@ async def delete_dataset(
             status_code=403,
             detail="Only the dataset creator can delete this dataset",
         )
+
+    try:
+        await deletion_guard.ensure_deletable(dataset_id=dataset_id, org_id=org.id)
+    except DatasetDeletionConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     if dataset.ls_project_id and dataset.ls_project_id != SPARSE_NO_LS:
         try:

@@ -36,6 +36,21 @@ class TrainingJobRepository:
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
         self.session_factory = session_factory
 
+    async def has_active_jobs(self, *, dataset_id: str, org_id: str) -> bool:
+        async with self.session_factory() as session:
+            job_id = await session.scalar(
+                select(TrainingJobORM.id)
+                .where(
+                    TrainingJobORM.dataset_id == dataset_id,
+                    TrainingJobORM.org_id == org_id,
+                    TrainingJobORM.status.in_(
+                        [JobStatus.QUEUED.value, JobStatus.RUNNING.value]
+                    ),
+                )
+                .limit(1)
+            )
+            return job_id is not None
+
     async def set_job_public(self, job_id: str, is_public: bool) -> bool:
         async with self.session_factory() as session:
             row = await session.get(TrainingJobORM, job_id)

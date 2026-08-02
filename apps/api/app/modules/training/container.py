@@ -18,6 +18,7 @@ from app.modules.training.app.services.orchestrator import TrainingOrchestrator
 from app.modules.training.app.services.readiness import TrainingReadinessService
 from app.modules.training.domain.repository import TrainingRepository
 from app.modules.training.port.local import (
+    TrainingDatasetUsagePort,
     TrainingExecutionPort,
     TrainingReadinessPort,
 )
@@ -194,6 +195,13 @@ class TrainingModule(Module):
     def provide_training_repository(
         self, context: TrainingContext
     ) -> TrainingRepository:
+        return context.repository
+
+    @provider
+    @singleton
+    def provide_training_dataset_usage(
+        self, context: TrainingContext
+    ) -> TrainingDatasetUsagePort:
         return context.repository
 
     @provider

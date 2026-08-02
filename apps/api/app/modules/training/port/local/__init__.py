@@ -33,4 +33,12 @@ class TrainingReadinessPort(Protocol):
     ) -> TrainingReadinessReport: ...
 
 
-__all__ = ["TrainingExecutionPort", "TrainingReadinessPort"]
+class TrainingDatasetUsagePort(Protocol):
+    async def has_active_jobs(self, *, dataset_id: str, org_id: str) -> bool: ...
+
+
+__all__ = [
+    "TrainingDatasetUsagePort",
+    "TrainingExecutionPort",
+    "TrainingReadinessPort",
+]

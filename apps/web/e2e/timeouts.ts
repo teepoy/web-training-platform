@@ -32,6 +32,7 @@ export const E2E_TIMEOUTS = Object.freeze({
     scFullWorkflow: timeoutFromEnv("PLAYWRIGHT_SC_FULL_WORKFLOW_TEST_TIMEOUT_MS", 2_700_000),
   }),
   operation: Object.freeze({
+    jobCancellation: timeoutFromEnv("PLAYWRIGHT_JOB_CANCELLATION_TIMEOUT_MS", 60_000),
     scImport: timeoutFromEnv("PLAYWRIGHT_SC_IMPORT_TIMEOUT_MS", 600_000),
     scDataLoad: timeoutFromEnv("PLAYWRIGHT_SC_DATA_LOAD_TIMEOUT_MS", 180_000),
     training: timeoutFromEnv("PLAYWRIGHT_TRAINING_TIMEOUT_MS", 900_000),

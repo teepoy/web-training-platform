@@ -25,6 +25,7 @@ from app.modules.prediction.app.services.prediction_runtime import (
 )
 from app.modules.prediction.domain.repository import PredictionRepository
 from app.modules.prediction.port.local import (
+    PredictionDatasetUsagePort,
     PredictionCollectionPort,
     PredictionExecutionPort,
     PredictionQueryPort,
@@ -117,6 +118,13 @@ class PredictionModule(Module):
     def provide_prediction_repository(
         self, context: PredictionContext
     ) -> PredictionRepository:
+        return context.prediction_repository
+
+    @provider
+    @singleton
+    def provide_prediction_dataset_usage(
+        self, context: PredictionContext
+    ) -> PredictionDatasetUsagePort:
         return context.prediction_repository
 
     @provider

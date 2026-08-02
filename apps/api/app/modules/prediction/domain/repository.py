@@ -15,6 +15,8 @@ from app.shared.api.schemas import (
 
 
 class PredictionRepository(Protocol):
+    async def has_active_jobs(self, *, dataset_id: str, org_id: str) -> bool: ...
+
     async def create_prediction_job(
         self,
         job: PredictionJob,

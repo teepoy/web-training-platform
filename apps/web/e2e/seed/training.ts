@@ -3,6 +3,7 @@
  */
 import type { CreateTrainingJobRequest, TrainingJob } from "../../src/generated/orval/models";
 import {
+  cancelJobApiV1TrainingJobsJobIdCancelPost,
   createTrainingJobApiV1TrainingJobsPost,
   getJobApiV1TrainingJobsJobIdGet,
   listTrainersRouteApiV1TrainersGet,
@@ -38,6 +39,31 @@ export async function listTrainers(): Promise<Record<string, unknown>[]> {
  */
 export async function startTrainingJob(req: CreateTrainingJobRequest): Promise<TrainingJob> {
   return createTrainingJobApiV1TrainingJobsPost(req);
+}
+
+export async function cancelTrainingJobAndWait(
+  jobId: string,
+  opts?: { interval?: number; timeout?: number },
+): Promise<TrainingJob> {
+  const interval = opts?.interval ?? E2E_TIMEOUTS.pollInterval;
+  const timeout = opts?.timeout ?? E2E_TIMEOUTS.operation.jobCancellation;
+  const deadline = Date.now() + timeout;
+  let job = await getJobApiV1TrainingJobsJobIdGet(jobId);
+
+  if (job.status === "completed" || job.status === "failed" || job.status === "cancelled") {
+    return job;
+  }
+
+  await cancelJobApiV1TrainingJobsJobIdCancelPost(jobId);
+  while (Date.now() < deadline) {
+    job = await getJobApiV1TrainingJobsJobIdGet(jobId);
+    if (job.status === "completed" || job.status === "failed" || job.status === "cancelled") {
+      return job;
+    }
+    await new Promise((resolve) => setTimeout(resolve, interval));
+  }
+
+  throw new JobPollTimeoutError(jobId, "terminal state after cancellation", timeout);
 }
 
 /**

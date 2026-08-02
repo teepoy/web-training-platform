@@ -13,6 +13,7 @@ from __future__ import annotations
 
 # ── Protocol interfaces ────────────────────────────────────────────────────
 from app.modules.datasets.port.local._protocols import (
+    DatasetDeletionGuardPort,
     DatasetStorageFactoryPort,
     IDatasetService,
     SampleSimilarityPort,
@@ -38,6 +39,7 @@ from app.modules.datasets.domain.compatibility import (
 )
 
 __all__ = [
+    "DatasetDeletionGuardPort",
     "IDatasetService",
     "DatasetStorageFactoryPort",
     "SparseImportWriterFactoryPort",

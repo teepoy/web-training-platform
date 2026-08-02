@@ -1,12 +1,15 @@
 import { test, expect } from "../../fixtures";
+import type { TrainingJob } from "../../../src/generated/orval/models";
 import { TrainingListPage } from "../../pages/training/TrainingListPage";
-import { createDataset, addSamples, deleteDataset } from "../../seed";
+import { addSamples, cancelTrainingJobAndWait, createDataset, deleteDataset } from "../../seed";
 
 test.describe("Training Jobs", () => {
   let datasetId: string | undefined;
   let datasetName: string | undefined;
+  let jobId: string | undefined;
 
   test.beforeEach(async ({ page, liveAuth, seedClient, testPrefix }) => {
+    jobId = undefined;
     await page.addInitScript((token) => {
       localStorage.setItem("auth_token", token);
     }, liveAuth.token);
@@ -37,8 +40,11 @@ test.describe("Training Jobs", () => {
   });
 
   test.afterEach(async () => {
+    if (jobId) {
+      await cancelTrainingJobAndWait(jobId);
+    }
     if (datasetId) {
-      await deleteDataset(datasetId).catch(() => {});
+      await deleteDataset(datasetId);
     }
   });
 
@@ -50,7 +56,18 @@ test.describe("Training Jobs", () => {
 
     await trainingPage.selectDataset(datasetName!);
     await trainingPage.selectFirstTrainer();
+    const createJobResponse = page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        new URL(response.url()).pathname === "/api/v1/training-jobs",
+    );
     await trainingPage.clickStart();
+    const response = await createJobResponse;
+    if (!response.ok()) {
+      throw new Error(`Training job submission failed: ${response.status()}`);
+    }
+    const job = (await response.json()) as TrainingJob;
+    jobId = job.id;
 
     await trainingPage.waitForJobStarted();
 
