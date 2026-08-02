@@ -126,6 +126,65 @@ describe("SQL workbench data source", () => {
     ).resolves.toEqual([1, 2]);
   });
 
+  it("loads the full backend schema and includes dynamic metadata in table rows", async () => {
+    const requests: Array<{ description: string; sql: string; parameters: unknown[] }> = [];
+    server.use(
+      http.post(QUERY_URL, async ({ request }) => {
+        const body = (await request.json()) as (typeof requests)[number];
+        requests.push(body);
+        if (body.description === "sc-workbench.schema") {
+          return arrowResponse(
+            {
+              defect_id: Int32Array.from([]),
+              future_metric: Float64Array.from([]),
+              upstream_payload: [] as string[],
+            },
+            1,
+          );
+        }
+        return arrowResponse(
+          {
+            defect_id: Int32Array.from([42]),
+            future_metric: Float64Array.from([12.5]),
+            upstream_payload: ["kept"],
+            __total: BigInt64Array.from([1n]),
+          },
+          1,
+        );
+      }),
+    );
+    const source = new SqlWorkbenchDataSource({ kind: "dataset", datasetId: "ds-1" });
+    sources.push(source);
+
+    await expect(source.loadColumns()).resolves.toEqual([
+      { name: "defect_id", arrowType: "Int32", nullable: true },
+      { name: "future_metric", arrowType: "Float64", nullable: true },
+      { name: "upstream_payload", arrowType: "Null", nullable: true },
+    ]);
+    const page = await source.loadRows({
+      defectIds: [],
+      anchor: "0",
+      limit: 25,
+      filter: {
+        future_metric: { filterType: "number", type: "inRange", filter: 10, filterTo: 20 },
+      },
+      sort: { field: "future_metric", direction: "desc" },
+    });
+
+    expect(page.items[0]).toMatchObject({
+      defect_id: "42",
+      future_metric: 12.5,
+      upstream_payload: "kept",
+    });
+    expect(requests.map((request) => request.description)).toEqual([
+      "sc-workbench.schema",
+      "sc-workbench.table.rows",
+    ]);
+    expect(requests[1]?.sql).toContain('"future_metric"');
+    expect(requests[1]?.sql).toContain('ORDER BY "future_metric" DESC');
+    expect(requests[1]?.parameters).toEqual([10, 20, 25, 0]);
+  });
+
   it("keeps gallery select-all compact and sends only explicit exclusions", async () => {
     const requests: Array<{ sql: string; parameters: unknown[] }> = [];
     server.use(
@@ -218,23 +277,22 @@ describe("SQL workbench data source", () => {
   });
 
   it("aborts active SQL fetches when the data source closes", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(
-        async (_url: RequestInfo | URL, init?: RequestInit) =>
-          await new Promise<Response>((_resolve, reject) => {
-            init?.signal?.addEventListener(
-              "abort",
-              () => reject(new DOMException("aborted", "AbortError")),
-              { once: true },
-            );
-          }),
-      ),
+    const fetchMock = vi.fn(
+      async (_url: RequestInfo | URL, init?: RequestInit) =>
+        await new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener(
+            "abort",
+            () => reject(new DOMException("aborted", "AbortError")),
+            { once: true },
+          );
+        }),
     );
+    vi.stubGlobal("fetch", fetchMock);
     const source = new SqlWorkbenchDataSource({ kind: "dataset", datasetId: "ds-1" });
     sources.push(source);
 
     const query = source.loadAggregates({ field: "rough_bin" });
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
     source.close();
 
     await expect(query).rejects.toThrow("aborted");

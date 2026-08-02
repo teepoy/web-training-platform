@@ -10,14 +10,14 @@ import {
   SwapVerticalOutline,
 } from "@vicons/ionicons5";
 import type { ScSampleTableFilter, ScSampleTableSort } from "@/features/sc/domain/sampleTable";
-import type { ScTableSelectionConstraint } from "@/features/sc/domain/workbenchDataSource";
+import type {
+  ScDataColumn,
+  ScTableSelectionConstraint,
+} from "@/features/sc/domain/workbenchDataSource";
 import type { ScSampleTableDisplayRow } from "@/features/sc/domain/workbenchInteraction";
 import type { ScSampleTableDataSource } from "@/features/sc/domain/workbenchInteraction";
 import { ArrowBackedRows } from "./arrowBackedRows";
-import {
-  scSampleTableColumns,
-  type ScSampleTableColumnDefinition as ColumnDefinition,
-} from "./scSampleTableColumns";
+import { SC_RECLASSIFY_TABLE_COLUMNS, SC_SAMPLE_TABLE_COLUMNS } from "./scSampleTableColumns";
 import ScRangeFilterMenu from "./ScRangeFilterMenu.vue";
 import ScSetFilterMenu from "./ScSetFilterMenu.vue";
 import ScTextFilterMenu from "./ScTextFilterMenu.vue";
@@ -32,6 +32,14 @@ interface ScSampleTableVxeProps extends ScSampleTableBaseProps {
 const props = defineProps<ScSampleTableVxeProps>();
 
 const emit = defineEmits<ScSampleTableEmits>();
+
+interface ColumnDefinition {
+  key: string;
+  title: string;
+  width: number;
+  filter: "set" | "range" | null;
+  render?: (row: VxeSampleTableRow) => string;
+}
 
 interface VxeRowsPage {
   items: ScSampleTableDisplayRow[];
@@ -54,11 +62,24 @@ interface VxeGridRef {
   setCheckboxRowKey: (key: string | number, checked: boolean) => Promise<unknown> | void;
 }
 
-type VxeSampleTableRow = Partial<ScSampleTableDisplayRow> & {
-  defect_id: string;
-  _isHydrated?: boolean;
-};
+type VxeSampleTableRow = Partial<ScSampleTableDisplayRow> &
+  Record<string, unknown> & {
+    defect_id: string;
+    _isHydrated?: boolean;
+  };
 
+const columnDefinitions: ColumnDefinition[] = SC_SAMPLE_TABLE_COLUMNS;
+const reclassifyColumnDefinitions: ColumnDefinition[] = SC_RECLASSIFY_TABLE_COLUMNS;
+
+const knownColumnDefinitions = new Map(
+  [...columnDefinitions, ...reclassifyColumnDefinitions].map((definition) => [
+    definition.key,
+    definition,
+  ]),
+);
+const reclassifyColumnKeys = new Set(
+  reclassifyColumnDefinitions.map((definition) => definition.key),
+);
 const PAGE_SIZE = 250;
 const ROW_HEIGHT = 36;
 const SCROLLBAR_SIZE = 10;
@@ -68,9 +89,17 @@ const DEFAULT_TABLE_SORT: ScSampleTableSort = {
   field: "defect_id",
   direction: "asc",
 };
-const activeColumnDefinitions = computed(() =>
-  scSampleTableColumns(props.showReclassifyColumns === true),
-);
+const sourceColumns = ref<ScDataColumn[] | null>(null);
+const activeColumnDefinitions = computed(() => {
+  if (sourceColumns.value === null) {
+    return props.showReclassifyColumns
+      ? [...columnDefinitions, ...reclassifyColumnDefinitions]
+      : columnDefinitions;
+  }
+  return sourceColumns.value
+    .filter((column) => props.showReclassifyColumns || !reclassifyColumnKeys.has(column.name))
+    .map((column) => knownColumnDefinitions.get(column.name) ?? dynamicColumnDefinition(column));
+});
 const resolvedPageSize = computed(() => props.pageSize ?? PAGE_SIZE);
 
 let arrowRows = new ArrowBackedRows();
@@ -244,6 +273,35 @@ function normalizeFilterValue(field: string, value: string | number): string | n
 
 function normalizeTableSort(sort: ScSampleTableSort | null | undefined): ScSampleTableSort {
   return sort ?? DEFAULT_TABLE_SORT;
+}
+
+function dynamicColumnDefinition(column: ScDataColumn): ColumnDefinition {
+  const arrowType = column.arrowType.toLowerCase();
+  const numeric = /(^|[^a-z])(u?int|float|double|decimal)/.test(arrowType);
+  const scalar =
+    numeric ||
+    arrowType.includes("bool") ||
+    arrowType.includes("utf8") ||
+    arrowType.includes("string") ||
+    arrowType.includes("date") ||
+    arrowType.includes("time");
+  return {
+    key: column.name,
+    title: column.name,
+    width: Math.max(120, Math.min(240, column.name.length * 9 + 44)),
+    filter: numeric ? "range" : scalar ? "set" : null,
+  };
+}
+
+async function loadSourceColumns(): Promise<void> {
+  const source = props.dataSource;
+  try {
+    const columns = (await source.loadColumns?.()) ?? null;
+    if (source === props.dataSource) sourceColumns.value = columns;
+  } catch (error) {
+    if (source !== props.dataSource) return;
+    pageError.value = error instanceof Error ? error.message : "Failed to load sample columns";
+  }
 }
 
 function getFilterState(field: string): {
@@ -616,7 +674,14 @@ function renderCell(definition: ColumnDefinition, row: VxeSampleTableRow | undef
   if (definition.key !== "defect_id" && !row._isHydrated) return "";
   if (definition.render) return definition.render(row);
   const value = row[definition.key];
-  return value == null || value === "" ? "-" : String(value);
+  if (value == null || value === "") return "-";
+  if (value instanceof Uint8Array) return `[${value.byteLength} bytes]`;
+  if (typeof value === "object") {
+    return JSON.stringify(value, (_key, item: unknown) =>
+      typeof item === "bigint" ? item.toString() : item,
+    );
+  }
+  return String(value);
 }
 
 function sortOrder(field: string): VxeTablePropTypes.SortOrder {
@@ -813,6 +878,12 @@ watch(
 );
 
 watch(
+  () => props.dataSource.scopeKey,
+  () => void loadSourceColumns(),
+  { immediate: true },
+);
+
+watch(
   () => props.selection,
   (selection: ScTableSelectionConstraint | undefined) => {
     allMatchingRowsSelected.value = selection?.kind === "all";
@@ -969,6 +1040,7 @@ defineExpose({
               <span class="sst-vxe-column-title">{{ definition.title }}</span>
               <div class="sst-vxe-column-actions" @click.stop>
                 <NButton
+                  v-if="definition.filter !== null"
                   size="tiny"
                   quaternary
                   circle
@@ -985,6 +1057,7 @@ defineExpose({
                   </template>
                 </NButton>
                 <NPopover
+                  v-if="definition.filter !== null"
                   :key="`${String(definition.key)}:${filterPopoverVersion}`"
                   trigger="click"
                   placement="bottom-start"

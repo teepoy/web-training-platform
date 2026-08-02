@@ -93,6 +93,7 @@ export function useSqlInspectionModel(args: {
     const reticle = args.reticle.value;
     return {
       scopeKey: `${source.scopeKey}:${JSON.stringify(filters)}:${JSON.stringify(reticle)}`,
+      loadColumns: () => source.loadColumns(),
       loadRows: (query) => source.loadRows({ ...query, filters, reticle }),
       loadDistinctValues: (query) => source.loadDistinctValues({ ...query, filters, reticle }),
     };

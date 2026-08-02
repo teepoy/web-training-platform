@@ -79,8 +79,16 @@ export interface ScInvalidation {
   changedKinds: readonly string[];
 }
 
+export interface ScDataColumn {
+  /** Exact field name and Arrow type returned by SELECT * FROM samples LIMIT 0. */
+  name: string;
+  arrowType: string;
+  nullable: boolean;
+}
+
 export interface ScWorkbenchDataSource {
   readonly scopeKey: string;
+  loadColumns(): Promise<ScDataColumn[]>;
   loadMap(query: ScMapDataQuery): Promise<Uint8Array>;
   loadRows(query: ScSampleTableRowsQuery & ScDataQueryContext): Promise<ScSampleTableRowsPage>;
   loadGallery(query: ScGalleryDataQuery): Promise<ScGalleryPage>;

@@ -4,6 +4,7 @@ import { API_BASE, requestRaw, withAuthQueryParams } from "@/shared/api/client";
 import type {
   ScAggregateDataQuery,
   ScArrowQueryResult,
+  ScDataColumn,
   ScDataFilter,
   ScDataParameter,
   ScDataQueryContext,
@@ -55,7 +56,7 @@ const SAMPLE_COLUMNS = [
   "prediction_label",
   "prediction_confidence",
 ] as const;
-const ALLOWED_COLUMNS = new Set([
+const DEFAULT_ALLOWED_COLUMNS = new Set<string>([
   ...SAMPLE_COLUMNS,
   "sample_id",
   "inspection_time",
@@ -68,9 +69,12 @@ interface CompiledWhere {
   parameters: ScDataParameter[];
 }
 
-function quotedColumn(field: string): string {
-  if (!ALLOWED_COLUMNS.has(field)) throw new Error(`Unsupported SC data field: ${field}`);
-  return `"${field}"`;
+function quotedColumn(
+  field: string,
+  allowedColumns: ReadonlySet<string> = DEFAULT_ALLOWED_COLUMNS,
+): string {
+  if (!allowedColumns.has(field)) throw new Error(`Unsupported SC data field: ${field}`);
+  return `"${field.replace(/"/g, '""')}"`;
 }
 
 function positiveModulo(column: "index_x" | "index_y", shift: number, count: number): string {
@@ -101,28 +105,37 @@ function reticleExpression(
     : `"die_y" + (${positiveModulo("index_y", options.yDieShift, options.yDieCount)} * ${dieSizeY})`;
 }
 
-function selectColumn(field: string, reticle?: ScReticleProjection): string {
+function selectColumn(
+  field: string,
+  reticle?: ScReticleProjection,
+  allowedColumns: ReadonlySet<string> = DEFAULT_ALLOWED_COLUMNS,
+): string {
   if ((field === "reticle_x" || field === "reticle_y") && reticle) {
     return `${reticleExpression(field, reticle)} AS "${field}"`;
   }
-  return quotedColumn(field);
+  return quotedColumn(field, allowedColumns);
 }
 
-function filterColumn(field: string, reticle?: ScReticleProjection): string {
+function filterColumn(
+  field: string,
+  reticle?: ScReticleProjection,
+  allowedColumns: ReadonlySet<string> = DEFAULT_ALLOWED_COLUMNS,
+): string {
   if ((field === "reticle_x" || field === "reticle_y") && reticle) {
     return `(${reticleExpression(field, reticle)})`;
   }
-  return quotedColumn(field);
+  return quotedColumn(field, allowedColumns);
 }
 
 export function compileScWhere(
   filters: readonly ScDataFilter[],
   reticle?: ScReticleProjection,
+  allowedColumns: ReadonlySet<string> = DEFAULT_ALLOWED_COLUMNS,
 ): CompiledWhere {
   const predicates: string[] = [];
   const parameters: ScDataParameter[] = [];
   for (const [field, operator, value] of filters) {
-    const column = filterColumn(field, reticle);
+    const column = filterColumn(field, reticle, allowedColumns);
     if (operator === "is null") {
       predicates.push(`${column} IS NULL`);
       continue;
@@ -165,11 +178,12 @@ export function compileScWhere(
 function filtersFromTableFilter(
   filter: ScSampleTableFilter | undefined,
   omitField?: string,
+  allowedColumns: ReadonlySet<string> = DEFAULT_ALLOWED_COLUMNS,
 ): ScDataFilter[] {
   const result: ScDataFilter[] = [];
   for (const [field, condition] of Object.entries(filter ?? {})) {
     if (field === omitField) continue;
-    quotedColumn(field);
+    quotedColumn(field, allowedColumns);
     if (condition.filterType === "set" && condition.values.length > 0) {
       result.push([field, "in", condition.values]);
     } else if (condition.filterType === "number" && condition.type === "inRange") {
@@ -179,17 +193,26 @@ function filtersFromTableFilter(
   return result;
 }
 
-function orderBy(sort: ScSampleTableSort | null | undefined): string {
+function orderBy(
+  sort: ScSampleTableSort | null | undefined,
+  allowedColumns: ReadonlySet<string> = DEFAULT_ALLOWED_COLUMNS,
+): string {
   const field = sort?.direction ? sort.field : "defect_id";
   const direction = sort?.direction === "desc" ? "DESC" : "ASC";
-  return ` ORDER BY ${quotedColumn(field)} ${direction}`;
+  return ` ORDER BY ${quotedColumn(field, allowedColumns)} ${direction}`;
 }
 
 function rowRecord(table: Table, index: number): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   for (const field of table.schema.fields)
-    result[field.name] = table.getChild(field.name)?.get(index);
+    result[field.name] = normalizeArrowValue(table.getChild(field.name)?.get(index));
   return result;
+}
+
+function normalizeArrowValue(value: unknown): unknown {
+  if (typeof value !== "bigint") return value;
+  const numeric = Number(value);
+  return Number.isSafeInteger(numeric) ? numeric : value.toString();
 }
 
 function numeric(value: unknown): number {
@@ -203,6 +226,7 @@ function nullableString(value: unknown): string | null {
 
 function sampleRow(row: Record<string, unknown>): ScSampleTableDisplayRow {
   return {
+    ...row,
     defect_id: String(row.defect_id ?? ""),
     rough_bin: numeric(row.rough_bin),
     class_number: numeric(row.class_number),
@@ -240,6 +264,7 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
   private readonly listeners = new Set<(event: ScInvalidation) => void>();
   private eventSource: EventSource | null = null;
   private readonly inFlightQueries = new Set<AbortController>();
+  private columnsPromise: Promise<ScDataColumn[]> | null = null;
   private knownRevision = 0;
   private closed = false;
 
@@ -256,6 +281,23 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
     this.eventsUrl = `${API_BASE}/sc/data/${scopePath}/events`;
   }
 
+  loadColumns(): Promise<ScDataColumn[]> {
+    if (this.columnsPromise) return this.columnsPromise;
+    const request = this.query("sc-workbench.schema", "SELECT * FROM samples LIMIT 0", []).then(
+      ({ table }) =>
+        table.schema.fields.map((field) => ({
+          name: field.name,
+          arrowType: field.type.toString(),
+          nullable: field.nullable,
+        })),
+    );
+    this.columnsPromise = request.catch((error: unknown) => {
+      this.columnsPromise = null;
+      throw error;
+    });
+    return this.columnsPromise;
+  }
+
   async loadMap(query: ScMapDataQuery): Promise<Uint8Array> {
     const columns = [
       "defect_id",
@@ -268,12 +310,17 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
       query.legendColumn,
       "images",
     ];
-    const compiled = compileScWhere(query.filters ?? [], query.reticle);
+    const allowedColumns = await this.allowedColumnsFor([
+      ...columns,
+      ...(query.filters ?? []).map(([field]) => field),
+    ]);
+    const compiled = compileScWhere(query.filters ?? [], query.reticle, allowedColumns);
     return (
       await this.query(
         "sc-workbench.map",
-        `SELECT ${[...new Set(columns)].map((field) => selectColumn(field, query.reticle)).join(", ")} ` +
-          `FROM samples${compiled.sql} ORDER BY "defect_id"`,
+        `SELECT ${[...new Set(columns)]
+          .map((field) => selectColumn(field, query.reticle, allowedColumns))
+          .join(", ")} ` + `FROM samples${compiled.sql} ORDER BY "defect_id"`,
         compiled.parameters,
       )
     ).ipc;
@@ -282,14 +329,16 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
   async loadRows(
     query: ScSampleTableRowsQuery & ScDataQueryContext,
   ): Promise<ScSampleTableRowsPage> {
+    const sourceColumns = await this.loadColumns();
+    const allowedColumns = this.allowedColumns(sourceColumns);
     const filters = [
       ...(query.filters ?? []),
-      ...filtersFromTableFilter(query.filter),
+      ...filtersFromTableFilter(query.filter, undefined, allowedColumns),
       ...(query.defectIds.length > 0
         ? ([["defect_id", "in", query.defectIds.map(Number)]] as ScDataFilter[])
         : []),
     ];
-    const compiled = compileScWhere(filters, query.reticle);
+    const compiled = compileScWhere(filters, query.reticle, allowedColumns);
     const offset = Number.parseInt(query.anchor, 10) || 0;
     const reticle = query.reticleOptions
       ? {
@@ -298,11 +347,16 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
           dieSizeY: query.reticle?.dieSizeY ?? 1,
         }
       : query.reticle;
-    const columns = SAMPLE_COLUMNS.map((field) => selectColumn(field, reticle));
+    const columns = [
+      ...sourceColumns.map((field) => selectColumn(field.name, reticle, allowedColumns)),
+      ...(["reticle_x", "reticle_y"] as const)
+        .filter((field) => !sourceColumns.some((column) => column.name === field))
+        .map((field) => selectColumn(field, reticle, allowedColumns)),
+    ];
     const result = await this.query(
       "sc-workbench.table.rows",
       `SELECT ${columns.join(", ")}, COUNT(*) OVER () AS "__total" FROM samples${compiled.sql}` +
-        `${orderBy(query.sort)} LIMIT ? OFFSET ?`,
+        `${orderBy(query.sort, allowedColumns)} LIMIT ? OFFSET ?`,
       [...compiled.parameters, query.limit, offset],
     );
     const total = result.table.numRows > 0 ? numeric(result.table.getChild("__total")?.get(0)) : 0;
@@ -328,9 +382,15 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
             "prediction_confidence",
           ]
         : ["defect_id", "annotation_label", "prediction_label", "prediction_confidence"];
+    const allowedColumns = await this.allowedColumnsFor([
+      ...galleryColumns,
+      ...Object.keys(query.tableFilter ?? {}),
+      ...(query.filters ?? []).map(([field]) => field),
+      ...(query.tableSort?.field ? [query.tableSort.field] : []),
+    ]);
     const filters = [
       ...(query.filters ?? []),
-      ...filtersFromTableFilter(query.tableFilter),
+      ...filtersFromTableFilter(query.tableFilter, undefined, allowedColumns),
       ...(query.tableSelection?.kind === "ids" && query.tableSelection.ids.length > 0
         ? ([["defect_id", "in", [...query.tableSelection.ids]]] as ScDataFilter[])
         : []),
@@ -339,12 +399,14 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
         : []),
       ...(query.mode === "review" ? ([["images", ">", 0]] as ScDataFilter[]) : []),
     ];
-    const compiled = compileScWhere(filters, query.reticle);
+    const compiled = compileScWhere(filters, query.reticle, allowedColumns);
     const result = await this.query(
       `sc-workbench.gallery.${query.mode}`,
-      `SELECT ${galleryColumns.map((field) => selectColumn(field, query.reticle)).join(", ")}, ` +
+      `SELECT ${galleryColumns
+        .map((field) => selectColumn(field, query.reticle, allowedColumns))
+        .join(", ")}, ` +
         `COUNT(*) OVER () AS "__total" FROM samples${compiled.sql}` +
-        `${orderBy(query.tableSort)} LIMIT ? OFFSET ?`,
+        `${orderBy(query.tableSort, allowedColumns)} LIMIT ? OFFSET ?`,
       [...compiled.parameters, query.limit, query.offset],
     );
     const total = result.table.numRows > 0 ? numeric(result.table.getChild("__total")?.get(0)) : 0;
@@ -357,8 +419,12 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
   }
 
   async loadAggregates(query: ScAggregateDataQuery): Promise<Record<string, number>> {
-    const compiled = compileScWhere(query.filters ?? [], query.reticle);
-    const column = filterColumn(query.field, query.reticle);
+    const allowedColumns = await this.allowedColumnsFor([
+      query.field,
+      ...(query.filters ?? []).map(([field]) => field),
+    ]);
+    const compiled = compileScWhere(query.filters ?? [], query.reticle, allowedColumns);
+    const column = filterColumn(query.field, query.reticle, allowedColumns);
     const result = await this.query(
       `sc-workbench.aggregate.${query.field}`,
       `SELECT ${column} AS "group_key", COUNT(*) AS "group_count" FROM samples${compiled.sql} ` +
@@ -378,18 +444,23 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
   async loadDistinctValues(
     query: ScSampleTableDistinctValuesQuery & ScDataQueryContext,
   ): Promise<Array<string | number>> {
+    const allowedColumns = await this.allowedColumnsFor([
+      query.field,
+      ...Object.keys(query.filter ?? {}),
+      ...(query.filters ?? []).map(([field]) => field),
+    ]);
     const filters = [
       ...(query.filters ?? []),
-      ...filtersFromTableFilter(query.filter, query.field),
+      ...filtersFromTableFilter(query.filter, query.field, allowedColumns),
       ...(query.search.trim()
         ? ([[query.field, "contains", query.search.trim()]] as ScDataFilter[])
         : []),
     ];
-    const compiled = compileScWhere(filters, query.reticle);
-    const column = filterColumn(query.field, query.reticle);
+    const compiled = compileScWhere(filters, query.reticle, allowedColumns);
+    const column = filterColumn(query.field, query.reticle, allowedColumns);
     const result = await this.query(
       `sc-workbench.distinct.${query.field}`,
-      `SELECT DISTINCT ${column} AS ${quotedColumn(query.field)} FROM samples${compiled.sql} ` +
+      `SELECT DISTINCT ${column} AS ${quotedColumn(query.field, allowedColumns)} FROM samples${compiled.sql} ` +
         `ORDER BY ${column} LIMIT ?`,
       [...compiled.parameters, query.limit],
     );
@@ -404,6 +475,10 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
   async resolveSelection(query: ScSelectionQuery): Promise<number[]> {
     const filters = [...(query.filters ?? [])];
     const constraint = query.constraint;
+    const allowedColumns = await this.allowedColumnsFor([
+      ...(query.filters ?? []).map(([field]) => field),
+      ...(constraint.kind === "legend" ? [constraint.field] : []),
+    ]);
     if (constraint.kind === "ids") {
       if (constraint.ids.length === 0) return [];
       filters.push(["defect_id", "in", [...constraint.ids]]);
@@ -412,7 +487,7 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
       if (!Number.isInteger(constraint.limit) || constraint.limit <= 0) {
         throw new Error("Random selection limit must be a positive integer");
       }
-      const compiled = compileScWhere(filters, query.reticle);
+      const compiled = compileScWhere(filters, query.reticle, allowedColumns);
       const result = await this.query(
         "sc-workbench.selection.random",
         `SELECT "defect_id" FROM samples${compiled.sql} ORDER BY RANDOM() LIMIT ?`,
@@ -437,10 +512,10 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
         [`${constraint.mode}_y`, "<=", region.y + ("height" in region ? region.height : region.h)],
       );
     }
-    const compiled = compileScWhere(filters, query.reticle);
+    const compiled = compileScWhere(filters, query.reticle, allowedColumns);
     const columns =
       constraint.kind === "polygon"
-        ? `"defect_id", ${selectColumn(`${constraint.mode}_x`, query.reticle)}, ${selectColumn(`${constraint.mode}_y`, query.reticle)}`
+        ? `"defect_id", ${selectColumn(`${constraint.mode}_x`, query.reticle, allowedColumns)}, ${selectColumn(`${constraint.mode}_y`, query.reticle, allowedColumns)}`
         : '"defect_id"';
     const result = await this.query(
       `sc-workbench.selection.${constraint.kind}`,
@@ -475,6 +550,17 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
     this.eventSource = null;
     for (const controller of this.inFlightQueries) controller.abort();
     this.inFlightQueries.clear();
+  }
+
+  private allowedColumns(columns: readonly ScDataColumn[]): Set<string> {
+    return new Set([...DEFAULT_ALLOWED_COLUMNS, ...columns.map((column) => column.name)]);
+  }
+
+  private async allowedColumnsFor(fields: readonly string[]): Promise<ReadonlySet<string>> {
+    if (fields.every((field) => DEFAULT_ALLOWED_COLUMNS.has(field))) {
+      return DEFAULT_ALLOWED_COLUMNS;
+    }
+    return this.allowedColumns(await this.loadColumns());
   }
 
   private async query(

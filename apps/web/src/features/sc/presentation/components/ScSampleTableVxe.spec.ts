@@ -152,4 +152,28 @@ describe("ScSampleTableVxe server query state", () => {
       rough_bin: { filterType: "set", values: [7] },
     });
   });
+
+  it("renders metadata columns discovered from the backend schema", async () => {
+    const reloadData = vi.fn(async () => undefined);
+    const loadRows = vi.fn<ScSampleTableDataSource["loadRows"]>(async () => ({
+      items: [{ ...sampleRow("1", 2), future_metric: 12.5 }],
+      total: 1,
+      nextAnchor: null,
+    }));
+    const dataSource: ScSampleTableDataSource = {
+      scopeKey: "dataset:dynamic",
+      loadColumns: async () => [
+        { name: "defect_id", arrowType: "Int32", nullable: false },
+        { name: "future_metric", arrowType: "Float64", nullable: true },
+      ],
+      loadRows,
+    };
+    const { wrapper } = await mountWithProviders(ScSampleTableVxe, {
+      props: { dataSource },
+      global: { stubs: tableStubs(reloadData) },
+    });
+
+    await vi.waitFor(() => expect(wrapper.text()).toContain("future_metric"));
+    expect(wrapper.findAll(".sst-vxe-sort-button")).toHaveLength(2);
+  });
 });

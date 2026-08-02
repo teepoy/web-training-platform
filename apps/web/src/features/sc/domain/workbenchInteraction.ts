@@ -2,6 +2,7 @@ import type { ScSampleTableRow } from "@/generated/orval/models/scSampleTableRow
 import type { ScSampleTableRowsRequest } from "@/generated/orval/models/scSampleTableRowsRequest";
 import type { ScSampleTableFilter, ScSampleTableSort } from "@/features/sc/domain/sampleTable";
 import type { ReticleMapOptions } from "@/features/sc/application/reticleMapOptions";
+import type { ScDataColumn } from "@/features/sc/domain/workbenchDataSource";
 
 export type ScLegendSource = "class" | "bin" | "annotation" | "prediction" | "final_class";
 export type ScSelectionSource = "sample-table" | "blink-table";
@@ -50,6 +51,7 @@ export interface ScSampleTableDistinctValuesQuery {
 
 export interface ScSampleTableDataSource {
   scopeKey: string;
+  loadColumns?: () => Promise<ScDataColumn[]>;
   loadRows: (query: ScSampleTableRowsQuery) => Promise<ScSampleTableRowsPage>;
   loadDistinctValues?: (query: ScSampleTableDistinctValuesQuery) => Promise<Array<string | number>>;
 }
