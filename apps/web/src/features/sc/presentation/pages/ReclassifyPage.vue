@@ -13,6 +13,7 @@ import {
   NTooltip,
   NDescriptions,
   NDescriptionsItem,
+  NAlert,
   useThemeVars,
   useMessage,
 } from "naive-ui";
@@ -32,15 +33,30 @@ const router = useRouter();
 const taskInsightVisible = ref(false);
 const inspectionQuad = ref<{
   getGlobalFilter: () => ScSampleTableFilter;
-  queryGlobalFilterCount: () => Promise<number>;
-  queryRandomGlobalFilteredDefectIds: (count: number) => Promise<number[]>;
+  getSamplingContext: () => { reviewMode: boolean; mapSelectionCount: number };
+  querySamplingCandidateCount: (options: {
+    reviewOnly: boolean;
+    mapSelectionOnly: boolean;
+  }) => Promise<number>;
+  querySamplingDefectIds: (
+    count: number,
+    seed: number,
+    options: { reviewOnly: boolean; mapSelectionOnly: boolean },
+  ) => Promise<number[]>;
 } | null>(null);
 const filterConfirmationVisible = ref(false);
 const filteredWorkflowCount = ref(0);
 const filteredWorkflowFilter = ref<ScSampleTableFilter | null>(null);
 const isPreparingFilteredWorkflow = ref(false);
 const samplingAvailableCount = ref(0);
+const samplingMapSelectionCount = ref(0);
 const isPreparingSampling = ref(false);
+const MAX_SAMPLING_SEED = Number.MAX_SAFE_INTEGER;
+
+const samplingOptions = computed(() => ({
+  reviewOnly: page.samplingReviewOnly.value,
+  mapSelectionOnly: page.samplingMapSelectionOnly.value,
+}));
 
 const containerStyle = computed(() => ({
   "--cv-bg": themeVars.value.bodyColor,
@@ -88,12 +104,16 @@ async function handleTrainAndPredictClick(): Promise<void> {
     return;
   }
   const globalFilter = quad.getGlobalFilter();
-  if (Object.keys(globalFilter).length > 0) {
+  const sampledIds = [...page.galleryRandomSamplingDefectIds.value];
+  const workflowFilter = page.resolveTrainSampleFilter(globalFilter);
+  if (workflowFilter) {
     isPreparingFilteredWorkflow.value = true;
     try {
-      filteredWorkflowFilter.value = globalFilter;
-      const count = await quad.queryGlobalFilterCount();
-      filteredWorkflowCount.value = count;
+      filteredWorkflowFilter.value = workflowFilter;
+      filteredWorkflowCount.value =
+        sampledIds.length > 0
+          ? sampledIds.length
+          : await quad.querySamplingCandidateCount({ reviewOnly: false, mapSelectionOnly: false });
       filterConfirmationVisible.value = true;
     } catch (error) {
       message.error(
@@ -117,16 +137,44 @@ async function submitTrainAndPredict(sampleFilter: ScSampleTableFilter | null): 
 
 const globalFilterEntries = computed(() => Object.entries(filteredWorkflowFilter.value ?? {}));
 
+function formatWorkflowCondition(field: string, condition: ScSampleTableFilter[string]): string {
+  if (field === "defect_id" && condition.filterType === "set") {
+    return `${condition.values.length} sampled defects`;
+  }
+  return JSON.stringify(condition);
+}
+
 async function openSamplingModal(): Promise<void> {
   isPreparingSampling.value = true;
   try {
-    const count = await inspectionQuad.value?.queryGlobalFilterCount();
-    if (count === undefined) throw new Error("Data is still loading. Try again in a moment.");
-    samplingAvailableCount.value = count;
-    page.samplingCount.value = Math.min(page.samplingCount.value, Math.max(count, 1));
+    const quad = inspectionQuad.value;
+    if (!quad) throw new Error("Data is still loading. Try again in a moment.");
+    const context = quad.getSamplingContext();
+    samplingMapSelectionCount.value = context.mapSelectionCount;
+    if (context.mapSelectionCount === 0) page.samplingMapSelectionOnly.value = false;
     page.showSamplingModal.value = true;
+    await refreshSamplingAvailableCount();
   } catch (error) {
     message.error(toUserMessage(error, "Failed to prepare sampling"));
+  } finally {
+    isPreparingSampling.value = false;
+  }
+}
+
+async function refreshSamplingAvailableCount(): Promise<void> {
+  const quad = inspectionQuad.value;
+  if (!quad) throw new Error("Data is still loading. Try again in a moment.");
+  const count = await quad.querySamplingCandidateCount(samplingOptions.value);
+  samplingAvailableCount.value = count;
+  page.samplingCount.value = Math.min(page.samplingCount.value, Math.max(count, 1));
+}
+
+async function handleSamplingScopeChange(): Promise<void> {
+  isPreparingSampling.value = true;
+  try {
+    await refreshSamplingAvailableCount();
+  } catch (error) {
+    message.error(toUserMessage(error, "Failed to update sampling candidates"));
   } finally {
     isPreparingSampling.value = false;
   }
@@ -135,8 +183,10 @@ async function openSamplingModal(): Promise<void> {
 async function applyRandomSampling(): Promise<void> {
   isPreparingSampling.value = true;
   try {
-    const ids = await inspectionQuad.value?.queryRandomGlobalFilteredDefectIds(
+    const ids = await inspectionQuad.value?.querySamplingDefectIds(
       page.samplingCount.value,
+      page.samplingSeed.value,
+      samplingOptions.value,
     );
     if (!ids) throw new Error("Data is still loading. Try again in a moment.");
     page.applySampling(ids.map(String));
@@ -203,14 +253,20 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
         <div class="sc-header">
           <div class="sc-header-left">
             <NButton text size="small" @click="goBack">← Back</NButton>
-            <NTooltip>
-              <template #trigger>
-                <NText depth="2" class="sc-dataset-name">
-                  {{ page.dataset.value?.name ?? "Reclassify" }}
-                </NText>
-              </template>
-              {{ page.dataset.value?.name ?? "Reclassify" }}
-            </NTooltip>
+            <div class="sc-dataset-title" data-testid="sc-dataset-name">
+              <NTooltip>
+                <template #trigger>
+                  <NText depth="2" class="sc-dataset-name">
+                    {{ page.dataset.value?.name ?? "Reclassify" }}
+                  </NText>
+                </template>
+                {{ page.dataset.value?.name ?? "Reclassify" }}
+              </NTooltip>
+            </div>
+            <div
+              id="sc-reclassify-global-filter-action"
+              class="sc-reclassify-global-filter-action"
+            />
           </div>
           <div class="sc-header-right">
             <NSelect
@@ -259,7 +315,19 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
               :loading="isPreparingSampling"
               @click="openSamplingModal"
             >
-              Sampling
+              Sampling{{
+                page.galleryRandomSamplingDefectIds.value.size
+                  ? ` (${page.galleryRandomSamplingDefectIds.value.size})`
+                  : ""
+              }}
+            </NButton>
+            <NButton
+              v-if="page.galleryRandomSamplingDefectIds.value.size"
+              size="small"
+              quaternary
+              @click="page.clearGalleryRandomSamplingDefectIds"
+            >
+              Clear sample
             </NButton>
             <NButton size="small" quaternary @click="router.push('/sc/handbook')">
               Handbook
@@ -284,6 +352,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
             :selected-defect-ids="Array.from(page.selectedDefectIds.value)"
             :gallery-random-sampling-defect-ids="page.galleryRandomSamplingDefectIds.value"
             :annotation-drafts="page.annotationDraft.value"
+            global-filter-trigger-target="#sc-reclassify-global-filter-action"
             @clear-gallery-random-sampling="page.clearGalleryRandomSamplingDefectIds"
             @selection-change="page.applySelectionAction"
           >
@@ -311,25 +380,72 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
     <NModal
       v-model:show="page.showSamplingModal.value"
       preset="card"
-      title="Random Sampling"
-      :style="{ width: '380px' }"
+      title="Review Sampling"
+      :style="{ width: '440px' }"
     >
       <div class="sc-sampling-form">
+        <NAlert type="info" :show-icon="false">
+          Sampling is deterministic for the same seed and candidate scope. The active cohort is
+          applied to the map, table, gallery, distribution, and Train &amp; Predict.
+        </NAlert>
+        <NCheckbox
+          v-model:checked="page.samplingReviewOnly.value"
+          style="margin-top: 14px"
+          @update:checked="handleSamplingScopeChange"
+        >
+          Review candidates only (has images)
+        </NCheckbox>
+        <NCheckbox
+          v-model:checked="page.samplingMapSelectionOnly.value"
+          :disabled="samplingMapSelectionCount === 0"
+          @update:checked="handleSamplingScopeChange"
+        >
+          Current map selection only
+          <template v-if="samplingMapSelectionCount > 0"
+            >({{ samplingMapSelectionCount }})</template
+          >
+        </NCheckbox>
         <div class="sc-sampling-field">
           <NText depth="2" style="font-size: 13px">Sample Count</NText>
           <NInputNumber
             v-model:value="page.samplingCount.value"
             :min="1"
             :max="samplingAvailableCount"
+            :disabled="isPreparingSampling || samplingAvailableCount === 0"
             style="width: 100%"
           />
-          <NText depth="3" style="font-size: 11px; margin-top: 4px">
+          <NText v-if="isPreparingSampling" depth="3" style="font-size: 11px; margin-top: 4px">
+            Loading candidate count…
+          </NText>
+          <NText v-else depth="3" style="font-size: 11px; margin-top: 4px">
             Total available: {{ samplingAvailableCount }} samples
           </NText>
+        </div>
+        <div class="sc-sampling-field" style="margin-top: 12px">
+          <NText depth="2" style="font-size: 13px">Seed</NText>
+          <NInputNumber
+            v-model:value="page.samplingSeed.value"
+            :min="0"
+            :max="MAX_SAMPLING_SEED"
+            :precision="0"
+            style="width: 100%"
+          />
         </div>
         <NCheckbox v-model:checked="page.assignDefaultDraftLabel.value" style="margin-top: 12px">
           Assign draft label to sampled
         </NCheckbox>
+        <NSelect
+          v-if="page.assignDefaultDraftLabel.value"
+          v-model:value="page.samplingDraftLabel.value"
+          :options="
+            page.codeLabels.value.map((item) => ({
+              label: `${item.code} · ${item.name}`,
+              value: item.code,
+            }))
+          "
+          placeholder="Select draft label"
+          style="margin-top: 8px"
+        />
       </div>
       <template #footer>
         <div class="sc-sampling-footer">
@@ -337,7 +453,10 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
           <NButton
             type="primary"
             :loading="isPreparingSampling"
-            :disabled="samplingAvailableCount === 0"
+            :disabled="
+              samplingAvailableCount === 0 ||
+              (page.assignDefaultDraftLabel.value && !page.samplingDraftLabel.value)
+            "
             @click="applyRandomSampling"
           >
             Confirm
@@ -352,7 +471,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
       :style="{ width: '560px' }"
     >
       <NText>
-        The current global filter will limit both training and prediction to
+        The current workbench scope will limit both training and prediction to
         {{ filteredWorkflowCount }} defects.
       </NText>
       <NDescriptions bordered :column="1" size="small" style="margin-top: 16px">
@@ -361,7 +480,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
           :key="field"
           :label="field"
         >
-          {{ JSON.stringify(condition) }}
+          {{ formatWorkflowCondition(field, condition) }}
         </NDescriptionsItem>
       </NDescriptions>
       <template #footer>
@@ -424,9 +543,20 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
 
 .sc-header-left {
   display: flex;
+  flex: 1 1 auto;
   align-items: center;
   gap: 12px;
   min-width: 0;
+}
+
+.sc-dataset-title {
+  min-width: 0;
+}
+
+.sc-reclassify-global-filter-action {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
 }
 
 .sc-header-right {
@@ -444,6 +574,35 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
   white-space: nowrap;
   font-size: 15px;
   font-weight: 600;
+}
+
+@media (max-width: 960px) {
+  .sc-header {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .sc-header-left,
+  .sc-header-right {
+    width: 100%;
+  }
+
+  .sc-header-left {
+    flex-basis: 100%;
+  }
+
+  .sc-header-right {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .sc-dataset-title {
+    flex: 1 1 auto;
+  }
+
+  .sc-dataset-name {
+    max-width: none;
+  }
 }
 
 /* ── Main layout (mirrors ClassifyBrowserArea.vue) ─── */

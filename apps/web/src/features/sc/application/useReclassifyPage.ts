@@ -85,10 +85,15 @@ export interface ReclassifyPageState {
 
   showSamplingModal: Ref<boolean>;
   samplingCount: Ref<number>;
+  samplingSeed: Ref<number>;
+  samplingReviewOnly: Ref<boolean>;
+  samplingMapSelectionOnly: Ref<boolean>;
   assignDefaultDraftLabel: Ref<boolean>;
+  samplingDraftLabel: Ref<string | null>;
   applySampling: (defectIds: string[]) => void;
   galleryRandomSamplingDefectIds: Ref<Set<string>>;
   clearGalleryRandomSamplingDefectIds: () => void;
+  resolveTrainSampleFilter: (globalFilter: ScSampleTableFilter) => ScSampleTableFilter | null;
 
   selectedTrainerId: Ref<string | null>;
   trainerOptions: ComputedRef<{ label: string; value: string }[]>;
@@ -150,7 +155,9 @@ export function useReclassifyPage(): ReclassifyPageState {
 
   // InspectionQuad owns SC sample loading and all workbench-local controls.
   // Keep this composable limited to annotation, sampling and workflow state.
-  const galleryRandomSamplingDefectIds = ref<Set<string>>(new Set());
+  const galleryRandomSamplingDefectIds = ref<Set<string>>(
+    new Set(reclassifyStore.samplingDefectIdsByDataset?.[datasetId.value] ?? []),
+  );
 
   const selectedDefectIds = computed(
     () => new Set(reclassifyStore.selectedDefectIdsByDataset[datasetId.value] ?? []),
@@ -516,10 +523,27 @@ export function useReclassifyPage(): ReclassifyPageState {
 
   const showSamplingModal = ref(false);
   const samplingCount = ref(200);
+  const samplingSeed = ref(42);
+  const samplingReviewOnly = ref(true);
+  const samplingMapSelectionOnly = ref(false);
   const assignDefaultDraftLabel = ref(false);
+  const samplingDraftLabel = ref<string | null>(effectiveLabels.value[0] ?? null);
+
+  watch(effectiveLabels, (labels) => {
+    if (!samplingDraftLabel.value || !labels.includes(samplingDraftLabel.value)) {
+      samplingDraftLabel.value = labels[0] ?? null;
+    }
+  });
+
+  watch(datasetId, (id) => {
+    galleryRandomSamplingDefectIds.value = new Set(
+      reclassifyStore.samplingDefectIdsByDataset?.[id] ?? [],
+    );
+  });
 
   function clearGalleryRandomSamplingDefectIds(): void {
     galleryRandomSamplingDefectIds.value = new Set();
+    reclassifyStore.clearSamplingDefectIds(datasetId.value);
   }
 
   function applySampling(defectIds: string[]): void {
@@ -527,16 +551,26 @@ export function useReclassifyPage(): ReclassifyPageState {
     if (sampled.length === 0) return;
 
     galleryRandomSamplingDefectIds.value = new Set(sampled);
+    reclassifyStore.setSamplingDefectIds(datasetId.value, sampled);
 
-    if (assignDefaultDraftLabel.value) {
-      const next: Record<string, string> = {};
+    if (assignDefaultDraftLabel.value && samplingDraftLabel.value) {
+      const next: Record<string, string> = { ...annotationDraft.value };
       for (const id of sampled) {
-        next[id] = "60";
+        next[id] = samplingDraftLabel.value;
       }
       annotationDraft.value = next;
     }
 
     showSamplingModal.value = false;
+  }
+
+  function resolveTrainSampleFilter(globalFilter: ScSampleTableFilter): ScSampleTableFilter | null {
+    const filter: ScSampleTableFilter = { ...globalFilter };
+    const sampledIds = [...galleryRandomSamplingDefectIds.value];
+    if (sampledIds.length > 0) {
+      filter.defect_id = { filterType: "set", values: sampledIds };
+    }
+    return Object.keys(filter).length > 0 ? filter : null;
   }
 
   // ── Train & Predict ─────────────────────────────────────────────────
@@ -797,10 +831,15 @@ export function useReclassifyPage(): ReclassifyPageState {
 
     showSamplingModal,
     samplingCount,
+    samplingSeed,
+    samplingReviewOnly,
+    samplingMapSelectionOnly,
     assignDefaultDraftLabel,
+    samplingDraftLabel,
     applySampling,
     galleryRandomSamplingDefectIds,
     clearGalleryRandomSamplingDefectIds,
+    resolveTrainSampleFilter,
 
     selectedTrainerId,
     trainerOptions,

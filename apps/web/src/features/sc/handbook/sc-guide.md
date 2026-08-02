@@ -25,6 +25,9 @@ Defect points are color-coded by a configurable **legend grouping** (e.g., by ro
 - **Zoom** into rectangular regions on any map to fetch higher-resolution data.
 - **Filter and sort** defects in the data table below the maps.
 - Click defects to select them and view associated review images.
+- Use **Global Filter** beside the page title to constrain the map, table, gallery, sampling, and
+  Train & Predict together. Missing Annotation, Prediction, and Final Class values appear as
+  Unlabeled, No Prediction, and Unclassified.
 
 ### Importing an Inspection
 
@@ -78,6 +81,8 @@ The same wafer/die/reticle map triad as the preview page, integrated with annota
 
 - **Box selection** — draw a rectangle on the map to filter the Blink table to defects within that region.
 - **Legend coloring** — by bin, class number, annotation status, or prediction label.
+- **Custom colors** — label colors accept text labels as well as numeric classes and persist per
+  dataset and legend source.
 - **Zoom** — click to zoom into a region.
 - **Map filters** — active filters are shown in the tab bar with a **Clear** option.
 
@@ -92,8 +97,14 @@ The same wafer/die/reticle map triad as the preview page, integrated with annota
 Click **Sampling** to open the sampling modal:
 
 - Specify a **sample count** (default: 200).
-- Optionally **filter by current map selection**.
-- Optionally **auto-assign a default draft label** to all sampled defects.
+- Keep **Review candidates only** enabled to sample defects that have review images.
+- Optionally limit candidates to the **current map selection**.
+- Set a seed to reproduce the same draw from an unchanged candidate set.
+- Optionally choose and assign a draft label. Existing drafts outside the sample are preserved.
+
+The active cohort is shown in the Sampling button and limits the map, table, gallery, group
+distribution, and Train & Predict. Changing the Global Filter, Review mode, or map selection clears
+the cohort so stale sampling results cannot remain active silently.
 
 ### Train & Predict
 

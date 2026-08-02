@@ -246,6 +246,43 @@ describe("useReclassifyPage - addLabel", () => {
   });
 });
 
+describe("useReclassifyPage - review sampling", () => {
+  it("keeps existing drafts and assigns the explicitly selected sampling label", async () => {
+    const { state } = await mountPage("ds-sampling", DEFAULT_DATASET);
+    state.annotationDraft.value = { existing: "7" };
+    state.assignDefaultDraftLabel.value = true;
+    state.samplingDraftLabel.value = "12";
+
+    state.applySampling(["103", "274", "103"]);
+
+    expect([...state.galleryRandomSamplingDefectIds.value]).toEqual(["103", "274"]);
+    expect(state.annotationDraft.value).toEqual({ existing: "7", "103": "12", "274": "12" });
+  });
+
+  it("clears the active cohort explicitly", async () => {
+    const { state } = await mountPage("ds-clear-sampling", DEFAULT_DATASET);
+    state.applySampling(["3", "9"]);
+
+    state.clearGalleryRandomSamplingDefectIds();
+
+    expect(state.galleryRandomSamplingDefectIds.value.size).toBe(0);
+  });
+
+  it("combines the active cohort with Global Filter for Train & Predict", async () => {
+    const { state } = await mountPage("ds-sampled-train", DEFAULT_DATASET);
+    state.applySampling(["3", "9"]);
+
+    expect(
+      state.resolveTrainSampleFilter({
+        final_class: { filterType: "set", values: ["Scratch"] },
+      }),
+    ).toEqual({
+      final_class: { filterType: "set", values: ["Scratch"] },
+      defect_id: { filterType: "set", values: ["3", "9"] },
+    });
+  });
+});
+
 describe("useReclassifyPage - train defaults", () => {
   it("selects the first SC trainer by default", async () => {
     const { state } = await mountPage("ds-test-1", DEFAULT_DATASET);
