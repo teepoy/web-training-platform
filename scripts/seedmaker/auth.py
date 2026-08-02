@@ -36,15 +36,12 @@ def promote_superadmin(compose_file: str, email: str, password: str, name: str) 
         "exec",
         "-T",
         "api",
-        "uv",
-        "run",
-        "python",
-        "-m",
-        "app.cli",
-        "create-superadmin",
-        f"--email={email}",
-        f"--password={password}",
-        f"--name={name}",
+        "env",
+        f"BOOTSTRAP_SUPERADMIN_EMAIL={email}",
+        f"BOOTSTRAP_SUPERADMIN_PASSWORD={password}",
+        f"BOOTSTRAP_SUPERADMIN_NAME={name}",
+        "/app/.venv/bin/python",
+        "scripts/create_superadmin.py",
     ]
     print(f"  Promoting {email} to superadmin via docker exec ...")
     result = subprocess.run(cmd, capture_output=True, text=True)

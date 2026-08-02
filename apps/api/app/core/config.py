@@ -52,7 +52,7 @@ class MinioLifecycleExportsConfig(ConfigSection):
     enabled: bool = True
     prefix: str = "exports/"
     expiration_days: int = 1
-    abort_incomplete_multipart_upload_days: int | None = 1
+    abort_incomplete_multipart_upload_days: int | None = None
 
 
 class MinioLifecycleConfig(ConfigSection):
@@ -196,6 +196,10 @@ class RedisConfig(ConfigSection):
     password: str = ""
 
 
+class StartupChecksConfig(ConfigSection):
+    dependency_timeout_seconds: float = Field(default=5.0, gt=0)
+
+
 class AuthConfig(ConfigSection):
     enabled: bool = True
     jwt_secret_key: str = "replace-me-in-production"
@@ -283,6 +287,7 @@ class AppConfig(ConfigSection):
     sensors: SensorsConfig = Field(default_factory=SensorsConfig)
     agent: AgentConfig = Field(default_factory=AgentConfig)
     redis: RedisConfig = Field(default_factory=RedisConfig)
+    startup_checks: StartupChecksConfig = Field(default_factory=StartupChecksConfig)
     auth: AuthConfig = Field(default_factory=AuthConfig)
     sc: ScConfig = Field(default_factory=_default_sc_config)
     prediction: PredictionConfig = Field(default_factory=PredictionConfig)
@@ -438,6 +443,9 @@ def load_config(skip_runtime_validation: bool = False) -> AppConfig:
     redis_password = os.getenv("REDIS_PASSWORD")
     if redis_password:
         cfg.redis.password = redis_password
+    startup_timeout = os.getenv("STARTUP_CHECK_DEPENDENCY_TIMEOUT_SECONDS")
+    if startup_timeout:
+        cfg.startup_checks.dependency_timeout_seconds = float(startup_timeout)
     data_provider_environment = {
         "SC_DATA_PROVIDER_IMPLEMENTATION": ("implementation", str),
         "SC_DATA_PROVIDER_MAX_RSS_MB": ("max_rss_mb", int),

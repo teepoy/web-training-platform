@@ -1,111 +1,52 @@
 from __future__ import annotations
 
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock, call
 
 import pytest
-from omegaconf import DictConfig
-from omegaconf import OmegaConf
 
-from app.main import _ensure_prefect_deployments
+from app.core.config import load_config
+from app.core.platform_setup import prepare_prefect
+from app.modules.runtime.app.services.deployment_seed import (
+    platform_prefect_deployment_specs,
+)
+from app.shared.context import SharedInfra
 
 
-def _prefect_cfg() -> DictConfig:
-    return OmegaConf.create(
-        {
-            "execution": {"engine": "prefect"},
-        }
-    )
+def test_platform_prefect_deployment_specs_cover_runtime_and_cpu() -> None:
+    config = load_config(skip_runtime_validation=True)
+    specs = {
+        spec["deployment_name"]: spec
+        for spec in platform_prefect_deployment_specs(config)
+    }
+
+    assert {
+        "train-job-deployment",
+        "train-and-predict-deployment",
+        "predict-job-batch-deployment",
+        "timer-sensor",
+        "dataset-size-sensor",
+        "drain-dataset",
+    } <= set(specs)
+    assert specs["train-job-deployment"]["work_pool_name"] == "default-gpu"
+    assert specs["timer-sensor"]["work_pool_name"] == "default-cpu"
 
 
 @pytest.mark.anyio
-async def test_ensure_prefect_deployments_all_entries() -> None:
-    cfg = _prefect_cfg()
-    mock_client = AsyncMock()
+async def test_prepare_prefect_ensures_pools_and_deployments(monkeypatch) -> None:
+    config = load_config(skip_runtime_validation=True)
+    prefect = AsyncMock()
+    shared = MagicMock(spec=SharedInfra)
+    shared.prefect_client = prefect
+    validate = AsyncMock()
+    monkeypatch.setattr("app.core.platform_setup.validate_prefect", validate)
 
-    await _ensure_prefect_deployments(cfg, mock_client)
+    await prepare_prefect(config, shared)
 
-    assert mock_client.ensure_deployment.call_count == 6
-
-    calls = mock_client.ensure_deployment.call_args_list
-    called: list[dict] = []
-    for call in calls:
-        called.append(call.kwargs)
-
-    # ── GPU pool ──
-    assert {
-        "deployment_name": "train-job-deployment",
-        "flow_name": "training-train-job",
-        "work_pool_name": "default-gpu",
-        "entrypoint": "app.modules.training.flows.train_job:train_job_flow",
-        "path": "",
-    } in called
-
-    assert {
-        "deployment_name": "train-and-predict-deployment",
-        "flow_name": "training-train-and-predict",
-        "work_pool_name": "default-gpu",
-        "entrypoint": "app.workflows.train_predict:train_and_predict_flow",
-        "path": "",
-    } in called
-
-    assert {
-        "deployment_name": "predict-job-batch-deployment",
-        "flow_name": "prediction-predict-job",
-        "work_pool_name": "default-gpu",
-        "entrypoint": "app.modules.prediction.flows.predict_job:predict_job_flow",
-        "path": "",
-    } in called
-
-    assert {
-        "deployment_name": "timer-sensor",
-        "flow_name": "timer-sensor",
-        "work_pool_name": "default-cpu",
-        "entrypoint": "app.modules.jobs.sensors.adapter.flows.timer_sensor:timer_sensor",
-        "path": "",
-    } in called
-
-    assert {
-        "deployment_name": "dataset-size-sensor",
-        "flow_name": "dataset-size-sensor",
-        "work_pool_name": "default-cpu",
-        "entrypoint": "app.modules.jobs.sensors.adapter.flows.dataset_size_sensor:dataset_size_sensor",
-        "path": "",
-    } in called
-
-    assert {
-        "deployment_name": "drain-dataset",
-        "flow_name": "drain-dataset",
-        "work_pool_name": "default-cpu",
-        "entrypoint": "app.modules.datasets.adapter.flows.drain_dataset:drain_dataset",
-        "path": "",
-    } in called
-
-
-@pytest.mark.anyio
-async def test_ensure_prefect_deployments_skips_when_engine_not_prefect() -> None:
-    cfg = OmegaConf.create({
-        "execution": {"engine": "local"},
-    })
-    mock_client = AsyncMock()
-
-    await _ensure_prefect_deployments(cfg, mock_client)
-
-    mock_client.ensure_deployment.assert_not_called()
-
-
-@pytest.mark.anyio
-async def test_ensure_prefect_deployments_swallows_errors_per_entry() -> None:
-    cfg = _prefect_cfg()
-    mock_client = AsyncMock()
-    mock_client.ensure_deployment.side_effect = [
-        Exception("first fails"),
-        None,
-        None,
-        None,
-        None,
-        None,
+    assert prefect.ensure_work_pool.await_args_list == [
+        call("default-cpu", "process"),
+        call("default-gpu", "process"),
     ]
-
-    await _ensure_prefect_deployments(cfg, mock_client)
-
-    assert mock_client.ensure_deployment.call_count == 6
+    assert prefect.ensure_deployment.await_count == len(
+        platform_prefect_deployment_specs(config)
+    )
+    validate.assert_awaited_once_with(config, shared)

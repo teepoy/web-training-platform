@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-import logging
 import re
 from io import BytesIO
 from typing import Any
@@ -17,9 +16,8 @@ from minio.lifecycleconfig import (
 from minio import Minio
 
 _S3_URI_RE = re.compile(r"^s3://([^/]+)/(.+)$")
-_EXPORT_LIFECYCLE_RULE_ID = "finetune-export-expiration"
-_EXPORT_MULTIPART_ABORT_RULE_ID = "finetune-export-multipart-abort"
-logger = logging.getLogger(__name__)
+EXPORT_LIFECYCLE_RULE_ID = "finetune-export-expiration"
+EXPORT_MULTIPART_ABORT_RULE_ID = "finetune-export-multipart-abort"
 
 
 def _parse_s3_uri(uri: str) -> tuple[str, str]:
@@ -51,30 +49,22 @@ class MinioExportLifecycle:
             )
 
     def to_rules(self) -> list[Rule]:
-        rules = [
+        multipart_abort = (
+            AbortIncompleteMultipartUpload(
+                days_after_initiation=self.abort_incomplete_multipart_upload_days
+            )
+            if self.abort_incomplete_multipart_upload_days is not None
+            else None
+        )
+        return [
             Rule(
                 status="Enabled",
                 rule_filter=Filter(prefix=self.prefix),
-                rule_id=_EXPORT_LIFECYCLE_RULE_ID,
+                rule_id=EXPORT_LIFECYCLE_RULE_ID,
                 expiration=Expiration(days=self.expiration_days),
+                abort_incomplete_multipart_upload=multipart_abort,
             )
         ]
-        if self.abort_incomplete_multipart_upload_days is not None:
-            rules.append(
-                Rule(
-                    status="Enabled",
-                    rule_filter=Filter(prefix=self.prefix),
-                    rule_id=_EXPORT_MULTIPART_ABORT_RULE_ID,
-                    abort_incomplete_multipart_upload=(
-                        AbortIncompleteMultipartUpload(
-                            days_after_initiation=(
-                                self.abort_incomplete_multipart_upload_days
-                            )
-                        )
-                    ),
-                )
-            )
-        return rules
 
 
 def build_minio_export_lifecycle(cfg: Any) -> MinioExportLifecycle | None:
@@ -117,7 +107,6 @@ class MinioArtifactStorage:
         self.bucket = bucket
         self.secure = secure
         self.export_lifecycle = export_lifecycle
-        self._lifecycle_configured_buckets: set[str] = set()
 
     def polars_storage_options(self) -> dict[str, str]:
         """Return cloud options accepted by Polars' native object-store reader."""
@@ -142,9 +131,6 @@ class MinioArtifactStorage:
         client = self.client
 
         def _put() -> None:
-            if not client.bucket_exists(bucket):
-                client.make_bucket(bucket)
-            self._ensure_export_lifecycle(bucket)
             client.put_object(
                 bucket_name=bucket,
                 object_name=object_name,
@@ -166,9 +152,6 @@ class MinioArtifactStorage:
         client = self.client
 
         def _put() -> None:
-            if not client.bucket_exists(bucket):
-                client.make_bucket(bucket)
-            self._ensure_export_lifecycle(bucket)
             client.fput_object(
                 bucket_name=bucket,
                 object_name=object_name,
@@ -178,44 +161,6 @@ class MinioArtifactStorage:
 
         await asyncio.to_thread(_put)
         return f"s3://{bucket}/{object_name}"
-
-    def _ensure_export_lifecycle(self, bucket: str) -> None:
-        config = self.export_lifecycle
-        if config is None or bucket in self._lifecycle_configured_buckets:
-            return
-
-        rules = self._existing_lifecycle_rules(bucket)
-        rules = [
-            rule
-            for rule in rules
-            if rule.rule_id
-            not in {_EXPORT_LIFECYCLE_RULE_ID, _EXPORT_MULTIPART_ABORT_RULE_ID}
-        ]
-        rules.extend(config.to_rules())
-        try:
-            self.client.set_bucket_lifecycle(bucket, LifecycleConfig(rules))
-        except Exception as exc:
-            code = getattr(exc, "code", None)
-            if code != "InvalidArgument":
-                raise
-            logger.warning(
-                "Skipping MinIO lifecycle configuration for bucket %s: %s",
-                bucket,
-                exc,
-            )
-        self._lifecycle_configured_buckets.add(bucket)
-
-    def _existing_lifecycle_rules(self, bucket: str) -> list[Rule]:
-        try:
-            lifecycle = self.client.get_bucket_lifecycle(bucket)
-        except Exception as exc:
-            code = getattr(exc, "code", None)
-            if code == "NoSuchLifecycleConfiguration":
-                return []
-            raise
-        if lifecycle is None:
-            return []
-        return list(lifecycle.rules)
 
     async def get_bytes(self, uri: str) -> bytes:
         """Read bytes from a MinIO object identified by an ``s3://`` URI.
@@ -294,3 +239,100 @@ class MinioArtifactStorage:
             ]
 
         return await asyncio.to_thread(_list)
+
+
+def prepare_minio_storage(
+    client: Minio,
+    *,
+    artifact_bucket: str,
+    runtime_bucket: str,
+    export_lifecycle: MinioExportLifecycle | None,
+) -> None:
+    """Create API-owned buckets and converge the managed export lifecycle."""
+    for bucket in (artifact_bucket, runtime_bucket):
+        if not client.bucket_exists(bucket):
+            try:
+                client.make_bucket(bucket)
+            except Exception:
+                if not client.bucket_exists(bucket):
+                    raise
+
+    if export_lifecycle is not None:
+        existing = _existing_lifecycle_rules(client, artifact_bucket)
+        unmanaged = [rule for rule in existing if not _is_managed_rule(rule)]
+        client.set_bucket_lifecycle(
+            artifact_bucket,
+            LifecycleConfig([*unmanaged, *export_lifecycle.to_rules()]),
+        )
+
+    validate_minio_storage(
+        client,
+        artifact_bucket=artifact_bucket,
+        runtime_bucket=runtime_bucket,
+        export_lifecycle=export_lifecycle,
+    )
+
+
+def validate_minio_storage(
+    client: Minio,
+    *,
+    artifact_bucket: str,
+    runtime_bucket: str,
+    export_lifecycle: MinioExportLifecycle | None,
+) -> None:
+    """Verify API-owned buckets and managed lifecycle rules without mutation."""
+    missing = [
+        bucket
+        for bucket in (artifact_bucket, runtime_bucket)
+        if not client.bucket_exists(bucket)
+    ]
+    if missing:
+        raise RuntimeError(f"Required MinIO buckets are missing: {', '.join(missing)}")
+    if export_lifecycle is None:
+        return
+
+    actual = {
+        str(rule.rule_id): _lifecycle_rule_signature(rule)
+        for rule in _existing_lifecycle_rules(client, artifact_bucket)
+        if _is_managed_rule(rule)
+    }
+    expected = {
+        str(rule.rule_id): _lifecycle_rule_signature(rule)
+        for rule in export_lifecycle.to_rules()
+    }
+    if actual != expected:
+        raise RuntimeError(
+            f"MinIO lifecycle mismatch for bucket {artifact_bucket!r}: "
+            f"expected managed rules {sorted(expected)}, got {sorted(actual)}"
+        )
+
+
+def _existing_lifecycle_rules(client: Minio, bucket: str) -> list[Rule]:
+    try:
+        lifecycle = client.get_bucket_lifecycle(bucket)
+    except Exception as exc:
+        if getattr(exc, "code", None) == "NoSuchLifecycleConfiguration":
+            return []
+        raise
+    if lifecycle is None:
+        return []
+    return list(lifecycle.rules)
+
+
+def _is_managed_rule(rule: Rule) -> bool:
+    return str(rule.rule_id) in {
+        EXPORT_LIFECYCLE_RULE_ID,
+        EXPORT_MULTIPART_ABORT_RULE_ID,
+    }
+
+
+def _lifecycle_rule_signature(rule: Rule) -> tuple[object, ...]:
+    rule_filter = rule.rule_filter
+    expiration = rule.expiration
+    multipart_abort = rule.abort_incomplete_multipart_upload
+    return (
+        rule.status,
+        rule_filter.prefix if rule_filter is not None else None,
+        expiration.days if expiration is not None else None,
+        multipart_abort.days_after_initiation if multipart_abort is not None else None,
+    )

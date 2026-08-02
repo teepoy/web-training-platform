@@ -25,7 +25,6 @@ storage:
         enabled: true
         prefix: "exports/"
         expiration_days: 1
-        abort_incomplete_multipart_upload_days: 1
   runtime_bucket: "finetune-runtime-inputs"
 
 k8s:
@@ -134,6 +133,9 @@ redis:
   port: 6379
   db: 0
   password: ""
+
+startup_checks:
+  dependency_timeout_seconds: 5
 
 sc:
   pipeline:

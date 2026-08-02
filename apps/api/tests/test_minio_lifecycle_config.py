@@ -10,6 +10,8 @@ from app.shared.infrastructure.storage.minio import (
     MinioArtifactStorage,
     MinioExportLifecycle,
     build_minio_export_lifecycle,
+    prepare_minio_storage,
+    validate_minio_storage,
 )
 
 
@@ -39,6 +41,7 @@ class _FakeMinioClient:
     def set_bucket_lifecycle(self, bucket: str, config: LifecycleConfig) -> None:
         self.events.append(f"set_lifecycle:{bucket}")
         self.lifecycle = config
+        self.existing = config
 
     def put_object(
         self,
@@ -84,28 +87,21 @@ def test_default_config_enables_export_lifecycle() -> None:
     assert lifecycle == MinioExportLifecycle(
         prefix="exports/",
         expiration_days=1,
-        abort_incomplete_multipart_upload_days=1,
+        abort_incomplete_multipart_upload_days=None,
     )
 
 
-@pytest.mark.asyncio
-async def test_put_bytes_installs_export_lifecycle_when_bucket_has_no_policy() -> None:
+def test_prepare_installs_export_lifecycle_when_bucket_has_no_policy() -> None:
     fake = _FakeMinioClient(existing=_NoSuchLifecycleConfiguration())
     storage = _storage(fake)
 
-    uri = await storage.put_bytes(
-        "exports/ds-1/dataset-export.json",
-        b"payload",
-        content_type="application/json",
+    prepare_minio_storage(
+        fake,  # type: ignore[arg-type]
+        artifact_bucket="finetune-artifacts",
+        runtime_bucket="finetune-runtime-inputs",
+        export_lifecycle=storage.export_lifecycle,
     )
 
-    assert uri == "s3://finetune-artifacts/exports/ds-1/dataset-export.json"
-    assert fake.events == [
-        "bucket_exists:finetune-artifacts",
-        "get_lifecycle:finetune-artifacts",
-        "set_lifecycle:finetune-artifacts",
-        "put_object:finetune-artifacts/exports/ds-1/dataset-export.json",
-    ]
     assert fake.lifecycle is not None
     rules = _rules_by_id(fake.lifecycle)
     assert rules["finetune-export-expiration"].rule_filter == Filter(
@@ -113,14 +109,13 @@ async def test_put_bytes_installs_export_lifecycle_when_bucket_has_no_policy() -
     )
     assert rules["finetune-export-expiration"].expiration == Expiration(days=1)
     multipart_abort = rules[
-        "finetune-export-multipart-abort"
+        "finetune-export-expiration"
     ].abort_incomplete_multipart_upload
     assert multipart_abort is not None
     assert multipart_abort.days_after_initiation == 1
 
 
-@pytest.mark.asyncio
-async def test_put_bytes_preserves_unmanaged_lifecycle_rules() -> None:
+def test_prepare_preserves_unmanaged_lifecycle_rules() -> None:
     unmanaged = Rule(
         status="Enabled",
         rule_filter=Filter(prefix="artifacts/"),
@@ -138,26 +133,42 @@ async def test_put_bytes_preserves_unmanaged_lifecycle_rules() -> None:
     )
     storage = _storage(fake)
 
-    await storage.put_bytes(
-        "exports/ds-1/dataset-export.json",
-        b"payload",
-        content_type="application/json",
+    prepare_minio_storage(
+        fake,  # type: ignore[arg-type]
+        artifact_bucket="finetune-artifacts",
+        runtime_bucket="finetune-runtime-inputs",
+        export_lifecycle=storage.export_lifecycle,
     )
 
     assert fake.lifecycle is not None
     rules = _rules_by_id(fake.lifecycle)
     assert rules["keep-artifacts"] == unmanaged
     assert rules["finetune-export-expiration"].expiration == Expiration(days=1)
-    assert len(fake.lifecycle.rules) == 3
+    assert len(fake.lifecycle.rules) == 2
 
 
 @pytest.mark.asyncio
-async def test_lifecycle_policy_is_configured_once_per_storage_instance() -> None:
+async def test_upload_does_not_mutate_bucket_or_lifecycle() -> None:
     fake = _FakeMinioClient(existing=None)
     storage = _storage(fake)
 
     await storage.put_bytes("exports/one.json", b"payload", "application/json")
     await storage.put_bytes("exports/two.json", b"payload", "application/json")
 
-    assert fake.events.count("set_lifecycle:finetune-artifacts") == 1
-    assert fake.events.count("get_lifecycle:finetune-artifacts") == 1
+    assert fake.events == [
+        "put_object:finetune-artifacts/exports/one.json",
+        "put_object:finetune-artifacts/exports/two.json",
+    ]
+
+
+def test_validate_rejects_missing_managed_lifecycle() -> None:
+    fake = _FakeMinioClient(existing=None)
+    storage = _storage(fake)
+
+    with pytest.raises(RuntimeError, match="lifecycle mismatch"):
+        validate_minio_storage(
+            fake,  # type: ignore[arg-type]
+            artifact_bucket="finetune-artifacts",
+            runtime_bucket="finetune-runtime-inputs",
+            export_lifecycle=storage.export_lifecycle,
+        )

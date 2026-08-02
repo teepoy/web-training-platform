@@ -113,12 +113,28 @@ class LabelStudioClient(Protocol):
 
 
 class PrefectClient(Protocol):
+    async def close(self) -> None: ...
+
     async def ensure_work_pool(
         self,
         name: str,
         type: str,
-        concurrency_limit: int,
+        concurrency_limit: int | None = None,
     ) -> dict[str, Any]: ...
+
+    async def ensure_deployment(
+        self,
+        deployment_name: str,
+        flow_name: str,
+        work_pool_name: str,
+        *,
+        entrypoint: str | None = None,
+        path: str | None = None,
+        parameters: dict[str, object] | None = None,
+        tags: list[str] | None = None,
+    ) -> dict[str, Any]: ...
+
+    async def resolve_existing_flow_id(self, flow_name: str) -> str | None: ...
 
     async def get_work_pool(self, name: str) -> dict[str, Any]: ...
 

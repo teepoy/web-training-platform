@@ -6,10 +6,22 @@ Run locally:
 fastapi dev app/main.py
 ```
 
-Run migrations:
+Prepare a deployable environment before starting the API:
 
 ```bash
-uv run alembic upgrade head
+uv run python scripts/prepare_platform.py
+```
+
+This single-purpose script applies Alembic upgrades, reconciles the API-owned
+MinIO buckets and lifecycle rules, registers Prefect pools/deployments, and
+then validates every required dependency. For a database-only development
+upgrade, use `make db-migrate` from the repository root.
+
+Operational account creation and destructive local reset are separate scripts:
+
+```bash
+make create-superadmin EMAIL=admin@example.com PASSWORD=... NAME=Admin
+make reset-dev-database
 ```
 
 Configuration profiles:

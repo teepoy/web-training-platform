@@ -75,6 +75,7 @@ class PrefectClient:
         json: dict[str, object] | None = None,
         expect_json: bool = True,
         resource_label: str = "resource",
+        allow_conflict: bool = False,
     ) -> Any:
         """Execute an HTTP request and map Prefect errors to HTTPExceptions.
 
@@ -120,6 +121,8 @@ class PrefectClient:
                 detail=f"Prefect server unavailable: {exc}",
             )
 
+        if response.status_code == 409 and allow_conflict:
+            return None
         if response.status_code == 404:
             raise HTTPException(status_code=404, detail=f"{resource_label} not found")
         if 400 <= response.status_code < 500:
@@ -145,7 +148,7 @@ class PrefectClient:
         self,
         name: str,
         type: str,
-        concurrency_limit: int,
+        concurrency_limit: int | None = None,
     ) -> dict:
         """Create a work pool, or return the existing one on 409 Conflict.
 
@@ -164,15 +167,14 @@ class PrefectClient:
             The work pool object returned by Prefect.
         """
         url = self._url("/work_pools/")
+        body: dict[str, object] = {"name": name, "type": type}
+        if concurrency_limit is not None:
+            body["concurrency_limit"] = concurrency_limit
         try:
             resp = await self._client.request(
                 "POST",
                 url,
-                json={
-                    "name": name,
-                    "type": type,
-                    "concurrency_limit": concurrency_limit,
-                },
+                json=body,
             )
         except httpx.ConnectError:
             raise HTTPException(status_code=503, detail="Prefect server unavailable")
@@ -264,8 +266,39 @@ class PrefectClient:
             "POST",
             "/flows/",
             json={"name": flow_name},
+            allow_conflict=True,
         )
-        return created["id"]
+        if created is not None:
+            return created["id"]
+
+        result = await self._request(
+            "POST",
+            "/flows/filter",
+            json={
+                "flows": {"name": {"any_": [flow_name]}},
+                "limit": 1,
+            },
+        )
+        if not result:
+            raise RuntimeError(
+                f"Prefect reported a conflict creating flow {flow_name!r}, "
+                "but the flow could not be resolved"
+            )
+        return result[0]["id"]
+
+    async def resolve_existing_flow_id(self, flow_name: str) -> str | None:
+        """Look up a flow without creating it."""
+        result = await self._request(
+            "POST",
+            "/flows/filter",
+            json={
+                "flows": {"name": {"any_": [flow_name]}},
+                "limit": 1,
+            },
+        )
+        if result:
+            return result[0]["id"]
+        return None
 
     async def resolve_deployment_id(self, deployment_name: str) -> str | None:
         """Look up a Prefect deployment by name.
@@ -365,12 +398,42 @@ class PrefectClient:
             body["parameters"] = parameters
         if tags is not None:
             body["tags"] = tags
-        return await self._request(
+        created = await self._request(
             "POST",
             "/deployments/",
             json=body,
             resource_label="deployment",
+            allow_conflict=True,
         )
+        if created is not None:
+            return created
+
+        existing_id = await self.resolve_deployment_id(deployment_name)
+        if existing_id is None:
+            raise RuntimeError(
+                f"Prefect reported a conflict creating deployment "
+                f"{deployment_name!r}, but it could not be resolved"
+            )
+        update_body = {
+            key: value
+            for key, value in {
+                "work_pool_name": work_pool_name,
+                "entrypoint": entrypoint,
+                "path": path,
+                "parameters": parameters,
+                "tags": tags,
+            }.items()
+            if value is not None
+        }
+        if update_body:
+            await self._request(
+                "PATCH",
+                f"/deployments/{existing_id}",
+                json=update_body,
+                expect_json=False,
+                resource_label="deployment",
+            )
+        return await self.get_deployment(existing_id)
 
     async def get_deployment(self, deployment_id: str) -> dict:
         """Fetch a single deployment by ID."""

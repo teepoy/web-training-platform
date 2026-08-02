@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import sys
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -20,14 +19,12 @@ from app.modules.auth.port.http.deps import (
     seed_dev_auth_context,
 )
 from app.modules.dashboard.port.http.deps import DashboardServiceDep
-from app.modules.runtime.app.services.deployment_seed import (
-    runtime_prefect_deployment_specs,
-)
 from app.shared.api.schemas import (
     DashboardResponse,
 )
 from app.core.config import load_config
 from app.core.logger import init_logging
+from app.core.platform_setup import validate_platform_dependencies
 from app.shared.db.session import init_db
 from app.shared.db.registry import UserORM
 from app.shared.infrastructure.metrics import online_jwt_users
@@ -54,141 +51,67 @@ def _strip_api_prefix(router: Any) -> None:
         )
 
 
-async def _ensure_prefect_deployments(cfg: Any, prefect_client: Any) -> None:
-    engine = str(cfg.execution.engine)
-    if engine != "prefect":
-        return
-
-    _logger.info("Ensuring Prefect deployments (execution.engine=prefect)")
-
-    deployments = [
-        *runtime_prefect_deployment_specs(cfg),
-        # ── CPU pool ──
-        {
-            "deployment_name": "timer-sensor",
-            "flow_name": "timer-sensor",
-            "work_pool_name": "default-cpu",
-            "entrypoint": "app.modules.jobs.sensors.adapter.flows.timer_sensor:timer_sensor",
-            "path": "",
-        },
-        {
-            "deployment_name": "dataset-size-sensor",
-            "flow_name": "dataset-size-sensor",
-            "work_pool_name": "default-cpu",
-            "entrypoint": "app.modules.jobs.sensors.adapter.flows.dataset_size_sensor:dataset_size_sensor",
-            "path": "",
-        },
-        {
-            "deployment_name": "drain-dataset",
-            "flow_name": "drain-dataset",
-            "work_pool_name": "default-cpu",
-            "entrypoint": "app.modules.datasets.adapter.flows.drain_dataset:drain_dataset",
-            "path": "",
-        },
-    ]
-
-    for dep in deployments:
-        try:
-            await prefect_client.ensure_deployment(
-                deployment_name=dep["deployment_name"],
-                flow_name=dep["flow_name"],
-                work_pool_name=dep["work_pool_name"],
-                entrypoint=dep.get("entrypoint"),
-                path=dep.get("path"),
-            )
-        except Exception:
-            _logger.warning(
-                "Failed to ensure deployment '%s'",
-                dep["deployment_name"],
-                exc_info=True,
-            )
-
-
 @asynccontextmanager
 async def lifespan(api: FastAPI):
     cfg = load_config()
     init_logging(cfg)
     ctx = build_app_context(cfg)
     api.state.app_context = ctx
-
-    # ── Startup readiness checks ─────────────────────────────────────────────
-    # Fail fast if stateful dependencies are not reachable.  The container
-    # orchestrator (Compose / Kubernetes) should restart the pod after a delay.
-    # ──────────────────────────────────────────────────────────────────────
-
-    # 1. Postgres
-    try:
-        async with ctx.shared.db_engine.connect() as conn:
-            await conn.execute(text("SELECT 1"))
-        _logger.info("Readiness check passed: postgres")
-    except Exception:
-        _logger.error("Readiness check failed: postgres unreachable", exc_info=True)
-        sys.exit(1)
-
-    # 2. Redis-backed metrics + event publishing (best effort)
     import redis.asyncio as redis_client  # type: ignore[import-untyped]
 
     metrics_redis: Any | None = None
-    if str(cfg.app.env) == "test":
-        online_jwt_users.configure_redis(None)
-        ctx.shared.redis_event_publisher = RedisEventPublisher(None)
-        _logger.info("Metrics Redis disabled for test profile")
-    else:
-        try:
+    api.state.startup_ready = False
+    api.state.metrics_redis = None
+    try:
+        if bool(cfg.db.auto_create):
+            await init_db(ctx.shared.db_engine)
+
+        if str(cfg.app.env) == "test":
+            online_jwt_users.configure_redis(None)
+            ctx.shared.redis_event_publisher = RedisEventPublisher(None)
+            _logger.info("Redis and external startup checks disabled for test profile")
+        else:
+            timeout = float(cfg.startup_checks.dependency_timeout_seconds)
             metrics_redis = redis_client.Redis(
                 host=str(cfg.redis.host),
                 port=int(cfg.redis.port),
                 password=str(cfg.redis.password) if cfg.redis.password else None,
                 db=int(cfg.redis.db),
-                socket_connect_timeout=1,
-                socket_timeout=1,
+                socket_connect_timeout=timeout,
+                socket_timeout=timeout,
             )
             await metrics_redis.ping()  # type: ignore[awaitable]
             online_jwt_users.configure_redis(metrics_redis)
-
             ctx.shared.redis_event_publisher = RedisEventPublisher(
                 metrics_redis,
                 revision_namespace=cfg.sc.data_provider.revision_namespace,
             )
             _logger.info("Metrics Redis + event publisher configured")
+            api.state.metrics_redis = metrics_redis
+            await validate_platform_dependencies(cfg, ctx.shared)
+
+        if not bool(getattr(cfg.auth, "enabled", True)):
+            _logger.info("auth disabled — seeding dev user on startup")
+            await seed_dev_auth_context(ctx.shared.session_factory)
+
+        if ctx.jobs is None:
+            raise RuntimeError("AppContext jobs module was not initialized")
+
+        try:
+            sensor_count = ctx.jobs.sensors.sensor_registry.load()
         except Exception:
-            if metrics_redis is not None:
-                await metrics_redis.aclose()
-            online_jwt_users.configure_redis(None)
-            ctx.shared.redis_event_publisher = RedisEventPublisher(
-                None,
-                revision_namespace=cfg.sc.data_provider.revision_namespace,
-            )
-            _logger.warning(
-                "Metrics Redis unavailable; counters are per-process and "
-                "revision-dependent writes will fail explicitly"
-            )
+            sensor_count = 0
+        _logger.info("Sensor registry: %d sensors loaded", sensor_count)
 
-    if bool(cfg.db.auto_create):
-        await init_db(ctx.shared.db_engine)
-
-    if not bool(getattr(cfg.auth, "enabled", True)):
-        _logger.info("auth disabled — seeding dev user on startup")
-        await seed_dev_auth_context(ctx.shared.session_factory)
-
-    if ctx.jobs is None:
-        raise RuntimeError("AppContext jobs module was not initialized")
-
-    try:
-        sensor_count = ctx.jobs.sensors.sensor_registry.load()
-    except Exception:
-        sensor_count = 0
-    _logger.info("Sensor registry: %d sensors loaded", sensor_count)
-
-    try:
-        await _ensure_prefect_deployments(cfg, ctx.shared.prefect_client)
-    except Exception:
-        _logger.warning("Failed to ensure Prefect deployments", exc_info=True)
-
-    try:
+        api.state.startup_ready = True
         yield
     finally:
+        api.state.startup_ready = False
         await online_jwt_users.close()
+        if metrics_redis is not None and api.state.metrics_redis is None:
+            await metrics_redis.aclose()
+        online_jwt_users.configure_redis(None)
+        api.state.metrics_redis = None
         prefect_close = getattr(ctx.shared.prefect_client, "close", None)
         if prefect_close is not None:
             await prefect_close()
@@ -295,12 +218,20 @@ async def daily_user_metrics(
 )
 async def readiness(request: Request) -> dict[str, str] | JSONResponse:
     try:
+        if not bool(getattr(request.app.state, "startup_ready", False)):
+            raise RuntimeError("startup validation has not completed")
         async with (
             request.app.state.app_context.shared.db_engine.connect() as connection
         ):
             await connection.execute(text("SELECT 1"))
+        metrics_redis = getattr(request.app.state, "metrics_redis", None)
+        cfg = request.app.state.app_context.shared.config
+        if str(cfg.app.env) != "test":
+            if metrics_redis is None:
+                raise RuntimeError("Redis client is not configured")
+            await metrics_redis.ping()
     except Exception:
-        _logger.warning("Readiness check failed: database unavailable", exc_info=True)
+        _logger.warning("Readiness check failed", exc_info=True)
         return JSONResponse(
             status_code=503,
             content={"status": "unavailable"},

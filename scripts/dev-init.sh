@@ -141,10 +141,11 @@ else
 
     # Try to create superadmin via docker compose exec
     if docker compose -f "$COMPOSE_FILE" exec -T api \
-        uv run --no-dev python -m app.cli create-superadmin \
-        --email="$ADMIN_EMAIL" \
-        --password="$ADMIN_PASSWORD" \
-        --name="Admin" 2>/dev/null; then
+        env \
+        BOOTSTRAP_SUPERADMIN_EMAIL="$ADMIN_EMAIL" \
+        BOOTSTRAP_SUPERADMIN_PASSWORD="$ADMIN_PASSWORD" \
+        BOOTSTRAP_SUPERADMIN_NAME="Admin" \
+        /app/.venv/bin/python scripts/create_superadmin.py 2>/dev/null; then
         log_success "Admin user created"
     else
         log_warn "Could not create admin via docker exec (may already exist or not using compose)"

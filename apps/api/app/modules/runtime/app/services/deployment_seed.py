@@ -24,6 +24,30 @@ _RUNTIME_FLOW_SPECS: dict[RuntimeOperation, dict[str, str]] = {
     },
 }
 
+_CPU_DEPLOYMENT_SPECS: tuple[dict[str, str], ...] = (
+    {
+        "deployment_name": "timer-sensor",
+        "flow_name": "timer-sensor",
+        "work_pool_name": "default-cpu",
+        "entrypoint": "app.modules.jobs.sensors.adapter.flows.timer_sensor:timer_sensor",
+        "path": "",
+    },
+    {
+        "deployment_name": "dataset-size-sensor",
+        "flow_name": "dataset-size-sensor",
+        "work_pool_name": "default-cpu",
+        "entrypoint": "app.modules.jobs.sensors.adapter.flows.dataset_size_sensor:dataset_size_sensor",
+        "path": "",
+    },
+    {
+        "deployment_name": "drain-dataset",
+        "flow_name": "drain-dataset",
+        "work_pool_name": "default-cpu",
+        "entrypoint": "app.modules.datasets.adapter.flows.drain_dataset:drain_dataset",
+        "path": "",
+    },
+)
+
 
 def runtime_prefect_deployment_specs(config: Any) -> list[dict[str, str]]:
     routing = ConfigRuntimeRoutingService(config)
@@ -48,6 +72,21 @@ def runtime_prefect_deployment_specs(config: Any) -> list[dict[str, str]]:
             )
         specs_by_name[route.deployment] = candidate
     return list(specs_by_name.values())
+
+
+def platform_prefect_deployment_specs(config: Any) -> list[dict[str, str]]:
+    """Return every API-owned Prefect deployment from one declaration source."""
+    return [*runtime_prefect_deployment_specs(config), *_CPU_DEPLOYMENT_SPECS]
+
+
+def required_prefect_deployment_names(config: Any) -> set[str]:
+    """Return all deployments the API must resolve, including external routes."""
+    routing = ConfigRuntimeRoutingService(config)
+    names = {spec["deployment_name"] for spec in _CPU_DEPLOYMENT_SPECS}
+    for catalog_id, definition in runtime_capabilities.list_routes():
+        route = _resolve_route(routing, definition.operation, catalog_id)
+        names.add(route.deployment)
+    return names
 
 
 def _resolve_route(
