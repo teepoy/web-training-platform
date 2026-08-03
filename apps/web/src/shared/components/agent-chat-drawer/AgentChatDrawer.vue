@@ -5,111 +5,111 @@
   action button.  Contains a scrollable message list and an input bar.
 -->
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue'
-import type { AgentChatStatus, ChatEntry } from '../../types/components'
+import { ref, computed, watch, nextTick, onBeforeUnmount } from "vue";
+import type { AgentChatStatus, ChatEntry } from "../../types/components";
 
 const props = defineProps<{
-  messages: readonly ChatEntry[]
-  status: AgentChatStatus
-}>()
+  messages: readonly ChatEntry[];
+  status: AgentChatStatus;
+}>();
 
 const emit = defineEmits<{
-  send: [message: string]
-  abort: []
-  clear: []
-}>()
+  send: [message: string];
+  abort: [];
+  clear: [];
+}>();
 
-const isOpen = ref(false)
-const inputText = ref('')
-const scrollRef = ref<HTMLElement | null>(null)
+const isOpen = ref(false);
+const inputText = ref("");
+const scrollRef = ref<HTMLElement | null>(null);
 
 // ── Resize state ──
-const MIN_W = 300
-const MAX_W = 700
-const MIN_H = 300
-const MAX_H_RATIO = 0.85 // fraction of viewport height
+const MIN_W = 300;
+const MAX_W = 700;
+const MIN_H = 300;
+const MAX_H_RATIO = 0.85; // fraction of viewport height
 
-const drawerW = ref(380)
-const drawerH = ref(520)
-const isResizing = ref(false)
+const drawerW = ref(380);
+const drawerH = ref(520);
+const isResizing = ref(false);
 
-type Edge = 'top' | 'left' | 'corner'
-let resizeEdge: Edge = 'top'
-let startX = 0
-let startY = 0
-let startW = 0
-let startH = 0
+type Edge = "top" | "left" | "corner";
+let resizeEdge: Edge = "top";
+let startX = 0;
+let startY = 0;
+let startW = 0;
+let startH = 0;
 
 function onResizePointerDown(edge: Edge, e: PointerEvent) {
-  e.preventDefault()
-  resizeEdge = edge
-  startX = e.clientX
-  startY = e.clientY
-  startW = drawerW.value
-  startH = drawerH.value
-  isResizing.value = true
-  document.addEventListener('pointermove', onResizePointerMove)
-  document.addEventListener('pointerup', onResizePointerUp)
+  e.preventDefault();
+  resizeEdge = edge;
+  startX = e.clientX;
+  startY = e.clientY;
+  startW = drawerW.value;
+  startH = drawerH.value;
+  isResizing.value = true;
+  document.addEventListener("pointermove", onResizePointerMove);
+  document.addEventListener("pointerup", onResizePointerUp);
 }
 
 function onResizePointerMove(e: PointerEvent) {
-  const maxH = Math.round(window.innerHeight * MAX_H_RATIO)
-  const dx = startX - e.clientX  // positive = moved left = wider
-  const dy = startY - e.clientY  // positive = moved up   = taller
+  const maxH = Math.round(window.innerHeight * MAX_H_RATIO);
+  const dx = startX - e.clientX; // positive = moved left = wider
+  const dy = startY - e.clientY; // positive = moved up   = taller
 
-  if (resizeEdge === 'left' || resizeEdge === 'corner') {
-    drawerW.value = Math.min(MAX_W, Math.max(MIN_W, startW + dx))
+  if (resizeEdge === "left" || resizeEdge === "corner") {
+    drawerW.value = Math.min(MAX_W, Math.max(MIN_W, startW + dx));
   }
-  if (resizeEdge === 'top' || resizeEdge === 'corner') {
-    drawerH.value = Math.min(maxH, Math.max(MIN_H, startH + dy))
+  if (resizeEdge === "top" || resizeEdge === "corner") {
+    drawerH.value = Math.min(maxH, Math.max(MIN_H, startH + dy));
   }
 }
 
 function onResizePointerUp() {
-  isResizing.value = false
-  document.removeEventListener('pointermove', onResizePointerMove)
-  document.removeEventListener('pointerup', onResizePointerUp)
+  isResizing.value = false;
+  document.removeEventListener("pointermove", onResizePointerMove);
+  document.removeEventListener("pointerup", onResizePointerUp);
 }
 
 onBeforeUnmount(() => {
-  document.removeEventListener('pointermove', onResizePointerMove)
-  document.removeEventListener('pointerup', onResizePointerUp)
-})
+  document.removeEventListener("pointermove", onResizePointerMove);
+  document.removeEventListener("pointerup", onResizePointerUp);
+});
 
 function toggle() {
-  isOpen.value = !isOpen.value
+  isOpen.value = !isOpen.value;
 }
 
 function handleSend() {
-  const text = inputText.value.trim()
-  if (!text) return
-  inputText.value = ''
-  emit('send', text)
+  const text = inputText.value.trim();
+  if (!text) return;
+  inputText.value = "";
+  emit("send", text);
 }
 
 function handleKeyDown(e: KeyboardEvent) {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault()
-    handleSend()
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    handleSend();
   }
 }
 
-const isStreaming = computed(() => props.status === 'streaming')
+const isStreaming = computed(() => props.status === "streaming");
 
 // Auto-scroll to bottom on new messages
 watch(
   () => props.messages.length,
   async () => {
-    await nextTick()
+    await nextTick();
     if (scrollRef.value) {
-      scrollRef.value.scrollTop = scrollRef.value.scrollHeight
+      scrollRef.value.scrollTop = scrollRef.value.scrollHeight;
     }
   },
-)
+);
 
 function formatTime(ts: number): string {
-  const d = new Date(ts)
-  return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+  const d = new Date(ts);
+  return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
 }
 </script>
 
@@ -120,8 +120,17 @@ function formatTime(ts: number): string {
     class="acd-fab"
     @click="toggle"
     title="Open Agent Chat"
+    aria-label="Open Agent Chat"
+    data-testid="agent-chat-open"
   >
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+    >
       <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
     </svg>
   </button>
@@ -133,32 +142,45 @@ function formatTime(ts: number): string {
       class="acd"
       :class="{ 'acd--resizing': isResizing }"
       :style="{ width: drawerW + 'px', height: drawerH + 'px' }"
+      role="dialog"
+      aria-labelledby="agent-chat-title"
+      data-testid="agent-chat-drawer"
     >
       <!-- Resize handles (top, left, corner) -->
-      <div
-        class="acd-resize acd-resize--top"
-        @pointerdown="onResizePointerDown('top', $event)"
-      />
-      <div
-        class="acd-resize acd-resize--left"
-        @pointerdown="onResizePointerDown('left', $event)"
-      />
+      <div class="acd-resize acd-resize--top" @pointerdown="onResizePointerDown('top', $event)" />
+      <div class="acd-resize acd-resize--left" @pointerdown="onResizePointerDown('left', $event)" />
       <div
         class="acd-resize acd-resize--corner"
         @pointerdown="onResizePointerDown('corner', $event)"
       />
       <!-- Header -->
       <div class="acd-header">
-        <span class="acd-header__title">Agent Chat</span>
+        <span id="agent-chat-title" class="acd-header__title">Agent Chat</span>
         <div class="acd-header__actions">
           <button class="acd-header__btn" @click="emit('clear')" title="Clear history">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
               <polyline points="3 6 5 6 21 6" />
-              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+              <path
+                d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
+              />
             </svg>
           </button>
           <button class="acd-header__btn" @click="toggle" title="Close">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
               <line x1="18" y1="6" x2="6" y2="18" />
               <line x1="6" y1="6" x2="18" y2="18" />
             </svg>
@@ -168,7 +190,11 @@ function formatTime(ts: number): string {
 
       <!-- Messages -->
       <div ref="scrollRef" class="acd-messages">
-        <div v-if="messages.length === 0" class="acd-messages__empty">
+        <div
+          v-if="messages.length === 0"
+          class="acd-messages__empty"
+          data-testid="agent-chat-empty"
+        >
           Ask the agent to analyze your data, create charts, or explore metadata.
         </div>
         <div
@@ -176,6 +202,7 @@ function formatTime(ts: number): string {
           :key="msg.id"
           class="acd-msg"
           :class="`acd-msg--${msg.role}`"
+          :data-testid="`agent-chat-message-${msg.role}`"
         >
           <div v-if="msg.role === 'action'" class="acd-msg__action">
             <span class="acd-msg__tool">{{ msg.tool }}</span>
@@ -186,10 +213,8 @@ function formatTime(ts: number): string {
             <div class="acd-msg__time">{{ formatTime(msg.timestamp) }}</div>
           </template>
         </div>
-        <div v-if="isStreaming" class="acd-msg acd-msg--loading">
-          <div class="acd-msg__dots">
-            <span></span><span></span><span></span>
-          </div>
+        <div v-if="isStreaming" class="acd-msg acd-msg--loading" data-testid="agent-chat-loading">
+          <div class="acd-msg__dots"><span></span><span></span><span></span></div>
         </div>
       </div>
 
@@ -207,12 +232,15 @@ function formatTime(ts: number): string {
           rows="1"
           @keydown="handleKeyDown"
           :disabled="isStreaming"
+          data-testid="agent-chat-input"
         />
         <button
           v-if="isStreaming"
           class="acd-input__btn acd-input__btn--abort"
           @click="emit('abort')"
           title="Stop"
+          aria-label="Stop Agent response"
+          data-testid="agent-chat-abort"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
             <rect x="6" y="6" width="12" height="12" rx="2" />
@@ -224,8 +252,17 @@ function formatTime(ts: number): string {
           @click="handleSend"
           :disabled="!inputText.trim()"
           title="Send"
+          aria-label="Send Agent message"
+          data-testid="agent-chat-send"
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
             <line x1="22" y1="2" x2="11" y2="13" />
             <polygon points="22 2 15 22 11 13 2 9 22 2" />
           </svg>
@@ -253,7 +290,9 @@ function formatTime(ts: number): string {
   align-items: center;
   justify-content: center;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  transition: transform 0.15s, box-shadow 0.15s;
+  transition:
+    transform 0.15s,
+    box-shadow 0.15s;
 }
 .acd-fab:hover {
   transform: scale(1.08);
@@ -308,7 +347,9 @@ function formatTime(ts: number): string {
 /* Slide transition */
 .acd-slide-enter-active,
 .acd-slide-leave-active {
-  transition: opacity 0.2s, transform 0.2s;
+  transition:
+    opacity 0.2s,
+    transform 0.2s;
 }
 .acd-slide-enter-from,
 .acd-slide-leave-to {
@@ -450,12 +491,22 @@ function formatTime(ts: number): string {
   background: rgba(255, 255, 255, 0.4);
   animation: acd-dot-bounce 1.2s ease-in-out infinite;
 }
-.acd-msg__dots span:nth-child(2) { animation-delay: 0.15s; }
-.acd-msg__dots span:nth-child(3) { animation-delay: 0.3s; }
+.acd-msg__dots span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.acd-msg__dots span:nth-child(3) {
+  animation-delay: 0.3s;
+}
 
 @keyframes acd-dot-bounce {
-  0%, 60%, 100% { transform: translateY(0); }
-  30% { transform: translateY(-4px); }
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+  }
+  30% {
+    transform: translateY(-4px);
+  }
 }
 
 /* Disclaimer */

@@ -4,8 +4,9 @@ import { makeTrainingJob, makeTrainingJobList } from "../factories";
 
 export async function mockListTrainingJobs(page: Page, jobs?: TrainingJob[]): Promise<void> {
   const body = jobs ?? [];
-  await page.route("**/api/v1/training-jobs", async (route) => {
-    if (route.request().method() !== "GET") {
+  await page.route("**/api/v1/training-jobs**", async (route) => {
+    const request = route.request();
+    if (request.method() !== "GET" || new URL(request.url()).pathname !== "/api/v1/training-jobs") {
       await route.continue();
       return;
     }

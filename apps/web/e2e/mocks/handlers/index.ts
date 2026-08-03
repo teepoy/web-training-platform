@@ -1,4 +1,5 @@
 export { mockAuthLogin, mockAuthMe } from "./auth";
+export { mockAgentUnavailable } from "./agent";
 export {
   mockListDatasets,
   mockGetDataset,

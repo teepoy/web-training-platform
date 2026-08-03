@@ -6,7 +6,63 @@ import { DatasetDetailPage } from "../../pages/datasets/DatasetDetailPage";
 import { addSamples, cleanupTestArtifacts, createDataset } from "../../seed";
 import { E2E_TIMEOUTS } from "../../timeouts";
 
-test.describe("Agent QA", () => {
+test("global agent reports route context and backend errors @mock", async ({
+  authedPage,
+  apiMocks,
+}) => {
+  const datasetId = "agent-qa-mock-dataset";
+  const backendError = "Mock Agent backend is not configured";
+
+  await apiMocks.datasets.mockGetDataset(datasetId);
+  await apiMocks.datasets.mockListSamples(datasetId, []);
+  await apiMocks.datasets.mockAnnotationStats(datasetId, {
+    total_samples: 0,
+    annotated_samples: 0,
+    unlabeled_samples: 0,
+    label_counts: {},
+  });
+  await apiMocks.datasets.mockDatasetStatus(datasetId, {
+    allow_train: false,
+    train_disabled_reason: "no_samples",
+    active_class_count: 0,
+    annotated_samples: 0,
+    total_samples: 0,
+  });
+  await apiMocks.training.mockListTrainingJobs([]);
+  await apiMocks.training.mockListTrainers([]);
+  await apiMocks.agent.mockUnavailable(backendError);
+
+  const detailPage = new DatasetDetailPage(authedPage);
+  await detailPage.gotoDetail(datasetId);
+  await detailPage.waitForLoaded();
+
+  const agentPage = new AgentChatPage(authedPage);
+  await agentPage.openDrawer();
+  await expect(agentPage.getHeaderTitle()).toHaveText("Agent Chat");
+  await expect(agentPage.getEmptyState()).toBeVisible();
+
+  const requestPromise = authedPage.waitForRequest(
+    (request) =>
+      request.method() === "POST" && new URL(request.url()).pathname === "/api/v1/agent/chat",
+  );
+  await agentPage.sendMessage("Check the current dataset without changing it.");
+
+  const request = await requestPromise;
+  const requestBody = request.postDataJSON() as {
+    message?: string;
+    context?: { page?: string; dataset_id?: string };
+  };
+  expect(requestBody.message).toBe("Check the current dataset without changing it.");
+  expect(requestBody.context).toEqual({
+    page: `/datasets/${datasetId}`,
+    dataset_id: datasetId,
+  });
+  await expect(agentPage.getUserMessages()).toHaveCount(1);
+  await expect(agentPage.getAssistantMessages()).toContainText(`Error: ${backendError}`);
+  await expect(agentPage.getLoadingIndicator()).toBeHidden();
+});
+
+test.describe("Agent QA live", () => {
   test.setTimeout(E2E_TIMEOUTS.test.agent);
 
   let datasetId: string | undefined;

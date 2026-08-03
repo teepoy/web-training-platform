@@ -14,7 +14,7 @@ export class AgentChatPage extends BasePage {
   }
 
   async waitForLoaded(): Promise<void> {
-    await this.page.locator(".acd-fab").waitFor({
+    await this.getFab().waitFor({
       state: "visible",
       timeout: E2E_TIMEOUTS.expect,
     });
@@ -23,7 +23,7 @@ export class AgentChatPage extends BasePage {
   // ── FAB ──────────────────────────────────────────────────────────
 
   getFab(): Locator {
-    return this.page.locator(".acd-fab");
+    return this.page.getByTestId("agent-chat-open");
   }
 
   async waitForFabVisible(): Promise<void> {
@@ -41,7 +41,7 @@ export class AgentChatPage extends BasePage {
   // ── Drawer ───────────────────────────────────────────────────────
 
   getDrawer(): Locator {
-    return this.page.locator(".acd");
+    return this.page.getByTestId("agent-chat-drawer");
   }
 
   async waitForDrawerOpen(): Promise<void> {
@@ -58,43 +58,43 @@ export class AgentChatPage extends BasePage {
   // ── Header ───────────────────────────────────────────────────────
 
   getHeaderTitle(): Locator {
-    return this.page.locator(".acd-header__title");
+    return this.getDrawer().getByText("Agent Chat", { exact: true });
   }
 
   // ── Messages ─────────────────────────────────────────────────────
 
   getEmptyState(): Locator {
-    return this.page.locator(".acd-messages__empty");
+    return this.page.getByTestId("agent-chat-empty");
   }
 
   getUserMessages(): Locator {
-    return this.page.locator(".acd-msg--user");
+    return this.page.getByTestId("agent-chat-message-user");
   }
 
   getAssistantMessages(): Locator {
-    return this.page.locator(".acd-msg--assistant");
+    return this.page.getByTestId("agent-chat-message-assistant");
   }
 
   getActionMessages(): Locator {
-    return this.page.locator(".acd-msg--action");
+    return this.page.getByTestId("agent-chat-message-action");
   }
 
   getLoadingIndicator(): Locator {
-    return this.page.locator(".acd-msg--loading");
+    return this.page.getByTestId("agent-chat-loading");
   }
 
   getAnyResponse(): Locator {
-    return this.page.locator(".acd-msg--assistant, .acd-msg--action");
+    return this.getAssistantMessages().or(this.getActionMessages());
   }
 
   // ── Input ────────────────────────────────────────────────────────
 
   getInputField(): Locator {
-    return this.page.locator(".acd-input__field");
+    return this.page.getByPlaceholder("Ask the agent...");
   }
 
   getSendButton(): Locator {
-    return this.page.locator(".acd-input__btn");
+    return this.page.getByRole("button", { name: "Send Agent message" });
   }
 
   async fillMessage(text: string): Promise<void> {

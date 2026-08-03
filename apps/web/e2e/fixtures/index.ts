@@ -50,6 +50,8 @@ import {
   mockDashboard,
   mockSettings,
   mockPlugins,
+  // agent
+  mockAgentUnavailable,
   // auth
   mockAuthLogin,
   mockAuthMe,
@@ -167,6 +169,9 @@ async function ensureLiveAuth(): Promise<SeedAuthResult> {
 
 /** Namespaced mock handler functions with page already bound. */
 export interface ApiMocks {
+  agent: {
+    mockUnavailable: (detail?: string) => Promise<void>;
+  };
   core: {
     mockCoreApi: (overrides?: CoreApiOverrides) => Promise<void>;
     mockOrganizations: (orgs?: OrgResponse[]) => Promise<void>;
@@ -315,6 +320,9 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
     }
 
     const bound: ApiMocks = {
+      agent: {
+        mockUnavailable: (detail) => mockAgentUnavailable(page, detail),
+      },
       core: {
         mockCoreApi: (overrides) => mockCoreApi(page, overrides),
         mockOrganizations: (orgs) => mockOrganizations(page, orgs),
