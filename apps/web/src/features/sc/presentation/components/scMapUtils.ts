@@ -21,7 +21,7 @@ export interface ScatterPoint {
 export type LegendColorSource = "class" | "bin" | "annotation" | "prediction" | "final_class";
 
 const STRING_COLOR_MULTIPLIER = 31;
-const MISSING_LEGEND_COLORS = new Set(["__unlabeled__", "__no_prediction__"]);
+const MISSING_LEGEND_COLORS = new Set(["__unlabeled__", "__no_prediction__", "__unclassified__"]);
 
 export function stringColor(value: string): string {
   let hash = 0;

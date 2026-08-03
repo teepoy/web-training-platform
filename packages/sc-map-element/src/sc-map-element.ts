@@ -5,6 +5,7 @@ import {
   type MapProjectionSpec,
 } from "./map-arrow-client";
 import ScMapRenderWorker from "./sc-map-render.worker?worker&inline";
+import { encodeLegendColorMap } from "./legend-key-codec";
 
 export const SC_MAP_TAG_NAME = "sc-map";
 export type ScMapMode = "wafer" | "die" | "reticle";
@@ -46,6 +47,60 @@ export interface ScMapProgress {
   stage: string;
 }
 
+export const SC_MAP_WHEEL_ZOOM_SENSITIVITY = 0.0015;
+export const SC_MAP_WHEEL_ZOOM_COMMIT_DELAY_MS = 120;
+
+const MIN_VIEWPORT_RATIO = 1 / 10_000;
+const MIN_WHEEL_FRAME_FACTOR = 0.8;
+const MAX_WHEEL_FRAME_FACTOR = 1.25;
+const WHEEL_LINE_HEIGHT_PX = 16;
+
+export function normalizeWheelDelta(deltaY: number, deltaMode: number, pageHeight: number): number {
+  if (deltaMode === 1) return deltaY * WHEEL_LINE_HEIGHT_PX;
+  if (deltaMode === 2) return deltaY * Math.max(1, pageHeight);
+  return deltaY;
+}
+
+export function clampRegionToBounds(region: ScMapRegion, bounds: ScMapRegion): ScMapRegion {
+  const width = Math.min(bounds.w, region.w);
+  const height = Math.min(bounds.h, region.h);
+  return {
+    x: Math.min(bounds.x + bounds.w - width, Math.max(bounds.x, region.x)),
+    y: Math.min(bounds.y + bounds.h - height, Math.max(bounds.y, region.y)),
+    w: width,
+    h: height,
+  };
+}
+
+export function zoomRegionAroundPoint(
+  region: ScMapRegion,
+  bounds: ScMapRegion,
+  anchor: ScMapPoint,
+  factor: number,
+): ScMapRegion {
+  if (!Number.isFinite(factor) || factor <= 0) {
+    throw new Error(`Invalid zoom factor: ${factor}`);
+  }
+  const width = Math.min(bounds.w, Math.max(bounds.w * MIN_VIEWPORT_RATIO, region.w * factor));
+  const height = Math.min(bounds.h, Math.max(bounds.h * MIN_VIEWPORT_RATIO, region.h * factor));
+  const anchorRatioX = (anchor.x - region.x) / region.w;
+  const anchorRatioY = (anchor.y - region.y) / region.h;
+  return clampRegionToBounds(
+    {
+      x: anchor.x - anchorRatioX * width,
+      y: anchor.y - anchorRatioY * height,
+      w: width,
+      h: height,
+    },
+    bounds,
+  );
+}
+
+function sameRegion(left: ScMapRegion | null, right: ScMapRegion | null): boolean {
+  if (left === null || right === null) return left === right;
+  return left.x === right.x && left.y === right.y && left.w === right.w && left.h === right.h;
+}
+
 interface Transform {
   scale: number;
   centerX: number;
@@ -83,6 +138,7 @@ export class ScMapElement extends HTMLElement {
   #resizeObserver: ResizeObserver | null = null;
   #frame: number | null = null;
   #points = new Float32Array();
+  #legendKeys: string[] = [];
   #colorMap: Record<string, string> = {};
   #showImageMarkers = true;
   #defectSize = 2;
@@ -100,7 +156,17 @@ export class ScMapElement extends HTMLElement {
   #immediatePoints: Array<{ x: number; y: number }> = [];
   #dragStart: { x: number; y: number } | null = null;
   #dragEnd: { x: number; y: number } | null = null;
+  #dragInteractionMode: ScMapInteractionMode | null = null;
+  #dragTransform: Transform | null = null;
+  #dragViewport: ScMapRegion | null = null;
   #lassoPoints: ScMapPoint[] = [];
+  #previewZoom: ScMapRegion | null = null;
+  #wheelInteraction: "pan" | "zoom" | null = null;
+  #wheelDeltaX = 0;
+  #wheelDeltaY = 0;
+  #wheelPoint: ScMapPoint | null = null;
+  #wheelFrame: number | null = null;
+  #wheelCommitTimer: ReturnType<typeof setTimeout> | null = null;
   #lastLoggedDataRevision = -1;
   #latestViewportRevision = 0;
 
@@ -125,7 +191,8 @@ export class ScMapElement extends HTMLElement {
     this.#overlay.addEventListener("pointerdown", this.#onPointerDown);
     this.#overlay.addEventListener("pointermove", this.#onPointerMove);
     this.#overlay.addEventListener("pointerup", this.#onPointerUp);
-    this.#overlay.addEventListener("pointercancel", this.#onPointerUp);
+    this.#overlay.addEventListener("pointercancel", this.#onPointerCancel);
+    this.#overlay.addEventListener("wheel", this.#onWheel, { passive: false });
     this.#overlay.addEventListener("dblclick", this.#onDoubleClick);
     this.#overlay.addEventListener("contextmenu", (event) => event.preventDefault());
   }
@@ -192,6 +259,7 @@ export class ScMapElement extends HTMLElement {
     this.#resizeObserver = null;
     if (this.#frame !== null) cancelAnimationFrame(this.#frame);
     this.#frame = null;
+    this.#cancelWheelGesture();
     this.#worker?.terminate();
     this.#worker = null;
     this.#pointsContext = null;
@@ -227,6 +295,7 @@ export class ScMapElement extends HTMLElement {
   }
   set points(value: number[] | Float32Array) {
     this.#points = value instanceof Float32Array ? value : Float32Array.from(value);
+    this.#legendKeys = [];
     this.#postData();
   }
   set colorMap(value: Record<string, string>) {
@@ -248,6 +317,7 @@ export class ScMapElement extends HTMLElement {
   }
   set mode(value: ScMapMode) {
     if (value === this.#mode) return;
+    this.#cancelWheelGesture();
     this.#mode = value;
     this.#scheduleRender();
     this.#scheduleProjection();
@@ -257,7 +327,10 @@ export class ScMapElement extends HTMLElement {
     this.#drawOverlay();
   }
   set zoom(value: ScMapRegion | null) {
-    this.#zoom = value ? { ...value } : null;
+    const next = value ? { ...value } : null;
+    if (sameRegion(this.#zoom, next) && this.#previewZoom === null) return;
+    this.#cancelWheelGesture();
+    this.#zoom = next;
     this.#scheduleRender();
     this.#scheduleProjection();
   }
@@ -307,7 +380,7 @@ export class ScMapElement extends HTMLElement {
   #transform(): Transform {
     const width = Math.max(1, this.clientWidth);
     const height = Math.max(1, this.clientHeight);
-    const region = this.#zoom;
+    const region = this.#effectiveZoom();
     const bounds = region
       ? { minX: region.x, maxX: region.x + region.w, minY: region.y, maxY: region.y + region.h }
       : (this.#dataBounds ?? this.#modeBounds());
@@ -320,6 +393,20 @@ export class ScMapElement extends HTMLElement {
       centerY: height / 2,
       offsetX: -(bounds.minX + bounds.maxX) / 2,
       offsetY: -(bounds.minY + bounds.maxY) / 2,
+    };
+  }
+
+  #effectiveZoom(): ScMapRegion | null {
+    return this.#previewZoom ?? this.#zoom;
+  }
+
+  #fullRegion(): ScMapRegion {
+    const bounds = this.#modeBounds();
+    return {
+      x: bounds.minX,
+      y: bounds.minY,
+      w: bounds.maxX - bounds.minX,
+      h: bounds.maxY - bounds.minY,
     };
   }
 
@@ -367,7 +454,7 @@ export class ScMapElement extends HTMLElement {
     clipPath: Path2D | null,
   ): void {
     const geometry = this.#geometry;
-    const zoom = this.#zoom;
+    const zoom = this.#effectiveZoom();
     const minX = zoom ? zoom.x : geometry.centerX - geometry.waferRadiusNm;
     const maxX = zoom ? zoom.x + zoom.w : geometry.centerX + geometry.waferRadiusNm;
     const minY = zoom ? zoom.y : geometry.centerY - geometry.waferRadiusNm;
@@ -451,7 +538,7 @@ export class ScMapElement extends HTMLElement {
     if (this.#mode === "wafer") {
       const [x, y] = this.#toScreen(transform, geometry.centerX, geometry.centerY);
       const radius = geometry.waferRadiusNm * transform.scale;
-      if (this.#zoom) {
+      if (this.#effectiveZoom()) {
         this.#drawWaferDieGrid(context, transform, null);
         context.strokeStyle = "#333333";
         context.lineWidth = 2;
@@ -474,12 +561,13 @@ export class ScMapElement extends HTMLElement {
     }
     context.fillStyle = "#e8e8e8";
     context.fillRect(0, 0, width, height);
-    const bounds = this.#zoom
+    const zoom = this.#effectiveZoom();
+    const bounds = zoom
       ? {
-          minX: this.#zoom.x,
-          maxX: this.#zoom.x + this.#zoom.w,
-          minY: this.#zoom.y,
-          maxY: this.#zoom.y + this.#zoom.h,
+          minX: zoom.x,
+          maxX: zoom.x + zoom.w,
+          minY: zoom.y,
+          maxY: zoom.y + zoom.h,
         }
       : this.#modeBounds();
     const cellX = this.#mode === "reticle" ? geometry.dieSizeX : geometry.dieSizeX;
@@ -531,7 +619,8 @@ export class ScMapElement extends HTMLElement {
       ],
       "#000000",
     );
-    if (this.#interactionMode === "lasso" && this.#lassoPoints.length > 1) {
+    const dragInteractionMode = this.#dragInteractionMode ?? this.#interactionMode;
+    if (dragInteractionMode === "lasso" && this.#lassoPoints.length > 1) {
       context.beginPath();
       context.moveTo(this.#lassoPoints[0].x, this.#lassoPoints[0].y);
       for (const point of this.#lassoPoints.slice(1)) {
@@ -542,14 +631,14 @@ export class ScMapElement extends HTMLElement {
       context.strokeStyle = "#a855f7";
       context.fill();
       context.stroke();
-    } else if (this.#dragStart && this.#dragEnd && this.#interactionMode !== "pan") {
+    } else if (this.#dragStart && this.#dragEnd && dragInteractionMode !== "pan") {
       const x = Math.min(this.#dragStart.x, this.#dragEnd.x);
       const y = Math.min(this.#dragStart.y, this.#dragEnd.y);
       const w = Math.abs(this.#dragEnd.x - this.#dragStart.x);
       const h = Math.abs(this.#dragEnd.y - this.#dragStart.y);
       context.fillStyle =
-        this.#interactionMode === "zoomin" ? "rgba(34,197,94,.15)" : "rgba(59,130,246,.15)";
-      context.strokeStyle = this.#interactionMode === "zoomin" ? "#22c55e" : "#3b82f6";
+        dragInteractionMode === "zoomin" ? "rgba(34,197,94,.15)" : "rgba(59,130,246,.15)";
+      context.strokeStyle = dragInteractionMode === "zoomin" ? "#22c55e" : "#3b82f6";
       context.fillRect(x, y, w, h);
       context.strokeRect(x, y, w, h);
     }
@@ -625,6 +714,7 @@ export class ScMapElement extends HTMLElement {
     this.#highlights = [];
     this.#resolvedImmediateHighlights = [];
     this.#points = new Float32Array();
+    this.#legendKeys = [];
     this.#postData();
     this.#drawOverlay();
     if (!arrow || !this.isConnected) return;
@@ -689,19 +779,20 @@ export class ScMapElement extends HTMLElement {
         const dataset: MapArrowDataset = this.#arrowDataset;
         const mode = this.#mode;
         this.#emitProgress(0.5, `${mode}: preparing projection`);
-        const points = await dataset.project(
+        const projection = await dataset.project(
           this.#projectionRequest(),
           (progress: number, stage: string) => this.#emitProgress(0.5 + progress * 0.5, stage),
         );
         if (dataset !== this.#arrowDataset) continue;
         if (revision !== this.#projectionRevision) continue;
-        this.#points = points;
+        this.#points = projection.points;
+        this.#legendKeys = projection.legendKeys;
         this.#postData();
         this.#renderAll();
         this.#emitProgress(1, "Map ready");
         this.dispatchEvent(
           new CustomEvent("map-ready", {
-            detail: { mode, binCount: Math.floor(points.length / 6) },
+            detail: { mode, binCount: Math.floor(projection.points.length / 6) },
             bubbles: true,
             composed: true,
           }),
@@ -730,7 +821,7 @@ export class ScMapElement extends HTMLElement {
       {
         type: "data",
         points,
-        colorMap: { ...this.#colorMap },
+        colorMap: encodeLegendColorMap(this.#colorMap, this.#legendKeys),
         showImageMarkers: this.#showImageMarkers,
         defectSize: this.#defectSize,
       },
@@ -752,6 +843,7 @@ export class ScMapElement extends HTMLElement {
     this.#drawOverlay();
     if (!this.#worker) return;
     const bounds = this.#dataBounds ?? this.#modeBounds();
+    const zoom = this.#effectiveZoom();
     const viewportRevision = ++this.#latestViewportRevision;
     this.#worker.postMessage({
       type: "viewport",
@@ -763,30 +855,53 @@ export class ScMapElement extends HTMLElement {
         centerX: (bounds.minX + bounds.maxX) / 2,
         centerY: (bounds.minY + bounds.maxY) / 2,
         dataRangeNm: Math.max(bounds.maxX - bounds.minX, bounds.maxY - bounds.minY),
-        zoom: this.#zoom ? { ...this.#zoom } : null,
+        zoom: zoom ? { ...zoom } : null,
         dataBounds: { ...bounds },
       },
     });
   }
 
-  #localPoint(event: PointerEvent): { x: number; y: number } {
+  #localPoint(event: MouseEvent): { x: number; y: number } {
     const rect = this.getBoundingClientRect();
     return { x: event.clientX - rect.left, y: event.clientY - rect.top };
   }
 
   #onPointerDown = (event: PointerEvent): void => {
-    if (event.button !== 0) return;
+    if (event.button !== 0 && event.button !== 2) return;
+    this.#flushWheelGesture();
+    if (event.button === 2) event.preventDefault();
     this.#overlay.setPointerCapture?.(event.pointerId);
     this.#dragStart = this.#localPoint(event);
     this.#dragEnd = { ...this.#dragStart };
-    this.#lassoPoints = this.#interactionMode === "lasso" ? [{ ...this.#dragStart }] : [];
+    this.#dragInteractionMode = event.button === 2 ? "pan" : this.#interactionMode;
+    this.#dragTransform = this.#dragInteractionMode === "pan" ? this.#transform() : null;
+    this.#dragViewport =
+      this.#dragInteractionMode === "pan" ? (this.#effectiveZoom() ?? this.#fullRegion()) : null;
+    this.#lassoPoints = this.#dragInteractionMode === "lasso" ? [{ ...this.#dragStart }] : [];
     this.#drawOverlay();
   };
 
   #onPointerMove = (event: PointerEvent): void => {
     if (!this.#dragStart) return;
     this.#dragEnd = this.#localPoint(event);
-    if (this.#interactionMode === "lasso") {
+    if (this.#dragInteractionMode === "pan" && this.#dragTransform && this.#dragViewport) {
+      const [startX, startY] = this.#toData(
+        this.#dragTransform,
+        this.#dragStart.x,
+        this.#dragStart.y,
+      );
+      const [endX, endY] = this.#toData(this.#dragTransform, this.#dragEnd.x, this.#dragEnd.y);
+      this.#previewZoom = clampRegionToBounds(
+        {
+          x: this.#dragViewport.x + startX - endX,
+          y: this.#dragViewport.y + startY - endY,
+          w: this.#dragViewport.w,
+          h: this.#dragViewport.h,
+        },
+        this.#fullRegion(),
+      );
+      this.#scheduleRender();
+    } else if (this.#dragInteractionMode === "lasso") {
       const previous = this.#lassoPoints.at(-1);
       if (
         !previous ||
@@ -794,7 +909,7 @@ export class ScMapElement extends HTMLElement {
       ) {
         this.#lassoPoints.push({ ...this.#dragEnd });
       }
-    } else if (this.#interactionMode === "zoomin") {
+    } else if (this.#dragInteractionMode === "zoomin") {
       const width = Math.max(1, this.clientWidth);
       const height = Math.max(1, this.clientHeight);
       const dx = this.#dragEnd.x - this.#dragStart.x;
@@ -815,15 +930,20 @@ export class ScMapElement extends HTMLElement {
     const start = this.#dragStart;
     const end = this.#dragEnd;
     const lassoPoints = this.#lassoPoints;
+    const dragInteractionMode = this.#dragInteractionMode;
+    const dragViewport = this.#dragViewport;
     this.#dragStart = null;
     this.#dragEnd = null;
+    this.#dragInteractionMode = null;
+    this.#dragTransform = null;
+    this.#dragViewport = null;
     this.#lassoPoints = [];
     const transform = this.#transform();
     const [startX, startY] = this.#toData(transform, start.x, start.y);
     const [endX, endY] = this.#toData(transform, end.x, end.y);
     const dx = Math.abs(end.x - start.x);
     const dy = Math.abs(end.y - start.y);
-    if (this.#interactionMode === "lasso" && lassoPoints.length >= 3) {
+    if (dragInteractionMode === "lasso" && lassoPoints.length >= 3) {
       const dataPoints = lassoPoints.map((point) => this.#toData(transform, point.x, point.y));
       const points = dataPoints.map(([x, y]) => ({ x, y }));
       const xs = points.map((point) => point.x);
@@ -844,21 +964,16 @@ export class ScMapElement extends HTMLElement {
         }),
       );
     } else if (dx >= 4 || dy >= 4) {
-      const current =
-        this.#zoom ??
-        (() => {
-          const b = this.#modeBounds();
-          return { x: b.minX, y: b.minY, w: b.maxX - b.minX, h: b.maxY - b.minY };
-        })();
-      if (this.#interactionMode === "pan") {
+      if (dragInteractionMode === "pan") {
+        const preview = this.#previewZoom ?? dragViewport ?? this.#fullRegion();
+        const next = sameRegion(preview, this.#fullRegion()) ? null : { ...preview };
+        this.#previewZoom = null;
+        this.#zoom = next;
+        this.#scheduleRender();
+        this.#scheduleProjection();
         this.dispatchEvent(
           new CustomEvent("zoom-in", {
-            detail: {
-              x: current.x + startX - endX,
-              y: current.y + startY - endY,
-              w: current.w,
-              h: current.h,
-            },
+            detail: next,
             bubbles: true,
           }),
         );
@@ -869,7 +984,7 @@ export class ScMapElement extends HTMLElement {
           w: Math.abs(endX - startX),
           h: Math.abs(endY - startY),
         };
-        if (this.#interactionMode === "zoomin") {
+        if (dragInteractionMode === "zoomin") {
           this.dispatchEvent(new CustomEvent("zoom-in", { detail: region, bubbles: true }));
         } else {
           this.#appendImmediatePoints(
@@ -885,8 +1000,153 @@ export class ScMapElement extends HTMLElement {
         }
       }
     }
+    if (dragInteractionMode === "pan" && this.#previewZoom !== null) {
+      this.#previewZoom = null;
+      this.#scheduleRender();
+    }
     this.#drawOverlay();
   };
+
+  #onPointerCancel = (): void => {
+    this.#dragStart = null;
+    this.#dragEnd = null;
+    this.#dragInteractionMode = null;
+    this.#dragTransform = null;
+    this.#dragViewport = null;
+    this.#lassoPoints = [];
+    this.#previewZoom = null;
+    this.#scheduleRender();
+    this.#drawOverlay();
+  };
+
+  #onWheel = (event: WheelEvent): void => {
+    const interaction = event.ctrlKey ? "zoom" : "pan";
+    const deltaX = normalizeWheelDelta(event.deltaX, event.deltaMode, this.clientWidth);
+    const deltaY = normalizeWheelDelta(event.deltaY, event.deltaMode, this.clientHeight);
+    if (deltaX === 0 && deltaY === 0) return;
+    if (this.#wheelInteraction !== null && this.#wheelInteraction !== interaction) {
+      this.#flushWheelGesture();
+    }
+    event.preventDefault();
+    this.#wheelInteraction = interaction;
+    this.#wheelDeltaX += deltaX;
+    this.#wheelDeltaY += deltaY;
+    this.#wheelPoint = this.#localPoint(event);
+    if (this.#wheelFrame === null) {
+      this.#wheelFrame = requestAnimationFrame(this.#applyWheelDelta);
+    }
+    if (this.#wheelCommitTimer !== null) clearTimeout(this.#wheelCommitTimer);
+    this.#wheelCommitTimer = setTimeout(this.#flushWheelGesture, SC_MAP_WHEEL_ZOOM_COMMIT_DELAY_MS);
+  };
+
+  #applyWheelDelta = (): void => {
+    this.#wheelFrame = null;
+    if (!this.#wheelPoint || this.#wheelInteraction === null) return;
+
+    if (this.#wheelInteraction === "pan") {
+      const deltaX = this.#wheelDeltaX;
+      const deltaY = this.#wheelDeltaY;
+      this.#wheelDeltaX = 0;
+      this.#wheelDeltaY = 0;
+      this.#applyWheelPan(deltaX, deltaY);
+      return;
+    }
+    if (this.#wheelDeltaY === 0) return;
+
+    const minDelta = Math.log(MIN_WHEEL_FRAME_FACTOR) / SC_MAP_WHEEL_ZOOM_SENSITIVITY;
+    const maxDelta = Math.log(MAX_WHEEL_FRAME_FACTOR) / SC_MAP_WHEEL_ZOOM_SENSITIVITY;
+    const delta = Math.min(maxDelta, Math.max(minDelta, this.#wheelDeltaY));
+    this.#wheelDeltaY -= delta;
+    this.#wheelDeltaX = 0;
+    this.#applyWheelZoom(delta);
+    if (Math.abs(this.#wheelDeltaY) > Number.EPSILON && this.#wheelFrame === null) {
+      this.#wheelFrame = requestAnimationFrame(this.#applyWheelDelta);
+    }
+  };
+
+  #applyWheelPan(deltaX: number, deltaY: number): void {
+    if (deltaX === 0 && deltaY === 0) return;
+    const current = this.#effectiveZoom() ?? this.#fullRegion();
+    const transform = this.#transform();
+    const next = clampRegionToBounds(
+      {
+        x: current.x + deltaX / transform.scale,
+        y: current.y - deltaY / transform.scale,
+        w: current.w,
+        h: current.h,
+      },
+      this.#fullRegion(),
+    );
+    if (!sameRegion(current, next)) {
+      this.#previewZoom = next;
+      this.#scheduleRender();
+    }
+  }
+
+  #applyWheelZoom(delta: number): void {
+    const point = this.#wheelPoint;
+    if (!point || delta === 0) return;
+    const current = this.#effectiveZoom() ?? this.#fullRegion();
+    const transform = this.#transform();
+    const [anchorX, anchorY] = this.#toData(transform, point.x, point.y);
+    const exponent = Math.min(
+      -Math.log(MIN_VIEWPORT_RATIO),
+      Math.max(Math.log(MIN_VIEWPORT_RATIO), delta * SC_MAP_WHEEL_ZOOM_SENSITIVITY),
+    );
+    const factor = Math.exp(exponent);
+    const next = zoomRegionAroundPoint(
+      current,
+      this.#fullRegion(),
+      { x: anchorX, y: anchorY },
+      factor,
+    );
+    if (!sameRegion(current, next)) {
+      this.#previewZoom = next;
+      this.#scheduleRender();
+    }
+  }
+
+  #flushWheelGesture = (): void => {
+    if (this.#wheelFrame !== null) {
+      cancelAnimationFrame(this.#wheelFrame);
+      this.#wheelFrame = null;
+    }
+    if (this.#wheelInteraction === "pan") {
+      this.#applyWheelPan(this.#wheelDeltaX, this.#wheelDeltaY);
+    } else if (Math.abs(this.#wheelDeltaY) > Number.EPSILON) {
+      this.#applyWheelZoom(this.#wheelDeltaY);
+    }
+    this.#wheelDeltaX = 0;
+    this.#wheelDeltaY = 0;
+    if (this.#wheelCommitTimer !== null) {
+      clearTimeout(this.#wheelCommitTimer);
+      this.#wheelCommitTimer = null;
+    }
+    const preview = this.#previewZoom;
+    if (!preview) {
+      this.#wheelInteraction = null;
+      return;
+    }
+    const next = sameRegion(preview, this.#fullRegion()) ? null : { ...preview };
+    this.#previewZoom = null;
+    this.#wheelInteraction = null;
+    this.#zoom = next;
+    this.#scheduleRender();
+    this.#scheduleProjection();
+    this.dispatchEvent(new CustomEvent("zoom-in", { detail: next, bubbles: true }));
+  };
+
+  #cancelWheelGesture(): void {
+    if (this.#wheelFrame !== null) cancelAnimationFrame(this.#wheelFrame);
+    if (this.#wheelCommitTimer !== null) clearTimeout(this.#wheelCommitTimer);
+    this.#wheelFrame = null;
+    this.#wheelCommitTimer = null;
+    this.#wheelInteraction = null;
+    this.#wheelDeltaX = 0;
+    this.#wheelDeltaY = 0;
+    this.#wheelPoint = null;
+    this.#previewZoom = null;
+  }
 
   #onDoubleClick = (): void => {
     this.#immediatePoints = [];

@@ -71,6 +71,7 @@ const props = withDefaults(
     legendGroupBy?: LegendSource | null;
     legendSources?: LegendSource[];
     legendGroups?: Record<string, DefectList> | null;
+    colorMapScopeKey?: string;
 
     zoom?: { x: number; y: number; w: number; h: number } | null;
 
@@ -150,8 +151,8 @@ const hiddenLegendKeysBySource = ref<Record<LegendSource, string[]>>({
   prediction: [],
   final_class: [],
 });
-const colorMap = ref<Record<string, string>>({});
-const previousDefaultColorMap = ref<Record<string, string>>({});
+const colorMapsBySource = ref<Record<LegendSource, Record<string, string>>>(emptyColorMaps());
+const colorMap = computed(() => colorMapsBySource.value[legendSource.value]);
 const legendSourceOptions = computed(() => {
   const enabled = props.legendSources ?? ["class", "bin"];
   const labels: Record<LegendSource, string> = {
@@ -180,6 +181,57 @@ function loadPersistedState(key: string, defaultValue: boolean): boolean {
   if (raw === "true") return true;
   if (raw === "false") return false;
   return defaultValue;
+}
+
+function emptyColorMaps(): Record<LegendSource, Record<string, string>> {
+  return {
+    class: {},
+    bin: {},
+    annotation: {},
+    prediction: {},
+    final_class: {},
+  };
+}
+
+function colorMapStorageKey(source: LegendSource): string | null {
+  const scope = props.colorMapScopeKey?.trim();
+  return scope ? `sc_map_panel.color_map.${encodeURIComponent(scope)}.${source}` : null;
+}
+
+function loadPersistedColorMap(source: LegendSource): Record<string, string> {
+  const key = colorMapStorageKey(source);
+  if (!key) return {};
+  try {
+    const parsed = JSON.parse(localStorage.getItem(key) ?? "{}") as Record<string, unknown>;
+    return Object.fromEntries(
+      Object.entries(parsed).filter(
+        (entry): entry is [string, string] =>
+          typeof entry[1] === "string" && /^#[0-9a-f]{6}$/i.test(entry[1]),
+      ),
+    );
+  } catch {
+    return {};
+  }
+}
+
+function loadPersistedColorMaps(): Record<LegendSource, Record<string, string>> {
+  return {
+    class: loadPersistedColorMap("class"),
+    bin: loadPersistedColorMap("bin"),
+    annotation: loadPersistedColorMap("annotation"),
+    prediction: loadPersistedColorMap("prediction"),
+    final_class: loadPersistedColorMap("final_class"),
+  };
+}
+
+function updateColorMap(source: LegendSource, next: Record<string, string>): void {
+  colorMapsBySource.value = { ...colorMapsBySource.value, [source]: next };
+  const key = colorMapStorageKey(source);
+  if (key) localStorage.setItem(key, JSON.stringify(next));
+}
+
+function handleColorMapUpdate(next: Record<string, string>): void {
+  updateColorMap(legendSource.value, next);
 }
 
 function savePersistedState(key: string, value: boolean): void {
@@ -333,16 +385,32 @@ const defaultColorMap = computed<Record<string, string>>(() => {
 });
 
 watch(
+  () => props.colorMapScopeKey,
+  () => {
+    const loaded = loadPersistedColorMaps();
+    const source = legendSource.value;
+    loaded[source] = Object.fromEntries(
+      Object.entries(defaultColorMap.value).map(([key, defaultColor]) => [
+        key,
+        loaded[source][key] ?? defaultColor,
+      ]),
+    );
+    colorMapsBySource.value = loaded;
+  },
+  { immediate: true },
+);
+
+watch(
   defaultColorMap,
   (defaults) => {
-    const previous = previousDefaultColorMap.value;
-    const next: Record<string, string> = {};
-    for (const [key, defaultColor] of Object.entries(defaults)) {
-      const currentColor = colorMap.value[key];
-      next[key] = currentColor && currentColor !== previous[key] ? currentColor : defaultColor;
-    }
-    colorMap.value = next;
-    previousDefaultColorMap.value = { ...defaults };
+    const source = legendSource.value;
+    const stored = colorMapsBySource.value[source];
+    updateColorMap(
+      source,
+      Object.fromEntries(
+        Object.entries(defaults).map(([key, defaultColor]) => [key, stored[key] ?? defaultColor]),
+      ),
+    );
   },
   { immediate: true },
 );
@@ -378,7 +446,7 @@ const activeImmediatePoints = computed(() => {
 });
 
 function onNativeZoom(event: Event): void {
-  keepMapVisibleWhileRendering.value = mapMode.value[internalTab.value] === "pan";
+  keepMapVisibleWhileRendering.value = true;
   handleZoomIn(
     (event as CustomEvent<{ x: number; y: number; w: number; h: number } | null>).detail,
   );
@@ -576,6 +644,7 @@ function handleHiddenLegendKeysUpdate(keys: string[]): void {
           </div>
           <sc-map
             data-testid="sc-unified-map"
+            title="Right-drag or two-finger scroll to pan · Pinch to zoom"
             :arrowData.prop="arrowData ?? null"
             :legendColumn.prop="mapLegendColumn ?? 'class_number'"
             :hiddenLegendKeys.prop="activeHiddenLegendKeys"
@@ -664,7 +733,7 @@ function handleHiddenLegendKeysUpdate(keys: string[]): void {
                   :legendSource="legendSource"
                   :hidden-keys="activeHiddenLegendKeys"
                   @select-class="handleLegendSelect"
-                  @update:color-map="colorMap = $event"
+                  @update:color-map="handleColorMapUpdate"
                   @update:hidden-keys="handleHiddenLegendKeysUpdate"
                 />
               </div>

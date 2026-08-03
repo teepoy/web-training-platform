@@ -20,17 +20,22 @@ export interface MapResolvedHighlight {
   reticleY: number;
 }
 
+export interface MapProjectionResult {
+  points: Float32Array;
+  legendKeys: string[];
+}
+
 export interface MapArrowDataset {
   project(
     spec: MapProjectionSpec,
     onProgress?: (progress: number, stage: string) => void,
-  ): Promise<Float32Array>;
+  ): Promise<MapProjectionResult>;
   resolveHighlights(defectIds: readonly number[]): Promise<MapResolvedHighlight[]>;
   dispose(): void;
 }
 
 interface PendingCall {
-  resolve: (value: Float32Array | Float64Array | null) => void;
+  resolve: (value: MapProjectionResult | Float32Array | Float64Array | null) => void;
   reject: (error: Error) => void;
   onProgress?: (progress: number, stage: string) => void;
 }
@@ -53,6 +58,7 @@ export async function createMapArrowDataset(
       progress?: number;
       stage?: string;
       points?: Float32Array;
+      legendKeys?: string[];
       highlights?: Float64Array;
       rowCount?: number;
       error?: string;
@@ -83,7 +89,14 @@ export async function createMapArrowDataset(
         }),
       );
     }
-    call.resolve(event.data.points ?? event.data.highlights ?? null);
+    call.resolve(
+      event.data.type === "projected"
+        ? {
+            points: event.data.points ?? new Float32Array(),
+            legendKeys: event.data.legendKeys ?? [],
+          }
+        : (event.data.highlights ?? null),
+    );
   };
   worker.onerror = (event) => {
     const error = new Error(event.message);
@@ -96,7 +109,7 @@ export async function createMapArrowDataset(
     message: Record<string, unknown>,
     transfer: Transferable[] = [],
     progress?: (value: number, stage: string) => void,
-  ): Promise<Float32Array | Float64Array | null> {
+  ): Promise<MapProjectionResult | Float32Array | Float64Array | null> {
     if (disposed) return Promise.reject(new Error("Arrow map dataset has been disposed"));
     const id = ++requestId;
     return new Promise((resolve, reject) => {
@@ -122,7 +135,7 @@ export async function createMapArrowDataset(
         [],
         progress,
       );
-      return result instanceof Float32Array ? result : new Float32Array();
+      return result && "points" in result ? result : { points: new Float32Array(), legendKeys: [] };
     },
     async resolveHighlights(defectIds) {
       if (defectIds.length === 0) return [];

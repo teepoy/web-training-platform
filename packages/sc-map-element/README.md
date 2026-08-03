@@ -30,6 +30,14 @@ Area selections are additive. Box selection emits `box-select`; lasso selection
 emits `lasso-select` with the polygon and its bounding region. Double-click emits
 `clear-selection`. Zoom reset is controlled explicitly by assigning `zoom = null`.
 
+Left-button dragging follows `interactionMode`. Right-button dragging always pans
+without changing that mode. Ordinary trackpad `wheel` input uses `deltaX` and
+`deltaY` to pan. Trackpad pinch input, represented by browsers as `wheel` with
+`ctrlKey`, zooms around the pointer. Wheel deltas are normalized and accumulated
+per animation frame, visual viewport changes are previewed immediately, and one
+final `zoom-in` event plus Arrow reprojection is committed 120 ms after input
+stops. Zoom sensitivity is defined by `SC_MAP_WHEEL_ZOOM_SENSITIVITY`.
+
 `<sc-map>` owns both workers. Its Arrow worker retains and iterates the Arrow
 vectors directly for mode selection, zoom filtering, pixel-grid binning, and
 deduplication. Its render worker owns the `OffscreenCanvas`. Zoom, pan, resize,

@@ -2,6 +2,7 @@
 
 import { tableFromIPC, type Table, type Vector } from "apache-arrow";
 import type { ScMapRegion } from "./types";
+import { encodeLegendKey, normalizeLegendKey } from "./legend-key-codec";
 
 type MapMode = "wafer" | "die" | "reticle";
 
@@ -141,6 +142,8 @@ function project(message: ProjectMessage): void {
   const totalRows = tables.reduce((sum, table) => sum + table.numRows, 0);
   const display = new Float32Array(totalRows * 6);
   const binOffsets = new Map<string, number>();
+  const legendCodes = new Map<string, number>();
+  const legendKeys: string[] = [];
   const interval = Math.max(1, Math.floor(totalRows / 100));
   let displayRows = 0;
   let processedRows = 0;
@@ -161,21 +164,22 @@ function project(message: ProjectMessage): void {
         continue;
       }
 
-      const legend = legendColumn.get(rowIndex);
-      if (hidden.has(String(legend))) continue;
+      const legendKey = normalizeLegendKey(legendColumnName, legendColumn.get(rowIndex));
+      if (hidden.has(legendKey)) continue;
+      const legendCode = encodeLegendKey(legendKey, legendCodes, legendKeys);
       const gx = Math.floor(x / message.binSize);
       const gy = Math.floor(y / message.binSize);
       const key = `${gx}:${gy}`;
       const existingOffset = binOffsets.get(key);
       if (existingOffset !== undefined) {
-        display[existingOffset + 2] = Number(legend ?? 0);
+        display[existingOffset + 2] = legendCode;
         if (Number(imagesColumn?.get(rowIndex) ?? 0) > 0) display[existingOffset + 4] = 1;
       } else {
         const offset = displayRows * 6;
         binOffsets.set(key, offset);
         display[offset] = gx * message.binSize + message.binSize / 2;
         display[offset + 1] = gy * message.binSize + message.binSize / 2;
-        display[offset + 2] = Number(legend ?? 0);
+        display[offset + 2] = legendCode;
         display[offset + 4] = Number(imagesColumn?.get(rowIndex) ?? 0) > 0 ? 1 : 0;
         displayRows += 1;
       }
@@ -192,7 +196,7 @@ function project(message: ProjectMessage): void {
 
   const points = display.slice(0, displayRows * 6);
   progress(message.id, 1, `${message.mode}: ${displayRows.toLocaleString()} occupied bins`);
-  self.postMessage({ id: message.id, type: "projected", points }, [points.buffer]);
+  self.postMessage({ id: message.id, type: "projected", points, legendKeys }, [points.buffer]);
 }
 
 self.onmessage = (event: MessageEvent<WorkerMessage>) => {

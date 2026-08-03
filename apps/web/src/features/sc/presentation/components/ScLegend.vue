@@ -20,6 +20,7 @@ type LegendSource = "class" | "bin" | "annotation" | "prediction" | "final_class
 type LegendKey = number | string;
 const UNLABELED_KEY = "__unlabeled__";
 const NO_PREDICTION_KEY = "__no_prediction__";
+const UNCLASSIFIED_KEY = "__unclassified__";
 
 const props = defineProps<{
   points?: number[];
@@ -74,6 +75,7 @@ const legendData = computed(() => {
   const missingLabels: Record<string, string> = {
     [UNLABELED_KEY]: "Unlabeled",
     [NO_PREDICTION_KEY]: "No Prediction",
+    [UNCLASSIFIED_KEY]: "Unclassified",
   };
   if (compactGroups && Object.keys(compactGroups).length > 0) {
     return Object.entries(compactGroups)

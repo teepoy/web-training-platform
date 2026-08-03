@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { NDropdown } from "naive-ui";
 import { mountWithProviders } from "@/testing";
 import ScMapPanelBinned from "../ScMapPanelBinned.vue";
+import ScLegend from "../ScLegend.vue";
 
 describe("ScMapPanelBinned unified map", () => {
   it("keeps one native map element while switching modes", async () => {
@@ -132,6 +133,51 @@ describe("ScMapPanelBinned unified map", () => {
     wrapper.findComponent(NDropdown).vm.$emit("select", "lasso");
     await wrapper.vm.$nextTick();
     expect(element.interactionMode).toBe("lasso");
+  });
+
+  it("keeps custom colors separate by legend source and restores them by scope", async () => {
+    const groups = {
+      "2": { $typeName: "sc.v1.DefectList", count: 5, defectIds: [1, 2] },
+    };
+    const { wrapper } = await mountWithProviders(ScMapPanelBinned, {
+      props: {
+        legendGroupBy: "class",
+        legendGroups: groups,
+        colorMapScopeKey: "dataset:colors",
+      },
+    });
+
+    wrapper.findComponent(ScLegend).vm.$emit("update:colorMap", { "2": "#ff00ff" });
+    await wrapper.vm.$nextTick();
+    expect(
+      (
+        wrapper.find('[data-testid="sc-unified-map"]').element as HTMLElement & {
+          colorMap: Record<string, string>;
+        }
+      ).colorMap,
+    ).toEqual({ "2": "#ff00ff" });
+
+    await wrapper.setProps({
+      legendGroupBy: "prediction",
+      legendGroups: {
+        Scratch: { $typeName: "sc.v1.DefectList", count: 2, defectIds: [3, 4] },
+      },
+    });
+    wrapper.findComponent(ScLegend).vm.$emit("update:colorMap", { Scratch: "#00ff00" });
+    await wrapper.vm.$nextTick();
+
+    await wrapper.setProps({ legendGroupBy: "class", legendGroups: groups });
+    await wrapper.vm.$nextTick();
+    expect(
+      (
+        wrapper.find('[data-testid="sc-unified-map"]').element as HTMLElement & {
+          colorMap: Record<string, string>;
+        }
+      ).colorMap,
+    ).toEqual({ "2": "#ff00ff" });
+    expect(localStorage.getItem("sc_map_panel.color_map.dataset%3Acolors.class")).toBe(
+      '{"2":"#ff00ff"}',
+    );
   });
 
   it("keeps the current map visible while a pan redraw is pending", async () => {
