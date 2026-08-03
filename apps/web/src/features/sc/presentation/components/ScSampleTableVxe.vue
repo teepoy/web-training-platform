@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, markRaw, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import type { CSSProperties } from "vue";
 import { NButton, NIcon, NPopover, NText } from "naive-ui";
 import type { VxeTableDefines, VxeTablePropTypes } from "vxe-table";
 import {
@@ -18,10 +17,17 @@ import type { ScSampleTableDisplayRow } from "@/features/sc/domain/workbenchInte
 import type { ScSampleTableDataSource } from "@/features/sc/domain/workbenchInteraction";
 import { SC_SCROLL_QUERY_DEBOUNCE_MS } from "../composables/scrollQueryDebounce";
 import { ArrowBackedRows } from "./arrowBackedRows";
-import { SC_RECLASSIFY_TABLE_COLUMNS, SC_SAMPLE_TABLE_COLUMNS } from "./scSampleTableColumns";
 import ScRangeFilterMenu from "./ScRangeFilterMenu.vue";
 import ScSetFilterMenu from "./ScSetFilterMenu.vue";
 import ScTextFilterMenu from "./ScTextFilterMenu.vue";
+import {
+  normalizeSampleTableFilterValue,
+  renderSampleTableCell,
+  sampleTablePresentationColumns,
+  sampleTableRowDefectId,
+  type ScSampleTablePresentationColumn,
+  type ScSampleTablePresentationRow,
+} from "./sampleTablePresentation";
 import type { ScSampleTableBaseProps, ScSampleTableEmits } from "./scSampleTableContract";
 
 interface ScSampleTableVxeProps extends ScSampleTableBaseProps {
@@ -33,14 +39,6 @@ interface ScSampleTableVxeProps extends ScSampleTableBaseProps {
 const props = defineProps<ScSampleTableVxeProps>();
 
 const emit = defineEmits<ScSampleTableEmits>();
-
-interface ColumnDefinition {
-  key: string;
-  title: string;
-  width: number;
-  filter: "set" | "range" | null;
-  render?: (row: VxeSampleTableRow) => string;
-}
 
 interface VxeRowsPage {
   items: ScSampleTableDisplayRow[];
@@ -57,51 +55,24 @@ interface VxeGridRef {
   };
   loadData: (data: VxeSampleTableRow[]) => Promise<unknown> | void;
   recalculate: (refull?: boolean) => Promise<unknown> | void;
-  refreshScroll: () => Promise<unknown> | void;
-  reloadData: (data: VxeSampleTableRow[]) => Promise<unknown> | void;
   scrollTo: (scrollLeft: number | null, scrollTop: number | null) => Promise<unknown> | void;
   setCheckboxRowKey: (key: string | number, checked: boolean) => Promise<unknown> | void;
 }
 
-type VxeSampleTableRow = Partial<ScSampleTableDisplayRow> &
-  Record<string, unknown> & {
-    defect_id: string;
-    _isHydrated?: boolean;
-  };
+type VxeSampleTableRow = ScSampleTablePresentationRow;
 
-const columnDefinitions: ColumnDefinition[] = SC_SAMPLE_TABLE_COLUMNS;
-const reclassifyColumnDefinitions: ColumnDefinition[] = SC_RECLASSIFY_TABLE_COLUMNS;
-
-const knownColumnDefinitions = new Map(
-  [...columnDefinitions, ...reclassifyColumnDefinitions].map((definition) => [
-    definition.key,
-    definition,
-  ]),
-);
-const reclassifyColumnKeys = new Set(
-  reclassifyColumnDefinitions.map((definition) => definition.key),
-);
 const PAGE_SIZE = 50;
 const ROW_HEIGHT = 36;
 const PAGE_WINDOW_OVERSCAN_ROWS = 2;
-const SCROLLBAR_SIZE = 10;
-const MIN_SCROLL_THUMB_SIZE = 24;
 const DEFAULT_TOTAL = 0;
 const DEFAULT_TABLE_SORT: ScSampleTableSort = {
   field: "defect_id",
   direction: "asc",
 };
 const sourceColumns = ref<ScDataColumn[] | null>(null);
-const activeColumnDefinitions = computed(() => {
-  if (sourceColumns.value === null) {
-    return props.showReclassifyColumns
-      ? [...columnDefinitions, ...reclassifyColumnDefinitions]
-      : columnDefinitions;
-  }
-  return sourceColumns.value
-    .filter((column) => props.showReclassifyColumns || !reclassifyColumnKeys.has(column.name))
-    .map((column) => knownColumnDefinitions.get(column.name) ?? dynamicColumnDefinition(column));
-});
+const activeColumnDefinitions = computed(() =>
+  sampleTablePresentationColumns(sourceColumns.value, props.showReclassifyColumns === true),
+);
 const resolvedPageSize = computed(() => props.pageSize ?? PAGE_SIZE);
 
 let arrowRows = new ArrowBackedRows();
@@ -110,8 +81,6 @@ let displayRows: VxeSampleTableRow[] = [];
 const gridRef = ref<VxeGridRef | null>(null);
 const gridHostRef = ref<HTMLElement | null>(null);
 const virtualRailRef = ref<HTMLElement | null>(null);
-const xScrollbarRailRef = ref<HTMLElement | null>(null);
-const yScrollbarRailRef = ref<HTMLElement | null>(null);
 const serverTotal = ref(DEFAULT_TOTAL);
 const storageStats = ref(arrowRows.getStats());
 const pageError = ref<string | null>(null);
@@ -133,106 +102,11 @@ const setFilterSearchLoading = ref<Record<string, boolean>>({});
 let requestVersion = 0;
 const loadedDefectIds = new Set<number>();
 let loadingRequest: { page: number; version: number } | null = null;
-let pendingHorizontalScrollRestore: { version: number; scrollLeft: number } | null = null;
 let pendingRowsReplacementVersion: number | null = null;
 let requestedPage = 0;
 let renderedPage = -1;
 let virtualRailSyncTimer: ReturnType<typeof setTimeout> | null = null;
 let pageLoadController: AbortController | null = null;
-let resizeObserver: ResizeObserver | null = null;
-let scrollbarDragState: {
-  axis: "x" | "y";
-  startPointer: number;
-  startScroll: number;
-  scrollableDistance: number;
-  trackDistance: number;
-} | null = null;
-
-interface ScrollbarMetrics {
-  xClientSize: number;
-  xScrollSize: number;
-  xPosition: number;
-  xTrackSize: number;
-  yClientSize: number;
-  yScrollSize: number;
-  yPosition: number;
-  yTrackSize: number;
-}
-
-const scrollbarMetrics = ref<ScrollbarMetrics>({
-  xClientSize: 0,
-  xScrollSize: 0,
-  xPosition: 0,
-  xTrackSize: 0,
-  yClientSize: 0,
-  yScrollSize: 0,
-  yPosition: 0,
-  yTrackSize: 0,
-});
-
-function thumbSize(clientSize: number, scrollSize: number, trackSize: number): number {
-  if (trackSize <= 0) return 0;
-  if (clientSize <= 0 || scrollSize <= clientSize) return trackSize;
-  return Math.min(
-    trackSize,
-    Math.max(MIN_SCROLL_THUMB_SIZE, (clientSize / scrollSize) * trackSize),
-  );
-}
-
-function thumbOffset(
-  position: number,
-  clientSize: number,
-  scrollSize: number,
-  trackSize: number,
-  size: number,
-): number {
-  const scrollableDistance = scrollSize - clientSize;
-  const trackDistance = trackSize - size;
-  if (scrollableDistance <= 0 || trackDistance <= 0) return 0;
-  return (position / scrollableDistance) * trackDistance;
-}
-
-const xThumbSize = computed(() =>
-  thumbSize(
-    scrollbarMetrics.value.xClientSize,
-    scrollbarMetrics.value.xScrollSize,
-    scrollbarMetrics.value.xTrackSize,
-  ),
-);
-const yThumbSize = computed(() =>
-  thumbSize(
-    scrollbarMetrics.value.yClientSize,
-    scrollbarMetrics.value.yScrollSize,
-    scrollbarMetrics.value.yTrackSize,
-  ),
-);
-const xThumbStyle = computed<CSSProperties>(() => ({
-  width: `${xThumbSize.value}px`,
-  transform: `translateX(${thumbOffset(
-    scrollbarMetrics.value.xPosition,
-    scrollbarMetrics.value.xClientSize,
-    scrollbarMetrics.value.xScrollSize,
-    scrollbarMetrics.value.xTrackSize,
-    xThumbSize.value,
-  )}px)`,
-}));
-const yThumbStyle = computed<CSSProperties>(() => ({
-  height: `${yThumbSize.value}px`,
-  transform: `translateY(${thumbOffset(
-    scrollbarMetrics.value.yPosition,
-    scrollbarMetrics.value.yClientSize,
-    scrollbarMetrics.value.yScrollSize,
-    scrollbarMetrics.value.yTrackSize,
-    yThumbSize.value,
-  )}px)`,
-}));
-
-const virtualYConfig: VxeTablePropTypes.VirtualYConfig = {
-  enabled: true,
-  gt: 0,
-  mode: "scroll",
-  oSize: 2,
-};
 const virtualXConfig: VxeTablePropTypes.VirtualXConfig = {
   enabled: true,
   gt: 0,
@@ -240,8 +114,6 @@ const virtualXConfig: VxeTablePropTypes.VirtualXConfig = {
   scrollToLeftOnChange: false,
 };
 const scrollbarConfig: VxeTablePropTypes.ScrollbarConfig = {
-  height: SCROLLBAR_SIZE,
-  width: SCROLLBAR_SIZE,
   x: {
     visible: "visible",
   },
@@ -266,42 +138,21 @@ const checkboxConfig: VxeTablePropTypes.CheckboxConfig<VxeSampleTableRow> = {
   checkStrictly: true,
   showHeader: true,
   highlight: true,
-  checkMethod: ({ row }) => rowDefectId(row) !== null,
+  checkMethod: ({ row }) => sampleTableRowDefectId(row) !== null,
 };
-
-function normalizeFilterValue(field: string, value: string | number): string | number {
-  if (field !== "defect_id") return value;
-  const numeric = Number(value);
-  return Number.isFinite(numeric) ? numeric : value;
-}
 
 function normalizeTableSort(sort: ScSampleTableSort | null | undefined): ScSampleTableSort {
   return sort ?? DEFAULT_TABLE_SORT;
-}
-
-function dynamicColumnDefinition(column: ScDataColumn): ColumnDefinition {
-  const arrowType = column.arrowType.toLowerCase();
-  const numeric = /(^|[^a-z])(u?int|float|double|decimal)/.test(arrowType);
-  const scalar =
-    numeric ||
-    arrowType.includes("bool") ||
-    arrowType.includes("utf8") ||
-    arrowType.includes("string") ||
-    arrowType.includes("date") ||
-    arrowType.includes("time");
-  return {
-    key: column.name,
-    title: column.name,
-    width: Math.max(120, Math.min(240, column.name.length * 9 + 44)),
-    filter: numeric ? "range" : scalar ? "set" : null,
-  };
 }
 
 async function loadSourceColumns(): Promise<void> {
   const source = props.dataSource;
   try {
     const columns = (await source.loadColumns?.()) ?? null;
-    if (source === props.dataSource) sourceColumns.value = columns;
+    if (source !== props.dataSource) return;
+    sourceColumns.value = columns;
+    await nextTick();
+    await gridRef.value?.recalculate(true);
   } catch (error) {
     if (source !== props.dataSource) return;
     pageError.value = error instanceof Error ? error.message : "Failed to load sample columns";
@@ -321,23 +172,23 @@ function getFilterState(field: string): {
 function getSetFilterValues(field: string): Array<string | number> {
   const filter = tableFilter.value[field];
   return filter?.filterType === "set"
-    ? filter.values.map((value) => normalizeFilterValue(field, value))
+    ? filter.values.map((value) => normalizeSampleTableFilterValue(field, value))
     : [];
 }
 
-function getSetFilterOptions(definition: ColumnDefinition) {
+function getSetFilterOptions(definition: ScSampleTablePresentationColumn) {
   const field = definition.key;
   const values = new Map<string, string | number>();
   for (const value of searchedSetFilterValues.value[String(field)] ?? []) {
-    const normalized = normalizeFilterValue(String(field), value);
+    const normalized = normalizeSampleTableFilterValue(String(field), value);
     values.set(String(normalized), normalized);
   }
   for (const value of discoveredSetFilterValues.value[String(field)] ?? []) {
-    const normalized = normalizeFilterValue(String(field), value);
+    const normalized = normalizeSampleTableFilterValue(String(field), value);
     values.set(String(normalized), normalized);
   }
   for (const value of getSetFilterValues(String(field))) {
-    const normalized = normalizeFilterValue(String(field), value);
+    const normalized = normalizeSampleTableFilterValue(String(field), value);
     values.set(String(normalized), normalized);
   }
   return Array.from(values.values())
@@ -425,19 +276,14 @@ async function loadPage(pageIndex: number): Promise<void> {
     displayRows = items;
     loadedDefectIds.clear();
     for (const row of items) {
-      const id = rowDefectId(row);
+      const id = sampleTableRowDefectId(row);
       if (id !== null) loadedDefectIds.add(id);
     }
     await syncRawRowsToTable();
     renderedPage = pageIndex;
     accumulateDiscoveredSetFilterValues(items);
-    const horizontalScrollRestore = pendingHorizontalScrollRestore?.scrollLeft;
-    if (horizontalScrollRestore !== undefined) {
-      pendingHorizontalScrollRestore = null;
-    }
     void nextTick(() => {
       syncCurrentPageSelection();
-      void refreshGridLayout(horizontalScrollRestore);
     });
   } catch (error) {
     if (!isAbortError(error) && version === requestVersion) {
@@ -465,14 +311,14 @@ function accumulateDiscoveredSetFilterValues(items: VxeSampleTableRow[]): void {
     const field = String(definition.key);
     const values = new Map(
       (discoveredSetFilterValues.value[field] ?? []).map((value) => {
-        const normalized = normalizeFilterValue(field, value);
+        const normalized = normalizeSampleTableFilterValue(field, value);
         return [String(normalized), normalized];
       }),
     );
     for (const row of items) {
       const value = row[definition.key];
       if (typeof value === "string" || typeof value === "number") {
-        const normalized = normalizeFilterValue(field, value);
+        const normalized = normalizeSampleTableFilterValue(field, value);
         values.set(String(normalized), normalized);
       }
     }
@@ -502,10 +348,8 @@ async function searchSetFilterOptions(field: string): Promise<void> {
 }
 
 async function resetRows(): Promise<void> {
-  const scrollLeft = gridRef.value?.getScrollData().scrollLeft ?? 0;
   const version = ++requestVersion;
   pageLoadController?.abort();
-  pendingHorizontalScrollRestore = { version, scrollLeft };
   pendingRowsReplacementVersion = version;
   loadingRequest = null;
   loadedDefectIds.clear();
@@ -525,7 +369,7 @@ function applySetFilter(field: string, values: Array<string | number>): void {
   } else {
     next[field] = {
       filterType: "set",
-      values: values.map((value) => normalizeFilterValue(field, value)),
+      values: values.map((value) => normalizeSampleTableFilterValue(field, value)),
     };
   }
   tableFilter.value = next;
@@ -569,7 +413,7 @@ function clearAllFilters(): void {
   filterPopoverVersion.value += 1;
 }
 
-function openFilter(definition: ColumnDefinition, open: boolean): void {
+function openFilter(definition: ScSampleTablePresentationColumn, open: boolean): void {
   const field = String(definition.key);
   if (!open || definition.filter !== "set") return;
   setFilterDraft.value[field] = new Set(getSetFilterValues(field).map(String));
@@ -607,12 +451,6 @@ function sortButtonLabel(field: string): string {
   return "Sort ascending";
 }
 
-function rowDefectId(row: VxeSampleTableRow | undefined): number | null {
-  if (!row) return null;
-  const id = Number(row.defect_id);
-  return Number.isFinite(id) ? id : null;
-}
-
 function rowIsSelected(id: number): boolean {
   return allMatchingRowsSelected.value
     ? !selectionDeltaIds.value.has(id)
@@ -638,7 +476,7 @@ function handleCheckboxChange(
 ): void {
   if (props.enableSelection !== true) return;
   if (!event.row) return;
-  const id = rowDefectId(event.row);
+  const id = sampleTableRowDefectId(event.row);
   if (id === null) return;
   const next = new Set(selectionDeltaIds.value);
   if (allMatchingRowsSelected.value) {
@@ -663,7 +501,7 @@ function handleCheckboxAll(event: VxeTableDefines.CheckboxAllEventParams<VxeSamp
 function handleCellClick(event: VxeTableDefines.CellClickEventParams<VxeSampleTableRow>): void {
   if (props.enableSelection !== true) return;
   if (!event.row || event.column?.type === "checkbox") return;
-  const id = rowDefectId(event.row);
+  const id = sampleTableRowDefectId(event.row);
   if (id === null) return;
   const next = new Set(selectionDeltaIds.value);
   const checked = !rowIsSelected(id);
@@ -691,61 +529,8 @@ function clearSelection(): void {
   emitSelection();
 }
 
-function renderCell(definition: ColumnDefinition, row: VxeSampleTableRow | undefined): string {
-  if (!row) return "";
-  if (definition.key !== "defect_id" && !row._isHydrated) return "";
-  if (definition.render) return definition.render(row);
-  const value = row[definition.key];
-  if (value == null || value === "") return "-";
-  if (value instanceof Uint8Array) return `[${value.byteLength} bytes]`;
-  if (typeof value === "object") {
-    return JSON.stringify(value, (_key, item: unknown) =>
-      typeof item === "bigint" ? item.toString() : item,
-    );
-  }
-  return String(value);
-}
-
 function sortOrder(field: string): VxeTablePropTypes.SortOrder {
   return tableSort.value?.field === field ? tableSort.value.direction : null;
-}
-
-async function refreshGridLayout(horizontalScrollLeft?: number): Promise<void> {
-  await nextTick();
-  const grid = gridRef.value;
-  await grid?.recalculate(true);
-  await grid?.refreshScroll();
-  const rail = virtualRailRef.value;
-  if (rail) scheduleGridSyncToVirtualRail(rail);
-  if (horizontalScrollLeft !== undefined) {
-    await grid?.scrollTo(horizontalScrollLeft, null);
-  }
-  syncScrollbarMetrics();
-}
-
-function syncScrollbarMetrics(): void {
-  const xScroll = gridRef.value?.getScrollData();
-  const yScroll = virtualRailRef.value;
-  scrollbarMetrics.value = {
-    xClientSize: xScroll?.clientWidth ?? 0,
-    xScrollSize: xScroll?.scrollWidth ?? 0,
-    xPosition: xScroll?.scrollLeft ?? 0,
-    xTrackSize: xScrollbarRailRef.value?.clientWidth ?? 0,
-    yClientSize: yScroll?.clientHeight ?? 0,
-    yScrollSize: yScroll?.scrollHeight ?? 0,
-    yPosition: yScroll?.scrollTop ?? 0,
-    yTrackSize: yScrollbarRailRef.value?.clientHeight ?? 0,
-  };
-}
-
-function setHorizontalScroll(scrollLeft: number): void {
-  const { xClientSize, xScrollSize } = scrollbarMetrics.value;
-  const nextScrollLeft = Math.max(0, Math.min(xScrollSize - xClientSize, scrollLeft));
-  scrollbarMetrics.value = {
-    ...scrollbarMetrics.value,
-    xPosition: nextScrollLeft,
-  };
-  void Promise.resolve(gridRef.value?.scrollTo(nextScrollLeft, null)).then(syncScrollbarMetrics);
 }
 
 function setVerticalScroll(scrollTop: number): void {
@@ -753,66 +538,7 @@ function setVerticalScroll(scrollTop: number): void {
   if (!rail) return;
   const maxScrollTop = Math.max(0, rail.scrollHeight - rail.clientHeight);
   rail.scrollTop = Math.max(0, Math.min(maxScrollTop, scrollTop));
-  syncScrollbarMetrics();
   scheduleGridSyncToVirtualRail(rail);
-}
-
-function beginScrollbarDrag(axis: "x" | "y", event: MouseEvent): void {
-  endScrollbarDrag();
-  const metrics = scrollbarMetrics.value;
-  const scrollableDistance =
-    axis === "x"
-      ? metrics.xScrollSize - metrics.xClientSize
-      : metrics.yScrollSize - metrics.yClientSize;
-  const trackDistance =
-    axis === "x" ? metrics.xTrackSize - xThumbSize.value : metrics.yTrackSize - yThumbSize.value;
-  if (scrollableDistance <= 0 || trackDistance <= 0) return;
-  scrollbarDragState = {
-    axis,
-    startPointer: axis === "x" ? event.clientX : event.clientY,
-    startScroll: axis === "x" ? metrics.xPosition : metrics.yPosition,
-    scrollableDistance,
-    trackDistance,
-  };
-  document.addEventListener("mousemove", handleScrollbarDrag);
-  document.addEventListener("mouseup", endScrollbarDrag, { once: true });
-}
-
-function handleScrollbarDrag(event: MouseEvent): void {
-  if (!scrollbarDragState) return;
-  const pointer = scrollbarDragState.axis === "x" ? event.clientX : event.clientY;
-  const delta = pointer - scrollbarDragState.startPointer;
-  const position =
-    scrollbarDragState.startScroll +
-    (delta / scrollbarDragState.trackDistance) * scrollbarDragState.scrollableDistance;
-  if (scrollbarDragState.axis === "x") {
-    setHorizontalScroll(position);
-  } else {
-    setVerticalScroll(position);
-  }
-}
-
-function endScrollbarDrag(): void {
-  scrollbarDragState = null;
-  document.removeEventListener("mousemove", handleScrollbarDrag);
-}
-
-function jumpScrollbar(axis: "x" | "y", event: MouseEvent): void {
-  const target = event.currentTarget;
-  if (!(target instanceof HTMLElement)) return;
-  const rect = target.getBoundingClientRect();
-  const metrics = scrollbarMetrics.value;
-  if (axis === "x") {
-    const trackDistance = metrics.xTrackSize - xThumbSize.value;
-    if (trackDistance <= 0) return;
-    const offset = event.clientX - rect.left - xThumbSize.value / 2;
-    setHorizontalScroll((offset / trackDistance) * (metrics.xScrollSize - metrics.xClientSize));
-    return;
-  }
-  const trackDistance = metrics.yTrackSize - yThumbSize.value;
-  if (trackDistance <= 0) return;
-  const offset = event.clientY - rect.top - yThumbSize.value / 2;
-  setVerticalScroll((offset / trackDistance) * (metrics.yScrollSize - metrics.yClientSize));
 }
 
 function virtualScrollPosition(rail: HTMLElement): {
@@ -875,16 +601,10 @@ function resetVirtualPosition(): void {
   const rail = virtualRailRef.value;
   if (rail) rail.scrollTop = 0;
   void gridRef.value?.scrollTo(null, 0);
-  syncScrollbarMetrics();
 }
 
 function handleVirtualRailScroll(event: Event): void {
-  syncScrollbarMetrics();
   scheduleGridSyncToVirtualRail(event.currentTarget as HTMLElement);
-}
-
-function handleGridScroll(): void {
-  syncScrollbarMetrics();
 }
 
 function handleWheel(event: WheelEvent): void {
@@ -968,13 +688,7 @@ onMounted(() => {
   if (rawRows.length > 0) {
     void gridRef.value?.loadData(displayRows);
   }
-  if (gridHostRef.value && typeof ResizeObserver !== "undefined") {
-    resizeObserver = new ResizeObserver(() => {
-      void nextTick(syncScrollbarMetrics);
-    });
-    resizeObserver.observe(gridHostRef.value);
-  }
-  void refreshGridLayout();
+  void nextTick(() => gridRef.value?.recalculate(true));
 });
 
 onBeforeUnmount(() => {
@@ -982,17 +696,7 @@ onBeforeUnmount(() => {
   pageLoadController?.abort();
   pageLoadController = null;
   cancelScheduledGridSync();
-  resizeObserver?.disconnect();
-  resizeObserver = null;
-  endScrollbarDrag();
 });
-
-watch(
-  () => serverTotal.value,
-  () => {
-    void refreshGridLayout();
-  },
-);
 
 defineExpose({
   getDefectCoords(defectId: number):
@@ -1075,13 +779,11 @@ defineExpose({
         :cell-config="cellConfig"
         :header-cell-config="headerCellConfig"
         :checkbox-config="checkboxConfig"
-        :virtual-y-config="virtualYConfig"
         :virtual-x-config="virtualXConfig"
         :scrollbar-config="scrollbarConfig"
         @checkbox-change="handleCheckboxChange"
         @checkbox-all="handleCheckboxAll"
         @cell-click="handleCellClick"
-        @scroll="handleGridScroll"
       >
         <vxe-column v-if="enableSelection" type="checkbox" width="44" fixed="left" align="center" />
         <vxe-column
@@ -1170,7 +872,7 @@ defineExpose({
             </div>
           </template>
           <template #default="{ row }">
-            {{ renderCell(definition, row as VxeSampleTableRow) }}
+            {{ renderSampleTableCell(definition, row as VxeSampleTableRow) }}
           </template>
         </vxe-column>
         <template #empty>
@@ -1184,44 +886,11 @@ defineExpose({
       <div
         ref="virtualRailRef"
         class="sst-vxe-virtual-rail"
-        aria-hidden="true"
+        aria-label="Sample table vertical scroll"
+        tabindex="0"
         @scroll="handleVirtualRailScroll"
       >
         <div :style="{ height: `${serverTotal * ROW_HEIGHT}px` }" />
-      </div>
-      <div
-        ref="yScrollbarRailRef"
-        class="sst-vxe-scrollbar-rail sst-vxe-scrollbar-rail--y"
-        role="scrollbar"
-        aria-label="Sample table vertical scroll"
-        aria-orientation="vertical"
-        :aria-valuemax="Math.max(0, scrollbarMetrics.yScrollSize - scrollbarMetrics.yClientSize)"
-        :aria-valuenow="scrollbarMetrics.yPosition"
-        aria-valuemin="0"
-        @mousedown.prevent="jumpScrollbar('y', $event)"
-      >
-        <div
-          class="sst-vxe-scrollbar-thumb"
-          :style="yThumbStyle"
-          @mousedown.stop.prevent="beginScrollbarDrag('y', $event)"
-        />
-      </div>
-      <div
-        ref="xScrollbarRailRef"
-        class="sst-vxe-scrollbar-rail sst-vxe-scrollbar-rail--x"
-        role="scrollbar"
-        aria-label="Sample table horizontal scroll"
-        aria-orientation="horizontal"
-        :aria-valuemax="Math.max(0, scrollbarMetrics.xScrollSize - scrollbarMetrics.xClientSize)"
-        :aria-valuenow="scrollbarMetrics.xPosition"
-        aria-valuemin="0"
-        @mousedown.prevent="jumpScrollbar('x', $event)"
-      >
-        <div
-          class="sst-vxe-scrollbar-thumb"
-          :style="xThumbStyle"
-          @mousedown.stop.prevent="beginScrollbarDrag('x', $event)"
-        />
       </div>
     </div>
 
@@ -1249,53 +918,22 @@ defineExpose({
   position: absolute;
   top: 0;
   right: 0;
-  bottom: 10px;
-  width: 10px;
+  bottom: 14px;
+  width: 14px;
   overflow-x: hidden;
   overflow-y: scroll;
-  opacity: 0;
-  pointer-events: none;
-  scrollbar-width: none;
-  z-index: 5;
+  scrollbar-gutter: stable;
+  scrollbar-width: auto;
+  z-index: 10;
 }
 
 .sst-vxe-virtual-rail::-webkit-scrollbar {
-  width: 0;
-  height: 0;
+  display: block;
+  width: 14px;
 }
 
-.sst-vxe-scrollbar-rail {
-  position: absolute;
-  z-index: 20;
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.28);
-  user-select: none;
-  transition: none;
-}
-
-.sst-vxe-scrollbar-rail--y {
-  top: 0;
-  right: 0;
-  bottom: 10px;
-  width: 10px;
-}
-
-.sst-vxe-scrollbar-rail--x {
-  right: 10px;
-  bottom: 0;
-  left: 0;
-  height: 10px;
-}
-
-.sst-vxe-scrollbar-thumb {
-  width: 100%;
-  height: 100%;
-  border-radius: 999px;
-  background: rgba(142, 160, 255, 0.7);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
-  cursor: pointer;
-  outline: none;
-  transition: none;
+.sst-vxe-virtual-rail > div {
+  width: 1px;
 }
 
 .sst-vxe-header {
@@ -1334,16 +972,6 @@ defineExpose({
 .sst-vxe-grid {
   height: 100%;
   width: 100%;
-}
-
-.sst-vxe-grid :deep(.vxe-table--scroll-x-handle) {
-  opacity: 0;
-  scrollbar-width: none;
-}
-
-.sst-vxe-grid :deep(.vxe-table--scroll-x-handle::-webkit-scrollbar) {
-  width: 0;
-  height: 0;
 }
 
 .sst-vxe-column-header {

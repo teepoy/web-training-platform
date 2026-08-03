@@ -11,7 +11,7 @@ import type { ECElementEvent } from "echarts/core";
 import type { ScMapLassoSelection } from "@platform/sc-map-element";
 import ScMapPanelBinned from "@/features/sc/presentation/components/ScMapPanelBinned.vue";
 import ScGlobalFilterModal from "@/features/sc/presentation/components/ScGlobalFilterModal.vue";
-import ScSampleTableVxe from "@/features/sc/presentation/components/ScSampleTableVxe.vue";
+import ScSampleTable from "@/features/sc/presentation/components/ScSampleTable.vue";
 import ScBlinkVirtualTable from "@/features/sc/presentation/components/ScBlinkVirtualTable.vue";
 import type { ScSampleTableFilter, ScSampleTableSort } from "@/features/sc/domain/sampleTable";
 import type { ScTableSelectionConstraint } from "@/features/sc/domain/workbenchDataSource";
@@ -704,7 +704,7 @@ function useMapSelectionQueue() {
         @pointerup="onRowResizeEnd"
         @pointercancel="onRowResizeEnd"
       />
-      <ScSampleTableVxe
+      <ScSampleTable
         v-if="model.sampleTableDataSource.value"
         :data-source="model.sampleTableDataSource.value"
         :loading="!dataReady"

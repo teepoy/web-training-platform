@@ -84,6 +84,10 @@ describe("ScSampleTableVxe server query state", () => {
     });
 
     await vi.waitFor(() => expect(loadRows).toHaveBeenCalledTimes(1));
+    expect(wrapper.find(".sst-vxe-scrollbar-rail").exists()).toBe(false);
+    expect(wrapper.get(".sst-vxe-virtual-rail").attributes("aria-label")).toBe(
+      "Sample table vertical scroll",
+    );
     const rail = wrapper.find<HTMLElement>(".sst-vxe-virtual-rail");
     for (const page of [1, 2, 3]) {
       rail.element.scrollTop = page * 10 * 36;

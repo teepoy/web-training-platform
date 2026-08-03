@@ -77,9 +77,9 @@ vi.mock("./ScGlobalFilterModal.vue", () => ({
     template: "<div />",
   },
 }));
-vi.mock("./ScSampleTableVxe.vue", () => ({
+vi.mock("./ScSampleTable.vue", () => ({
   default: {
-    name: "ScSampleTableVxe",
+    name: "ScSampleTable",
     props: ["filter", "sort", "selection"],
     emits: ["filter-change", "sort-change", "selection-change"],
     template: "<div />",
@@ -249,7 +249,7 @@ describe("InspectionQuad state ownership", () => {
       props: requiredProps,
     });
     const map = wrapper.findComponent({ name: "ScMapPanelBinned" });
-    const table = wrapper.findComponent({ name: "ScSampleTableVxe" });
+    const table = wrapper.findComponent({ name: "ScSampleTable" });
     const viewport = { x: 1, y: 2, w: 3, h: 4 };
     const nextReticle = { xDieCount: 4, yDieCount: 6, xDieShift: 1, yDieShift: -1 };
     const filter: ScSampleTableFilter = {
@@ -286,7 +286,7 @@ describe("InspectionQuad state ownership", () => {
       props: { ...requiredProps, variant: "reclassify", selectedDefectIds: [] },
     });
 
-    wrapper.findComponent({ name: "ScSampleTableVxe" }).vm.$emit("selection-change", {
+    wrapper.findComponent({ name: "ScSampleTable" }).vm.$emit("selection-change", {
       kind: "all",
       excludedIds: [],
     });
