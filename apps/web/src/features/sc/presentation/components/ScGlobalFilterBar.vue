@@ -2,50 +2,51 @@
 import { computed, onUpdated, ref } from "vue";
 import { NButton, NPopover, NSpace, NTag, NText } from "naive-ui";
 import type { ScSampleTableFilter } from "@/features/sc/domain/sampleTable";
+import { scGlobalFilterColumns, type ScFilterColumnDefinition } from "./scSampleTableColumns";
 import ScRangeFilterMenu from "./ScRangeFilterMenu.vue";
 import ScSetFilterMenu from "./ScSetFilterMenu.vue";
-
-type SetField = "test_id" | "annotation_label" | "prediction_label" | "final_class";
-type RangeField = "prediction_confidence";
-type GlobalField = SetField | RangeField;
-
-const SET_FIELDS: Array<{ field: SetField; label: string }> = [
-  { field: "test_id", label: "Test ID" },
-  { field: "prediction_label", label: "Prediction" },
-  { field: "final_class", label: "Final Class" },
-];
+import ScTextFilterMenu from "./ScTextFilterMenu.vue";
 
 const props = defineProps<{
   filter: ScSampleTableFilter;
-  distinctValues: Partial<Record<SetField, Array<string | number>>>;
+  distinctValues: Record<string, Array<string | number>>;
+  showReclassifyColumns?: boolean;
 }>();
 
 const emit = defineEmits<{
   (e: "update:filter", filter: ScSampleTableFilter): void;
-  (e: "search-options", payload: { field: SetField; search: string }): void;
+  (e: "search-options", payload: { field: string; search: string }): void;
 }>();
 
-const searchByField = ref<Partial<Record<SetField, string>>>({});
-const draftByField = ref<Partial<Record<SetField, string[]>>>({});
-const rangeDraft = ref<Record<RangeField, { min: number | null; max: number | null }>>({
-  prediction_confidence: { min: null, max: null },
-});
+const searchByField = ref<Record<string, string>>({});
+const draftByField = ref<Record<string, string[]>>({});
+const rangeDraft = ref<Record<string, { min: number | null; max: number | null }>>({});
 
 const activeCount = computed(() => Object.keys(props.filter ?? {}).length);
+const fieldDefinitions = computed(() =>
+  scGlobalFilterColumns(props.showReclassifyColumns === true),
+);
 
-function setFilterValues(field: SetField): Array<string | number> {
+function setFilterValues(field: string): Array<string | number> {
   const filter = props.filter[field];
   return filter?.filterType === "set" ? filter.values : [];
 }
 
-function rangeFilterValues(field: RangeField): { min: number | null; max: number | null } {
+function rangeFilterValues(field: string): { min: number | null; max: number | null } {
   const filter = props.filter[field];
   return filter?.filterType === "number" && filter.type === "inRange"
     ? { min: filter.filter, max: filter.filterTo }
     : { min: null, max: null };
 }
 
-function optionsFor(field: SetField): Array<{ label: string; value: string | number }> {
+function getRangeDraft(field: string): { min: number | null; max: number | null } {
+  if (!rangeDraft.value[field]) {
+    rangeDraft.value[field] = rangeFilterValues(field);
+  }
+  return rangeDraft.value[field];
+}
+
+function optionsFor(field: string): Array<{ label: string; value: string | number }> {
   const values = new Map<string, string | number>();
   for (const value of props.distinctValues[field] ?? []) values.set(String(value), value);
   for (const value of setFilterValues(field)) values.set(String(value), value);
@@ -58,15 +59,26 @@ function optionsFor(field: SetField): Array<{ label: string; value: string | num
     .map((value) => ({ label: String(value), value }));
 }
 
-function applySetFilter(field: SetField, values: Array<string | number>): void {
+function normalizeFilterValue(field: string, value: string | number): string | number {
+  if (field !== "defect_id") return value;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : value;
+}
+
+function applySetFilter(field: string, values: Array<string | number>): void {
   const next = { ...(props.filter ?? {}) };
   if (values.length === 0) delete next[field];
-  else next[field] = { filterType: "set", values };
+  else {
+    next[field] = {
+      filterType: "set",
+      values: values.map((value) => normalizeFilterValue(field, value)),
+    };
+  }
   emit("update:filter", next);
 }
 
-function applyRangeFilter(field: RangeField): void {
-  const draft = rangeDraft.value[field];
+function applyRangeFilter(field: string): void {
+  const draft = getRangeDraft(field);
   const next = { ...(props.filter ?? {}) };
   if (draft.min === null || draft.max === null || draft.min > draft.max) delete next[field];
   else {
@@ -80,7 +92,7 @@ function applyRangeFilter(field: RangeField): void {
   emit("update:filter", next);
 }
 
-function clearRangeFilter(field: RangeField): void {
+function clearRangeFilter(field: string): void {
   rangeDraft.value[field] = { min: null, max: null };
   const next = { ...(props.filter ?? {}) };
   delete next[field];
@@ -90,8 +102,18 @@ function clearRangeFilter(field: RangeField): void {
 function clearAll(): void {
   draftByField.value = {};
   searchByField.value = {};
-  rangeDraft.value.prediction_confidence = { min: null, max: null };
+  rangeDraft.value = {};
   emit("update:filter", {});
+}
+
+function openFilter(definition: ScFilterColumnDefinition, open: boolean): void {
+  if (!open) return;
+  const field = String(definition.key);
+  if (definition.filter === "range") {
+    rangeDraft.value[field] = rangeFilterValues(field);
+  } else {
+    draftByField.value[field] = setFilterValues(field).map(String);
+  }
 }
 
 onUpdated(() => console.debug("[render] ScGlobalFilterBar"));
@@ -100,78 +122,89 @@ onUpdated(() => console.debug("[render] ScGlobalFilterBar"));
 <template>
   <div class="sc-global-filter-bar">
     <NText depth="3" class="sc-global-filter-title">Global Filters</NText>
-    <NSpace :size="6" align="center">
-      <NPopover
-        v-for="item in SET_FIELDS"
-        :key="item.field"
-        trigger="click"
-        placement="bottom-start"
-      >
-        <template #trigger>
-          <NButton size="tiny" :type="setFilterValues(item.field).length ? 'primary' : 'default'">
-            {{ item.label }}
-            <NTag
-              v-if="setFilterValues(item.field).length"
+    <div class="sc-global-filter-fields">
+      <NSpace :size="8" align="center" :wrap="true">
+        <NPopover
+          v-for="definition in fieldDefinitions"
+          :key="String(definition.key)"
+          trigger="click"
+          placement="bottom-start"
+          @update:show="openFilter(definition, $event)"
+        >
+          <template #trigger>
+            <NButton
               size="tiny"
-              round
-              class="sc-filter-count"
+              :type="props.filter[String(definition.key)] ? 'primary' : 'default'"
             >
-              {{ setFilterValues(item.field).length }}
-            </NTag>
-          </NButton>
-        </template>
-        <ScSetFilterMenu
-          :search="searchByField[item.field] ?? ''"
-          :applied-values="setFilterValues(item.field)"
-          :draft-values="draftByField[item.field] ?? setFilterValues(item.field).map(String)"
-          :options="optionsFor(item.field)"
-          @update:search="searchByField[item.field] = $event"
-          @update:draft-values="draftByField[item.field] = $event"
-          @search-options="emit('search-options', { field: item.field, search: $event })"
-          @apply="applySetFilter(item.field, $event)"
-        />
-      </NPopover>
+              {{ definition.title }}
+              <NTag
+                v-if="setFilterValues(String(definition.key)).length"
+                size="tiny"
+                round
+                class="sc-filter-count"
+              >
+                {{ setFilterValues(String(definition.key)).length }}
+              </NTag>
+            </NButton>
+          </template>
+          <ScTextFilterMenu
+            v-if="definition.key === 'defect_id'"
+            :applied-values="setFilterValues('defect_id')"
+            @apply="applySetFilter('defect_id', $event)"
+          />
+          <ScSetFilterMenu
+            v-else-if="definition.filter === 'set'"
+            :search="searchByField[String(definition.key)] ?? ''"
+            :applied-values="setFilterValues(String(definition.key))"
+            :draft-values="
+              draftByField[String(definition.key)] ??
+              setFilterValues(String(definition.key)).map(String)
+            "
+            :options="optionsFor(String(definition.key))"
+            @update:search="searchByField[String(definition.key)] = $event"
+            @update:draft-values="draftByField[String(definition.key)] = $event"
+            @search-options="
+              emit('search-options', { field: String(definition.key), search: $event })
+            "
+            @apply="applySetFilter(String(definition.key), $event)"
+          />
+          <ScRangeFilterMenu
+            v-else
+            :min="getRangeDraft(String(definition.key)).min"
+            :max="getRangeDraft(String(definition.key)).max"
+            @update:min="getRangeDraft(String(definition.key)).min = $event"
+            @update:max="getRangeDraft(String(definition.key)).max = $event"
+            @apply="applyRangeFilter(String(definition.key))"
+            @clear="clearRangeFilter(String(definition.key))"
+          />
+        </NPopover>
+      </NSpace>
+    </div>
 
-      <NPopover trigger="click" placement="bottom-start">
-        <template #trigger>
-          <NButton
-            size="tiny"
-            :type="props.filter.prediction_confidence ? 'primary' : 'default'"
-            @click="rangeDraft.prediction_confidence = rangeFilterValues('prediction_confidence')"
-          >
-            Confidence
-          </NButton>
-        </template>
-        <ScRangeFilterMenu
-          :min="rangeDraft.prediction_confidence.min"
-          :max="rangeDraft.prediction_confidence.max"
-          @update:min="rangeDraft.prediction_confidence.min = $event"
-          @update:max="rangeDraft.prediction_confidence.max = $event"
-          @apply="applyRangeFilter('prediction_confidence')"
-          @clear="clearRangeFilter('prediction_confidence')"
-        />
-      </NPopover>
-
-      <NButton size="tiny" quaternary :disabled="activeCount === 0" @click="clearAll"
-        >Clear</NButton
-      >
-    </NSpace>
+    <NButton size="tiny" quaternary :disabled="activeCount === 0" @click="clearAll">Clear</NButton>
   </div>
 </template>
 
 <style scoped>
 .sc-global-filter-bar {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  align-items: flex-start;
+  gap: 12px;
   min-height: 32px;
   padding: 4px 6px;
   border-bottom: 1px solid var(--cv-border, rgba(255, 255, 255, 0.1));
 }
 
 .sc-global-filter-title {
+  flex: 0 0 auto;
+  padding-top: 5px;
   font-size: 12px;
   white-space: nowrap;
+}
+
+.sc-global-filter-fields {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .sc-filter-count {

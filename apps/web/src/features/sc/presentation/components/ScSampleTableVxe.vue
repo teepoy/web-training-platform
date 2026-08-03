@@ -14,6 +14,10 @@ import type { ScTableSelectionConstraint } from "@/features/sc/domain/workbenchD
 import type { ScSampleTableDisplayRow } from "@/features/sc/domain/workbenchInteraction";
 import type { ScSampleTableDataSource } from "@/features/sc/domain/workbenchInteraction";
 import { ArrowBackedRows } from "./arrowBackedRows";
+import {
+  scSampleTableColumns,
+  type ScSampleTableColumnDefinition as ColumnDefinition,
+} from "./scSampleTableColumns";
 import ScRangeFilterMenu from "./ScRangeFilterMenu.vue";
 import ScSetFilterMenu from "./ScSetFilterMenu.vue";
 import ScTextFilterMenu from "./ScTextFilterMenu.vue";
@@ -28,14 +32,6 @@ interface ScSampleTableVxeProps extends ScSampleTableBaseProps {
 const props = defineProps<ScSampleTableVxeProps>();
 
 const emit = defineEmits<ScSampleTableEmits>();
-
-interface ColumnDefinition {
-  key: keyof ScSampleTableDisplayRow;
-  title: string;
-  width: number;
-  filter: "set" | "range";
-  render?: (row: VxeSampleTableRow) => string;
-}
 
 interface VxeRowsPage {
   items: ScSampleTableDisplayRow[];
@@ -63,54 +59,6 @@ type VxeSampleTableRow = Partial<ScSampleTableDisplayRow> & {
   _isHydrated?: boolean;
 };
 
-const columnDefinitions: ColumnDefinition[] = [
-  {
-    key: "defect_id",
-    title: "Defect ID",
-    width: 130,
-    filter: "set",
-    render: (row) => String(Number(row.defect_id)),
-  },
-  { key: "images", title: "Images", width: 110, filter: "range" },
-  { key: "test_id", title: "Test ID", width: 120, filter: "set" },
-  { key: "index_x", title: "Index X", width: 120, filter: "range" },
-  { key: "index_y", title: "Index Y", width: 120, filter: "range" },
-  { key: "wafer_x", title: "Wafer X", width: 120, filter: "range" },
-  { key: "wafer_y", title: "Wafer Y", width: 120, filter: "range" },
-  { key: "die_x", title: "Die X", width: 120, filter: "range" },
-  { key: "die_y", title: "Die Y", width: 120, filter: "range" },
-  { key: "size_x", title: "Size X", width: 120, filter: "range" },
-  { key: "size_y", title: "Size Y", width: 120, filter: "range" },
-  { key: "size_d", title: "Size D", width: 120, filter: "range" },
-  { key: "area", title: "Area", width: 120, filter: "range" },
-  { key: "class_number", title: "Class", width: 120, filter: "set" },
-  { key: "rough_bin", title: "Rough Bin", width: 120, filter: "set" },
-  { key: "final_bin", title: "Final Bin", width: 120, filter: "set" },
-  { key: "manual_bin", title: "Manual Bin", width: 120, filter: "set" },
-  { key: "adder", title: "Adder", width: 120, filter: "set" },
-  { key: "cluster_id", title: "Cluster ID", width: 120, filter: "set" },
-  {
-    key: "kill_ratio",
-    title: "Kill Ratio",
-    width: 120,
-    filter: "range",
-    render: (row) => (row.kill_ratio != null ? row.kill_ratio.toFixed(3) : "-"),
-  },
-];
-
-const reclassifyColumnDefinitions: ColumnDefinition[] = [
-  { key: "annotation_label", title: "Annotation", width: 140, filter: "set" },
-  { key: "prediction_label", title: "Prediction", width: 140, filter: "set" },
-  {
-    key: "prediction_confidence",
-    title: "Confidence",
-    width: 130,
-    filter: "range",
-    render: (row) =>
-      row.prediction_confidence != null ? row.prediction_confidence.toFixed(3) : "-",
-  },
-];
-
 const PAGE_SIZE = 250;
 const ROW_HEIGHT = 36;
 const SCROLLBAR_SIZE = 10;
@@ -121,9 +69,7 @@ const DEFAULT_TABLE_SORT: ScSampleTableSort = {
   direction: "asc",
 };
 const activeColumnDefinitions = computed(() =>
-  props.showReclassifyColumns
-    ? [...columnDefinitions, ...reclassifyColumnDefinitions]
-    : columnDefinitions,
+  scSampleTableColumns(props.showReclassifyColumns === true),
 );
 const resolvedPageSize = computed(() => props.pageSize ?? PAGE_SIZE);
 

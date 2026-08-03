@@ -57,6 +57,13 @@ test.describe("SC Reclassify warmup and sidebar @mock", () => {
     await expect(authedPage.getByText("Annotation").first()).toBeVisible();
     await expect(pom.headerSampleCount(0)).toBeVisible({ timeout: 5_000 });
 
+    await authedPage.getByRole("button", { name: "Global Filter" }).click();
+    await expect(
+      authedPage.getByRole("heading", { name: "Global Filter", exact: true }),
+    ).toBeVisible();
+    await expect(authedPage.getByRole("button", { name: "Defect ID", exact: true })).toBeVisible();
+    await expect(authedPage.getByRole("button", { name: "Confidence", exact: true })).toBeVisible();
+
     expect(requestEvents).toEqual([]);
     expect(viewSampleRequests).toEqual([]);
   });

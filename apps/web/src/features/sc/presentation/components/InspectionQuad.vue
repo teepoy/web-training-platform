@@ -10,7 +10,7 @@ import type { EChartsOption } from "echarts";
 import type { ECElementEvent } from "echarts/core";
 import type { ScMapLassoSelection } from "@platform/sc-map-element";
 import ScMapPanelBinned from "@/features/sc/presentation/components/ScMapPanelBinned.vue";
-import ScGlobalFilterBar from "@/features/sc/presentation/components/ScGlobalFilterBar.vue";
+import ScGlobalFilterModal from "@/features/sc/presentation/components/ScGlobalFilterModal.vue";
 import ScSampleTableVxe from "@/features/sc/presentation/components/ScSampleTableVxe.vue";
 import ScBlinkVirtualTable from "@/features/sc/presentation/components/ScBlinkVirtualTable.vue";
 import type { ScSampleTableFilter, ScSampleTableSort } from "@/features/sc/domain/sampleTable";
@@ -78,6 +78,7 @@ const globalFilterSearchVersions = new Map<string, number>();
 // Parent workflows may read a cloned GlobalFilter snapshot, but must not mirror
 // workbench-local state through props/events again.
 const globalFilter = ref<ScSampleTableFilter>({});
+const globalFilterModalVisible = ref(false);
 const activeMapTab = ref<MapMode>("wafer");
 const mapZoomByMode = ref<Record<MapMode, MapViewport | null>>(emptyMapZoomByMode());
 const zoom = computed(() => mapZoomByMode.value[activeMapTab.value]);
@@ -103,6 +104,7 @@ type QueuedAreaSelection =
 
 const isReclassify = computed(() => props.variant === "reclassify");
 const globalFilterModel = computed(() => globalFilter.value);
+const globalFilterCount = computed(() => Object.keys(globalFilter.value).length);
 const enabledLegendSources = computed<ScLegendSource[]>(() =>
   isReclassify.value
     ? ["class", "bin", "annotation", "prediction", "final_class"]
@@ -208,6 +210,7 @@ watch(
   (scope, previousScope) => {
     if (!previousScope || scope.every((value, index) => value === previousScope[index])) return;
     globalFilter.value = {};
+    globalFilterModalVisible.value = false;
     globalDistinctValues.value = {};
     globalFilterSearchVersions.clear();
     activeMapTab.value = "wafer";
@@ -590,13 +593,24 @@ function useMapSelectionQueue() {
     }"
     :style="quadStyle"
   >
+    <ScGlobalFilterModal
+      v-model:show="globalFilterModalVisible"
+      :filter="globalFilterModel"
+      :distinct-values="globalDistinctValues"
+      :show-reclassify-columns="isReclassify"
+      @update:filter="handleGlobalFilterChange"
+      @search-options="searchGlobalFilterOptions"
+    />
     <div ref="leftPanelEl" class="iq-panel-left" :style="leftPanelStyle">
-      <ScGlobalFilterBar
-        :filter="globalFilterModel"
-        :distinct-values="globalDistinctValues"
-        @update:filter="handleGlobalFilterChange"
-        @search-options="searchGlobalFilterOptions"
-      />
+      <div class="iq-global-filter-toolbar">
+        <NButton
+          size="small"
+          :type="globalFilterCount > 0 ? 'primary' : 'default'"
+          @click="globalFilterModalVisible = true"
+        >
+          Global Filter{{ globalFilterCount > 0 ? ` (${globalFilterCount})` : "" }}
+        </NButton>
+      </div>
       <div class="iq-wafer">
         <ScMapPanelBinned
           :active-map-tab="activeMapTab"
@@ -801,6 +815,11 @@ function useMapSelectionQueue() {
   display: grid;
   min-height: 0;
   overflow: hidden;
+}
+.iq-global-filter-toolbar {
+  display: flex;
+  justify-content: flex-start;
+  padding: 0 0 8px;
 }
 .iq-panel-right {
   display: flex;

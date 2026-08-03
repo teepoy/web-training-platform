@@ -65,11 +65,11 @@ vi.mock("./ScMapPanelBinned.vue", () => ({
     template: "<div />",
   },
 }));
-vi.mock("./ScGlobalFilterBar.vue", () => ({
+vi.mock("./ScGlobalFilterModal.vue", () => ({
   default: {
-    name: "ScGlobalFilterBar",
-    props: ["filter", "distinctValues"],
-    emits: ["update:filter", "search-options"],
+    name: "ScGlobalFilterModal",
+    props: ["show", "filter", "distinctValues"],
+    emits: ["update:show", "update:filter", "search-options"],
     template: "<div />",
   },
 }));
@@ -134,18 +134,18 @@ describe("InspectionQuad state ownership", () => {
     const { wrapper } = await mountWithProviders(InspectionQuad, {
       props: requiredProps,
     });
-    const filterBar = wrapper.findComponent({ name: "ScGlobalFilterBar" });
+    const filterModal = wrapper.findComponent({ name: "ScGlobalFilterModal" });
 
-    filterBar.vm.$emit("search-options", { field: "test_id", search: "" });
-    filterBar.vm.$emit("search-options", { field: "test_id", search: "936" });
+    filterModal.vm.$emit("search-options", { field: "test_id", search: "" });
+    filterModal.vm.$emit("search-options", { field: "test_id", search: "936" });
     resolveSearch([936]);
     await vi.waitFor(() => {
-      expect(filterBar.props("distinctValues")).toEqual({ test_id: [936] });
+      expect(filterModal.props("distinctValues")).toEqual({ test_id: [936] });
     });
 
     resolveInitial([1, 2, 3]);
     await wrapper.vm.$nextTick();
-    expect(filterBar.props("distinctValues")).toEqual({ test_id: [936] });
+    expect(filterModal.props("distinctValues")).toEqual({ test_id: [936] });
   });
 
   it("owns filter updates and exposes only a cloned workflow snapshot", async () => {
@@ -156,7 +156,12 @@ describe("InspectionQuad state ownership", () => {
       rough_bin: { filterType: "set", values: [1, 2] },
     };
 
-    wrapper.findComponent({ name: "ScGlobalFilterBar" }).vm.$emit("update:filter", filter);
+    const filterModal = wrapper.findComponent({ name: "ScGlobalFilterModal" });
+    expect(filterModal.props("show")).toBe(false);
+    await wrapper.get("button").trigger("click");
+    expect(filterModal.props("show")).toBe(true);
+
+    filterModal.vm.$emit("update:filter", filter);
     await wrapper.vm.$nextTick();
 
     expect(harness.options?.globalFilter.value).toEqual(filter);
@@ -174,7 +179,7 @@ describe("InspectionQuad state ownership", () => {
     const { wrapper } = await mountWithProviders(InspectionQuad, {
       props: requiredProps,
     });
-    wrapper.findComponent({ name: "ScGlobalFilterBar" }).vm.$emit("update:filter", {
+    wrapper.findComponent({ name: "ScGlobalFilterModal" }).vm.$emit("update:filter", {
       class_number: { filterType: "set", values: [7] },
     });
     await wrapper.vm.$nextTick();

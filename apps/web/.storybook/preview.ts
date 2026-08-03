@@ -8,7 +8,7 @@ import {
   NNotificationProvider,
 } from "naive-ui";
 import { createPinia } from "pinia";
-import { configureOrvalFetcher } from "../src/shared/api/orval-fetcher";
+import { configureTransport } from "../src/shared/api/client";
 
 setup((app) => {
   app.use(createPinia());
@@ -23,10 +23,11 @@ setup((app) => {
   });
 });
 
-configureOrvalFetcher({
+configureTransport({
   getToken: () => null,
   getOrgId: () => null,
   onAuthError: () => {},
+  authEnabled: () => false,
 });
 
 const preview: Preview = {
