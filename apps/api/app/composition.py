@@ -27,7 +27,6 @@ from app.modules.datasets.adapter.repositories.dataset_sql_repository import (
 from app.shared.domain.protocols import (
     ArtifactStorage as ArtifactStoragePort,
     LabelStudioClient as LabelStudioClientPort,
-    LlmClient as LlmClientPort,
     NotificationSink as NotificationSinkPort,
     PrefectClient as PrefectClientPort,
 )
@@ -124,11 +123,6 @@ class _AppContextModule(Module):
     @singleton
     def provide_label_studio_client(self, shared: SharedInfra) -> LabelStudioClientPort:
         return shared.label_studio_client
-
-    @provider
-    @singleton
-    def provide_llm_client(self, shared: SharedInfra) -> LlmClientPort:
-        return shared.llm_client
 
     @provider
     @singleton

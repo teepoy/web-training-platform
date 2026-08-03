@@ -6,8 +6,8 @@
  */
 
 export interface ScSampleTableRangeFilter {
-  filterType: 'number';
-  type: 'inRange';
+  filterType: "number";
+  type: "inRange";
   filter: number;
   filterTo: number;
 }

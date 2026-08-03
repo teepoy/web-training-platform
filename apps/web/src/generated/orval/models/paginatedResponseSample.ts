@@ -4,7 +4,7 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { Sample } from './sample';
+import type { Sample } from "./sample";
 
 export interface PaginatedResponseSample {
   items: Sample[];

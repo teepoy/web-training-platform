@@ -6,10 +6,10 @@
  */
 
 export type ListPredictionJobsApiV1PredictionJobsGetParams = {
-/**
- * Filter prediction jobs to one dataset.
- */
-dataset_id?: string | null;
-offset?: number;
-limit?: number;
+  /**
+   * Filter prediction jobs to one dataset.
+   */
+  dataset_id?: string | null;
+  offset?: number;
+  limit?: number;
 };

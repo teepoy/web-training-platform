@@ -204,8 +204,6 @@ async def import_parquet(
             else ""
         )
         task_data: dict = {"image": image_url}
-        if dataset.task_spec.task_type == "vqa":
-            task_data["question"] = str(item.metadata.get("question", ""))
         ls_tasks.append(task_data)
 
     try:

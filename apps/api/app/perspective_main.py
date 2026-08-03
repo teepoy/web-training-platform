@@ -44,6 +44,18 @@ def _configured_max_rss_mb() -> float | None:
     return limit
 
 
+def _record_memory_usage(*, endpoint: str) -> tuple[float, float | None]:
+    rss_mb = _current_rss_mb()
+    max_rss_mb = _configured_max_rss_mb()
+    _logger.info(
+        "Perspective memory usage endpoint=%s rss_mb=%.1f max_rss_mb=%s",
+        endpoint,
+        rss_mb,
+        f"{max_rss_mb:.1f}" if max_rss_mb is not None else "disabled",
+    )
+    return rss_mb, max_rss_mb
+
+
 @asynccontextmanager
 async def lifespan(ws_app: FastAPI):
     cfg = load_config()
@@ -82,28 +94,30 @@ app.include_router(router)
 
 @app.get("/health")
 def health() -> dict[str, str]:
+    try:
+        _record_memory_usage(endpoint="/health")
+    except (OSError, RuntimeError, ValueError):
+        _logger.exception("Health check failed to record Perspective memory usage")
     return {"status": "ok"}
 
 
 @app.get("/ready", response_model=None)
 async def readiness(request: Request) -> dict[str, str] | JSONResponse:
     try:
-        max_rss_mb = _configured_max_rss_mb()
-        if max_rss_mb is not None:
-            rss_mb = _current_rss_mb()
-            if rss_mb >= max_rss_mb:
-                _logger.error(
-                    "Readiness check failed: RSS %.1f MiB reached %.1f MiB limit",
-                    rss_mb,
-                    max_rss_mb,
-                )
-                return JSONResponse(
-                    status_code=503,
-                    content={
-                        "status": "unavailable",
-                        "reason": "memory_pressure",
-                    },
-                )
+        rss_mb, max_rss_mb = _record_memory_usage(endpoint="/ready")
+        if max_rss_mb is not None and rss_mb >= max_rss_mb:
+            _logger.error(
+                "Readiness check failed: RSS %.1f MiB reached %.1f MiB limit",
+                rss_mb,
+                max_rss_mb,
+            )
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "status": "unavailable",
+                    "reason": "memory_pressure",
+                },
+            )
     except (OSError, RuntimeError, ValueError):
         _logger.exception("Readiness check failed: invalid RSS health configuration")
         return JSONResponse(

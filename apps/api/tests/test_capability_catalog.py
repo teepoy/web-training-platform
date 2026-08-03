@@ -41,8 +41,6 @@ def test_catalog_aggregates_module_owned_capability_bundles() -> None:
     assert {view.id for view in catalog.list_views()} == {
         "image_input_v1",
         "labeled_image_v1",
-        "box_detection_v1",
-        "qa_input_v1",
         "patch_image_v1",
         "review_image_v1",
     }

@@ -4,8 +4,8 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { SampleMetadata } from './sampleMetadata';
-import type { SampleLsTaskId } from './sampleLsTaskId';
+import type { SampleMetadata } from "./sampleMetadata";
+import type { SampleLsTaskId } from "./sampleLsTaskId";
 
 export interface Sample {
   id?: string;

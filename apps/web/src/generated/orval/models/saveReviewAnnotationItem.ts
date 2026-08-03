@@ -4,8 +4,8 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { SaveReviewAnnotationItemConfidence } from './saveReviewAnnotationItemConfidence';
-import type { SaveReviewAnnotationItemPredictionId } from './saveReviewAnnotationItemPredictionId';
+import type { SaveReviewAnnotationItemConfidence } from "./saveReviewAnnotationItemConfidence";
+import type { SaveReviewAnnotationItemPredictionId } from "./saveReviewAnnotationItemPredictionId";
 
 /**
  * Single reviewed prediction to save as annotation.

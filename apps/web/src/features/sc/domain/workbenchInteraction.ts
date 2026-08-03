@@ -20,6 +20,17 @@ export interface ScMapRegion {
   h: number;
 }
 
+export type ScMapSelectionSource = "box" | "lasso" | "legend" | "bar-chart" | "clear";
+
+/** Completed map-selection mutation published after Perspective state is updated. */
+export interface ScMapSelectionChange {
+  source: ScMapSelectionSource;
+  mode: "append" | "replace" | "clear";
+  ids: number[];
+  region?: ScMapRegion;
+  groupKey?: string | number | null;
+}
+
 export interface ScSelectionAction {
   source: ScSelectionSource;
   ids: string[];

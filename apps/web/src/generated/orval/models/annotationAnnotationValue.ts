@@ -4,6 +4,6 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { AnnotationAnnotationValueAnyOf } from './annotationAnnotationValueAnyOf';
+import type { AnnotationAnnotationValueAnyOf } from "./annotationAnnotationValueAnyOf";
 
 export type AnnotationAnnotationValue = AnnotationAnnotationValueAnyOf | unknown[] | null;

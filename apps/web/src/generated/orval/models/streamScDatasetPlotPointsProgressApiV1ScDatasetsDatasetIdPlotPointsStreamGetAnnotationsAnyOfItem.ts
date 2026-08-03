@@ -5,4 +5,5 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type StreamScDatasetPlotPointsProgressApiV1ScDatasetsDatasetIdPlotPointsStreamGetAnnotationsAnyOfItem = number | string;
+export type StreamScDatasetPlotPointsProgressApiV1ScDatasetsDatasetIdPlotPointsStreamGetAnnotationsAnyOfItem =
+  number | string;

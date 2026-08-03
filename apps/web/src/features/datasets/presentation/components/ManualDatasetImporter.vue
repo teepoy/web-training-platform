@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { ref } from "vue";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { useMessage } from "naive-ui";
-import { NForm, NFormItem, NInput, NSelect, NDynamicTags, NButton, NSpace, NAlert } from "naive-ui";
+import { NForm, NFormItem, NInput, NDynamicTags, NButton, NSpace, NAlert } from "naive-ui";
 import {
   createDatasetApiV1DatasetsPost,
   importSamplesApiV1DatasetsDatasetIdSamplesImportPost,
@@ -19,43 +19,20 @@ const qc = useQueryClient();
 const orgStore = useOrgStore();
 
 const name = ref("");
-const datasetType = ref<string | null>(null);
-const taskType = ref<string | null>(null);
 const labelSpace = ref<string[]>([]);
 const importItems = ref<BulkCreateSampleItem[]>([]);
 const importFileName = ref("");
 
-const datasetTypeOptions = [
-  { label: "Image Classification", value: "image_classification" },
-  { label: "Image Detection", value: "image_detection" },
-  { label: "Image VQA", value: "image_vqa" },
-];
-
-watch(datasetType, (v) => {
-  if (v === "image_classification") {
-    taskType.value = "classification";
-  } else if (v === "image_detection") {
-    taskType.value = "detection";
-  } else if (v === "image_vqa") {
-    taskType.value = "vqa";
-    labelSpace.value = [];
-  } else {
-    taskType.value = null;
-  }
-});
-
 const importDataset = useMutation({
   mutationFn: async (payload: {
     name: string;
-    dataset_type: "image_classification" | "image_detection" | "image_vqa";
-    task_type: "classification" | "detection" | "vqa";
     label_space: string[];
     items: BulkCreateSampleItem[];
   }) => {
     const dataset = await createDatasetApiV1DatasetsPost({
       name: payload.name,
-      dataset_type: payload.dataset_type,
-      task_spec: { task_type: payload.task_type, label_space: payload.label_space },
+      dataset_type: "image_classification",
+      task_spec: { task_type: "classification", label_space: payload.label_space },
     });
     const chunkSize = 5000;
     for (let offset = 0; offset < payload.items.length; offset += chunkSize) {
@@ -107,11 +84,11 @@ async function handleFileChange(event: Event) {
 }
 
 function onSubmit() {
-  if (!name.value || !datasetType.value || !taskType.value) {
-    message.error("Dataset name and type are required");
+  if (!name.value) {
+    message.error("Dataset name is required");
     return;
   }
-  if (datasetType.value === "image_classification" && labelSpace.value.length === 0) {
+  if (labelSpace.value.length === 0) {
     message.error("Label space is required for image classification datasets");
     return;
   }
@@ -121,8 +98,6 @@ function onSubmit() {
   }
   importDataset.mutate({
     name: name.value,
-    dataset_type: datasetType.value! as "image_classification" | "image_detection" | "image_vqa",
-    task_type: taskType.value! as "classification" | "detection" | "vqa",
     label_space: labelSpace.value,
     items: importItems.value,
   });
@@ -135,19 +110,11 @@ function onSubmit() {
       <NInput v-model:value="name" placeholder="e.g. imported-dataset" clearable />
     </NFormItem>
 
-    <NFormItem label="Dataset Type">
-      <NSelect
-        v-model:value="datasetType"
-        :options="datasetTypeOptions"
-        placeholder="Select dataset type"
-      />
-    </NFormItem>
-
     <NFormItem label="Task Type">
-      <NInput :value="taskType ?? ''" disabled />
+      <NInput value="classification" disabled />
     </NFormItem>
 
-    <NFormItem v-if="datasetType === 'image_classification'" label="Label Space">
+    <NFormItem label="Label Space">
       <NDynamicTags v-model:value="labelSpace" />
     </NFormItem>
 

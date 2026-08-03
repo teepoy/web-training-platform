@@ -4,10 +4,10 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { SampleWithLabelsMetadata } from './sampleWithLabelsMetadata';
-import type { SampleWithLabelsLsTaskId } from './sampleWithLabelsLsTaskId';
-import type { SampleWithLabelsLatestAnnotation } from './sampleWithLabelsLatestAnnotation';
-import type { SampleWithLabelsLatestPrediction } from './sampleWithLabelsLatestPrediction';
+import type { SampleWithLabelsMetadata } from "./sampleWithLabelsMetadata";
+import type { SampleWithLabelsLsTaskId } from "./sampleWithLabelsLsTaskId";
+import type { SampleWithLabelsLatestAnnotation } from "./sampleWithLabelsLatestAnnotation";
+import type { SampleWithLabelsLatestPrediction } from "./sampleWithLabelsLatestPrediction";
 
 export interface SampleWithLabels {
   id: string;

@@ -4,7 +4,7 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { TrainingEvent } from './trainingEvent';
+import type { TrainingEvent } from "./trainingEvent";
 
 export interface PaginatedResponseTrainingEvent {
   items: TrainingEvent[];

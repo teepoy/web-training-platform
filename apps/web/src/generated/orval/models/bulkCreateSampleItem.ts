@@ -4,8 +4,8 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { BulkCreateSampleItemMetadata } from './bulkCreateSampleItemMetadata';
-import type { BulkCreateSampleItemLabel } from './bulkCreateSampleItemLabel';
+import type { BulkCreateSampleItemMetadata } from "./bulkCreateSampleItemMetadata";
+import type { BulkCreateSampleItemLabel } from "./bulkCreateSampleItemLabel";
 
 export interface BulkCreateSampleItem {
   image_uris?: string[];

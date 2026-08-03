@@ -4,7 +4,7 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { TaskTrackerCheckResult } from './taskTrackerCheckResult';
+import type { TaskTrackerCheckResult } from "./taskTrackerCheckResult";
 
 export interface TaskTrackerScorecard {
   errors?: number;

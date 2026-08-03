@@ -4,7 +4,7 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { AgentPanelDescriptorDataAnyOf } from './agentPanelDescriptorDataAnyOf';
+import type { AgentPanelDescriptorDataAnyOf } from "./agentPanelDescriptorDataAnyOf";
 
 /**
  * Inline data payload: {inline: <payload>}

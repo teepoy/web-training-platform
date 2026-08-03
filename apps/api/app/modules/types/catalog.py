@@ -11,11 +11,9 @@ from app.modules.types.capabilities import (
     ViewDefinition,
 )
 from app.modules.types.registrations.core_image import (
-    BOX_DETECTION_V1,
     CORE_IMAGE_CAPABILITIES,
     IMAGE_INPUT_V1,
     LABELED_IMAGE_V1,
-    QA_INPUT_V1,
 )
 from app.modules.types.registrations.sc import (
     SC_CAPABILITIES,
@@ -91,7 +89,6 @@ def validate_predictor_model_contract(
 
 
 __all__ = [
-    "BOX_DETECTION_V1",
     "CORE_IMAGE_CAPABILITIES",
     "CapabilityBundle",
     "IMAGE_INPUT_V1",
@@ -99,7 +96,6 @@ __all__ = [
     "MaterializerMetadata",
     "ModelContractRef",
     "PredictorMetadata",
-    "QA_INPUT_V1",
     "SC_CAPABILITIES",
     "SC_PATCH_IMAGE_V1",
     "SC_REVIEW_IMAGE_V1",

@@ -509,15 +509,11 @@ A "dataset type" controls how samples, annotations, Label Studio configuration, 
 ```python
 class DatasetType(str, Enum):
     IMAGE_CLASSIFICATION = "image_classification"
-    IMAGE_VQA = "image_vqa"
-    IMAGE_DETECTION = "image_detection"
-    IMAGE_SEGMENTATION = "image_ newsegmentation"   #
+    IMAGE_SEGMENTATION = "image_segmentation"
 
 class TaskType(str, Enum):
     CLASSIFICATION = "classification"
-    VQA = "vqa"
-    DETECTION = "detection"
-    SEGMENTATION = " newsegmentation"               #
+    SEGMENTATION = "segmentation"
 ```
 
 **b. Create the schema module** `apps/api/app/domain/schemas/image_segmentation.py`:
@@ -562,15 +558,12 @@ After this, `compatibility.py` will automatically allow the new pair via `get_al
 **d. Add type values** in `libs/web-ui/src/api/types.ts`:
 
 ```typescript
-export type TaskType = "classification" | "vqa" | "detection" | "segmentation";
-export type DatasetType =
-  | "image_classification"
-  | "image_vqa"
-  | "image_detection"
-  | "image_segmentation";
+export type TaskType = "classification" | "sc" | "segmentation";
+export type DatasetType = "image_classification" | "image_sc" | "image_segmentation";
 ```
 
-**e. Create the shim component** `apps/web/src/views/datasets/shims/SegmentationDatasetsShim.vue` (copy `DetectionDatasetsShim.vue` as a template).
+**e. Create the shim component** under
+`apps/web/src/features/datasets/presentation/dataset-types/segmentation/views/`.
 
 **f. Create the frontend schema module** `apps/web/src/views/datasets/schemas/image-segmentation.ts`:
 
@@ -640,7 +633,7 @@ After completing all steps above:
 
 ### Further reading
 
-- [Dataset schema system](../architecture/dataset-schema-system.md)
-- [Datasets shim architecture](../architecture/datasets-shim-architecture.md)
-- `apps/api/app/domain/schemas/image_detection.py` — backend reference implementation
-- `apps/web/src/views/datasets/schemas/image-detection.ts` — frontend reference implementation
+- `CORE_DESIGNS.md` — capability, view-contract, and registration rules
+- `apps/api/app/modules/datasets/classification/` — implemented generic dataset example
+- `apps/web/src/features/datasets/presentation/dataset-types/classification/` —
+  implemented frontend descriptor example

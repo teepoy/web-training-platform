@@ -7,6 +7,7 @@ import asyncio
 import concurrent.futures
 import io
 import time
+from itertools import batched
 from typing import Any, Generator, cast
 
 from PIL import Image
@@ -96,20 +97,19 @@ def resnet_sc_predictor(
     model = model.to(device)
     model.eval()
 
-    rows = list(materialized_dataset)
-    total = len(rows)
+    total = len(materialized_dataset)
     batch_size = 16
     total_batches = (total + batch_size - 1) // batch_size
     t_start = time.monotonic()
+    processed = 0
 
-    for start in range(0, total, batch_size):
-        end = min(start + batch_size, total)
-        batch_no = start // batch_size + 1
-
+    for batch_no, rows in enumerate(
+        batched(materialized_dataset, batch_size),
+        start=1,
+    ):
         _pending_imgs: list[dict[str, object]] = []
 
-        for i in range(start, end):
-            row = rows[i]
+        for row in rows:
             sample_id = str(row["sample_id"])
             def_bytes = row.get("patch_defective_bytes")
             ref_bytes = row.get("patch_template_bytes")
@@ -166,7 +166,7 @@ def resnet_sc_predictor(
                 "scores": scores,
             }
         elapsed = time.monotonic() - t_start
-        processed = min(end, total)
+        processed += len(rows)
         logger.info(
             "Prediction batch %d/%d — %d/%d samples (%.1f samples/s)",
             batch_no,

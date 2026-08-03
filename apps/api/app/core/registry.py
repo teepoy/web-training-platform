@@ -56,8 +56,6 @@ class DatasetTypeRegistration:
 
 _dataset_view_types: dict[str, list[str]] = {
     "image_classification": ["image_input_v1", "labeled_image_v1"],
-    "image_vqa": ["image_input_v1", "qa_input_v1"],
-    "image_detection": ["image_input_v1", "box_detection_v1"],
 }
 
 

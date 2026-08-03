@@ -275,28 +275,13 @@ def test_create_dataset_rejects_incompatible_dataset_and_task() -> None:
         r = c.post(
             "/api/v1/datasets",
             json={
-                "name": "bad-vqa-ds",
-                "dataset_type": "image_vqa",
+                "name": "unknown-dataset-type",
+                "dataset_type": "unknown",
                 "task_spec": {"task_type": "classification", "label_space": ["cat"]},
             },
         )
         assert r.status_code == 422
         assert "incompatible" in r.json()["detail"]
-
-
-def test_create_vqa_dataset_requires_empty_label_space() -> None:
-    with TestClient(app) as c:
-        r = c.post(
-            "/api/v1/datasets",
-            json={
-                "name": "vqa-ds",
-                "dataset_type": "image_vqa",
-                "task_spec": {"task_type": "vqa", "label_space": ["nope"]},
-            },
-        )
-        assert r.status_code == 422
-        assert "must not define a label space" in r.json()["detail"]
-
 
 def test_auth_callback_removed() -> None:
     with TestClient(app) as c:

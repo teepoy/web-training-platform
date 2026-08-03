@@ -4,10 +4,10 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { AgentPanelDescriptorData } from './agentPanelDescriptorData';
-import type { AgentPanelDescriptorDataSource } from './agentPanelDescriptorDataSource';
-import type { AgentPanelDescriptorConfig } from './agentPanelDescriptorConfig';
-import type { AgentPanelDescriptorTtl } from './agentPanelDescriptorTtl';
+import type { AgentPanelDescriptorData } from "./agentPanelDescriptorData";
+import type { AgentPanelDescriptorDataSource } from "./agentPanelDescriptorDataSource";
+import type { AgentPanelDescriptorConfig } from "./agentPanelDescriptorConfig";
+import type { AgentPanelDescriptorTtl } from "./agentPanelDescriptorTtl";
 
 /**
  * Describes a single panel that the agent wants to render on a display surface.

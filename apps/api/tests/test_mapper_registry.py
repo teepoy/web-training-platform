@@ -181,10 +181,8 @@ def test_real_mappers_from_sample() -> None:
 
     from app.modules.sc.models import PatchSample
     from app.modules.datasets.classification.models import ClassificationSample
-    from app.modules.datasets.detection.models import DetectionSample
-    from app.modules.datasets.vqa.models import VQASample
 
-    for cls in [PatchSample, ClassificationSample, DetectionSample, VQASample]:
+    for cls in [PatchSample, ClassificationSample]:
         fn = mapper.get_mapper(Sample, cls)
         assert callable(fn)
 
@@ -199,10 +197,8 @@ def test_real_mappers_to_sample() -> None:
 
     from app.modules.sc.models import PatchSample
     from app.modules.datasets.classification.models import ClassificationSample
-    from app.modules.datasets.detection.models import DetectionSample
-    from app.modules.datasets.vqa.models import VQASample
 
-    for cls in [PatchSample, ClassificationSample, DetectionSample, VQASample]:
+    for cls in [PatchSample, ClassificationSample]:
         fn = mapper.get_mapper(cls, Sample)
         assert callable(fn)
 

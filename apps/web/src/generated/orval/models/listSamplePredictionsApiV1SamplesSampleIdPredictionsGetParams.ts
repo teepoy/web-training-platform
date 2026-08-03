@@ -6,9 +6,9 @@
  */
 
 export type ListSamplePredictionsApiV1SamplesSampleIdPredictionsGetParams = {
-/**
- * Dataset ID (required for sparse datasets)
- */
-dataset_id?: string | null;
-model_version?: string | null;
+  /**
+   * Dataset ID (required for sparse datasets)
+   */
+  dataset_id?: string | null;
+  model_version?: string | null;
 };

@@ -15,12 +15,12 @@ or deployment mechanism.
 
 ## 1. Observability Surface — Who Owns What
 
-| System           | What It Provides                                      | Cardinality        | Consumer         |
-| ---------------- | ----------------------------------------------------- | ------------------ | ---------------- |
-| **Prometheus**   | Aggregate service/queue/job-type health and SLOs      | Low (label-controlled) | Platform SRE, Grafana dashboards |
-| **Loki**         | Structured JSON logs for per-job forensics            | High (job ids in log body) | Developer debugging, incident forensics |
-| **Task Tracker** | Product-facing task status, stages, summaries         | Medium             | Platform web UI  |
-| **Prefect**      | Flow-run state, task-run DAG, queue assignment, logs  | High               | Task Tracker (data source), admin debugging |
+| System           | What It Provides                                     | Cardinality                | Consumer                                    |
+| ---------------- | ---------------------------------------------------- | -------------------------- | ------------------------------------------- |
+| **Prometheus**   | Aggregate service/queue/job-type health and SLOs     | Low (label-controlled)     | Platform SRE, Grafana dashboards            |
+| **Loki**         | Structured JSON logs for per-job forensics           | High (job ids in log body) | Developer debugging, incident forensics     |
+| **Task Tracker** | Product-facing task status, stages, summaries        | Medium                     | Platform web UI                             |
+| **Prefect**      | Flow-run state, task-run DAG, queue assignment, logs | High                       | Task Tracker (data source), admin debugging |
 
 ### Separation Rule
 
@@ -41,45 +41,45 @@ or deployment mechanism.
 platform_<service>_<metric>_<unit>
 ```
 
-| Component     | Rules                                                                 |
-| ------------- | --------------------------------------------------------------------- |
-| `platform_`   | Fixed prefix for all platform-originated metrics                      |
-| `<service>`   | Lowercase snake_case service name: `api`, `gpu_worker`, `prefect`    |
-| `<metric>`    | Describes what is measured: `jobs_active`, `request_duration`, `queue_depth` |
-| `<unit>`      | Prometheus base unit suffix: `_seconds`, `_bytes`, `_total` (for counter), `_ratio` |
+| Component   | Rules                                                                               |
+| ----------- | ----------------------------------------------------------------------------------- |
+| `platform_` | Fixed prefix for all platform-originated metrics                                    |
+| `<service>` | Lowercase snake_case service name: `api`, `gpu_worker`, `prefect`                   |
+| `<metric>`  | Describes what is measured: `jobs_active`, `request_duration`, `queue_depth`        |
+| `<unit>`    | Prometheus base unit suffix: `_seconds`, `_bytes`, `_total` (for counter), `_ratio` |
 
 ### Allowed Metric Names
 
 #### GPU Worker (`gpu_worker`)
 
-| Metric                                      | Type      | Description                                     |
-| ------------------------------------------- | --------- | ----------------------------------------------- |
-| `platform_gpu_worker_jobs_active`            | Gauge     | Currently executing jobs                        |
-| `platform_gpu_worker_jobs_queued`            | Gauge     | Jobs waiting in the GPU work queue              |
-| `platform_gpu_worker_jobs_total`             | Counter   | Total jobs processed (labeled by status)        |
-| `platform_gpu_worker_job_duration_seconds`   | Histogram | Wall-clock job duration                         |
-| `platform_gpu_worker_predict_batch_duration_seconds` | Histogram | End-to-end `/v1/predict` batch latency |
-| `platform_gpu_worker_embed_batch_duration_seconds`  | Histogram | End-to-end `/v1/embed` batch latency    |
-| `platform_gpu_worker_model_load_duration_seconds`   | Histogram | Time to load/cache a model from cold start |
-| `platform_gpu_worker_model_cache_hits_total` | Counter   | Successful model cache lookups                  |
-| `platform_gpu_worker_model_cache_misses_total` | Counter | Model cache misses requiring load               |
+| Metric                                               | Type      | Description                                |
+| ---------------------------------------------------- | --------- | ------------------------------------------ |
+| `platform_gpu_worker_jobs_active`                    | Gauge     | Currently executing jobs                   |
+| `platform_gpu_worker_jobs_queued`                    | Gauge     | Jobs waiting in the GPU work queue         |
+| `platform_gpu_worker_jobs_total`                     | Counter   | Total jobs processed (labeled by status)   |
+| `platform_gpu_worker_job_duration_seconds`           | Histogram | Wall-clock job duration                    |
+| `platform_gpu_worker_predict_batch_duration_seconds` | Histogram | End-to-end `/v1/predict` batch latency     |
+| `platform_gpu_worker_embed_batch_duration_seconds`   | Histogram | End-to-end `/v1/embed` batch latency       |
+| `platform_gpu_worker_model_load_duration_seconds`    | Histogram | Time to load/cache a model from cold start |
+| `platform_gpu_worker_model_cache_hits_total`         | Counter   | Successful model cache lookups             |
+| `platform_gpu_worker_model_cache_misses_total`       | Counter   | Model cache misses requiring load          |
 
 #### Prefect (via exporter sidecar or Prefect-native metrics)
 
-| Metric                                      | Type      | Description                                     |
-| ------------------------------------------- | --------- | ----------------------------------------------- |
-| `platform_prefect_flow_runs_by_state`       | Gauge     | Flow runs grouped by state label                |
-| `platform_prefect_queue_depth`              | Gauge     | Items queued in each work queue                 |
-| `platform_prefect_worker_status`            | Gauge     | Worker liveness (1=healthy, 0=down)             |
-| `platform_prefect_flow_duration_seconds`    | Histogram | Wall-clock flow run duration                    |
+| Metric                                   | Type      | Description                         |
+| ---------------------------------------- | --------- | ----------------------------------- |
+| `platform_prefect_flow_runs_by_state`    | Gauge     | Flow runs grouped by state label    |
+| `platform_prefect_queue_depth`           | Gauge     | Items queued in each work queue     |
+| `platform_prefect_worker_status`         | Gauge     | Worker liveness (1=healthy, 0=down) |
+| `platform_prefect_flow_duration_seconds` | Histogram | Wall-clock flow run duration        |
 
 #### API Server (`api`)
 
-| Metric                                            | Type      | Description                                |
-| ------------------------------------------------- | --------- | ------------------------------------------ |
-| `platform_api_request_duration_seconds`            | Histogram | HTTP request duration                      |
-| `platform_api_requests_total`                      | Counter   | HTTP requests (labeled by route, status)   |
-| `platform_api_jobs_dispatched_total`               | Counter   | Jobs submitted to Prefect                  |
+| Metric                                  | Type      | Description                              |
+| --------------------------------------- | --------- | ---------------------------------------- |
+| `platform_api_request_duration_seconds` | Histogram | HTTP request duration                    |
+| `platform_api_requests_total`           | Counter   | HTTP requests (labeled by route, status) |
+| `platform_api_jobs_dispatched_total`    | Counter   | Jobs submitted to Prefect                |
 
 ---
 
@@ -90,15 +90,15 @@ platform_<service>_<metric>_<unit>
 Labels MUST be drawn from this allowlist. No other label keys are permitted
 on platform Prometheus metrics.
 
-| Label        | Description                                 | Example Values                                    |
-| ------------ | ------------------------------------------- | ------------------------------------------------- |
-| `service`    | Originating service name                    | `api`, `gpu_worker`, `prefect`                    |
-| `task_kind`  | Platform job category                       | `training`, `prediction`, `schedule_run`, `embedding` |
-| `queue`      | Prefect work queue name                     | `train-gpu`, `predict-batch`, `embed-batch`       |
-| `status`     | High-level outcome bucket                   | `success`, `failure`, `cancelled`                 |
-| `stage`      | Pipeline stage (if applicable)              | `queue_allocation`, `execution_flow`, `validation_output` |
-| `target`     | Prediction target modality                  | `classification`, `vqa`, `embedding`              |
-| `runtime`    | Execution engine or runtime variant         | `torch`, `dspy-vqa-v1`, `kubernetes`              |
+| Label       | Description                         | Example Values                                            |
+| ----------- | ----------------------------------- | --------------------------------------------------------- |
+| `service`   | Originating service name            | `api`, `gpu_worker`, `prefect`                            |
+| `task_kind` | Platform job category               | `training`, `prediction`, `schedule_run`, `embedding`     |
+| `queue`     | Prefect work queue name             | `train-gpu`, `predict-batch`, `embed-batch`               |
+| `status`    | High-level outcome bucket           | `success`, `failure`, `cancelled`                         |
+| `stage`     | Pipeline stage (if applicable)      | `queue_allocation`, `execution_flow`, `validation_output` |
+| `target`    | Prediction target modality          | `classification`, `embedding`                             |
+| `runtime`   | Execution engine or runtime variant | `torch`, `kubernetes`                                     |
 
 All label values MUST be drawn from a bounded set. Never tag a metric with
 dynamically-generated or user-supplied values (e.g. model names, dataset names).
@@ -164,24 +164,24 @@ include a standard set of **correlation fields**:
 
 ### Correlation Field Reference
 
-| Field                 | Type     | Description                                        | Required |
-| --------------------- | -------- | -------------------------------------------------- | -------- |
-| `timestamp`           | ISO 8601 | Log event time                                     | Yes      |
-| `level`               | string   | `debug` / `info` / `warning` / `error`             | Yes      |
-| `service`             | string   | Service name (`api`, `gpu_worker`, `prefect`)      | Yes      |
-| `env`                 | string   | Deployment environment (`dev`, `prod`)             | Yes      |
-| `message`             | string   | Human-readable summary                             | Yes      |
-| `org_id`              | string   | Platform org identifier                            | When available |
-| `platform_job_id`     | string   | Platform DB job id                                 | When available |
-| `prefect_flow_run_id` | UUID     | Prefect flow run id                                | When available |
-| `gpu_job_id`          | string   | GPU worker's internal job id                       | When available |
-| `task_kind`           | string   | `training` / `prediction` / `schedule_run`         | When available |
-| `queue`               | string   | Prefect work queue name                            | When available |
-| `stage`               | string   | Pipeline stage                                     | When available |
-| `status`              | string   | `running` / `success` / `failure` / `cancelled`    | When available |
-| `error_type`          | string   | Exception class name or error code                 | On error        |
-| `duration_ms`         | number   | Operation duration in milliseconds                 | Optional        |
-| `context`             | object   | Additional structured data (key-value)             | Optional        |
+| Field                 | Type     | Description                                     | Required       |
+| --------------------- | -------- | ----------------------------------------------- | -------------- |
+| `timestamp`           | ISO 8601 | Log event time                                  | Yes            |
+| `level`               | string   | `debug` / `info` / `warning` / `error`          | Yes            |
+| `service`             | string   | Service name (`api`, `gpu_worker`, `prefect`)   | Yes            |
+| `env`                 | string   | Deployment environment (`dev`, `prod`)          | Yes            |
+| `message`             | string   | Human-readable summary                          | Yes            |
+| `org_id`              | string   | Platform org identifier                         | When available |
+| `platform_job_id`     | string   | Platform DB job id                              | When available |
+| `prefect_flow_run_id` | UUID     | Prefect flow run id                             | When available |
+| `gpu_job_id`          | string   | GPU worker's internal job id                    | When available |
+| `task_kind`           | string   | `training` / `prediction` / `schedule_run`      | When available |
+| `queue`               | string   | Prefect work queue name                         | When available |
+| `stage`               | string   | Pipeline stage                                  | When available |
+| `status`              | string   | `running` / `success` / `failure` / `cancelled` | When available |
+| `error_type`          | string   | Exception class name or error code              | On error       |
+| `duration_ms`         | number   | Operation duration in milliseconds              | Optional       |
+| `context`             | object   | Additional structured data (key-value)          | Optional       |
 
 ### Loki Stream Labels (Low-Cardinality Only)
 
@@ -189,12 +189,14 @@ Loki stream labels index the log stream for efficient querying. Keep labels
 low-cardinality following the same discipline as Prometheus:
 
 **Allowed stream labels:**
+
 - `service` — always
 - `env` — always
 - `task_kind` — when available
 - `status` — when available
 
 **Forbidden stream labels:**
+
 - `org_id`, `platform_job_id`, `prefect_flow_run_id`, `gpu_job_id`
 - Any high-cardinality identifier
 
@@ -209,25 +211,29 @@ query time via LogQL label filters (e.g.
 ### GPU Worker (`apps/inference/`)
 
 The GPU worker MUST expose:
+
 1. A `/metrics` endpoint (Prometheus scrape target) with the metrics listed
    in Section 2.
 2. All log lines MUST be structured JSON with correlation fields from Section 4.
 
 Label usage:
+
 - `service=gpu_worker` on all metrics
 - `task_kind` labeled by the job type (`prediction`, `embedding`)
 - `status` labeled by outcome bucket (`success`, `failure`)
-- `target` labeled by prediction modality (`classification`, `vqa`, `embedding`)
-- `runtime` labeled by engine variant (`torch`, `dspy-vqa-v1`)
+- `target` labeled by prediction modality (`classification`, `embedding`)
+- `runtime` labeled by engine variant (`torch`, `kubernetes`)
 
 ### API Server (`apps/api/`)
 
 The API server MUST expose:
+
 1. A `/metrics` endpoint with `platform_api_request_duration_seconds`,
    `platform_api_requests_total`, `platform_api_jobs_dispatched_total`.
 2. All log lines MUST be structured JSON with correlation fields.
 
 Label usage:
+
 - `service=api` on all metrics
 - `status` for HTTP response status and job dispatch outcome
 - `task_kind` for job dispatch counter

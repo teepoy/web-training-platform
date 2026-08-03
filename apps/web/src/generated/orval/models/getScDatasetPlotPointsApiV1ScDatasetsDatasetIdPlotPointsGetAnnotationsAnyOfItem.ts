@@ -5,4 +5,6 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type GetScDatasetPlotPointsApiV1ScDatasetsDatasetIdPlotPointsGetAnnotationsAnyOfItem = number | string;
+export type GetScDatasetPlotPointsApiV1ScDatasetsDatasetIdPlotPointsGetAnnotationsAnyOfItem =
+  | number
+  | string;

@@ -6,7 +6,7 @@
  */
 
 export type ListReviewActionsApiV1PredictionReviewsGetParams = {
-dataset_id: string;
-offset?: number;
-limit?: number;
+  dataset_id: string;
+  offset?: number;
+  limit?: number;
 };

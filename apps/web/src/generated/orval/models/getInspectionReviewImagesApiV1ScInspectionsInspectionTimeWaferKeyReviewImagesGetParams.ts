@@ -5,11 +5,12 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type GetInspectionReviewImagesApiV1ScInspectionsInspectionTimeWaferKeyReviewImagesGetParams = {
-defect_ids?: string[] | null;
-sample_filter?: string | null;
-reticle_x_die_count?: number;
-reticle_y_die_count?: number;
-reticle_x_die_shift?: number;
-reticle_y_die_shift?: number;
-};
+export type GetInspectionReviewImagesApiV1ScInspectionsInspectionTimeWaferKeyReviewImagesGetParams =
+  {
+    defect_ids?: string[] | null;
+    sample_filter?: string | null;
+    reticle_x_die_count?: number;
+    reticle_y_die_count?: number;
+    reticle_x_die_shift?: number;
+    reticle_y_die_shift?: number;
+  };

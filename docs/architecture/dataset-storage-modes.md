@@ -135,9 +135,9 @@ Workers must not call the materialization endpoint before compute begins. Failur
 
 **Annotate.** Bulk annotations resolve `defect_id` → `sample_id` through `ScDatasetAgg`. Sparse mode uses the storage aggregate's manifest index, while `db_full` performs one JSON-metadata query. The `sample_id` equals the `defect_id` in sparse mode (no `SampleORM` rows exist); unknown defect IDs are excluded.
 
-**Train.** `train_job` opens the dataset through `DatasetStorageFactory`, then calls `storage.list_samples(with_labels=True, return_lazyframe=True)`. The trainer receives the raw LazyFrame, performs SC/view transforms locally, writes any temporary parquet it needs inside the trainer process, and opens it with HuggingFace datasets. No `RuntimeMaterializer`, `BulkViewLoader`, or `DatasetSampleService` is used.
+**Train.** `train_job` opens the dataset through `DatasetStorageFactory`, then calls `storage.list_samples(with_labels=True, return_lazyframe=True)`. External runtimes consume the data-plane manifest. API-local compatibility trainers use the registered SC view materializer, which writes temporary Parquet in bounded batches and scans that Parquet directly. No legacy `RuntimeMaterializer`, `BulkViewLoader`, or `DatasetSampleService` is used.
 
-**Predict.** `predict_job` opens the dataset through `DatasetStorageFactory`, then calls `storage.list_samples(return_lazyframe=True, sample_ids=...)`. Predictors receive the LazyFrame and stream/transform it themselves. Predicting the full dataset should pass `sample_ids=None`; sending 100k IDs through Prefect parameters exceeds Prefect's serialized-parameter limit. Prediction no longer regenerates a full materialized dataset before compute.
+**Predict.** `predict_job` opens the dataset through `DatasetStorageFactory`, then calls `storage.list_samples(return_lazyframe=True, sample_ids=...)`. Predictors that declare a `lazyframe` input consume it directly; API-local compatibility predictors that declare `materialized_dataset` use the registered bounded Parquet materializer. Predicting the full dataset should pass `sample_ids=None`; sending 100k IDs through Prefect parameters exceeds Prefect's serialized-parameter limit.
 
 **Export.** The `SparseExportAssembler` joins shard rows with annotations and prediction results, producing `sparse-export-v1` format output. Annotations are resolved via `sample_id IN (manifest.sample_index keys)` (batched at 500). Prediction results are joined by `(shard_index, row_index)` from the latest completed prediction job's per-shard Parquet output.
 
@@ -180,6 +180,24 @@ The runtime does not infer roles from `image_uris` position, `image_type`, or re
 images; missing role metadata is a dataset validation failure.
 
 Rows without both roles are not silently treated as labeled training data. `POST /training-jobs/train-and-predict` runs readiness validation before it creates the training job or submits Prefect work. The report counts annotated, immediately readable, runtime-resolvable, unusable, and skipped samples; it then requires at least two active labels after applying `missing_image_policy`.
+
+For SC Train & Predict, the workflow applies the user-visible training policy after
+the workflow filter: labeled rows are ordered by stable sample identity and at most
+1,000 rows per class enter training materialization. The prediction stage keeps the
+original workflow scope, so rows held out by the training cap still receive platform
+predictions for validation/review.
+
+API-local compatibility materialization writes Parquet in bounded row batches and
+exposes a re-iterable Parquet row view; it does not create a second Hugging Face cache.
+Compatibility predictors consume that row view in fixed-size inference batches rather
+than converting the complete validation scope to a Python list.
+Use the reproducible benchmark below when changing this path:
+
+```bash
+PYTHONPATH=apps/api .venv/bin/python \
+  apps/api/scripts/benchmark_sc_materialization.py \
+  --rows 5000 --classes 5 --unique-images 1000 --image-size 64
+```
 
 **Schema version gating.** A `schema_version` field on `DatasetManifest` distinguishes v2 shards from legacy shards. Datasets imported with the v2 importer carry `schema_version="v2"`. Legacy datasets have `schema_version=None` or `"v1"` and use the old `image_uris` + `metadata` columns.
 
@@ -225,7 +243,7 @@ All existing datasets remain `db_full`. An Alembic migration sets `storage_mode 
 
 Sparse mode is strictly opt-in. No dataset is converted to sparse unless an operator explicitly creates it as `file_shard_sparse`. Seed scripts, test fixtures, and local dev flows continue to produce `db_full` datasets by default.
 
-The `storage_mode` field is orthogonal to `dataset_type`. A classification dataset and a VQA dataset can each be either `db_full` or `file_shard_sparse`. Storage behavior is never inferred from the semantic type.
+The `storage_mode` field is orthogonal to `dataset_type`. Classification and SC datasets can each use the storage modes explicitly supported by their capability declarations. Storage behavior is never inferred from the semantic type.
 
 ---
 

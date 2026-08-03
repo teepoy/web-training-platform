@@ -171,54 +171,12 @@ class ArtifactStorage(Protocol):
         ...
 
 
-class LlmClient(Protocol):
-    """Multimodal LLM client for VQA generation."""
-
-    async def answer_vqa(
-        self,
-        *,
-        image_bytes: bytes,
-        question: str,
-        system_prompt: str,
-    ) -> str:
-        """Generate an answer for a visual question."""
-        ...
-
-
-class EmbeddingClient(Protocol):
-    """Client for generating image embeddings."""
-
-    async def embed_image(
-        self,
-        image_bytes: bytes,
-        model_name: str = "openai/clip-vit-base-patch32",
-    ) -> list[float]: ...
-
-    async def classify_image(
-        self,
-        image_bytes: bytes,
-        labels: list[str],
-        model_name: str = "openai/clip-vit-base-patch32",
-    ) -> tuple[str, float, dict[str, float]]: ...
-
-    async def classify_batch(
-        self,
-        images: list[bytes],
-        labels: list[str],
-        model_name: str = "openai/clip-vit-base-patch32",
-    ) -> list[tuple[str, float, dict[str, float]]]: ...
-
-    async def health(self) -> bool: ...
-
-
 __all__ = [
     "ArtifactStorage",
     "BatchPredictResult",
     "DatasetAdapter",
     "DatasetRef",
-    "EmbeddingClient",
     "JobRef",
-    "LlmClient",
     "ModelRef",
     "PredictContext",
     "PredictResult",

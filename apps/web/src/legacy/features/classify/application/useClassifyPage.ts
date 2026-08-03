@@ -411,9 +411,6 @@ export function useClassifyPage() {
     if (Array.isArray(targets) && typeof targets[0] === "string") {
       return targets[0];
     }
-    const dt = selectedDataset.value?.dataset_type ?? "image_classification";
-    if (dt === "image_vqa") return "qa_input_v1";
-    if (dt === "image_detection") return "box_detection_v1";
     return "labeled_image_v1";
   });
 

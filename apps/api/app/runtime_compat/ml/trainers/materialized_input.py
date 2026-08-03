@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import unquote, urlparse
 
 import polars as pl
 
@@ -22,23 +23,35 @@ def sc_materialized_lazyframe(
             f"{manifest.view_schema_version!r}"
         )
 
-    rows: list[dict[str, Any]] = []
-    for item in materialized_dataset:
-        row = dict(item)
-        row["images"] = [
-            {
-                "role": "patch_template",
-                "image_type": "patch_template",
-                "bytes": row.pop("patch_template_bytes", None),
-            },
-            {
-                "role": "patch_defective",
-                "image_type": "patch_defective",
-                "bytes": row.pop("patch_defective_bytes", None),
-            },
-        ]
-        rows.append(row)
-    return pl.DataFrame(rows, infer_schema_length=None).lazy()
+    _ = materialized_dataset
+    if manifest.format != "parquet" or len(manifest.shards) != 1:
+        raise ValueError("SC compatibility trainers require exactly one Parquet shard")
+    parsed = urlparse(manifest.shards[0].uri)
+    if parsed.scheme != "file":
+        raise ValueError(
+            "API-local SC compatibility trainers require a file:// Parquet shard"
+        )
+    parquet_path = unquote(parsed.path)
+    return (
+        pl.scan_parquet(parquet_path)
+        .with_columns(
+            pl.concat_list(
+                [
+                    pl.struct(
+                        pl.lit("patch_template").alias("role"),
+                        pl.lit("patch_template").alias("image_type"),
+                        pl.col("patch_template_bytes").alias("bytes"),
+                    ),
+                    pl.struct(
+                        pl.lit("patch_defective").alias("role"),
+                        pl.lit("patch_defective").alias("image_type"),
+                        pl.col("patch_defective_bytes").alias("bytes"),
+                    ),
+                ]
+            ).alias("images")
+        )
+        .drop(["patch_template_bytes", "patch_defective_bytes"])
+    )
 
 
 __all__ = ["sc_materialized_lazyframe"]

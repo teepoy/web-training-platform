@@ -5,4 +5,6 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type ExportReviewVersionApiV1PredictionReviewsActionIdExportGet200 = { [key: string]: unknown };
+export type ExportReviewVersionApiV1PredictionReviewsActionIdExportGet200 = {
+  [key: string]: unknown;
+};

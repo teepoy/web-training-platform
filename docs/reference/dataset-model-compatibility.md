@@ -9,17 +9,16 @@
 Current supported dataset types:
 
 - `image_classification`
-- `image_vqa`
+- `image_sc`
 
 Current supported task types:
 
 - `classification`
-- `vqa`
 
 Current valid dataset/task pairs:
 
 - `image_classification` + `classification`
-- `image_vqa` + `vqa`
+- `image_sc` + `sc`
 
 ## Presets
 
@@ -37,9 +36,8 @@ Uploaded models must declare explicit compatibility metadata. Uploads are groupe
 
 - `image-classifier`
 - `image-embedder`
-- `vqa`
 
-Profiles such as `clip-zero-shot-v1`, `resnet50-cls-v1`, and `dspy-vqa-v1` are prefill helpers only. All model fields remain editable after choosing a profile.
+Profiles such as `clip-zero-shot-v1` and `resnet50-cls-v1` are prefill helpers only. All model fields remain editable after choosing a profile.
 
 Required upload metadata includes:
 
@@ -52,7 +50,6 @@ Additional rules:
 
 - `image-classifier` requires a non-empty `label_space`
 - `image-embedder` requires `embedding_dimension` and `normalized_output`
-- `vqa` forbids `label_space`
 
 ## Prediction Validation
 
@@ -73,4 +70,3 @@ This allows a classifier trained on a narrower label space to run on a broader d
 - `dataset_type` is immutable after dataset creation.
 - `task_type` is immutable after dataset creation.
 - classification datasets may update `label_space`
-- VQA datasets must keep `label_space` empty

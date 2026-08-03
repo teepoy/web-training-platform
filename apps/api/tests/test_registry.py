@@ -98,8 +98,8 @@ def test_dataset_decorator_registers_adapter() -> None:
 
         @dataset(
             dataset_type=key,
-            view_types=["image_input_v1", "box_detection_v1"],
-            task_type="detect",
+            view_types=["image_input_v1", "labeled_image_v1"],
+            task_type="classify",
         )
         class FakeAdapter:
             pass
@@ -107,8 +107,8 @@ def test_dataset_decorator_registers_adapter() -> None:
         reg = _dataset_type_registry.get(key)
         assert reg is not None, "Registry should contain the decorated type"
         assert reg.dataset_type == key
-        assert reg.view_types == ["image_input_v1", "box_detection_v1"]
-        assert reg.task_type == "detect"
+        assert reg.view_types == ["image_input_v1", "labeled_image_v1"]
+        assert reg.task_type == "classify"
         assert reg.adapter_class is FakeAdapter
 
 
@@ -124,8 +124,8 @@ def test_create_adapter_returns_instance() -> None:
         key = "create_test"
         reg = DatasetTypeRegistration(
             dataset_type=key,
-            view_types=["qa_input_v1"],
-            task_type="vqa",
+            view_types=["image_input_v1"],
+            task_type="classify",
             adapter_class=MyAdapter,
         )
         register_dataset_type(reg)
@@ -142,15 +142,15 @@ def test_resolve_view_types_dynamic() -> None:
     with save_restore_registry():
 
         @dataset(
-            dataset_type="dynamic_vqa",
-            view_types=["image_input_v1", "qa_input_v1"],
-            task_type="vqa",
+            dataset_type="dynamic_classification",
+            view_types=["image_input_v1", "labeled_image_v1"],
+            task_type="classification",
         )
         class DynAdapter:
             pass
 
-        views = resolve_view_types("dynamic_vqa")
-        assert views == ["image_input_v1", "qa_input_v1"]
+        views = resolve_view_types("dynamic_classification")
+        assert views == ["image_input_v1", "labeled_image_v1"]
         assert len(views) == 2
 
 
@@ -209,8 +209,8 @@ def test_list_dataset_types() -> None:
         register_dataset_type(
             DatasetTypeRegistration(
                 dataset_type="type_b",
-                view_types=["image_input_v1", "box_detection_v1"],
-                task_type="detect",
+                view_types=["image_input_v1", "labeled_image_v1"],
+                task_type="classify",
                 adapter_class=object,
             )
         )
@@ -218,7 +218,7 @@ def test_list_dataset_types() -> None:
         types = list_dataset_types()
         assert "type_a" in types
         assert "type_b" in types
-        assert len(types) >= 5
+        assert len(types) >= 4
 
 
 # ── test_resolve_task_type ─────────────────────────────────────────────────
@@ -229,11 +229,11 @@ def test_resolve_task_type() -> None:
 
         @dataset(
             dataset_type=key,
-            view_types=["box_detection_v1"],
-            task_type="detect",
+            view_types=["labeled_image_v1"],
+            task_type="classify",
         )
         class TaskAdapter:
             pass
 
-        assert resolve_task_type(key) == "detect"
+        assert resolve_task_type(key) == "classify"
         assert resolve_task_type("unknown_type") is None

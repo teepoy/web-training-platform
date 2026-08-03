@@ -55,17 +55,17 @@ async def test_sc_materializer_cleans_partial_files_when_dataset_load_fails(
     tmp_path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def fail_import(_module_name: str) -> None:
-        raise RuntimeError("datasets unavailable")
+    def fail_write(*_args: Any, **_kwargs: Any) -> None:
+        raise RuntimeError("parquet unavailable")
 
-    monkeypatch.setattr(materializer_module, "import_module", fail_import)
+    monkeypatch.setattr(materializer_module.pq, "ParquetWriter", fail_write)
     materializer = ScInspectionMaterializer(
         _ImageSource(),
         schema_registry=DataPlaneSchemaRegistry.default(),
         temp_dir=str(tmp_path),
     )
 
-    with pytest.raises(RuntimeError, match="datasets unavailable"):
+    with pytest.raises(RuntimeError, match="parquet unavailable"):
         await materializer.materialize(
             rows_lazyframe=pl.DataFrame(
                 {
@@ -80,6 +80,39 @@ async def test_sc_materializer_cleans_partial_files_when_dataset_load_fails(
         )
 
     assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.asyncio
+async def test_sc_materializer_returns_reiterable_parquet_rows_without_hf_cache(
+    tmp_path,
+) -> None:
+    materializer = ScInspectionMaterializer(
+        _ImageSource(),
+        schema_registry=DataPlaneSchemaRegistry.default(),
+        temp_dir=str(tmp_path),
+    )
+    result = await materializer.materialize(
+        rows_lazyframe=pl.DataFrame(
+            {
+                "sample_id": ["sample-1"],
+                "defect_id": ["7"],
+                "inspection_time": ["2026-01-01T00:00:00"],
+                "wafer_key": [42],
+            }
+        ).lazy(),
+        dataset_id="dataset-1",
+        job_id="job-1",
+        image_types=["patch_template", "patch_defective"],
+    )
+    try:
+        first_read = list(result.dataset)
+        second_read = list(result.dataset)
+        assert first_read == second_read
+        assert len(result.dataset) == 1
+        assert first_read[0]["patch_template_bytes"] == b"template"
+        assert result.cache_dir is None
+    finally:
+        result.cleanup()
 
 
 @pytest.mark.asyncio

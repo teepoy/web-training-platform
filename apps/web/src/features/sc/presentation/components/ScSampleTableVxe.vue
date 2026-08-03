@@ -63,6 +63,7 @@ interface VxeGridRef {
   loadData: (data: VxeSampleTableRow[]) => Promise<unknown> | void;
   recalculate: (refull?: boolean) => Promise<unknown> | void;
   refreshScroll: () => Promise<unknown> | void;
+  reloadData: (data: VxeSampleTableRow[]) => Promise<unknown> | void;
   scrollTo: (scrollLeft: number | null, scrollTop: number | null) => Promise<unknown> | void;
   setCheckboxRowKey: (key: string | number, checked: boolean) => Promise<unknown> | void;
 }
@@ -508,7 +509,9 @@ async function waitForGridRef(): Promise<VxeGridRef | null> {
 async function syncRawRowsToTable(): Promise<void> {
   const table = await waitForGridRef();
   if (!table) return;
-  await table.loadData(displayRows);
+  const scrollLeft = table.getScrollData().scrollLeft;
+  await table.reloadData(displayRows);
+  await table.scrollTo(scrollLeft, null);
   storageStats.value = arrowRows.getStats();
 }
 

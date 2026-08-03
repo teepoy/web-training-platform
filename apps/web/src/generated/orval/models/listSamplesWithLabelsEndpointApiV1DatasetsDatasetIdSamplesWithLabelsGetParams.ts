@@ -6,9 +6,9 @@
  */
 
 export type ListSamplesWithLabelsEndpointApiV1DatasetsDatasetIdSamplesWithLabelsGetParams = {
-offset?: number;
-limit?: number;
-label?: string | null;
-order_by?: string;
-with_predictions?: boolean;
+  offset?: number;
+  limit?: number;
+  label?: string | null;
+  order_by?: string;
+  with_predictions?: boolean;
 };

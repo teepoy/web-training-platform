@@ -98,4 +98,32 @@ describe("ScBlinkVirtualTable - loading", () => {
     expect(toArrow).not.toHaveBeenCalled();
     expect(wrapper.text()).not.toContain("Loading...");
   });
+
+  it("toggles an already selected item off when clicked", async () => {
+    const { wrapper } = await mountWithProviders(ScBlinkVirtualTable, {
+      props: {
+        selectedDefectIds: new Set(["1"]),
+      },
+    });
+    const component = wrapper.vm.$.setupState as {
+      handleSampleClick: (
+        sample: { defectId: number; rowIndex: number },
+        event: MouseEvent,
+      ) => Promise<void>;
+    };
+
+    await component.handleSampleClick({ defectId: 1, rowIndex: 0 }, new MouseEvent("click"));
+
+    expect(wrapper.emitted("selectSamples")).toEqual([
+      [
+        ["1"],
+        {
+          shift: false,
+          ctrl: false,
+          meta: false,
+          selectionMode: "toggle",
+        },
+      ],
+    ]);
+  });
 });

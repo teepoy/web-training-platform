@@ -4,7 +4,7 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { CreateSampleRequestMetadata } from './createSampleRequestMetadata';
+import type { CreateSampleRequestMetadata } from "./createSampleRequestMetadata";
 
 export interface CreateSampleRequest {
   image_uris?: string[];

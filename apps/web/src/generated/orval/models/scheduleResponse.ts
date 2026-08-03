@@ -4,10 +4,10 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { ScheduleResponseCron } from './scheduleResponseCron';
-import type { ScheduleResponseParameters } from './scheduleResponseParameters';
-import type { ScheduleResponseCreated } from './scheduleResponseCreated';
-import type { ScheduleResponseUpdated } from './scheduleResponseUpdated';
+import type { ScheduleResponseCron } from "./scheduleResponseCron";
+import type { ScheduleResponseParameters } from "./scheduleResponseParameters";
+import type { ScheduleResponseCreated } from "./scheduleResponseCreated";
+import type { ScheduleResponseUpdated } from "./scheduleResponseUpdated";
 
 export interface ScheduleResponse {
   id: string;

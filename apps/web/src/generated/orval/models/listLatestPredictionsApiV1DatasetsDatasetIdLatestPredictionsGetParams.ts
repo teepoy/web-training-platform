@@ -6,6 +6,6 @@
  */
 
 export type ListLatestPredictionsApiV1DatasetsDatasetIdLatestPredictionsGetParams = {
-offset?: number;
-limit?: number | null;
+  offset?: number;
+  limit?: number | null;
 };

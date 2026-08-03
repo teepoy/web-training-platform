@@ -87,6 +87,10 @@ async def test_predict_failure_preserves_model_and_marks_prediction_failed() -> 
             )
 
     prediction_repository.update_prediction_job_status.assert_awaited_once()
+    submitted_prediction_job = (
+        prediction_repository.create_prediction_job.await_args.args[0]
+    )
+    assert submitted_prediction_job.summary["result_pool"] == "validation"
     status_call = prediction_repository.update_prediction_job_status.await_args
     assert status_call.args[:2] == ("prediction-job-1", JobStatus.FAILED)
     assert status_call.kwargs["summary"]["model_id"] == "model-1"

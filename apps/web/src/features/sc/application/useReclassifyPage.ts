@@ -26,6 +26,7 @@ import type {
   TrainingJob,
 } from "@/generated/orval/models";
 import type { ScSampleTableFilter } from "../domain/sampleTable";
+import type { ScMapSelectionChange } from "../domain/workbenchInteraction";
 import {
   DEFAULT_RETICLE_MAP_OPTIONS,
   normalizeReticleMapOptions,
@@ -152,7 +153,7 @@ export interface ReclassifyPageState {
   handleLegendGroupByChange: (source: LegendColorSource | null) => void;
   clearGlobalFilter: () => void;
   clearMapFilter: () => void;
-  handleBoxSelectionChange: (ids: number[]) => void;
+  handleMapSelectionChange: (change: ScMapSelectionChange) => void;
   filterBlinkTableSamples: (ids: number[]) => void;
   mapFilteredIds: Ref<Set<string>>;
   highlightDefects: ComputedRef<HighlightDefect[]>;
@@ -176,8 +177,10 @@ export interface ReclassifyPageState {
 
   annotationDraft: Ref<Record<string, string>>;
   draftCount: ComputedRef<number>;
+  trainingSampleLimitNotice: ComputedRef<string | null>;
   isSubmitting: ComputedRef<boolean>;
   setAnnotationDraft: (defectId: string, label: string) => void;
+  setAnnotationDrafts: (defectIds: Iterable<string>, label: string) => void;
   clearDrafts: () => void;
   submitAnnotations: () => void;
   addLabel: (label: string) => void;
@@ -314,10 +317,10 @@ export function useReclassifyPage(): ReclassifyPageState {
     retry: false,
   });
 
-  // ── Selection state (Blink table box-selection, separate from filter) ─
+  // ── Map selection state mirrored for page-level consumers ─────────
 
-  function handleBoxSelectionChange(ids: number[]): void {
-    mapFilteredIds.value = new Set(ids.map(String));
+  function handleMapSelectionChange(change: ScMapSelectionChange): void {
+    mapFilteredIds.value = new Set(change.ids.map(String));
     sampledIds.value = new Set();
     selectedDefectFilterIds.value = new Set();
     galleryRandomSamplingDefectIds.value = new Set();
@@ -858,8 +861,19 @@ export function useReclassifyPage(): ReclassifyPageState {
     writeLocalRecord(localStorageKey("shortcuts"), next);
   }
 
+  function setAnnotationDrafts(defectIds: Iterable<string>, label: string): void {
+    const next = { ...annotationDraft.value };
+    let changed = false;
+    for (const defectId of defectIds) {
+      if (next[defectId] === label) continue;
+      next[defectId] = label;
+      changed = true;
+    }
+    if (changed) annotationDraft.value = next;
+  }
+
   function setAnnotationDraft(defectId: string, label: string): void {
-    annotationDraft.value = { ...annotationDraft.value, [defectId]: label };
+    setAnnotationDrafts([defectId], label);
   }
 
   function clearDrafts(): void {
@@ -869,6 +883,21 @@ export function useReclassifyPage(): ReclassifyPageState {
   const draftCount = computed(
     () => Object.keys(annotationDraft.value).filter((k) => annotationDraft.value[k]).length,
   );
+
+  const trainingSampleLimitNotice = computed<string | null>(() => {
+    const stats = annotationStatsQuery.data.value as DatasetAnnotationStats | undefined;
+    const excessCount = Object.values(stats?.label_counts ?? {}).reduce(
+      (total, rawCount) => total + Math.max(0, Number(rawCount) - 1_000),
+      0,
+    );
+    if (excessCount === 0) return null;
+    return (
+      "Training uses at most 1,000 annotations per class. " +
+      `${excessCount.toLocaleString()} additional annotation${
+        excessCount === 1 ? "" : "s"
+      } will be held out; prediction results remain available in the validation pool.`
+    );
+  });
 
   // ── Helper: use dataset-owned image URLs only ───────────────────────
 
@@ -1258,6 +1287,9 @@ export function useReclassifyPage(): ReclassifyPageState {
       return;
     }
     if (isTrainPredictRunning.value) return;
+    if (trainingSampleLimitNotice.value) {
+      message.warning(trainingSampleLimitNotice.value);
+    }
 
     isTrainPredictRunning.value = true;
     trainPredictStatusMessage.value = "Starting train and predict workflow...";
@@ -1325,7 +1357,7 @@ export function useReclassifyPage(): ReclassifyPageState {
     handleLegendGroupByChange,
     clearGlobalFilter,
     clearMapFilter,
-    handleBoxSelectionChange,
+    handleMapSelectionChange,
     filterBlinkTableSamples,
     mapFilteredIds,
     highlightDefects,
@@ -1345,8 +1377,10 @@ export function useReclassifyPage(): ReclassifyPageState {
 
     annotationDraft,
     draftCount,
+    trainingSampleLimitNotice,
     isSubmitting: computed(() => bulkAnnotateMutation.isPending.value),
     setAnnotationDraft,
+    setAnnotationDrafts,
     clearDrafts,
     submitAnnotations,
     addLabel,

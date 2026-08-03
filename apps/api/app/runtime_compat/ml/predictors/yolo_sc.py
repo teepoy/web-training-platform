@@ -8,6 +8,7 @@ import concurrent.futures
 import io
 import time
 import tempfile
+from itertools import batched
 from pathlib import Path
 from typing import Any, Generator, Sequence, cast
 
@@ -83,20 +84,20 @@ def yolo_sc_predictor(
         _tmp_dir.cleanup()
         raise
 
-    rows = [dict(row) for row in materialized_dataset]
-    total = len(rows)
+    total = len(materialized_dataset)
     batch_size = 16
     total_batches = (total + batch_size - 1) // batch_size
     t_start = time.monotonic()
+    processed = 0
 
     try:
-        for start in range(0, total, batch_size):
-            end = min(start + batch_size, total)
-
+        for batch_no, rows in enumerate(
+            batched(materialized_dataset, batch_size),
+            start=1,
+        ):
             _pending_imgs: list[dict[str, object]] = []
 
-            for i in range(start, end):
-                row = rows[i]
+            for row in rows:
                 sample_id = str(row["sample_id"])
                 def_bytes = row.get("patch_defective_bytes")
                 ref_bytes = row.get("patch_template_bytes")
@@ -175,10 +176,10 @@ def yolo_sc_predictor(
                     "scores": scores,
                 }
             elapsed = time.monotonic() - t_start
-            processed = min(end, total)
+            processed += len(rows)
             logger.info(
                 "Prediction batch %d/%d — %d/%d samples (%.1f samples/s)",
-                start // batch_size + 1,
+                batch_no,
                 total_batches,
                 processed,
                 total,

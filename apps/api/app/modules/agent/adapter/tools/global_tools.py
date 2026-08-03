@@ -160,7 +160,7 @@ WRITE_TOOLS: list[dict[str, Any]] = [
                 },
                 "task_type": {
                     "type": "string",
-                    "enum": ["classification", "vqa"],
+                    "enum": ["classification"],
                     "description": "Task type (default: classification)",
                 },
                 "label_space": {
@@ -582,8 +582,8 @@ async def execute_create_dataset(
     """Create a new dataset with a Label Studio project."""
     from app.shared.api.schemas import Dataset, TaskSpec
 
-    tt = "vqa" if task_type == "vqa" else "classification"
-    ds_type = "image_vqa" if tt == "vqa" else "image_classification"
+    tt = "classification"
+    ds_type = "image_classification"
 
     # Create LS project
     try:
@@ -591,10 +591,7 @@ async def execute_create_dataset(
             LabelStudioClient as _LSC,
         )
 
-        if tt == "vqa":
-            label_config = _LSC.generate_vqa_config()
-        else:
-            label_config = _LSC.generate_image_classification_config(label_space)
+        label_config = _LSC.generate_image_classification_config(label_space)
         project = await label_studio_client.create_project(name, label_config)
         ls_project_id = str(project.get("id", ""))
         if not ls_project_id:

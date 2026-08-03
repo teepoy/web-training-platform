@@ -88,13 +88,6 @@ class BulkCreateSampleResponse(BaseModel):
     errors: list[str] = Field(default_factory=list)
 
 
-class ImportVqaJsonlResponse(BaseModel):
-    dataset_id: str
-    imported: int
-    failed: int
-    errors: list[str] = Field(default_factory=list)
-
-
 class CreateAnnotationRequest(BaseModel):
     dataset_id: str
     sample_id: str

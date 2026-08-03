@@ -8,12 +8,17 @@ import { GridComponent, TooltipComponent } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
 import type { EChartsOption } from "echarts";
 import type { ECElementEvent } from "echarts/core";
+import type { ScMapLassoSelection } from "@platform/sc-map-element";
 import ScMapPanelBinned from "@/features/sc/presentation/components/ScMapPanelBinned.vue";
 import ScGlobalFilterBar from "@/features/sc/presentation/components/ScGlobalFilterBar.vue";
 import ScSampleTableVxe from "@/features/sc/presentation/components/ScSampleTableVxe.vue";
 import ScBlinkVirtualTable from "@/features/sc/presentation/components/ScBlinkVirtualTable.vue";
 import type { ScSampleTableFilter, ScSampleTableSort } from "@/features/sc/domain/sampleTable";
-import type { ScLegendSource } from "@/features/sc/domain/workbenchInteraction";
+import type {
+  ScLegendSource,
+  ScMapRegion,
+  ScMapSelectionChange,
+} from "@/features/sc/domain/workbenchInteraction";
 import type { ReticleMapOptions } from "@/features/sc/application/reticleMapOptions";
 import type { HighlightDefect } from "@/features/sc/presentation/components/types";
 import { perspectiveReticleExpressions } from "@/features/sc/presentation/composables/perspectiveReticleExpressions";
@@ -55,14 +60,7 @@ const emit = defineEmits<{
   (e: "update:activeMapTab", v: "wafer" | "die" | "reticle"): void;
   (e: "update:reticleOptions", v: ReticleMapOptions): void;
   (e: "zoom-in", vp: { x: number; y: number; w: number; h: number } | null): void;
-  (
-    e: "map-filter-change",
-    payload: {
-      ids: number[];
-      region: { x: number; y: number; w: number; h: number };
-      key?: string | number | null;
-    },
-  ): void;
+  (e: "map-selection-change", change: ScMapSelectionChange): void;
   (e: "update:tableFilter", filter: ScSampleTableFilter): void;
   (e: "update:global-filter", filter: ScSampleTableFilter): void;
   (e: "update:tableSort", sort: ScSampleTableSort | null): void;
@@ -96,11 +94,18 @@ const isColumnResizing = ref(false);
 const isRowResizing = ref(false);
 const isBarResizing = ref(false);
 const globalDistinctValues = ref<Record<string, Array<string | number>>>({});
-type BoxSelectionRegion = { x: number; y: number; w: number; h: number };
-type QueuedBoxSelection = {
-  mode: "wafer" | "die" | "reticle";
-  region: BoxSelectionRegion;
-};
+type QueuedAreaSelection =
+  | {
+      kind: "box";
+      mode: "wafer" | "die" | "reticle";
+      region: ScMapRegion;
+    }
+  | {
+      kind: "lasso";
+      mode: "wafer" | "die" | "reticle";
+      selection: ScMapLassoSelection;
+      region: ScMapRegion;
+    };
 
 const isReclassify = computed(() => props.variant === "reclassify");
 const globalFilterModel = computed<ScSampleTableFilter>({
@@ -185,7 +190,7 @@ const mapImmediateCrosshairVersion = ref(0);
 let mapImmediateCrosshairSeq = 0;
 let _highlightTimer: ReturnType<typeof setTimeout> | null = null;
 const HIGHLIGHT_DEBOUNCE_MS = 250;
-const boxSelectionQueue = useBoxSelectionQueue();
+const mapSelectionQueue = useMapSelectionQueue();
 
 function scheduleHighlightUpdate(ids: Set<string>, tab: string): void {
   if (_highlightTimer !== null) clearTimeout(_highlightTimer);
@@ -227,7 +232,7 @@ watch([() => props.activeMapTab, () => props.zoom], () => {
 
 onUnmounted(() => {
   if (_highlightTimer !== null) clearTimeout(_highlightTimer);
-  boxSelectionQueue.clear();
+  mapSelectionQueue.dispose();
 });
 
 const barChartItems = computed(() => {
@@ -236,10 +241,10 @@ const barChartItems = computed(() => {
     .map(([key, group]) => ({
       key,
       count: Number(group.count ?? group.defectIds.length),
-      defectIds: group.defectIds.map(Number).filter(Number.isFinite),
     }))
     .sort((a, b) => String(a.key).localeCompare(String(b.key), undefined, { numeric: true }));
 });
+const selectedBarChartKey = ref<string | null>(null);
 const barChartOption = computed<EChartsOption>(() => ({
   animation: false,
   grid: { left: 42, right: 18, top: 12, bottom: 42 },
@@ -259,9 +264,19 @@ const barChartOption = computed<EChartsOption>(() => ({
   series: [
     {
       type: "bar",
-      data: barChartItems.value.map((item) => item.count),
+      data: barChartItems.value.map((item) => ({
+        value: item.count,
+        itemStyle: {
+          color: "#4c80f0",
+          borderColor: selectedBarChartKey.value === item.key ? "#2457c5" : "transparent",
+          borderWidth: selectedBarChartKey.value === item.key ? 2 : 0,
+          opacity:
+            selectedBarChartKey.value === null || selectedBarChartKey.value === item.key ? 1 : 0.35,
+        },
+      })),
       barMaxWidth: 18,
-      itemStyle: { color: "#4c80f0", borderRadius: [3, 3, 0, 0] },
+      itemStyle: { borderRadius: [3, 3, 0, 0] },
+      cursor: "pointer",
     },
   ],
 }));
@@ -292,6 +307,13 @@ const legendSourceOptions = computed(() => {
   };
   return enabledLegendSources.value.map((source) => ({ label: labels[source], value: source }));
 });
+
+watch(
+  () => props.legendGroupBy,
+  () => {
+    selectedBarChartKey.value = null;
+  },
+);
 
 async function searchGlobalFilterOptions(payload: {
   field: string;
@@ -354,33 +376,31 @@ function onBarResizeEnd(e: PointerEvent): void {
   if (e.currentTarget instanceof Element) e.currentTarget.releasePointerCapture(e.pointerId);
 }
 
-function handleBoxSelect(region: BoxSelectionRegion): void {
+function handleBoxSelect(region: ScMapRegion): void {
+  selectedBarChartKey.value = null;
   mapImmediateCrosshairDefects.value = [];
-  boxSelectionQueue.enqueue({ mode: props.activeMapTab, region });
+  mapSelectionQueue.append({ kind: "box", mode: props.activeMapTab, region });
 }
-async function handleLegendFilterChange(payload: {
-  ids: number[];
-  region: { x: number; y: number; w: number; h: number };
-  key?: string | number | null;
-}): Promise<void> {
-  const ids = payload.key != null ? await model.queryLegendSelection(payload.key) : payload.ids;
-  if (payload.key != null && ids.length <= HIGHLIGHT_MAX_DEFECTS) {
-    mapImmediateCrosshairDefects.value = await model.highlightDefectsForIds(ids);
-  } else {
-    mapImmediateCrosshairDefects.value = [];
-  }
+function handleLassoSelect(selection: ScMapLassoSelection): void {
+  selectedBarChartKey.value = null;
+  mapImmediateCrosshairDefects.value = [];
+  mapSelectionQueue.append({
+    kind: "lasso",
+    mode: props.activeMapTab,
+    selection,
+    region: selection.region,
+  });
+}
+function handleLegendSelection(key: string | number | null): void {
+  selectedBarChartKey.value = null;
+  mapSelectionQueue.replace("legend", key);
+}
+function handleClearMapSelection(): void {
+  selectedBarChartKey.value = null;
+  mapImmediateCrosshairSeq += 1;
+  mapImmediateCrosshairDefects.value = [];
   mapImmediateCrosshairVersion.value += 1;
-  await model.applyMapSelection(ids);
-  emit("map-filter-change", { ...payload, ids });
-}
-async function handleMapSelectionChange(ids: number[]): Promise<void> {
-  if (ids.length === 0) {
-    mapImmediateCrosshairSeq += 1;
-    mapImmediateCrosshairDefects.value = [];
-    mapImmediateCrosshairVersion.value += 1;
-  }
-  if (ids.length === 0) await model.clearMapSelection();
-  emit("map-filter-change", { ids, region: { x: 0, y: 0, w: 0, h: 0 } });
+  mapSelectionQueue.clear();
 }
 function handleTableSelectionChange(ids: number[]): void {
   void model.setTableSelectedDefectIds(ids);
@@ -398,78 +418,99 @@ function reconnectPerspective(): void {
 function refreshPage(): void {
   window.location.reload();
 }
-async function selectBarChartGroup(defectIds: number[]): Promise<void> {
-  await model.applyMapSelection(defectIds);
-  emit("map-filter-change", { ids: defectIds, region: { x: 0, y: 0, w: 0, h: 0 } });
+function selectBarChartGroup(key: string | null): void {
+  selectedBarChartKey.value = key;
+  mapSelectionQueue.replace("bar-chart", key);
 }
-async function handleBarChartClick(event: ECElementEvent): Promise<void> {
+function handleBarChartClick(event: ECElementEvent): void {
   const item = barChartItems.value[typeof event.dataIndex === "number" ? event.dataIndex : -1];
-  if (item) await selectBarChartGroup(item.defectIds);
+  if (!item) return;
+  selectBarChartGroup(selectedBarChartKey.value === item.key ? null : item.key);
 }
 
-function useBoxSelectionQueue() {
-  let queuedSelections: QueuedBoxSelection[] = [];
-  let drainInFlight = false;
-  let drainScheduled = false;
+function useMapSelectionQueue() {
+  let replacementVersion = 0;
+  let queue = Promise.resolve();
+  let disposed = false;
+
+  function enqueue(operation: () => Promise<void>, failureReason: string): void {
+    queue = queue
+      .then(async () => {
+        if (!disposed) await operation();
+      })
+      .catch((error: unknown) => {
+        reportPerspectiveError(failureReason, error);
+      });
+  }
+
+  function append(selection: QueuedAreaSelection): void {
+    const version = replacementVersion;
+    enqueue(async () => {
+      if (version !== replacementVersion) return;
+      const selectedIds =
+        selection.kind === "lasso"
+          ? await model.queryLassoSelection(selection.mode, selection.selection)
+          : await model.queryBoxSelection(selection.mode, selection.region);
+      if (version !== replacementVersion || selectedIds.length === 0) return;
+      const ids = await model.appendMapSelection(selectedIds);
+      if (version !== replacementVersion) return;
+      emit("map-selection-change", {
+        source: selection.kind,
+        mode: "append",
+        ids,
+        region: selection.region,
+      });
+    }, `${selection.kind} selection failed`);
+  }
+
+  function replace(source: "legend" | "bar-chart", key: string | number | null): void {
+    const version = ++replacementVersion;
+    // Replacement actions supersede slow area queries immediately. Model
+    // mutations remain serialized by usePerspectiveInspectionModel.
+    queue = Promise.resolve();
+    enqueue(async () => {
+      if (version !== replacementVersion) return;
+      const ids = key === null ? [] : await model.queryLegendSelection(key);
+      if (version !== replacementVersion) return;
+      if (key !== null && ids.length <= HIGHLIGHT_MAX_DEFECTS) {
+        mapImmediateCrosshairDefects.value = await model.highlightDefectsForIds(ids);
+      } else {
+        mapImmediateCrosshairDefects.value = [];
+      }
+      if (version !== replacementVersion) return;
+      mapImmediateCrosshairVersion.value += 1;
+      await model.applyMapSelection(ids);
+      if (version !== replacementVersion) return;
+      emit("map-selection-change", {
+        source,
+        mode: key === null ? "clear" : "replace",
+        ids,
+        groupKey: key,
+      });
+    }, `${source} selection failed`);
+  }
 
   function clear(): void {
-    queuedSelections = [];
-    drainScheduled = false;
+    const version = ++replacementVersion;
+    queue = Promise.resolve();
+    enqueue(async () => {
+      if (version !== replacementVersion) return;
+      await model.clearMapSelection();
+      if (version !== replacementVersion) return;
+      emit("map-selection-change", {
+        source: "clear",
+        mode: "clear",
+        ids: [],
+      });
+    }, "clear map selection failed");
   }
 
-  function enqueue(selection: QueuedBoxSelection): void {
-    queuedSelections.push(selection);
-    scheduleDrain();
+  function dispose(): void {
+    disposed = true;
+    replacementVersion += 1;
   }
 
-  function scheduleDrain(): void {
-    if (drainScheduled || drainInFlight) return;
-    drainScheduled = true;
-    queueMicrotask(() => {
-      drainScheduled = false;
-      void drain();
-    });
-  }
-
-  async function drain(): Promise<void> {
-    if (drainInFlight) return;
-    drainInFlight = true;
-    try {
-      while (queuedSelections.length > 0) {
-        const batch = queuedSelections;
-        queuedSelections = [];
-        await applyBatch(batch);
-      }
-    } finally {
-      drainInFlight = false;
-      if (queuedSelections.length > 0) scheduleDrain();
-    }
-  }
-
-  async function applyBatch(batch: QueuedBoxSelection[]): Promise<void> {
-    const ids = new Set<number>();
-    const lastRegion = batch[batch.length - 1]?.region;
-    for (const selection of batch) {
-      try {
-        const selectedIds = await model.queryBoxSelection(selection.mode, selection.region);
-        for (const id of selectedIds) ids.add(id);
-      } catch (err) {
-        reportPerspectiveError("box selection query failed", err);
-      }
-    }
-    if (ids.size === 0 || !lastRegion) return;
-
-    try {
-      // Box selection is append-only: each drained batch extends the current
-      // map selection. Do not route this through replace-style legend logic.
-      const nextIds = await model.appendMapSelection([...ids]);
-      emit("map-filter-change", { ids: nextIds, region: lastRegion });
-    } catch (err) {
-      reportPerspectiveError("box selection update failed", err);
-    }
-  }
-
-  return { clear, enqueue };
+  return { append, replace, clear, dispose };
 }
 </script>
 
@@ -522,11 +563,12 @@ function useBoxSelectionQueue() {
           :map-progress-percent="perspectiveReady ? model.mapProgressPercent.value : 0"
           @update:active-map-tab="(v) => emit('update:activeMapTab', v)"
           @update:reticle-options="(v) => emit('update:reticleOptions', v)"
-          @selection-change="handleMapSelectionChange"
-          @legend-select="handleLegendFilterChange"
+          @clear-selection="handleClearMapSelection"
+          @legend-select="handleLegendSelection"
           @legend-group-change="(groupBy) => emit('legend-group-change', groupBy)"
           @zoom-in="(vp) => emit('zoom-in', vp)"
           @box-select="handleBoxSelect"
+          @lasso-select="handleLassoSelect"
           @retry="reconnectPerspective"
         />
       </div>

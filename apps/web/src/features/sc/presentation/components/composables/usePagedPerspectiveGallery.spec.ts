@@ -94,4 +94,44 @@ describe("usePagedPerspectiveGallery", () => {
 
     scope.stop();
   });
+
+  it("reloads the Blink window for repeated, mixed, and cleared map selections", async () => {
+    const requestedRange = ref({ start: 0, end: 5 });
+    const firstBox = vi.fn(async () => "box-1");
+    const secondBox = vi.fn(async () => "box-2");
+    const legend = vi.fn(async () => "legend");
+    const allSamples = vi.fn(async () => "all");
+    const snapshot = ref<PerspectiveViewSnapshot | null>(snapshotFor(2, firstBox));
+    const scope = effectScope();
+    const state = scope.run(() =>
+      usePagedPerspectiveGallery(snapshot, requestedRange, (ipc) => [String(ipc)]),
+    );
+
+    await vi.waitFor(() => {
+      expect(state?.window.value.items).toEqual(["box-1"]);
+    });
+
+    snapshot.value = snapshotFor(3, secondBox);
+    await vi.waitFor(() => {
+      expect(state?.window.value.items).toEqual(["box-2"]);
+    });
+
+    snapshot.value = snapshotFor(1, legend);
+    await vi.waitFor(() => {
+      expect(state?.window.value.items).toEqual(["legend"]);
+    });
+
+    snapshot.value = null;
+    snapshot.value = snapshotFor(10, allSamples);
+    await vi.waitFor(() => {
+      expect(state?.window.value.items).toEqual(["all"]);
+      expect(state?.window.value.total).toBe(10);
+    });
+
+    expect(firstBox).toHaveBeenCalledOnce();
+    expect(secondBox).toHaveBeenCalledOnce();
+    expect(legend).toHaveBeenCalledOnce();
+    expect(allSamples).toHaveBeenCalledOnce();
+    scope.stop();
+  });
 });

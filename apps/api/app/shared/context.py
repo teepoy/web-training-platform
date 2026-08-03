@@ -16,11 +16,9 @@ from app.shared.db.session import (
 from app.shared.domain.protocols import (
     ArtifactStorage,
     LabelStudioClient as LabelStudioClientPort,
-    LlmClient,
     PrefectClient as PrefectClientPort,
 )
 from app.shared.infrastructure.label_studio.client import LabelStudioClient
-from app.shared.infrastructure.llm.client import OpenAICompatibleLlmClient
 from app.shared.infrastructure.prefect.client import PrefectClient
 from app.shared.infrastructure.redis.event_publisher import RedisEventPublisher
 from app.shared.infrastructure.storage.memory import InMemoryArtifactStorage
@@ -54,7 +52,6 @@ class SharedInfra:
     session_factory: AppDatabaseSessionFactory
     artifact_storage: ArtifactStorage
     label_studio_client: LabelStudioClientPort
-    llm_client: LlmClient
     prefect_client: PrefectClientPort
     notification_sink: WebhookNotificationSink
     surface_store: SurfaceStore
@@ -139,12 +136,6 @@ def build_shared_infra(cfg: AppConfig) -> SharedInfra:
         label_studio_client=LabelStudioClient(
             url=str(cfg.label_studio.url),
             api_key=str(cfg.label_studio.api_key),
-        ),
-        llm_client=OpenAICompatibleLlmClient(
-            base_url=str(cfg.llm.base_url),
-            api_key=str(cfg.llm.api_key),
-            model=str(cfg.llm.model),
-            timeout_seconds=float(cfg.llm.timeout_seconds),
         ),
         prefect_client=prefect_client,
         notification_sink=notification_sink,

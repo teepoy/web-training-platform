@@ -6,8 +6,8 @@
  */
 
 export type DeleteAnnotationApiV1AnnotationsAnnotationIdDeleteParams = {
-/**
- * Dataset ID for storage-mode dispatch
- */
-dataset_id: string;
+  /**
+   * Dataset ID for storage-mode dispatch
+   */
+  dataset_id: string;
 };

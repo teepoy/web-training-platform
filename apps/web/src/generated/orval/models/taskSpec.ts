@@ -4,7 +4,7 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { TaskSpecMetadataSchema } from './taskSpecMetadataSchema';
+import type { TaskSpecMetadataSchema } from "./taskSpecMetadataSchema";
 
 export interface TaskSpec {
   task_type?: string;

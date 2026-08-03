@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import os
-import shutil
 import tempfile
 from contextlib import ExitStack
-from importlib import import_module
+from collections.abc import Iterable, Iterator
 from typing import Any
 
 import pyarrow as pa
@@ -30,6 +29,23 @@ from app.modules.types import catalog
 SC_PATCH_IMAGE_MATERIALIZER = catalog.get_materializer_meta(
     "sc-inspection-patch-image-v1"
 )
+_PARQUET_WRITE_BATCH_SIZE = 256
+
+
+class _ParquetRowDataset:
+    """Re-iterable row view over materialized Parquet without a second cache."""
+
+    def __init__(self, path: str, row_count: int) -> None:
+        self._path = path
+        self._row_count = row_count
+
+    def __len__(self) -> int:
+        return self._row_count
+
+    def __iter__(self) -> Iterator[dict[str, Any]]:
+        parquet_file = pq.ParquetFile(self._path)
+        for batch in parquet_file.iter_batches(batch_size=_PARQUET_WRITE_BATCH_SIZE):
+            yield from batch.to_pylist()
 
 
 class ScInspectionMaterializer:
@@ -54,13 +70,11 @@ class ScInspectionMaterializer:
     ) -> ScInspectionMaterialization:
         image_types = image_types or list(DEFAULT_PATCH_IMAGE_TYPES)
         df = rows_lazyframe.collect()
-        rows = [
-            normalize_sc_training_row(dict(row)) for row in df.iter_rows(named=True)
-        ]
-        if not rows:
+        if df.height == 0:
             return await self._write_rows(
+                (),
                 [],
-                [],
+                row_count=0,
                 dataset_id=dataset_id,
                 job_id=job_id,
                 image_types=image_types,
@@ -74,7 +88,8 @@ class ScInspectionMaterializer:
         errors: list[dict[str, str]] = []
 
         missing_by_inspection: dict[tuple[str, int], set[int]] = {}
-        for row in rows:
+        for raw_row in df.iter_rows(named=True):
+            row = normalize_sc_training_row(dict(raw_row))
             inspection_time = str(row.get("inspection_time") or "")
             wafer_key = int(row.get("wafer_key", 0) or 0)
             defect_id = str(row.get("defect_id") or "")
@@ -131,39 +146,42 @@ class ScInspectionMaterializer:
                     bytes(item.get("image_data", b""))
                 )
 
-        materialized_rows: list[dict[str, Any]] = []
         columns = [_materialized_column_name(t) for t in image_types]
-        for row in rows:
-            defect_id = str(row.get("defect_id", ""))
-            inspection_time = str(row.get("inspection_time") or "")
-            wafer_key = int(row.get("wafer_key", 0) or 0)
-            out = {
-                "sample_id": str(row.get("sample_id", "")),
-                "defect_id": defect_id,
-                "inspection_time": _normalize_inspection_time(
-                    row.get("inspection_time")
-                ),
-                "wafer_key": int(row.get("wafer_key", 0) or 0),
-                "wafer_x": _optional_int(row.get("wafer_x")),
-                "wafer_y": _optional_int(row.get("wafer_y")),
-                "die_x": _optional_int(row.get("die_x")),
-                "die_y": _optional_int(row.get("die_y")),
-                "rough_bin": _optional_int(row.get("rough_bin")),
-                "class_number": _optional_int(row.get("class_number")),
-                "test_id": _optional_int(row.get("test_id")),
-                "label": _optional_str(row.get("label")),
-                "predicted_label": _optional_str(row.get("predicted_label")),
-                "confidence": _optional_float(row.get("confidence")),
-            }
-            for column in columns:
-                out[column] = image_bytes.get(
-                    (inspection_time, wafer_key, defect_id, column)
-                )
-            materialized_rows.append(out)
+
+        def materialized_rows() -> Iterator[dict[str, Any]]:
+            for raw_row in df.iter_rows(named=True):
+                row = normalize_sc_training_row(dict(raw_row))
+                defect_id = str(row.get("defect_id", ""))
+                inspection_time = str(row.get("inspection_time") or "")
+                wafer_key = int(row.get("wafer_key", 0) or 0)
+                out = {
+                    "sample_id": str(row.get("sample_id", "")),
+                    "defect_id": defect_id,
+                    "inspection_time": _normalize_inspection_time(
+                        row.get("inspection_time")
+                    ),
+                    "wafer_key": int(row.get("wafer_key", 0) or 0),
+                    "wafer_x": _optional_int(row.get("wafer_x")),
+                    "wafer_y": _optional_int(row.get("wafer_y")),
+                    "die_x": _optional_int(row.get("die_x")),
+                    "die_y": _optional_int(row.get("die_y")),
+                    "rough_bin": _optional_int(row.get("rough_bin")),
+                    "class_number": _optional_int(row.get("class_number")),
+                    "test_id": _optional_int(row.get("test_id")),
+                    "label": _optional_str(row.get("label")),
+                    "predicted_label": _optional_str(row.get("predicted_label")),
+                    "confidence": _optional_float(row.get("confidence")),
+                }
+                for column in columns:
+                    out[column] = image_bytes.get(
+                        (inspection_time, wafer_key, defect_id, column)
+                    )
+                yield out
 
         return await self._write_rows(
-            materialized_rows,
+            materialized_rows(),
             errors,
+            row_count=df.height,
             dataset_id=dataset_id,
             job_id=job_id,
             image_types=image_types,
@@ -171,9 +189,10 @@ class ScInspectionMaterializer:
 
     async def _write_rows(
         self,
-        rows: list[dict[str, Any]],
+        rows: Iterable[dict[str, Any]],
         errors: list[dict[str, str]],
         *,
+        row_count: int,
         dataset_id: str,
         job_id: str,
         image_types: list[str],
@@ -184,22 +203,13 @@ class ScInspectionMaterializer:
             )
             handle.close()
             cleanup.callback(_unlink_if_exists, handle.name)
-            table = _rows_to_table(rows)
-            pq.write_table(table, handle.name)
+            written_rows = _write_parquet_batches(rows, handle.name)
+            if written_rows != row_count:
+                raise RuntimeError(
+                    f"materializer row count changed while writing: "
+                    f"expected {row_count}, wrote {written_rows}"
+                )
             size_bytes = os.path.getsize(handle.name)
-            cache_dir = tempfile.mkdtemp(
-                prefix="finetune-hf-datasets-",
-                dir=self._temp_dir,
-            )
-            cleanup.callback(shutil.rmtree, cache_dir, ignore_errors=True)
-
-            datasets_module = import_module("datasets")
-            ds = datasets_module.load_dataset(
-                "parquet",
-                data_files=handle.name,
-                split="train",
-                cache_dir=cache_dir,
-            )
             schema = self._schema_registry.get(
                 SC_PATCH_IMAGE_MATERIALIZER.output_view.contract,
                 SC_PATCH_IMAGE_MATERIALIZER.output_view.schema_version,
@@ -224,23 +234,53 @@ class ScInspectionMaterializer:
                     DataPlaneShard(
                         uri=f"file://{handle.name}",
                         format="parquet",
-                        row_count=len(rows),
+                        row_count=row_count,
                         size_bytes=size_bytes,
                     ),
                 ),
-                row_count=len(rows),
+                row_count=row_count,
             )
             manifest.validate_transport()
             materialization = ScInspectionMaterialization(
                 parquet_path=handle.name,
-                cache_dir=cache_dir,
-                dataset=ds,
-                row_count=len(rows),
+                cache_dir=None,
+                dataset=_ParquetRowDataset(handle.name, row_count),
+                row_count=row_count,
                 manifest=manifest,
                 errors=errors,
             )
             cleanup.pop_all()
             return materialization
+
+
+def _write_parquet_batches(
+    rows: Iterable[dict[str, Any]],
+    path: str,
+) -> int:
+    writer: pq.ParquetWriter | None = None
+    batch: list[dict[str, Any]] = []
+    written_rows = 0
+    try:
+        for row in rows:
+            batch.append(row)
+            if len(batch) < _PARQUET_WRITE_BATCH_SIZE:
+                continue
+            table = _rows_to_table(batch)
+            writer = writer or pq.ParquetWriter(path, table.schema)
+            writer.write_table(table)
+            written_rows += len(batch)
+            batch.clear()
+        if batch:
+            table = _rows_to_table(batch)
+            writer = writer or pq.ParquetWriter(path, table.schema)
+            writer.write_table(table)
+            written_rows += len(batch)
+        if writer is None:
+            pq.write_table(_rows_to_table([]), path)
+        return written_rows
+    finally:
+        if writer is not None:
+            writer.close()
 
 
 def _unlink_if_exists(path: str) -> None:

@@ -5,4 +5,5 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type StreamInspectionMapPointsProgressApiV1ScInspectionsInspectionTimeWaferKeyMapPointsStreamGetPredictionsAnyOfItem = number | string;
+export type StreamInspectionMapPointsProgressApiV1ScInspectionsInspectionTimeWaferKeyMapPointsStreamGetPredictionsAnyOfItem =
+  number | string;

@@ -4,7 +4,7 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { CreateSubscriptionRequestFilterConfig } from './createSubscriptionRequestFilterConfig';
+import type { CreateSubscriptionRequestFilterConfig } from "./createSubscriptionRequestFilterConfig";
 
 export interface CreateSubscriptionRequest {
   workflow_type: string;

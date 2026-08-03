@@ -4,14 +4,14 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { PredictionResultResponseId } from './predictionResultResponseId';
-import type { PredictionResultResponseConfidence } from './predictionResultResponseConfidence';
-import type { PredictionResultResponseModelId } from './predictionResultResponseModelId';
-import type { PredictionResultResponseTarget } from './predictionResultResponseTarget';
-import type { PredictionResultResponseModelVersion } from './predictionResultResponseModelVersion';
-import type { PredictionResultResponseJobId } from './predictionResultResponseJobId';
-import type { PredictionResultResponseCreatedAt } from './predictionResultResponseCreatedAt';
-import type { PredictionResultResponseError } from './predictionResultResponseError';
+import type { PredictionResultResponseId } from "./predictionResultResponseId";
+import type { PredictionResultResponseConfidence } from "./predictionResultResponseConfidence";
+import type { PredictionResultResponseModelId } from "./predictionResultResponseModelId";
+import type { PredictionResultResponseTarget } from "./predictionResultResponseTarget";
+import type { PredictionResultResponseModelVersion } from "./predictionResultResponseModelVersion";
+import type { PredictionResultResponseJobId } from "./predictionResultResponseJobId";
+import type { PredictionResultResponseCreatedAt } from "./predictionResultResponseCreatedAt";
+import type { PredictionResultResponseError } from "./predictionResultResponseError";
 
 /**
  * Result of a single sample prediction.

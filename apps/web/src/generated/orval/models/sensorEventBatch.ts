@@ -4,8 +4,8 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { SensorEventBatchEventsItem } from './sensorEventBatchEventsItem';
-import type { SensorEventBatchWatermark } from './sensorEventBatchWatermark';
+import type { SensorEventBatchEventsItem } from "./sensorEventBatchEventsItem";
+import type { SensorEventBatchWatermark } from "./sensorEventBatchWatermark";
 
 export interface SensorEventBatch {
   sensor_id: string;

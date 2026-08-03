@@ -31,6 +31,27 @@ describe("ScMapPanelBinned unified map", () => {
     expect(wrapper.emitted("box-select")?.at(-1)?.[0]).toEqual(zoom);
   });
 
+  it("forwards lasso selection and always clears selection on the native clear event", async () => {
+    const { wrapper } = await mountWithProviders(ScMapPanelBinned);
+    const map = wrapper.find('[data-testid="sc-unified-map"]');
+    const selection = {
+      points: [
+        { x: 0, y: 0 },
+        { x: 10, y: 0 },
+        { x: 5, y: 10 },
+      ],
+      region: { x: 0, y: 0, w: 10, h: 10 },
+    };
+
+    map.element.dispatchEvent(new CustomEvent("lasso-select", { detail: selection }));
+    map.element.dispatchEvent(new CustomEvent("clear-selection"));
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.emitted("lasso-select")?.at(-1)?.[0]).toEqual(selection);
+    expect(wrapper.emitted("clear-selection")).toEqual([[]]);
+    expect(wrapper.emitted("zoom-in")).toBeUndefined();
+  });
+
   it("groups map interactions into one compact dropdown", async () => {
     const { wrapper } = await mountWithProviders(ScMapPanelBinned);
     const dropdown = wrapper.findComponent(NDropdown);
@@ -39,9 +60,15 @@ describe("ScMapPanelBinned unified map", () => {
     );
 
     expect(wrapper.find('[data-testid="sc-map-tools-button"]').exists()).toBe(true);
-    expect(labels).toEqual(["Box selection (append)", "Drag to zoom", "Pan map"]);
+    expect(labels).toEqual([
+      "Box selection (append)",
+      "Lasso selection (append)",
+      "Drag to zoom",
+      "Pan map",
+    ]);
     expect(wrapper.find('[data-testid="sc-map-zoom-in-button"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="sc-map-zoom-out-button"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="sc-map-reset-zoom-button"]').exists()).toBe(true);
   });
 
   it("offers one-step zoom in and zoom out controls", async () => {
@@ -69,6 +96,10 @@ describe("ScMapPanelBinned unified map", () => {
     });
 
     await wrapper.setProps({ zoom: { x: -50, y: -50, w: 100, h: 100 } });
+    await wrapper.find('[data-testid="sc-map-reset-zoom-button"]').trigger("click");
+    await wrapper.vm.$nextTick();
+    expect(wrapper.emitted("zoom-in")?.at(-1)?.[0]).toBeNull();
+
     await wrapper.find('[data-testid="sc-map-zoom-out-button"]').trigger("click");
     await wrapper.vm.$nextTick();
     expect(wrapper.emitted("zoom-in")?.at(-1)?.[0]).toBeNull();
@@ -98,6 +129,9 @@ describe("ScMapPanelBinned unified map", () => {
     wrapper.findComponent(NDropdown).vm.$emit("select", "zoomin");
     await wrapper.vm.$nextTick();
     expect(element.interactionMode).toBe("zoomin");
+    wrapper.findComponent(NDropdown).vm.$emit("select", "lasso");
+    await wrapper.vm.$nextTick();
+    expect(element.interactionMode).toBe("lasso");
   });
 
   it("keeps the current map visible while a pan redraw is pending", async () => {

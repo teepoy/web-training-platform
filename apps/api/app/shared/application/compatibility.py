@@ -55,11 +55,8 @@ UPLOAD_TEMPLATE_DEFINITIONS: tuple[UploadTemplateDefinition, ...] = (
     UploadTemplateDefinition(
         id="image-embedder",
         name="Image Embedder",
-        dataset_types=(
-            "image_classification",
-            "image_vqa",
-        ),
-        task_types=("classification", "vqa"),
+        dataset_types=("image_classification",),
+        task_types=("classification",),
         label_space_mode="forbidden",
         requires_embedding_metadata=True,
         profiles=(
@@ -81,31 +78,6 @@ UPLOAD_TEMPLATE_DEFINITIONS: tuple[UploadTemplateDefinition, ...] = (
             },
         ),
     ),
-    UploadTemplateDefinition(
-        id="vqa",
-        name="VQA",
-        dataset_types=("image_vqa",),
-        task_types=("vqa",),
-        label_space_mode="forbidden",
-        profiles=(
-            {
-                "id": "dspy-vqa-v1",
-                "name": "DSPy VQA",
-                "model_spec": {
-                    "framework": "dspy",
-                    "architecture": "vqa-program",
-                    "base_model": "gpt-4o-mini",
-                },
-                "default_prediction_targets": ["vqa"],
-            },
-            {
-                "id": "custom",
-                "name": "Custom",
-                "model_spec": {},
-                "default_prediction_targets": ["vqa"],
-            },
-        ),
-    ),
 )
 
 
@@ -119,8 +91,6 @@ def validate_dataset_contract(
         )
     if task_type == "classification" and not label_space:
         raise ValueError("classification datasets require a non-empty label space")
-    if task_type == "vqa" and label_space:
-        raise ValueError("vqa datasets must not define a label space")
 
 
 def validate_model_prediction(
@@ -133,11 +103,6 @@ def validate_model_prediction(
     validate_dataset_contract(
         dataset.dataset_type, dataset.task_spec.task_type, dataset.task_spec.label_space
     )
-
-    if target == "vqa" and dataset.task_spec.task_type != "vqa":
-        raise ValueError("target 'vqa' requires dataset task_type 'vqa'")
-    if target != "vqa" and dataset.task_spec.task_type == "vqa":
-        raise ValueError("dataset task_type 'vqa' requires target 'vqa'")
 
     if target not in supported_targets:
         raise ValueError(f"model does not support prediction target '{target}'")
@@ -170,9 +135,7 @@ def validate_model_prediction(
 
 
 def validate_model_review(dataset: Dataset, model_metadata: dict[str, object]) -> None:
-    supported_targets = _as_str_list(model_metadata.get("prediction_targets"))
-    preferred_target = "vqa" if "vqa" in supported_targets else "image_classification"
-    validate_model_prediction(dataset, model_metadata, preferred_target)
+    validate_model_prediction(dataset, model_metadata, "image_classification")
 
 
 def get_upload_template(template_id: str) -> UploadTemplateDefinition:
@@ -238,9 +201,6 @@ def validate_upload_metadata(metadata: dict[str, object]) -> dict[str, object]:
         raise ValueError(
             "image-embedder uploads only support prediction target 'embedding'"
         )
-    if template.id == "vqa" and prediction_targets != ["vqa"]:
-        raise ValueError("vqa uploads only support prediction target 'vqa'")
-
     return {
         **metadata,
         "compatibility": {

@@ -59,7 +59,8 @@ def create_test_dataset(
         client: An active ``TestClient`` instance.
         name: Human-readable dataset name.
         labels: Label space for the dataset (``task_spec.label_space``).
-        dataset_type: One of ``"image_classification"`` or ``"image_vqa"``.
+        dataset_type: An implemented dataset type such as
+            ``"image_classification"`` or ``"image_sc"``.
 
     Returns:
         The JSON response dict containing at least ``id``, ``name``,

@@ -6,5 +6,5 @@
  */
 
 export type SimilaritySearchApiV1DatasetsDatasetIdSimilaritySampleIdGetParams = {
-k?: number;
+  k?: number;
 };

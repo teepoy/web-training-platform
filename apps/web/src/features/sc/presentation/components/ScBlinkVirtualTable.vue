@@ -566,7 +566,7 @@ async function handleSampleClick(sample: BlinkSample, event: MouseEvent): Promis
     shift: false,
     ctrl: event.ctrlKey,
     meta: event.metaKey,
-    selectionMode: ctrlOrMeta ? "toggle" : "replace",
+    selectionMode: ctrlOrMeta || isSelected(targetId) ? "toggle" : "replace",
   });
 }
 

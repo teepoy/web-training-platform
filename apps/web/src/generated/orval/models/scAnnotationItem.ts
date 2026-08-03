@@ -4,7 +4,7 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { ScAnnotationItemLabel } from './scAnnotationItemLabel';
+import type { ScAnnotationItemLabel } from "./scAnnotationItemLabel";
 
 export interface ScAnnotationItem {
   defect_id: string;

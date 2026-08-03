@@ -6,8 +6,8 @@
  */
 
 export type ListModelsApiV1ModelsGetParams = {
-dataset_id?: string | null;
-job_id?: string | null;
-offset?: number;
-limit?: number;
+  dataset_id?: string | null;
+  job_id?: string | null;
+  offset?: number;
+  limit?: number;
 };

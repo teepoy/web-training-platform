@@ -4,8 +4,8 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { ServiceStatusLatencyMs } from './serviceStatusLatencyMs';
-import type { ServiceStatusEndpoint } from './serviceStatusEndpoint';
+import type { ServiceStatusLatencyMs } from "./serviceStatusLatencyMs";
+import type { ServiceStatusEndpoint } from "./serviceStatusEndpoint";
 
 export interface ServiceStatus {
   name: string;

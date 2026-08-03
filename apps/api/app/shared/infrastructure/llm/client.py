@@ -1,11 +1,7 @@
 """LLM service layer backed by litellm.
 
-Provides two public interfaces:
-
-1. ``OpenAICompatibleLlmClient`` — multimodal VQA client (used by prediction
-   runtime and DI container).
-2. ``call_llm`` — async helper for agent tool-calling loops (used by
-   ``ClassifyAgent`` and ``GlobalAgent``).
+Provides the ``call_llm`` async helper for agent tool-calling loops used by
+``ClassifyAgent`` and ``GlobalAgent``.
 
 litellm handles provider routing via the model string:
   - ``gpt-4o-mini``              → OpenAI
@@ -19,7 +15,6 @@ endpoint (same behaviour as the previous raw-httpx implementation).
 
 from __future__ import annotations
 
-import base64
 import logging
 from typing import Any
 
@@ -30,75 +25,6 @@ _logger = logging.getLogger(__name__)
 
 # Suppress litellm's noisy default logging (it logs full payloads at INFO)
 setattr(litellm, "suppress_debug_info", True)
-
-
-class LlmClientError(Exception):
-    """Raised when the configured LLM provider returns an error."""
-
-
-class OpenAICompatibleLlmClient:
-    """Multimodal LLM client for VQA generation, backed by litellm."""
-
-    def __init__(
-        self,
-        base_url: str,
-        api_key: str,
-        model: str,
-        timeout_seconds: float = 30.0,
-    ) -> None:
-        self._base_url = base_url.rstrip("/") if base_url else ""
-        self._api_key = api_key
-        self._model = model
-        self._timeout_seconds = timeout_seconds
-
-    async def answer_vqa(
-        self,
-        *,
-        image_bytes: bytes,
-        question: str,
-        system_prompt: str,
-    ) -> str:
-        if not self._api_key:
-            raise LlmClientError("LLM api_key is not configured")
-        if not self._model:
-            raise LlmClientError("LLM model is not configured")
-
-        data_uri = "data:image/jpeg;base64," + base64.b64encode(image_bytes).decode(
-            "ascii"
-        )
-        messages: list[dict[str, Any]] = [
-            {"role": "system", "content": system_prompt},
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": question},
-                    {"type": "image_url", "image_url": {"url": data_uri}},
-                ],
-            },
-        ]
-
-        kwargs: dict[str, Any] = {
-            "model": self._model,
-            "messages": messages,
-            "temperature": 0.2,
-            "timeout": self._timeout_seconds,
-            "api_key": self._api_key,
-        }
-        if self._base_url:
-            kwargs["api_base"] = self._base_url
-
-        try:
-            response: Any = await litellm.acompletion(**kwargs)
-        except Exception as exc:
-            raise LlmClientError(f"LLM request failed: {exc}") from exc
-
-        choices = response.choices
-        if not choices:
-            raise LlmClientError("LLM response has no choices")
-        content = choices[0].message.content
-        if not isinstance(content, str) or not content.strip():
-            raise LlmClientError("LLM response content is empty")
-        return content.strip()
 
 
 # ---------------------------------------------------------------------------

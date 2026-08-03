@@ -30,7 +30,6 @@ _INTEGRATION_TEST_PATH_PREFIXES = (
     "app/modules/jobs/task_tracker/tests/",
     "app/modules/prediction/tests/test_prediction_review.py",
     "app/modules/prediction/tests/test_prediction_routes.py",
-    "app/modules/prediction/tests/test_vqa_runtime.py",
     "app/modules/sc/tests/test_sc_import_endpoint.py",
     "app/modules/sc/tests/test_sc_import_service.py",
     "app/modules/sc/tests/test_sc_import_sparse_bytes.py",

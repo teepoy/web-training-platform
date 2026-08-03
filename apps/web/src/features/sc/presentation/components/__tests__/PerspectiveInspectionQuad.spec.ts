@@ -3,6 +3,14 @@ import { mountWithProviders } from "@/testing";
 import PerspectiveInspectionQuad from "../PerspectiveInspectionQuad.vue";
 
 vi.mock("@perspective-dev/viewer/inline", () => ({}));
+vi.mock("vue-echarts", () => ({
+  default: {
+    name: "VChart",
+    props: { option: Object },
+    emits: ["click"],
+    template: '<div data-testid="group-distribution-chart" />',
+  },
+}));
 
 const modelMock = vi.hoisted(() => ({
   mapArrowData: { value: null },
@@ -22,6 +30,7 @@ const modelMock = vi.hoisted(() => ({
   setTableSelectedDefectIds: vi.fn(),
   setReviewMode: vi.fn(),
   queryBoxSelection: vi.fn(),
+  queryLassoSelection: vi.fn(),
   queryLegendSelection: vi.fn(),
   applyMapSelection: vi.fn(),
   appendMapSelection: vi.fn(),
@@ -86,6 +95,7 @@ describe("PerspectiveInspectionQuad — highlight watcher", () => {
     vi.useFakeTimers();
     vi.clearAllMocks();
     modelMock.queryBoxSelection.mockResolvedValue([2, 3]);
+    modelMock.queryLassoSelection.mockResolvedValue([4, 5]);
     modelMock.appendMapSelection.mockResolvedValue([1, 2, 3]);
     modelMock.queryLegendSelection.mockResolvedValue([8, 9]);
     modelMock.highlightDefectsForIds.mockResolvedValue([]);
@@ -119,7 +129,7 @@ describe("PerspectiveInspectionQuad — highlight watcher", () => {
     expect(mapPanel.exists()).toBe(true);
   });
 
-  it("appends box selection results before emitting map filter ids", async () => {
+  it("appends box selection results before emitting a typed map selection change", async () => {
     const region = { x: 10, y: 20, w: 30, h: 40 };
     const { wrapper } = await mountWithProviders(PerspectiveInspectionQuad, {
       props: {
@@ -137,15 +147,19 @@ describe("PerspectiveInspectionQuad — highlight watcher", () => {
     expect(modelMock.appendMapSelection).toHaveBeenCalledWith([2, 3]);
     expect(modelMock.applyMapSelection).not.toHaveBeenCalled();
     await vi.waitFor(() => {
-      expect(wrapper.emitted("map-filter-change")).toEqual([[{ ids: [1, 2, 3], region }]]);
+      expect(wrapper.emitted("map-selection-change")).toEqual([
+        [{ source: "box", mode: "append", ids: [1, 2, 3], region }],
+      ]);
     });
   });
 
-  it("batches queued box selection ids into one table update", async () => {
+  it("serializes repeated box selections and refreshes after each append", async () => {
     const firstRegion = { x: 10, y: 20, w: 30, h: 40 };
     const secondRegion = { x: 50, y: 60, w: 70, h: 80 };
     modelMock.queryBoxSelection.mockResolvedValueOnce([2, 3]).mockResolvedValueOnce([4, 5]);
-    modelMock.appendMapSelection.mockResolvedValueOnce([1, 2, 3, 4, 5]);
+    modelMock.appendMapSelection
+      .mockResolvedValueOnce([1, 2, 3])
+      .mockResolvedValueOnce([1, 2, 3, 4, 5]);
     const { wrapper } = await mountWithProviders(PerspectiveInspectionQuad, {
       props: {
         ...requiredProps,
@@ -157,19 +171,105 @@ describe("PerspectiveInspectionQuad — highlight watcher", () => {
     const mapPanel = wrapper.findComponent({ name: "ScMapPanelBinned" });
     mapPanel.vm.$emit("box-select", firstRegion);
     mapPanel.vm.$emit("box-select", secondRegion);
-    await Promise.resolve();
+    await vi.waitFor(() => {
+      expect(modelMock.queryBoxSelection).toHaveBeenNthCalledWith(1, "die", firstRegion);
+      expect(modelMock.queryBoxSelection).toHaveBeenNthCalledWith(2, "die", secondRegion);
+      expect(modelMock.appendMapSelection).toHaveBeenNthCalledWith(1, [2, 3]);
+      expect(modelMock.appendMapSelection).toHaveBeenNthCalledWith(2, [4, 5]);
+      expect(wrapper.emitted("map-selection-change")).toEqual([
+        [{ source: "box", mode: "append", ids: [1, 2, 3], region: firstRegion }],
+        [{ source: "box", mode: "append", ids: [1, 2, 3, 4, 5], region: secondRegion }],
+      ]);
+    });
+  });
+
+  it("appends lasso selection results", async () => {
+    const selection = {
+      points: [
+        { x: 0, y: 0 },
+        { x: 10, y: 0 },
+        { x: 5, y: 10 },
+      ],
+      region: { x: 0, y: 0, w: 10, h: 10 },
+    };
+    modelMock.appendMapSelection.mockResolvedValueOnce([1, 4, 5]);
+    const { wrapper } = await mountWithProviders(PerspectiveInspectionQuad, {
+      props: {
+        ...requiredProps,
+        variant: "preview",
+        activeMapTab: "wafer",
+      },
+    });
+
+    wrapper.findComponent({ name: "ScMapPanelBinned" }).vm.$emit("lasso-select", selection);
+
+    await vi.waitFor(() => {
+      expect(modelMock.queryLassoSelection).toHaveBeenCalledWith("wafer", selection);
+      expect(modelMock.appendMapSelection).toHaveBeenCalledWith([4, 5]);
+      expect(wrapper.emitted("map-selection-change")).toEqual([
+        [
+          {
+            source: "lasso",
+            mode: "append",
+            ids: [1, 4, 5],
+            region: selection.region,
+          },
+        ],
+      ]);
+    });
+  });
+
+  it("clears map selection so the sample table returns to its full data source", async () => {
+    const { wrapper } = await mountWithProviders(PerspectiveInspectionQuad, {
+      props: {
+        ...requiredProps,
+        variant: "preview",
+      },
+    });
+
+    wrapper.findComponent({ name: "ScMapPanelBinned" }).vm.$emit("clear-selection");
+
+    await vi.waitFor(() => {
+      expect(modelMock.clearMapSelection).toHaveBeenCalledOnce();
+      expect(wrapper.emitted("map-selection-change")).toEqual([
+        [{ source: "clear", mode: "clear", ids: [] }],
+      ]);
+    });
+  });
+
+  it("does not reapply an in-flight area selection after clear", async () => {
+    const region = { x: 10, y: 20, w: 30, h: 40 };
+    let resolveQuery: ((ids: number[]) => void) | undefined;
+    modelMock.queryBoxSelection.mockReturnValueOnce(
+      new Promise<number[]>((resolve) => {
+        resolveQuery = resolve;
+      }),
+    );
+    const { wrapper } = await mountWithProviders(PerspectiveInspectionQuad, {
+      props: {
+        ...requiredProps,
+        variant: "preview",
+      },
+    });
+    const mapPanel = wrapper.findComponent({ name: "ScMapPanelBinned" });
+
+    mapPanel.vm.$emit("box-select", region);
+    await vi.waitFor(() => {
+      expect(modelMock.queryBoxSelection).toHaveBeenCalledOnce();
+    });
+    mapPanel.vm.$emit("clear-selection");
+    await vi.waitFor(() => {
+      expect(modelMock.clearMapSelection).toHaveBeenCalledOnce();
+    });
+
+    resolveQuery?.([2, 3]);
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(modelMock.queryBoxSelection).toHaveBeenNthCalledWith(1, "die", firstRegion);
-    expect(modelMock.queryBoxSelection).toHaveBeenNthCalledWith(2, "die", secondRegion);
-    expect(modelMock.appendMapSelection).toHaveBeenCalledTimes(1);
-    expect(modelMock.appendMapSelection).toHaveBeenCalledWith([2, 3, 4, 5]);
-    await vi.waitFor(() => {
-      expect(wrapper.emitted("map-filter-change")).toEqual([
-        [{ ids: [1, 2, 3, 4, 5], region: secondRegion }],
-      ]);
-    });
+    expect(modelMock.appendMapSelection).not.toHaveBeenCalled();
+    expect(wrapper.emitted("map-selection-change")).toEqual([
+      [{ source: "clear", mode: "clear", ids: [] }],
+    ]);
   });
 
   it("drains a second box selection after the first table update completes", async () => {
@@ -207,14 +307,13 @@ describe("PerspectiveInspectionQuad — highlight watcher", () => {
 
     expect(modelMock.appendMapSelection).toHaveBeenNthCalledWith(1, [2, 3]);
     expect(modelMock.appendMapSelection).toHaveBeenNthCalledWith(2, [4, 5]);
-    expect(wrapper.emitted("map-filter-change")).toEqual([
-      [{ ids: [1, 2, 3], region: firstRegion }],
-      [{ ids: [1, 2, 3, 4, 5], region: secondRegion }],
+    expect(wrapper.emitted("map-selection-change")).toEqual([
+      [{ source: "box", mode: "append", ids: [1, 2, 3], region: firstRegion }],
+      [{ source: "box", mode: "append", ids: [1, 2, 3, 4, 5], region: secondRegion }],
     ]);
   });
 
   it("keeps legend selection as replace semantics", async () => {
-    const region = { x: 0, y: 0, w: 0, h: 0 };
     const { wrapper } = await mountWithProviders(PerspectiveInspectionQuad, {
       props: {
         ...requiredProps,
@@ -222,17 +321,152 @@ describe("PerspectiveInspectionQuad — highlight watcher", () => {
       },
     });
 
-    wrapper
-      .findComponent({ name: "ScMapPanelBinned" })
-      .vm.$emit("legend-select", { ids: [], region, key: 7 });
-    await Promise.resolve();
-    await Promise.resolve();
-
-    expect(modelMock.queryLegendSelection).toHaveBeenCalledWith(7);
-    expect(modelMock.applyMapSelection).toHaveBeenCalledWith([8, 9]);
-    expect(modelMock.appendMapSelection).not.toHaveBeenCalled();
+    wrapper.findComponent({ name: "ScMapPanelBinned" }).vm.$emit("legend-select", 7);
     await vi.waitFor(() => {
-      expect(wrapper.emitted("map-filter-change")).toEqual([[{ ids: [8, 9], region, key: 7 }]]);
+      expect(modelMock.queryLegendSelection).toHaveBeenCalledWith(7);
+      expect(modelMock.applyMapSelection).toHaveBeenCalledWith([8, 9]);
+      expect(modelMock.appendMapSelection).not.toHaveBeenCalled();
+      expect(wrapper.emitted("map-selection-change")).toEqual([
+        [{ source: "legend", mode: "replace", ids: [8, 9], groupKey: 7 }],
+      ]);
     });
+  });
+
+  it("applies a box after a legend as an append to the replaced selection", async () => {
+    const region = { x: 10, y: 20, w: 30, h: 40 };
+    modelMock.appendMapSelection.mockResolvedValueOnce([2, 3, 8, 9]);
+    const { wrapper } = await mountWithProviders(PerspectiveInspectionQuad, {
+      props: {
+        ...requiredProps,
+        variant: "preview",
+      },
+    });
+    const mapPanel = wrapper.findComponent({ name: "ScMapPanelBinned" });
+
+    mapPanel.vm.$emit("legend-select", 7);
+    mapPanel.vm.$emit("box-select", region);
+
+    await vi.waitFor(() => {
+      expect(modelMock.applyMapSelection).toHaveBeenCalledWith([8, 9]);
+      expect(modelMock.appendMapSelection).toHaveBeenCalledWith([2, 3]);
+      expect(wrapper.emitted("map-selection-change")).toEqual([
+        [{ source: "legend", mode: "replace", ids: [8, 9], groupKey: 7 }],
+        [{ source: "box", mode: "append", ids: [2, 3, 8, 9], region }],
+      ]);
+    });
+    expect(modelMock.applyMapSelection.mock.invocationCallOrder[0]).toBeLessThan(
+      modelMock.appendMapSelection.mock.invocationCallOrder[0] ?? 0,
+    );
+  });
+
+  it("cancels a slow box when a later legend replaces the selection", async () => {
+    const region = { x: 10, y: 20, w: 30, h: 40 };
+    let resolveBoxQuery: ((ids: number[]) => void) | undefined;
+    modelMock.queryBoxSelection.mockReturnValueOnce(
+      new Promise<number[]>((resolve) => {
+        resolveBoxQuery = resolve;
+      }),
+    );
+    const { wrapper } = await mountWithProviders(PerspectiveInspectionQuad, {
+      props: {
+        ...requiredProps,
+        variant: "preview",
+      },
+    });
+    const mapPanel = wrapper.findComponent({ name: "ScMapPanelBinned" });
+
+    mapPanel.vm.$emit("box-select", region);
+    await vi.waitFor(() => {
+      expect(modelMock.queryBoxSelection).toHaveBeenCalledOnce();
+    });
+    mapPanel.vm.$emit("legend-select", 7);
+
+    await vi.waitFor(() => {
+      expect(modelMock.applyMapSelection).toHaveBeenCalledWith([8, 9]);
+      expect(wrapper.emitted("map-selection-change")).toEqual([
+        [{ source: "legend", mode: "replace", ids: [8, 9], groupKey: 7 }],
+      ]);
+    });
+
+    resolveBoxQuery?.([2, 3]);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(modelMock.appendMapSelection).not.toHaveBeenCalled();
+  });
+
+  it("toggles chart selection independently using the legend group query", async () => {
+    modelMock.legendGroups.value = {
+      "7": { count: 2, defectIds: [] },
+      "8": { count: 1, defectIds: [] },
+    };
+    const { wrapper } = await mountWithProviders(PerspectiveInspectionQuad, {
+      props: {
+        ...requiredProps,
+        variant: "reclassify",
+        legendGroupBy: "class",
+      },
+    });
+    const chart = wrapper.findComponent({ name: "VChart" });
+
+    chart.vm.$emit("click", { dataIndex: 0 });
+    await vi.waitFor(() => {
+      expect(modelMock.queryLegendSelection).toHaveBeenCalledWith("7");
+      expect(modelMock.applyMapSelection).toHaveBeenCalledWith([8, 9]);
+    });
+
+    const selectedOption = chart.props("option") as {
+      series: Array<{ data: Array<{ itemStyle: { opacity: number; borderWidth: number } }> }>;
+    };
+    expect(selectedOption.series[0]?.data[0]?.itemStyle).toMatchObject({
+      opacity: 1,
+      borderWidth: 2,
+    });
+    expect(selectedOption.series[0]?.data[1]?.itemStyle.opacity).toBe(0.35);
+
+    chart.vm.$emit("click", { dataIndex: 0 });
+    await vi.waitFor(() => {
+      expect(modelMock.applyMapSelection).toHaveBeenLastCalledWith([]);
+    });
+    expect(modelMock.queryLegendSelection).toHaveBeenCalledTimes(1);
+    expect(wrapper.emitted("map-selection-change")).toEqual([
+      [{ source: "bar-chart", mode: "replace", ids: [8, 9], groupKey: "7" }],
+      [{ source: "bar-chart", mode: "clear", ids: [], groupKey: null }],
+    ]);
+
+    modelMock.legendGroups.value = null;
+  });
+
+  it("clears the chart marker when another map interaction replaces its selection", async () => {
+    modelMock.legendGroups.value = {
+      "7": { count: 2, defectIds: [] },
+      "8": { count: 1, defectIds: [] },
+    };
+    const { wrapper } = await mountWithProviders(PerspectiveInspectionQuad, {
+      props: {
+        ...requiredProps,
+        variant: "reclassify",
+        legendGroupBy: "class",
+      },
+    });
+    const chart = wrapper.findComponent({ name: "VChart" });
+
+    chart.vm.$emit("click", { dataIndex: 0 });
+    await vi.waitFor(() => {
+      const option = chart.props("option") as {
+        series: Array<{ data: Array<{ itemStyle: { opacity: number } }> }>;
+      };
+      expect(option.series[0]?.data[1]?.itemStyle.opacity).toBe(0.35);
+    });
+
+    wrapper.findComponent({ name: "ScMapPanelBinned" }).vm.$emit("clear-selection");
+    await vi.waitFor(() => {
+      const option = chart.props("option") as {
+        series: Array<{ data: Array<{ itemStyle: { opacity: number; borderWidth: number } }> }>;
+      };
+      expect(option.series[0]?.data[0]?.itemStyle).toMatchObject({ opacity: 1, borderWidth: 0 });
+      expect(option.series[0]?.data[1]?.itemStyle.opacity).toBe(1);
+    });
+
+    modelMock.legendGroups.value = null;
   });
 });

@@ -4,28 +4,32 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { GetInspectionMapPointsApiV1ScInspectionsInspectionTimeWaferKeyMapPointsGetPredictionsAnyOfItem } from './getInspectionMapPointsApiV1ScInspectionsInspectionTimeWaferKeyMapPointsGetPredictionsAnyOfItem';
-import type { GetInspectionMapPointsApiV1ScInspectionsInspectionTimeWaferKeyMapPointsGetAnnotationsAnyOfItem } from './getInspectionMapPointsApiV1ScInspectionsInspectionTimeWaferKeyMapPointsGetAnnotationsAnyOfItem';
+import type { GetInspectionMapPointsApiV1ScInspectionsInspectionTimeWaferKeyMapPointsGetPredictionsAnyOfItem } from "./getInspectionMapPointsApiV1ScInspectionsInspectionTimeWaferKeyMapPointsGetPredictionsAnyOfItem";
+import type { GetInspectionMapPointsApiV1ScInspectionsInspectionTimeWaferKeyMapPointsGetAnnotationsAnyOfItem } from "./getInspectionMapPointsApiV1ScInspectionsInspectionTimeWaferKeyMapPointsGetAnnotationsAnyOfItem";
 
 export type GetInspectionMapPointsApiV1ScInspectionsInspectionTimeWaferKeyMapPointsGetParams = {
-reticleXDieCount?: number;
-reticleYDieCount?: number;
-reticleXDieShift?: number;
-reticleYDieShift?: number;
-sampled?: boolean;
-gridSizeNm?: number;
-zoomX?: number | null;
-zoomY?: number | null;
-zoomW?: number | null;
-zoomH?: number | null;
-mode?: 'wafer' | 'die' | 'reticle' | null;
-class_numbers?: number[] | null;
-rough_bins?: number[] | null;
-predictions?: GetInspectionMapPointsApiV1ScInspectionsInspectionTimeWaferKeyMapPointsGetPredictionsAnyOfItem[] | null;
-annotations?: GetInspectionMapPointsApiV1ScInspectionsInspectionTimeWaferKeyMapPointsGetAnnotationsAnyOfItem[] | null;
-test_ids?: number[] | null;
-adders?: number[] | null;
-cluster_ids?: number[] | null;
-legend_group_by?: 'class' | 'bin' | 'annotation' | 'prediction' | null;
-sample_filter?: string | null;
+  reticleXDieCount?: number;
+  reticleYDieCount?: number;
+  reticleXDieShift?: number;
+  reticleYDieShift?: number;
+  sampled?: boolean;
+  gridSizeNm?: number;
+  zoomX?: number | null;
+  zoomY?: number | null;
+  zoomW?: number | null;
+  zoomH?: number | null;
+  mode?: "wafer" | "die" | "reticle" | null;
+  class_numbers?: number[] | null;
+  rough_bins?: number[] | null;
+  predictions?:
+    | GetInspectionMapPointsApiV1ScInspectionsInspectionTimeWaferKeyMapPointsGetPredictionsAnyOfItem[]
+    | null;
+  annotations?:
+    | GetInspectionMapPointsApiV1ScInspectionsInspectionTimeWaferKeyMapPointsGetAnnotationsAnyOfItem[]
+    | null;
+  test_ids?: number[] | null;
+  adders?: number[] | null;
+  cluster_ids?: number[] | null;
+  legend_group_by?: "class" | "bin" | "annotation" | "prediction" | null;
+  sample_filter?: string | null;
 };

@@ -3,9 +3,7 @@ import { registerDatasetSchema } from "@/features/datasets/presentation/pages/sc
 
 export const imageScSchema = {
   datasetType: "image_sc",
-  // NOTE: "patch" will be added to TaskType union in Task 6.
-  // Expected temporary type error:
-  taskType: "patch" as "patch",
+  taskType: "sc",
   viewTypes: ["patch_image_v1", "review_image_v1"],
   annotationType: "none" as const,
   shimComponent: defineAsyncComponent(() => import("./ListShim.vue")),

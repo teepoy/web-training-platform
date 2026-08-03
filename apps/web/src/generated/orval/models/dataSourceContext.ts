@@ -4,7 +4,7 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { DataSourceContextPath } from './dataSourceContextPath';
+import type { DataSourceContextPath } from "./dataSourceContextPath";
 
 /**
  * Data source that reads from an injected Vue provide/inject context.

@@ -4,10 +4,10 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { RunPredictionRequestSampleIds } from './runPredictionRequestSampleIds';
-import type { RunPredictionRequestModelVersion } from './runPredictionRequestModelVersion';
-import type { RunPredictionRequestPrompt } from './runPredictionRequestPrompt';
-import type { RunPredictionRequestPredictorId } from './runPredictionRequestPredictorId';
+import type { RunPredictionRequestSampleIds } from "./runPredictionRequestSampleIds";
+import type { RunPredictionRequestModelVersion } from "./runPredictionRequestModelVersion";
+import type { RunPredictionRequestPrompt } from "./runPredictionRequestPrompt";
+import type { RunPredictionRequestPredictorId } from "./runPredictionRequestPredictorId";
 
 /**
  * Request to run predictions on a dataset using a model.

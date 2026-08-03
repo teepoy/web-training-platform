@@ -27,12 +27,12 @@ There are no API-side direct worker-client calls outside `**/flows/**` and
 The `rg -n "predict_batch|embed_batch" apps/api/app --glob '!**/flows/**' --glob '!**/workers/**'`
 results fall into these categories:
 
-| Category                                           | Examples                                                                        |
-| -------------------------------------------------- | ------------------------------------------------------------------------------- |
-| Protocol / interface definitions (`runtime.py`)    | `Predictor.predict_batch`                                                       |
-| Concrete type implementations (not worker clients) | `clip.py:predict_batch`, classification/detection/VQA predictor implementations |
-| Runtime flow implementations                       | `prediction/flows/**`                                                           |
-| Tests                                              | prediction flow and predictor tests                                             |
+| Category                                           | Examples                                                        |
+| -------------------------------------------------- | --------------------------------------------------------------- |
+| Protocol / interface definitions (`runtime.py`)    | `Predictor.predict_batch`                                       |
+| Concrete type implementations (not worker clients) | SC predictor implementations under the current runtime boundary |
+| Runtime flow implementations                       | `prediction/flows/**`                                           |
+| Tests                                              | prediction flow and predictor tests                             |
 
 ---
 
@@ -63,8 +63,8 @@ is the only route that is genuinely sync-and-latency-sensitive in production.
 **Scope B should address this route** by either:
 
 1. Converting it to a job-based pattern (returns a job ID, client polls for result), or
-2. Accepting the latency if the use-case is explicitly interactive (e.g., annotation assist
-   where the user is waiting for a single-sample result).
+2. Accepting the latency if the use-case is explicitly interactive and the user is waiting
+   for a single-sample result.
 
 ## 3. Follow-up Scope B Trigger Criteria
 
@@ -82,7 +82,7 @@ Scope B (sync→async route migration) is justified if **any** of the following 
    A job queue would serialize and back-pressure these requests gracefully.
 
 4. **Client timeout complaints**: Frontend or SDK clients report `504 Gateway Timeout` errors
-   on `/predictions/single` for large models (e.g., VQA with CLIP-ViT-Large).
+   on `/predictions/single` for large models.
 
 If none of these conditions are met, Scope B is optional and can be deferred indefinitely.
 The current architecture is correct for the scale it targets.

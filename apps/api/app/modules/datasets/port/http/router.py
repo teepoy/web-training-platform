@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import logging
 from collections.abc import AsyncIterator, Callable
 from typing import Annotated
@@ -53,7 +52,6 @@ from app.modules.datasets.port.http.schemas import (
     CreateDatasetRequest,
     DatasetStatusResponse,
     CreateSampleRequest,
-    ImportVqaJsonlResponse,
     LatestAnnotation,
     PersistExportResponse,
     SampleWithLabels,
@@ -232,12 +230,9 @@ async def create_dataset(
                 LabelStudioClient as _LSC,
             )
 
-            if payload.task_spec.task_type == "vqa":
-                label_config = _LSC.generate_vqa_config()
-            else:
-                label_config = _LSC.generate_image_classification_config(
-                    payload.task_spec.label_space
-                )
+            label_config = _LSC.generate_image_classification_config(
+                payload.task_spec.label_space
+            )
             project = await ls_client.create_project(payload.name, label_config)
             ls_project_id = str(project.get("id", ""))
             if not ls_project_id:
@@ -461,12 +456,9 @@ async def update_label_space(
                 LabelStudioClient as _LSC,
             )
 
-            if dataset.task_spec.task_type == "vqa":
-                label_config = _LSC.generate_vqa_config()
-            else:
-                label_config = _LSC.generate_image_classification_config(
-                    payload.label_space
-                )
+            label_config = _LSC.generate_image_classification_config(
+                payload.label_space
+            )
             await ls_client.update_project(
                 int(dataset.ls_project_id), label_config=label_config
             )
@@ -539,8 +531,6 @@ async def create_sample(
             _make_ls_image_url(payload.image_uris[0]) if payload.image_uris else ""
         )
         task_data: dict[str, object] = {"image": image_url}
-        if dataset.task_spec.task_type == "vqa":
-            task_data["question"] = str(payload.metadata.get("question", ""))
         task = await ls_client.create_task(int(dataset.ls_project_id), task_data)
         ls_task_id_raw = task.get("id")
         if ls_task_id_raw is None:
@@ -604,8 +594,6 @@ async def import_samples(
     for item in payload.items:
         image_url = _make_ls_image_url(item.image_uris[0]) if item.image_uris else ""
         task_data: dict[str, object] = {"image": image_url}
-        if dataset.task_spec.task_type == "vqa":
-            task_data["question"] = str(item.metadata.get("question", ""))
         ls_tasks.append(task_data)
 
     try:
@@ -673,89 +661,6 @@ async def import_samples(
         failed=0,
         sample_ids=sample_ids,
         ls_task_ids=task_ids,
-    )
-
-
-@router.post(
-    "/datasets/{dataset_id}/samples/import-vqa",
-    response_model=ImportVqaJsonlResponse,
-)
-async def import_vqa_samples(
-    dataset_id: str,
-    ls_client: LabelStudioClientDep,
-    factory: DatasetStorageFactoryDep,
-    file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user),
-    org: Organization = Depends(get_current_org),
-    repo: DatasetRepository = Depends(get_repository),
-) -> ImportVqaJsonlResponse:
-    storage = await _open_storage(factory, dataset_id, org_id=org.id)
-    dataset = await repo.get_dataset(dataset_id, org_id=org.id)
-    if dataset is None:
-        raise HTTPException(status_code=404, detail="dataset not found")
-    if dataset.task_spec.task_type != "vqa":
-        raise HTTPException(status_code=400, detail="dataset task_type must be 'vqa'")
-    if not dataset.ls_project_id or dataset.ls_project_id == SPARSE_NO_LS:
-        raise HTTPException(
-            status_code=500, detail="Dataset has no Label Studio project"
-        )
-    content = (await file.read()).decode("utf-8")
-    imported = 0
-    failed = 0
-    errors: list[str] = []
-
-    bulk_rows: list[BulkSampleRow] = []
-    for idx, raw_line in enumerate(content.splitlines(), start=1):
-        line = raw_line.strip()
-        if not line:
-            continue
-        try:
-            row = json.loads(line)
-            if not isinstance(row, dict):
-                raise ValueError("line is not a JSON object")
-            image_uri = str(row.get("image_uri", "")).strip()
-            question = str(row.get("question", "")).strip()
-            answer = row.get("answer")
-            if not image_uri:
-                raise ValueError("image_uri is required")
-            if not question:
-                raise ValueError("question is required")
-
-            image_url = _make_ls_image_url(image_uri)
-            task = await ls_client.create_task(
-                int(dataset.ls_project_id),
-                {"image": image_url, "question": question},
-            )
-            ls_task_id = task.get("id")
-            if ls_task_id is None:
-                raise ValueError("Label Studio task creation returned no ID")
-
-            metadata: dict[str, object] = {"question": question}
-            if answer is not None:
-                metadata["answer"] = str(answer)
-
-            sid = uuid4().hex
-            bulk_rows.append(
-                BulkSampleRow(
-                    sample_id=sid,
-                    image_uris=[image_uri],
-                    metadata=metadata,
-                    extra={"ls_task_id": int(str(ls_task_id))},
-                )
-            )
-            imported += 1
-        except Exception as exc:
-            failed += 1
-            errors.append(f"line {idx}: {exc}")
-
-    if bulk_rows:
-        await storage.write_samples(_collect_bulk_rows(bulk_rows))
-
-    return ImportVqaJsonlResponse(
-        dataset_id=dataset_id,
-        imported=imported,
-        failed=failed,
-        errors=errors,
     )
 
 

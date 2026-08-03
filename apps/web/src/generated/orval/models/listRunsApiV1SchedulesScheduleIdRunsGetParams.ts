@@ -6,5 +6,5 @@
  */
 
 export type ListRunsApiV1SchedulesScheduleIdRunsGetParams = {
-limit?: number;
+  limit?: number;
 };

@@ -62,40 +62,6 @@ LABELED_IMAGE_V1_SCHEMA = pa.schema(
     ]
 )
 
-BOX_DETECTION_V1_SCHEMA = pa.schema(
-    [
-        pa.field("sample_id", pa.string(), nullable=False),
-        pa.field("image_uri", pa.string(), nullable=False),
-        pa.field("image_bytes", pa.binary(), nullable=True),
-        pa.field(
-            "boxes",
-            pa.large_list(
-                pa.struct(
-                    [
-                        pa.field("label", pa.string(), nullable=False),
-                        pa.field("x", pa.float64(), nullable=False),
-                        pa.field("y", pa.float64(), nullable=False),
-                        pa.field("width", pa.float64(), nullable=False),
-                        pa.field("height", pa.float64(), nullable=False),
-                    ]
-                )
-            ),
-            nullable=True,
-        ),
-        pa.field("width", pa.int64(), nullable=True),
-        pa.field("height", pa.int64(), nullable=True),
-    ]
-)
-
-QA_INPUT_V1_SCHEMA = pa.schema(
-    [
-        pa.field("sample_id", pa.string(), nullable=False),
-        pa.field("image_uri", pa.string(), nullable=False),
-        pa.field("image_bytes", pa.binary(), nullable=True),
-        pa.field("question", pa.string(), nullable=False),
-    ]
-)
-
 
 @dataclass(frozen=True)
 class DataPlaneSchemaRegistry:

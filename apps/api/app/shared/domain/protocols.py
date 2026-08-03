@@ -98,19 +98,6 @@ class LabelStudioClient(Protocol):
     @staticmethod
     def generate_image_classification_config(label_space: list[str]) -> str: ...
 
-    @staticmethod
-    def generate_vqa_config() -> str: ...
-
-
-class LlmClient(Protocol):
-    async def answer_vqa(
-        self,
-        *,
-        image_bytes: bytes,
-        question: str,
-        system_prompt: str,
-    ) -> str: ...
-
 
 class PrefectClient(Protocol):
     async def ensure_work_pool(

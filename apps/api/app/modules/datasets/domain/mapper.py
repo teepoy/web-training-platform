@@ -6,15 +6,8 @@ from app.core.mapper_registry import mapper
 from app.shared.api.schemas import Sample
 
 from app.modules.datasets.classification.models import ClassificationSample
-from app.modules.datasets.detection.models import BoxV1, DetectionSample
-from app.modules.datasets.vqa.models import VQASample
 from app.modules.datasets.views.image_input.v1.schemas import ImageInputV1Row
 from app.modules.datasets.views.labeled_image.v1.schemas import LabeledImageV1Row
-from app.modules.datasets.views.box_detection.v1.schemas import (
-    BoxDetectionV1Row,
-    BoxV1Row,
-)
-from app.modules.datasets.views.qa_input.v1.schemas import QAInputV1Row
 from datetime import UTC, datetime
 
 from app.modules.datasets.domain.sample_row import (
@@ -94,158 +87,6 @@ def classification_sample_to_image_input_v1(
 
 
 # ════════════════════════════════════════════════════════════════════════
-# DetectionSample
-# ════════════════════════════════════════════════════════════════════════
-
-
-@mapper.register([Sample], [DetectionSample, DetectionSample.ID])
-def from_sample_to_detection_sample(
-    sample: Sample | dict,
-) -> DetectionSample:
-    if isinstance(sample, dict):
-        ann = sample.get("latest_annotation")
-        ann_value: object = (
-            ann.get("annotation_value", []) if isinstance(ann, dict) else []
-        )
-        boxes: list[BoxV1] = []
-        if isinstance(ann_value, list):
-            for b in ann_value:
-                if isinstance(b, dict):
-                    boxes.append(
-                        BoxV1(
-                            label=str(b.get("label", "")),
-                            x=float(b.get("x", 0)),
-                            y=float(b.get("y", 0)),
-                            width=float(b.get("width", 0)),
-                            height=float(b.get("height", 0)),
-                        )
-                    )
-        return DetectionSample(
-            sample_id=str(sample.get("id", sample.get("sample_id", ""))),
-            image_uris=cast("list[str]", sample.get("image_uris", [])),
-            boxes=boxes,
-            metadata=cast("dict", sample.get("metadata", {})),
-        )
-    meta = getattr(sample, "metadata", getattr(sample, "metadata_json", {}))
-    return DetectionSample(
-        sample_id=sample.id,
-        image_uris=sample.image_uris,
-        boxes=[],
-        metadata=meta if isinstance(meta, dict) else {},
-    )
-
-
-@mapper.register([DetectionSample, DetectionSample.ID], [Sample])
-def detection_sample_to_sample(obj: DetectionSample) -> Sample:
-    return Sample(
-        id=obj.sample_id,
-        dataset_id="",
-        image_uris=obj.image_uris,
-        metadata=obj.metadata,
-    )
-
-
-@mapper.register(
-    [DetectionSample, DetectionSample.ID],
-    [BoxDetectionV1Row, "box_detection_v1"],
-)
-def detection_sample_to_box_detection_v1(
-    obj: DetectionSample,
-) -> BoxDetectionV1Row:
-    return BoxDetectionV1Row(
-        sample_id=obj.sample_id,
-        image_uris=obj.image_uris,
-        boxes=[
-            BoxV1Row(label=b.label, x=b.x, y=b.y, width=b.width, height=b.height)
-            for b in obj.boxes
-        ],
-        width=obj.width,
-        height=obj.height,
-    )
-
-
-@mapper.register(
-    [DetectionSample, DetectionSample.ID],
-    [ImageInputV1Row, "image_input_v1"],
-)
-def detection_sample_to_image_input_v1(
-    obj: DetectionSample,
-) -> ImageInputV1Row:
-    return ImageInputV1Row(
-        sample_id=obj.sample_id,
-        image_uris=obj.image_uris,
-    )
-
-
-# ════════════════════════════════════════════════════════════════════════
-# VQASample
-# ════════════════════════════════════════════════════════════════════════
-
-
-@mapper.register([Sample], [VQASample, VQASample.ID])
-def from_sample_to_vqa_sample(
-    sample: Sample | dict,
-) -> VQASample:
-    if isinstance(sample, dict):
-        meta_raw: object = sample.get("metadata", {})
-        metadata: dict = meta_raw if isinstance(meta_raw, dict) else {}
-        question = str(metadata.get("question", ""))
-        image_uris_raw: object = sample.get("image_uris", [])
-        image_uris: list[str] = (
-            [str(u) for u in image_uris_raw] if isinstance(image_uris_raw, list) else []
-        )
-        return VQASample(
-            sample_id=str(sample.get("id", sample.get("sample_id", ""))),
-            image_uris=image_uris,
-            question=question,
-            metadata=dict(metadata),
-        )
-    meta = getattr(sample, "metadata", getattr(sample, "metadata_json", {}))
-    question = ""
-    if isinstance(meta, dict):
-        question = str(meta.get("question", ""))
-    return VQASample(
-        sample_id=sample.id,
-        image_uris=sample.image_uris,
-        question=question,
-        metadata=meta if isinstance(meta, dict) else {},
-    )
-
-
-@mapper.register([VQASample, VQASample.ID], [Sample])
-def vqa_sample_to_sample(obj: VQASample) -> Sample:
-    return Sample(
-        id=obj.sample_id,
-        dataset_id="",
-        image_uris=obj.image_uris,
-        metadata=obj.metadata,
-    )
-
-
-@mapper.register(
-    [VQASample, VQASample.ID],
-    [QAInputV1Row, "qa_input_v1"],
-)
-def vqa_sample_to_qa_input_v1(obj: VQASample) -> QAInputV1Row:
-    return QAInputV1Row(
-        sample_id=obj.sample_id,
-        image_uris=obj.image_uris,
-        question=obj.question,
-    )
-
-
-@mapper.register(
-    [VQASample, VQASample.ID],
-    [ImageInputV1Row, "image_input_v1"],
-)
-def vqa_sample_to_image_input_v1(obj: VQASample) -> ImageInputV1Row:
-    return ImageInputV1Row(
-        sample_id=obj.sample_id,
-        image_uris=obj.image_uris,
-    )
-
-
-# ════════════════════════════════════════════════════════════════════════
 # Glue mappers: Sample → view row (by dataset type)
 # ════════════════════════════════════════════════════════════════════════
 
@@ -268,22 +109,6 @@ def sample_to_cls_image_input_v1(sample: Sample | dict) -> ImageInputV1Row:
     return classification_sample_to_image_input_v1(
         from_sample_to_classification_sample(sample)
     )
-
-
-@mapper.register(
-    [Sample],
-    [BoxDetectionV1Row, "box_detection_v1"],
-)
-def sample_to_det_box_detection_v1(sample: Sample | dict) -> BoxDetectionV1Row:
-    return detection_sample_to_box_detection_v1(from_sample_to_detection_sample(sample))
-
-
-@mapper.register(
-    [Sample],
-    [QAInputV1Row, "qa_input_v1"],
-)
-def sample_to_vqa_qa_input_v1(sample: Sample | dict) -> QAInputV1Row:
-    return vqa_sample_to_qa_input_v1(from_sample_to_vqa_sample(sample))
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -456,58 +281,6 @@ def sample_row_to_image_input_v1(
     return ImageInputV1Row(
         sample_id=row.sample_id,
         image_uris=list(row.image_uris),
-    )
-
-
-@mapper.register(
-    [SampleRow, "sample_row"],
-    [BoxDetectionV1Row, "box_detection_v1"],
-)
-def sample_row_to_box_detection_v1(
-    row: SampleRow, *, context: ViewProjectionContext
-) -> BoxDetectionV1Row:
-    del context
-    boxes_raw = row.annotation_value if isinstance(row.annotation_value, list) else []
-    boxes = [
-        BoxV1Row(
-            label=str(box.get("label", "")),
-            x=float(box.get("x", 0)),
-            y=float(box.get("y", 0)),
-            width=float(box.get("width", 0)),
-            height=float(box.get("height", 0)),
-        )
-        for box in boxes_raw
-        if isinstance(box, dict)
-    ]
-    return BoxDetectionV1Row(
-        sample_id=row.sample_id,
-        image_uris=list(row.image_uris),
-        boxes=boxes,
-        width=(
-            int(row.metadata["width"])
-            if row.metadata.get("width") is not None
-            else None
-        ),
-        height=(
-            int(row.metadata["height"])
-            if row.metadata.get("height") is not None
-            else None
-        ),
-    )
-
-
-@mapper.register(
-    [SampleRow, "sample_row"],
-    [QAInputV1Row, "qa_input_v1"],
-)
-def sample_row_to_qa_input_v1(
-    row: SampleRow, *, context: ViewProjectionContext
-) -> QAInputV1Row:
-    del context
-    return QAInputV1Row(
-        sample_id=row.sample_id,
-        image_uris=list(row.image_uris),
-        question=str(row.metadata.get("question", "")),
     )
 
 

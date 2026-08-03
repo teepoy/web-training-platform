@@ -8,7 +8,17 @@ import ScMapRenderWorker from "./sc-map-render.worker?worker&inline";
 
 export const SC_MAP_TAG_NAME = "sc-map";
 export type ScMapMode = "wafer" | "die" | "reticle";
-export type ScMapInteractionMode = "select" | "zoomin" | "pan";
+export type ScMapInteractionMode = "select" | "lasso" | "zoomin" | "pan";
+
+export interface ScMapPoint {
+  x: number;
+  y: number;
+}
+
+export interface ScMapLassoSelection {
+  points: ScMapPoint[];
+  region: ScMapRegion;
+}
 
 export interface ScMapGeometry {
   waferRadiusNm: number;
@@ -85,6 +95,7 @@ export class ScMapElement extends HTMLElement {
   #immediatePoints: Array<{ x: number; y: number }> = [];
   #dragStart: { x: number; y: number } | null = null;
   #dragEnd: { x: number; y: number } | null = null;
+  #lassoPoints: ScMapPoint[] = [];
   #lastLoggedDataRevision = -1;
   #latestViewportRevision = 0;
 
@@ -507,7 +518,18 @@ export class ScMapElement extends HTMLElement {
       this.#immediatePoints.map((point) => [point.x, point.y]),
       "#000000",
     );
-    if (this.#dragStart && this.#dragEnd && this.#interactionMode !== "pan") {
+    if (this.#interactionMode === "lasso" && this.#lassoPoints.length > 1) {
+      context.beginPath();
+      context.moveTo(this.#lassoPoints[0].x, this.#lassoPoints[0].y);
+      for (const point of this.#lassoPoints.slice(1)) {
+        context.lineTo(point.x, point.y);
+      }
+      context.closePath();
+      context.fillStyle = "rgba(168,85,247,.15)";
+      context.strokeStyle = "#a855f7";
+      context.fill();
+      context.stroke();
+    } else if (this.#dragStart && this.#dragEnd && this.#interactionMode !== "pan") {
       const x = Math.min(this.#dragStart.x, this.#dragEnd.x);
       const y = Math.min(this.#dragStart.y, this.#dragEnd.y);
       const w = Math.abs(this.#dragEnd.x - this.#dragStart.x);
@@ -698,13 +720,22 @@ export class ScMapElement extends HTMLElement {
     this.#overlay.setPointerCapture?.(event.pointerId);
     this.#dragStart = this.#localPoint(event);
     this.#dragEnd = { ...this.#dragStart };
+    this.#lassoPoints = this.#interactionMode === "lasso" ? [{ ...this.#dragStart }] : [];
     this.#drawOverlay();
   };
 
   #onPointerMove = (event: PointerEvent): void => {
     if (!this.#dragStart) return;
     this.#dragEnd = this.#localPoint(event);
-    if (this.#interactionMode === "zoomin") {
+    if (this.#interactionMode === "lasso") {
+      const previous = this.#lassoPoints.at(-1);
+      if (
+        !previous ||
+        Math.hypot(this.#dragEnd.x - previous.x, this.#dragEnd.y - previous.y) >= 2
+      ) {
+        this.#lassoPoints.push({ ...this.#dragEnd });
+      }
+    } else if (this.#interactionMode === "zoomin") {
       const width = Math.max(1, this.clientWidth);
       const height = Math.max(1, this.clientHeight);
       const dx = this.#dragEnd.x - this.#dragStart.x;
@@ -724,14 +755,36 @@ export class ScMapElement extends HTMLElement {
     if (!this.#dragStart || !this.#dragEnd) return;
     const start = this.#dragStart;
     const end = this.#dragEnd;
+    const lassoPoints = this.#lassoPoints;
     this.#dragStart = null;
     this.#dragEnd = null;
+    this.#lassoPoints = [];
     const transform = this.#transform();
     const [startX, startY] = this.#toData(transform, start.x, start.y);
     const [endX, endY] = this.#toData(transform, end.x, end.y);
     const dx = Math.abs(end.x - start.x);
     const dy = Math.abs(end.y - start.y);
-    if (dx >= 4 || dy >= 4) {
+    if (this.#interactionMode === "lasso" && lassoPoints.length >= 3) {
+      const dataPoints = lassoPoints.map((point) => this.#toData(transform, point.x, point.y));
+      const points = dataPoints.map(([x, y]) => ({ x, y }));
+      const xs = points.map((point) => point.x);
+      const ys = points.map((point) => point.y);
+      const region = {
+        x: Math.min(...xs),
+        y: Math.min(...ys),
+        w: Math.max(...xs) - Math.min(...xs),
+        h: Math.max(...ys) - Math.min(...ys),
+      };
+      this.#appendImmediatePoints(
+        this.#projectedPoints().filter((point) => pointInPolygon(point, points)),
+      );
+      this.dispatchEvent(
+        new CustomEvent<ScMapLassoSelection>("lasso-select", {
+          detail: { points, region },
+          bubbles: true,
+        }),
+      );
+    } else if (dx >= 4 || dy >= 4) {
       const current =
         this.#zoom ??
         (() => {
@@ -760,37 +813,14 @@ export class ScMapElement extends HTMLElement {
         if (this.#interactionMode === "zoomin") {
           this.dispatchEvent(new CustomEvent("zoom-in", { detail: region, bubbles: true }));
         } else {
-          const selectedPoints: Array<{ x: number; y: number }> = [];
-          const count = Math.floor(this.#points.length / 6);
-          for (let index = 0; index < count; index += 1) {
-            const offset = index * 6;
-            const x = this.#points[offset];
-            const y = this.#points[offset + 1];
-            if (
-              x >= region.x &&
-              x <= region.x + region.w &&
-              y >= region.y &&
-              y <= region.y + region.h
-            ) {
-              selectedPoints.push({ x, y });
-            }
-          }
-          // Box selection is additive by product definition. Preserve points
-          // from earlier drags until the caller explicitly clears selection.
-          const immediatePointKeys = new Set(
-            this.#immediatePoints.map((point) => `${point.x}:${point.y}`),
-          );
-          for (const point of selectedPoints) {
-            const key = `${point.x}:${point.y}`;
-            if (immediatePointKeys.has(key)) continue;
-            immediatePointKeys.add(key);
-            this.#immediatePoints.push(point);
-          }
-          this.dispatchEvent(
-            new CustomEvent("immediate-crosshair-points", {
-              detail: this.#immediatePoints.map((point) => ({ ...point })),
-              bubbles: true,
-            }),
+          this.#appendImmediatePoints(
+            this.#projectedPoints().filter(
+              ({ x, y }) =>
+                x >= region.x &&
+                x <= region.x + region.w &&
+                y >= region.y &&
+                y <= region.y + region.h,
+            ),
           );
           this.dispatchEvent(new CustomEvent("box-select", { detail: region, bubbles: true }));
         }
@@ -804,9 +834,74 @@ export class ScMapElement extends HTMLElement {
     this.dispatchEvent(
       new CustomEvent("immediate-crosshair-points", { detail: [], bubbles: true }),
     );
-    this.dispatchEvent(new CustomEvent("zoom-in", { detail: null, bubbles: true }));
+    this.dispatchEvent(new CustomEvent("clear-selection", { bubbles: true }));
     this.#drawOverlay();
   };
+
+  #projectedPoints(): ScMapPoint[] {
+    const result: ScMapPoint[] = [];
+    const count = Math.floor(this.#points.length / 6);
+    for (let index = 0; index < count; index += 1) {
+      const offset = index * 6;
+      result.push({ x: this.#points[offset], y: this.#points[offset + 1] });
+    }
+    return result;
+  }
+
+  #appendImmediatePoints(points: ScMapPoint[]): void {
+    // Area selections are additive by product definition. Preserve points
+    // from earlier drags until the caller explicitly clears selection.
+    const immediatePointKeys = new Set(
+      this.#immediatePoints.map((point) => `${point.x}:${point.y}`),
+    );
+    for (const point of points) {
+      const key = `${point.x}:${point.y}`;
+      if (immediatePointKeys.has(key)) continue;
+      immediatePointKeys.add(key);
+      this.#immediatePoints.push(point);
+    }
+    this.dispatchEvent(
+      new CustomEvent("immediate-crosshair-points", {
+        detail: this.#immediatePoints.map((point) => ({ ...point })),
+        bubbles: true,
+      }),
+    );
+  }
+}
+
+export function pointInPolygon(point: ScMapPoint, polygon: readonly ScMapPoint[]): boolean {
+  let inside = false;
+  for (
+    let current = 0, previous = polygon.length - 1;
+    current < polygon.length;
+    previous = current++
+  ) {
+    const currentPoint = polygon[current];
+    const previousPoint = polygon[previous];
+    const edgeX = currentPoint.x - previousPoint.x;
+    const edgeY = currentPoint.y - previousPoint.y;
+    const pointX = point.x - previousPoint.x;
+    const pointY = point.y - previousPoint.y;
+    const cross = edgeX * pointY - edgeY * pointX;
+    const edgeScale = Math.max(1, Math.abs(edgeX), Math.abs(edgeY));
+    if (
+      Math.abs(cross) <= Number.EPSILON * edgeScale * edgeScale * 8 &&
+      point.x >= Math.min(previousPoint.x, currentPoint.x) &&
+      point.x <= Math.max(previousPoint.x, currentPoint.x) &&
+      point.y >= Math.min(previousPoint.y, currentPoint.y) &&
+      point.y <= Math.max(previousPoint.y, currentPoint.y)
+    ) {
+      return true;
+    }
+    const crosses =
+      currentPoint.y > point.y !== previousPoint.y > point.y &&
+      point.x <
+        ((previousPoint.x - currentPoint.x) * (point.y - currentPoint.y)) /
+          (previousPoint.y - currentPoint.y) +
+          currentPoint.x;
+    if (crosses) inside = !inside;
+  }
+  return inside;
 }
 
 export function defineScMapElement(): void {

@@ -4,11 +4,11 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { UpdateScheduleRequestName } from './updateScheduleRequestName';
-import type { UpdateScheduleRequestCron } from './updateScheduleRequestCron';
-import type { UpdateScheduleRequestParameters } from './updateScheduleRequestParameters';
-import type { UpdateScheduleRequestDescription } from './updateScheduleRequestDescription';
-import type { UpdateScheduleRequestIsScheduleActive } from './updateScheduleRequestIsScheduleActive';
+import type { UpdateScheduleRequestName } from "./updateScheduleRequestName";
+import type { UpdateScheduleRequestCron } from "./updateScheduleRequestCron";
+import type { UpdateScheduleRequestParameters } from "./updateScheduleRequestParameters";
+import type { UpdateScheduleRequestDescription } from "./updateScheduleRequestDescription";
+import type { UpdateScheduleRequestIsScheduleActive } from "./updateScheduleRequestIsScheduleActive";
 
 export interface UpdateScheduleRequest {
   name?: UpdateScheduleRequestName;

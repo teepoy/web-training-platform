@@ -4,7 +4,7 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { ReviewActionResponse } from './reviewActionResponse';
+import type { ReviewActionResponse } from "./reviewActionResponse";
 
 export interface PaginatedResponseReviewActionResponse {
   items: ReviewActionResponse[];

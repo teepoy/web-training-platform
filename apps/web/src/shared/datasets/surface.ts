@@ -13,7 +13,7 @@ import type {
 import type { FlowCard } from "../flow";
 
 export function resolveDefaultDatasetTaskType(taskType: string | null | undefined): string {
-  return taskType === "vqa" ? "vqa" : "classification";
+  return taskType === "sc" ? "sc" : "classification";
 }
 
 function normalizeDataset<TDataset extends DatasetListItem>(dataset: TDataset): TDataset {

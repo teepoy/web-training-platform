@@ -19,13 +19,11 @@ export default defineConfig({
     }),
     Components({ resolvers: [NaiveUiResolver()] }),
     legacy({
-      targets: ["chrome >= 108"],
       modernTargets: ["chrome >= 108"],
+      modernPolyfills: true,
+      renderLegacyChunks: false,
     }),
   ],
-  build: {
-    target: "chrome108",
-  },
   resolve: {
     alias: [
       {

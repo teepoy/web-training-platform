@@ -4,6 +4,6 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { SampleWithLabelsLatestPredictionAnyOf } from './sampleWithLabelsLatestPredictionAnyOf';
+import type { SampleWithLabelsLatestPredictionAnyOf } from "./sampleWithLabelsLatestPredictionAnyOf";
 
 export type SampleWithLabelsLatestPrediction = SampleWithLabelsLatestPredictionAnyOf | null;

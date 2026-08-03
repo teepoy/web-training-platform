@@ -12,9 +12,7 @@ from app.modules.storage.domain.data_plane.manifest import (
     ManifestPurpose,
 )
 from app.modules.storage.domain.data_plane.schemas import (
-    BOX_DETECTION_V1_SCHEMA,
     LABELED_IMAGE_V1_SCHEMA,
-    QA_INPUT_V1_SCHEMA,
     SC_PATCH_IMAGE_V1_SCHEMA,
     SC_REVIEW_IMAGE_V1_SCHEMA,
     DataPlaneSchemaRegistry,
@@ -25,7 +23,6 @@ from app.modules.storage.domain.data_plane.validation import (
 
 __all__ = [
     "ArrowColumn",
-    "BOX_DETECTION_V1_SCHEMA",
     "DataPlaneAuth",
     "DataPlaneManifest",
     "DataPlaneSchemaRegistry",
@@ -36,7 +33,6 @@ __all__ = [
     "LABELED_IMAGE_V1_SCHEMA",
     "ManifestFormat",
     "ManifestPurpose",
-    "QA_INPUT_V1_SCHEMA",
     "SC_PATCH_IMAGE_V1_SCHEMA",
     "SC_REVIEW_IMAGE_V1_SCHEMA",
     "validate_manifest_against_schema",

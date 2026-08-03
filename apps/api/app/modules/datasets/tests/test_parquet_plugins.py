@@ -407,40 +407,6 @@ class TestImportParquetEndpoint:
             assert body["imported"] == 1
             assert any("No image columns" in e for e in body["errors"])
 
-    def test_import_vqa_parquet(self) -> None:
-        with TestClient(app) as c:
-            ds = c.post(
-                "/api/v1/datasets",
-                json={
-                    "name": "parquet-vqa-ds",
-                    "dataset_type": "image_vqa",
-                    "task_spec": {"task_type": "vqa", "label_space": []},
-                },
-            )
-            assert ds.status_code == 200
-            dataset_id = ds.json()["id"]
-
-            image_type = pa.struct(
-                [pa.field("bytes", pa.binary()), pa.field("path", pa.string())]
-            )
-            table = pa.table({
-                "image": pa.array(
-                    [[{"bytes": b"\x89", "path": "memory://vqa.jpg"}]],
-                    type=pa.list_(image_type),
-                ),
-                "question": pa.array(["What is in this image?"]),
-            })
-            parquet_data = _make_parquet_bytes(table)
-
-            r = c.post(
-                f"/api/v1/plugins/import-parquet/import?dataset_id={dataset_id}",
-                files={"file": ("vqa.parquet", io.BytesIO(parquet_data), "application/octet-stream")},
-            )
-            assert r.status_code == 200
-            body = r.json()
-            assert body["imported"] == 1
-
-
 # ---------------------------------------------------------------------------
 # Integration tests — export endpoint
 # ---------------------------------------------------------------------------

@@ -4,7 +4,7 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { TaskTrackerSummaryResponse } from './taskTrackerSummaryResponse';
+import type { TaskTrackerSummaryResponse } from "./taskTrackerSummaryResponse";
 
 export interface PaginatedResponseTaskTrackerSummaryResponse {
   items: TaskTrackerSummaryResponse[];

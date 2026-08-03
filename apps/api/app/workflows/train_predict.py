@@ -147,6 +147,7 @@ async def predict_stage(
             sample_ids=sample_ids,
             summary={
                 "source_training_job_id": source_training_job_id,
+                "result_pool": "validation",
                 **({"sample_filter": sample_filter} if sample_filter else {}),
                 **({"prompt": prompt} if prompt else {}),
             },

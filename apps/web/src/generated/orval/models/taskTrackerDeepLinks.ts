@@ -4,9 +4,9 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { TaskTrackerDeepLinksPrefectRunUrl } from './taskTrackerDeepLinksPrefectRunUrl';
-import type { TaskTrackerDeepLinksPrefectDeploymentUrl } from './taskTrackerDeepLinksPrefectDeploymentUrl';
-import type { TaskTrackerDeepLinksPlatformJobUrl } from './taskTrackerDeepLinksPlatformJobUrl';
+import type { TaskTrackerDeepLinksPrefectRunUrl } from "./taskTrackerDeepLinksPrefectRunUrl";
+import type { TaskTrackerDeepLinksPrefectDeploymentUrl } from "./taskTrackerDeepLinksPrefectDeploymentUrl";
+import type { TaskTrackerDeepLinksPlatformJobUrl } from "./taskTrackerDeepLinksPlatformJobUrl";
 
 export interface TaskTrackerDeepLinks {
   prefect_run_url?: TaskTrackerDeepLinksPrefectRunUrl;

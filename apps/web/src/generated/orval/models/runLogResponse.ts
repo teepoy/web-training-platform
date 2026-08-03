@@ -4,8 +4,8 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { RunLogResponseId } from './runLogResponseId';
-import type { RunLogResponseFlowRunId } from './runLogResponseFlowRunId';
+import type { RunLogResponseId } from "./runLogResponseId";
+import type { RunLogResponseFlowRunId } from "./runLogResponseFlowRunId";
 
 export interface RunLogResponse {
   id?: RunLogResponseId;

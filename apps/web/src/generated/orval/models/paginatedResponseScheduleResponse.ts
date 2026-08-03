@@ -4,7 +4,7 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { ScheduleResponse } from './scheduleResponse';
+import type { ScheduleResponse } from "./scheduleResponse";
 
 export interface PaginatedResponseScheduleResponse {
   items: ScheduleResponse[];

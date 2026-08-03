@@ -24,7 +24,7 @@ FastAPI service with async SQLAlchemy persistence, OmegaConf profiles, Protocol-
 | Add/manage cron schedules       | `app/modules/jobs/schedules/app/services/scheduler.py`                                               | `SchedulerService` — Prefect REST client                                                                                                                                       |
 | Background/runtime jobs         | module orchestrators / runtime service clients                                                       | Prefect, queues, or service APIs are implementation details behind typed ports                                                                                                 |
 | Agent runtime                   | `app/modules/agent/`                                                                                 | Domain-oriented agent modules                                                                                                                                                  |
-| Dataset type modules            | `app/modules/datasets/{classification,detection,vqa}/`                                               | Unified dataset module with per-type subdomains (models, adapter, upstream, session)                                                                                           |
+| Dataset type modules            | `app/modules/datasets/classification/`, `app/modules/sc/`                                            | Implemented dataset domains; add future types only with an end-to-end capability implementation                                                                                |
 | Capability catalog              | `app/modules/types/catalog.py`, `capabilities.py`, `registrations/`                                  | Versioned view/materializer/trainer/predictor metadata only. Module bundles are centrally aggregated; executable compatibility code is isolated under `app/runtime_compat/ml`. |
 | Registry                        | `app/core/registry.py`                                                                               | `@view`, metadata catalog entries, `@dataset` (dataclass-based); dynamic `_dataset_type_registry` with query API                                                               |
 | Mapper registry                 | `app/core/mapper_registry.py`                                                                        | `@mapper.register(from_types, to_types)` — type-to-type conversion; `mapper.get_mapper(src, dst)` for lookup                                                                   |
@@ -137,8 +137,6 @@ app/modules/datasets/
 │   └── services/                # DatasetService and storage-adjacent services
 ├── port/http/                   # Routes, deps, schemas
 ├── classification/              # Classification subdomain
-├── detection/                   # Detection subdomain
-├── vqa/                         # VQA subdomain
 ├── compatibility.py             # Compatibility gates (view/trainer/predictor)
 └── tests/
 ```
@@ -151,7 +149,9 @@ app/modules/datasets/
 - Do not add Python `for` loops over sample rows unless the data size is explicitly bounded and known small.
 - Data-plane manifests follow `docs/architecture/data-plane-manifest-contract.md`; runtime routing follows `docs/architecture/runtime-registration-contract.md`.
 - Domain-specific aggregates wrap storage aggregates. SC semantics belong in `app/modules/sc/sc_dataset_agg.py` or SC services, not in generic storage implementations.
-- Each subdomain (`classification/`, `detection/`, `vqa/`) is self-contained: models + adapter + upstream + session in one directory.
+- Each implemented dataset subdomain is self-contained. Do not add placeholder
+  dataset types, views, trainers, predictors, or frontend shims before the
+  end-to-end capability is implemented.
 - Conversion between storage (`Sample`), domain (`ClassificationSample`, etc.), and view (`LabeledImageV1Row`, etc.) types goes through `MapperRegistry`, not through inline methods on model classes.
 - Per-dataset-type mappers live in `app/modules/datasets/domain/mapper.py`; SC mappers in `app/modules/sc/domain/mapper.py`.
 - `ViewService` delegates per-sample projection to per-type adapters via `adapter.view_for(view_type, sample)`.

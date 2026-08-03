@@ -24,8 +24,6 @@ from app.shared.api.schemas import Dataset, DatasetStorageMode
     ("dataset_type", "view_types"),
     [
         ("image_classification", ["image_input_v1", "labeled_image_v1"]),
-        ("image_vqa", ["image_input_v1", "qa_input_v1"]),
-        ("image_detection", ["image_input_v1", "box_detection_v1"]),
     ],
 )
 def test_storage_mode_is_orthogonal_to_dataset_views(
@@ -47,15 +45,15 @@ def test_storage_mode_is_orthogonal_to_dataset_views(
 
 def test_validate_view_accepts_enabled_view() -> None:
     validate_view_for_dataset(
-        "box_detection_v1",
-        ["image_input_v1", "box_detection_v1"],
+        "labeled_image_v1",
+        ["image_input_v1", "labeled_image_v1"],
     )
 
 
 def test_validate_view_rejects_disabled_view() -> None:
     with pytest.raises(DatasetCompatibilityError, match="not enabled"):
         validate_view_for_dataset(
-            "qa_input_v1",
+            "review_image_v1",
             ["image_input_v1", "labeled_image_v1"],
         )
 
@@ -81,7 +79,7 @@ def test_validate_trainer_uses_catalog_view_contract() -> None:
         with pytest.raises(DatasetCompatibilityError, match="not compatible"):
             validate_trainer_for_dataset(
                 "trainer",
-                ["image_input_v1", "qa_input_v1"],
+                ["image_input_v1", "review_image_v1"],
             )
 
 
@@ -100,7 +98,7 @@ def test_validate_predictor_uses_catalog_view_contract() -> None:
     ):
         validate_predictor_for_dataset(
             "predictor",
-            ["image_input_v1", "box_detection_v1"],
+            ["image_input_v1", "review_image_v1"],
         )
 
 

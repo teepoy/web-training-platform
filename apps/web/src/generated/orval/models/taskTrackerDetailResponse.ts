@@ -4,9 +4,9 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { TaskTrackerDetailResponseMeta } from './taskTrackerDetailResponseMeta';
-import type { TaskTrackerRawPayload } from './taskTrackerRawPayload';
-import type { TaskTrackerDerived } from './taskTrackerDerived';
+import type { TaskTrackerDetailResponseMeta } from "./taskTrackerDetailResponseMeta";
+import type { TaskTrackerRawPayload } from "./taskTrackerRawPayload";
+import type { TaskTrackerDerived } from "./taskTrackerDerived";
 
 export interface TaskTrackerDetailResponse {
   id: string;

@@ -4,8 +4,6 @@ from urllib.parse import quote
 
 
 def infer_dataset_type(task_type: str) -> str:
-    if task_type == "vqa":
-        return "image_vqa"
     return "image_classification"
 
 

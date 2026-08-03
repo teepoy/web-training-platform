@@ -4,7 +4,7 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { UserResponse } from './userResponse';
+import type { UserResponse } from "./userResponse";
 
 export interface LoginResponse {
   access_token: string;

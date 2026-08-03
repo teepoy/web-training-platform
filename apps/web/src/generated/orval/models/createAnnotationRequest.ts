@@ -4,7 +4,7 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { CreateAnnotationRequestAnnotationValue } from './createAnnotationRequestAnnotationValue';
+import type { CreateAnnotationRequestAnnotationValue } from "./createAnnotationRequestAnnotationValue";
 
 export interface CreateAnnotationRequest {
   dataset_id: string;

@@ -4,17 +4,17 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { TaskTrackerDerivedPrefectState } from './taskTrackerDerivedPrefectState';
-import type { TaskTrackerDerivedActiveNode } from './taskTrackerDerivedActiveNode';
-import type { TaskTrackerDerivedQueuePriority } from './taskTrackerDerivedQueuePriority';
-import type { TaskTrackerDerivedQueueDepthAhead } from './taskTrackerDerivedQueueDepthAhead';
-import type { TaskTrackerDerivedPoolConcurrencyLimit } from './taskTrackerDerivedPoolConcurrencyLimit';
-import type { TaskTrackerDerivedPoolSlotsUsed } from './taskTrackerDerivedPoolSlotsUsed';
-import type { TaskTrackerStage } from './taskTrackerStage';
-import type { TaskTrackerScorecard } from './taskTrackerScorecard';
-import type { TaskTrackerSummaryMetrics } from './taskTrackerSummaryMetrics';
-import type { TaskTrackerDerivedArtifactsItem } from './taskTrackerDerivedArtifactsItem';
-import type { TaskTrackerDeepLinks } from './taskTrackerDeepLinks';
+import type { TaskTrackerDerivedPrefectState } from "./taskTrackerDerivedPrefectState";
+import type { TaskTrackerDerivedActiveNode } from "./taskTrackerDerivedActiveNode";
+import type { TaskTrackerDerivedQueuePriority } from "./taskTrackerDerivedQueuePriority";
+import type { TaskTrackerDerivedQueueDepthAhead } from "./taskTrackerDerivedQueueDepthAhead";
+import type { TaskTrackerDerivedPoolConcurrencyLimit } from "./taskTrackerDerivedPoolConcurrencyLimit";
+import type { TaskTrackerDerivedPoolSlotsUsed } from "./taskTrackerDerivedPoolSlotsUsed";
+import type { TaskTrackerStage } from "./taskTrackerStage";
+import type { TaskTrackerScorecard } from "./taskTrackerScorecard";
+import type { TaskTrackerSummaryMetrics } from "./taskTrackerSummaryMetrics";
+import type { TaskTrackerDerivedArtifactsItem } from "./taskTrackerDerivedArtifactsItem";
+import type { TaskTrackerDeepLinks } from "./taskTrackerDeepLinks";
 
 export interface TaskTrackerDerived {
   task_kind: string;

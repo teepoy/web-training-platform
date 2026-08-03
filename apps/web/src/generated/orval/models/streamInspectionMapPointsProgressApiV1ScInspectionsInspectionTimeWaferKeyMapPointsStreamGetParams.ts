@@ -4,28 +4,33 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { StreamInspectionMapPointsProgressApiV1ScInspectionsInspectionTimeWaferKeyMapPointsStreamGetPredictionsAnyOfItem } from './streamInspectionMapPointsProgressApiV1ScInspectionsInspectionTimeWaferKeyMapPointsStreamGetPredictionsAnyOfItem';
-import type { StreamInspectionMapPointsProgressApiV1ScInspectionsInspectionTimeWaferKeyMapPointsStreamGetAnnotationsAnyOfItem } from './streamInspectionMapPointsProgressApiV1ScInspectionsInspectionTimeWaferKeyMapPointsStreamGetAnnotationsAnyOfItem';
+import type { StreamInspectionMapPointsProgressApiV1ScInspectionsInspectionTimeWaferKeyMapPointsStreamGetPredictionsAnyOfItem } from "./streamInspectionMapPointsProgressApiV1ScInspectionsInspectionTimeWaferKeyMapPointsStreamGetPredictionsAnyOfItem";
+import type { StreamInspectionMapPointsProgressApiV1ScInspectionsInspectionTimeWaferKeyMapPointsStreamGetAnnotationsAnyOfItem } from "./streamInspectionMapPointsProgressApiV1ScInspectionsInspectionTimeWaferKeyMapPointsStreamGetAnnotationsAnyOfItem";
 
-export type StreamInspectionMapPointsProgressApiV1ScInspectionsInspectionTimeWaferKeyMapPointsStreamGetParams = {
-reticleXDieCount?: number;
-reticleYDieCount?: number;
-reticleXDieShift?: number;
-reticleYDieShift?: number;
-sampled?: boolean;
-gridSizeNm?: number;
-zoomX?: number | null;
-zoomY?: number | null;
-zoomW?: number | null;
-zoomH?: number | null;
-mode?: 'wafer' | 'die' | 'reticle' | null;
-class_numbers?: number[] | null;
-rough_bins?: number[] | null;
-predictions?: StreamInspectionMapPointsProgressApiV1ScInspectionsInspectionTimeWaferKeyMapPointsStreamGetPredictionsAnyOfItem[] | null;
-annotations?: StreamInspectionMapPointsProgressApiV1ScInspectionsInspectionTimeWaferKeyMapPointsStreamGetAnnotationsAnyOfItem[] | null;
-test_ids?: number[] | null;
-adders?: number[] | null;
-cluster_ids?: number[] | null;
-legend_group_by?: 'class' | 'bin' | 'annotation' | 'prediction' | null;
-sample_filter?: string | null;
-};
+export type StreamInspectionMapPointsProgressApiV1ScInspectionsInspectionTimeWaferKeyMapPointsStreamGetParams =
+  {
+    reticleXDieCount?: number;
+    reticleYDieCount?: number;
+    reticleXDieShift?: number;
+    reticleYDieShift?: number;
+    sampled?: boolean;
+    gridSizeNm?: number;
+    zoomX?: number | null;
+    zoomY?: number | null;
+    zoomW?: number | null;
+    zoomH?: number | null;
+    mode?: "wafer" | "die" | "reticle" | null;
+    class_numbers?: number[] | null;
+    rough_bins?: number[] | null;
+    predictions?:
+      | StreamInspectionMapPointsProgressApiV1ScInspectionsInspectionTimeWaferKeyMapPointsStreamGetPredictionsAnyOfItem[]
+      | null;
+    annotations?:
+      | StreamInspectionMapPointsProgressApiV1ScInspectionsInspectionTimeWaferKeyMapPointsStreamGetAnnotationsAnyOfItem[]
+      | null;
+    test_ids?: number[] | null;
+    adders?: number[] | null;
+    cluster_ids?: number[] | null;
+    legend_group_by?: "class" | "bin" | "annotation" | "prediction" | null;
+    sample_filter?: string | null;
+  };

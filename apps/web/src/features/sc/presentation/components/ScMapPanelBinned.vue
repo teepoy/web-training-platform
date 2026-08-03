@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { computed, h, ref, watch, type Component } from "vue";
-import { defineScMapElement, type ScMapGeometry } from "@platform/sc-map-element";
+import {
+  defineScMapElement,
+  type ScMapGeometry,
+  type ScMapLassoSelection,
+} from "@platform/sc-map-element";
 import {
   NTabs,
   NTabPane,
@@ -16,6 +20,8 @@ import {
 import { ArrowBackOutline, ArrowForwardOutline } from "@vicons/ionicons5";
 import {
   AddOutline,
+  BrushOutline,
+  ContractOutline,
   MoveOutline,
   RemoveOutline,
   ScanOutline,
@@ -34,7 +40,7 @@ type LegendKey = number | string;
 type BoxSelectionRegion = { x: number; y: number; w: number; h: number };
 type CrosshairPoint = { x: number; y: number };
 type MapTab = "wafer" | "die" | "reticle";
-type MapToolAction = "select" | "zoomin" | "pan";
+type MapToolAction = "select" | "lasso" | "zoomin" | "pan";
 
 const props = withDefaults(
   defineProps<{
@@ -86,26 +92,20 @@ const emit = defineEmits<{
     e: "update:reticleOptions",
     v: { xDieCount: number; yDieCount: number; xDieShift: number; yDieShift: number },
   ): void;
-  (
-    e: "legend-select",
-    payload: {
-      ids: number[];
-      region: { x: number; y: number; w: number; h: number };
-      key?: LegendKey | null;
-    },
-  ): void;
+  (e: "legend-select", key: LegendKey | null): void;
   (e: "zoom-in", vp: { x: number; y: number; w: number; h: number } | null): void;
   (e: "retry"): void;
-  (e: "selection-change", ids: number[]): void;
+  (e: "clear-selection"): void;
   (e: "legend-group-change", groupBy: string | null): void;
   (e: "legend-hidden-change", payload: { source: LegendSource; hiddenKeys: string[] }): void;
   (e: "box-select", region: { x: number; y: number; w: number; h: number }): void;
+  (e: "lasso-select", selection: ScMapLassoSelection): void;
   (e: "update:showImageMarkers", value: boolean): void;
   (e: "update:defectSize", value: number): void;
 }>();
 
 const internalTab = ref<MapTab>(props.activeMapTab ?? "wafer");
-const mapMode = ref<Record<string, "select" | "zoomin" | "pan">>({
+const mapMode = ref<Record<MapTab, MapToolAction>>({
   wafer: "select",
   die: "select",
   reticle: "select",
@@ -249,6 +249,7 @@ function mapToolIcon(icon: Component): () => ReturnType<typeof h> {
 const activeMapToolIcon = computed(() => {
   const mode = mapMode.value[internalTab.value];
   if (mode === "zoomin") return SearchOutline;
+  if (mode === "lasso") return BrushOutline;
   if (mode === "pan") return MoveOutline;
   return ScanOutline;
 });
@@ -258,6 +259,11 @@ const mapToolOptions = computed<DropdownOption[]>(() => [
     label: "Box selection (append)",
     key: "select" satisfies MapToolAction,
     icon: mapToolIcon(ScanOutline),
+  },
+  {
+    label: "Lasso selection (append)",
+    key: "lasso" satisfies MapToolAction,
+    icon: mapToolIcon(BrushOutline),
   },
   {
     label: "Drag to zoom",
@@ -273,7 +279,7 @@ const mapToolOptions = computed<DropdownOption[]>(() => [
 
 function handleMapToolSelect(key: string | number): void {
   const action = String(key);
-  if (action === "select" || action === "zoomin" || action === "pan") {
+  if (action === "select" || action === "lasso" || action === "zoomin" || action === "pan") {
     mapMode.value[internalTab.value] = action;
   }
 }
@@ -385,6 +391,15 @@ function onNativeBoxSelect(event: Event): void {
   onBoxSelect((event as CustomEvent<BoxSelectionRegion>).detail);
 }
 
+function onNativeLassoSelect(event: Event): void {
+  emit("lasso-select", (event as CustomEvent<ScMapLassoSelection>).detail);
+}
+
+function onNativeClearSelection(): void {
+  clearLocalImmediateCrosshair();
+  emit("clear-selection");
+}
+
 function onNativeImmediateCrosshair(event: Event): void {
   localImmediateCrosshairPoints.value = {
     ...localImmediateCrosshairPoints.value,
@@ -465,13 +480,8 @@ function onBoxSelect(region: BoxSelectionRegion): void {
 }
 
 const handleLegendSelect = (key: LegendKey | null) => {
-  if (key === null) {
-    selectedClassNumber.value = null;
-    emit("legend-select", { ids: [], region: { x: 0, y: 0, w: 0, h: 0 }, key });
-  } else {
-    selectedClassNumber.value = key;
-    emit("legend-select", { ids: [], region: { x: 0, y: 0, w: 0, h: 0 }, key });
-  }
+  selectedClassNumber.value = key;
+  emit("legend-select", key);
 };
 
 function handleHiddenLegendKeysUpdate(keys: string[]): void {
@@ -552,6 +562,19 @@ function handleHiddenLegendKeysUpdate(keys: string[]): void {
               <NIcon><RemoveOutline /></NIcon>
             </template>
           </NButton>
+          <NButton
+            data-testid="sc-map-reset-zoom-button"
+            size="small"
+            quaternary
+            type="primary"
+            aria-label="Reset zoom"
+            :disabled="zoom == null"
+            @click="handleZoomIn(null)"
+          >
+            <template #icon>
+              <NIcon><ContractOutline /></NIcon>
+            </template>
+          </NButton>
           <ScReticleMapOptionsButton
             :modelValue="effectiveReticleOptions"
             :show-image-markers="showImageMarkers"
@@ -589,6 +612,8 @@ function handleHiddenLegendKeysUpdate(keys: string[]): void {
             :immediatePoints.prop="activeImmediatePoints"
             @zoom-in="onNativeZoom"
             @box-select="onNativeBoxSelect"
+            @lasso-select="onNativeLassoSelect"
+            @clear-selection="onNativeClearSelection"
             @immediate-crosshair-points="onNativeImmediateCrosshair"
             @map-progress="onNativeMapProgress"
             @map-ready="onNativeMapReady"

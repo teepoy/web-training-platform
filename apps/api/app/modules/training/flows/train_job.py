@@ -193,6 +193,12 @@ async def _run_training_pipeline_with_context(
         )
 
         lf = parse_and_apply_workflow_sample_filter(cast(Any, lf), sample_filter)
+    if dataset_type == "image_sc":
+        from app.modules.sc.app.services.training_selection import (
+            limit_sc_training_rows_per_class,
+        )
+
+        lf = limit_sc_training_rows_per_class(lf)
 
     ctx = TrainContext(
         job_id=job_id,

@@ -16,17 +16,6 @@ LABELED_IMAGE_V1 = ViewContractRef(
     contract="image.labeled.v1",
     schema_version="1",
 )
-BOX_DETECTION_V1 = ViewContractRef(
-    view_id="box_detection_v1",
-    contract="box_detection.v1",
-    schema_version="1",
-)
-QA_INPUT_V1 = ViewContractRef(
-    view_id="qa_input_v1",
-    contract="image.qa.v1",
-    schema_version="1",
-)
-
 CORE_IMAGE_CAPABILITIES = CapabilityBundle(
     views=(
         ViewDefinition(
@@ -51,35 +40,11 @@ CORE_IMAGE_CAPABILITIES = CapabilityBundle(
                 "app.modules.storage.domain.data_plane.schemas:LABELED_IMAGE_V1_SCHEMA"
             ),
         ),
-        ViewDefinition(
-            ref=BOX_DETECTION_V1,
-            name="Box Detection",
-            is_annotation_view=True,
-            row_type_path=(
-                "app.modules.datasets.views.box_detection.v1.schemas:BoxDetectionV1Row"
-            ),
-            arrow_schema_path=(
-                "app.modules.storage.domain.data_plane.schemas:BOX_DETECTION_V1_SCHEMA"
-            ),
-        ),
-        ViewDefinition(
-            ref=QA_INPUT_V1,
-            name="QA Input",
-            is_annotation_view=True,
-            row_type_path=(
-                "app.modules.datasets.views.qa_input.v1.schemas:QAInputV1Row"
-            ),
-            arrow_schema_path=(
-                "app.modules.storage.domain.data_plane.schemas:QA_INPUT_V1_SCHEMA"
-            ),
-        ),
     ),
 )
 
 __all__ = [
-    "BOX_DETECTION_V1",
     "CORE_IMAGE_CAPABILITIES",
     "IMAGE_INPUT_V1",
     "LABELED_IMAGE_V1",
-    "QA_INPUT_V1",
 ]

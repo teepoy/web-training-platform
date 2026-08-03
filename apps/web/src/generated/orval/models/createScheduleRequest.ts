@@ -4,7 +4,7 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { CreateScheduleRequestParameters } from './createScheduleRequestParameters';
+import type { CreateScheduleRequestParameters } from "./createScheduleRequestParameters";
 
 export interface CreateScheduleRequest {
   name: string;

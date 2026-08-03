@@ -5,4 +5,6 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type DeleteSensorSubscriptionApiV1SensorsSensorIdSubscriptionsSubIdDelete200 = {[key: string]: boolean};
+export type DeleteSensorSubscriptionApiV1SensorsSensorIdSubscriptionsSubIdDelete200 = {
+  [key: string]: boolean;
+};

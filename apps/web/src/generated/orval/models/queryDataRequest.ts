@@ -4,7 +4,7 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { QueryDataRequestParams } from './queryDataRequestParams';
+import type { QueryDataRequestParams } from "./queryDataRequestParams";
 
 /**
  * Structured data query from the agent.

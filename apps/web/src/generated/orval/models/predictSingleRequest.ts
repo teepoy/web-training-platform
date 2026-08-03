@@ -4,9 +4,9 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { PredictSingleRequestModelVersion } from './predictSingleRequestModelVersion';
-import type { PredictSingleRequestPrompt } from './predictSingleRequestPrompt';
-import type { PredictSingleRequestPredictorId } from './predictSingleRequestPredictorId';
+import type { PredictSingleRequestModelVersion } from "./predictSingleRequestModelVersion";
+import type { PredictSingleRequestPrompt } from "./predictSingleRequestPrompt";
+import type { PredictSingleRequestPredictorId } from "./predictSingleRequestPredictorId";
 
 /**
  * Request to predict a single sample.

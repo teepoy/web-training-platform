@@ -4,7 +4,9 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { ScSampleTableSetFilter } from './scSampleTableSetFilter';
-import type { ScSampleTableRangeFilter } from './scSampleTableRangeFilter';
+import type { ScSampleTableSetFilter } from "./scSampleTableSetFilter";
+import type { ScSampleTableRangeFilter } from "./scSampleTableRangeFilter";
 
-export type ScSampleTableRowsRequestFilterAnyOf = {[key: string]: ScSampleTableSetFilter | ScSampleTableRangeFilter};
+export type ScSampleTableRowsRequestFilterAnyOf = {
+  [key: string]: ScSampleTableSetFilter | ScSampleTableRangeFilter;
+};

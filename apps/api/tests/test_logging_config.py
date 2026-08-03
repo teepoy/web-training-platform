@@ -9,6 +9,26 @@ from omegaconf import OmegaConf
 from app.core.logger import init_logging
 
 
+def test_dev_logging_defaults_to_info(monkeypatch) -> None:
+    monkeypatch.delenv("LOG_LEVEL", raising=False)
+
+    init_logging(OmegaConf.create({"app": {"env": "dev"}}))
+
+    root = logging.getLogger()
+    assert root.level == logging.INFO
+    assert all(handler.level == logging.INFO for handler in root.handlers)
+
+
+def test_dev_logging_accepts_debug_override(monkeypatch) -> None:
+    monkeypatch.setenv("LOG_LEVEL", "DEBUG")
+
+    init_logging(OmegaConf.create({"app": {"env": "dev"}}))
+
+    root = logging.getLogger()
+    assert root.level == logging.DEBUG
+    assert all(handler.level == logging.DEBUG for handler in root.handlers)
+
+
 def test_prod_logging_uses_json_console_without_file_handler(
     capsys,
     monkeypatch,

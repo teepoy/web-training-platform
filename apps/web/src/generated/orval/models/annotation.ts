@@ -4,7 +4,7 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { AnnotationAnnotationValue } from './annotationAnnotationValue';
+import type { AnnotationAnnotationValue } from "./annotationAnnotationValue";
 
 export interface Annotation {
   id?: string;

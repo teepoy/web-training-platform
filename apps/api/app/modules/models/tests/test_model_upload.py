@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-import io
-import json
-
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -36,4 +33,4 @@ def test_list_model_upload_templates() -> None:
         resp = c.get("/api/v1/model-upload-templates")
         assert resp.status_code == 200
         template_ids = {item["id"] for item in resp.json()}
-        assert template_ids == {"image-classifier", "image-embedder", "vqa"}
+        assert template_ids == {"image-classifier", "image-embedder"}

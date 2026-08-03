@@ -213,6 +213,16 @@ All services at a glance:
 - Prefer `make updev` over the baked `web` container during daily development — or use `make up-dev` for the full compose dev stack.
 - GPU profile (`--profile gpu`) requires Linux with NVIDIA GPU and NVIDIA Container Toolkit. On macOS/non-NVIDIA hosts, GPU workers are simply omitted.
 - The API exposes `/health` for process liveness and `/ready` for database-backed readiness. Compose marks the API healthy only when `/ready` returns HTTP 200.
+- `PERSPECTIVE_WS_MEMORY` sets the hard memory limit for the entire
+  `perspective-ws` container. It defaults to `4g` in dev/local-prod and `8g` in
+  the split production platform; the production value covers all four
+  Supervisor-managed workers, not each worker independently.
+- `PERSPECTIVE_WS_MAX_RSS_MB` is a local-development readiness diagnostic for
+  native allocator investigation. Do not use it as production memory
+  protection because it can restart a container with active WebSocket clients.
+- Dev services default `LOG_LEVEL` to `INFO`, so Perspective memory probe
+  records are visible. Set `LOG_LEVEL=DEBUG` when additional diagnostics are
+  needed.
 
 ## Observability
 

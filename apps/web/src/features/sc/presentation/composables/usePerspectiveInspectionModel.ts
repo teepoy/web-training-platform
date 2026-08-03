@@ -6,6 +6,7 @@ import { DefectListSchema } from "@/features/sc/generated/proto/sc/v1/sample_pb"
 import type { ScSampleTableFilter, ScSampleTableSort } from "@/features/sc/domain/sampleTable";
 import type { ScLegendSource } from "@/features/sc/domain/workbenchInteraction";
 import type { HighlightDefect } from "@/features/sc/presentation/components/types";
+import { pointInPolygon, type ScMapLassoSelection } from "@platform/sc-map-element";
 import { usePerspectiveMapView } from "@/features/sc/presentation/components/composables/usePerspectiveMapView";
 import {
   useManagedPerspectiveView,
@@ -526,6 +527,57 @@ export function usePerspectiveInspectionModel(args: {
     );
   }
 
+  async function queryLassoSelection(
+    mode: MapMode,
+    selection: ScMapLassoSelection,
+  ): Promise<number[]> {
+    if (selection.points.length < 3) {
+      throw new Error("Lasso selection requires at least three points");
+    }
+    const table = args.perspectiveTable.value;
+    if (!table) return [];
+    const xColumn = `${mode}_x`;
+    const yColumn = `${mode}_y`;
+    const { region } = selection;
+    const filters = [
+      ...globalFilters.value,
+      [xColumn, ">=", region.x] as Filter,
+      [xColumn, "<=", region.x + region.w] as Filter,
+      [yColumn, ">=", region.y] as Filter,
+      [yColumn, "<=", region.y + region.h] as Filter,
+    ];
+    const managed = await managePerspectiveTable(table).view({
+      columns: ["defect_id", xColumn, yColumn],
+      expressions: mode === "reticle" ? args.reticleExpressions.value : undefined,
+      filter: filters,
+    } as never);
+    try {
+      const total = await managed.num_rows();
+      if (total === 0) return [];
+      const data = (await managed.to_columns({ start_row: 0, end_row: total })) as Record<
+        string,
+        unknown[]
+      >;
+      const ids: unknown[] = [];
+      for (let index = 0; index < total; index += 1) {
+        const point = {
+          x: Number(data[xColumn]?.[index]),
+          y: Number(data[yColumn]?.[index]),
+        };
+        if (
+          Number.isFinite(point.x) &&
+          Number.isFinite(point.y) &&
+          pointInPolygon(point, selection.points)
+        ) {
+          ids.push(data.defect_id?.[index]);
+        }
+      }
+      return sortedUniqueIds(ids);
+    } finally {
+      managed.retire();
+    }
+  }
+
   async function queryLegendSelection(key: string | number): Promise<number[]> {
     const table = args.perspectiveTable.value;
     if (!table) return [];
@@ -722,6 +774,7 @@ export function usePerspectiveInspectionModel(args: {
     setTableSelectedDefectIds,
     setReviewMode,
     queryBoxSelection,
+    queryLassoSelection,
     queryLegendSelection,
     queryGlobalFilterCount,
     queryRandomGlobalFilteredDefectIds,

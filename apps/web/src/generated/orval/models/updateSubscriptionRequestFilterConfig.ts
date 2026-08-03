@@ -4,6 +4,7 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { UpdateSubscriptionRequestFilterConfigAnyOf } from './updateSubscriptionRequestFilterConfigAnyOf';
+import type { UpdateSubscriptionRequestFilterConfigAnyOf } from "./updateSubscriptionRequestFilterConfigAnyOf";
 
-export type UpdateSubscriptionRequestFilterConfig = UpdateSubscriptionRequestFilterConfigAnyOf | null;
+export type UpdateSubscriptionRequestFilterConfig =
+  UpdateSubscriptionRequestFilterConfigAnyOf | null;

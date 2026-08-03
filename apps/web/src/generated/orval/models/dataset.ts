@@ -4,13 +4,13 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { TaskSpec } from './taskSpec';
-import type { DatasetOrgId } from './datasetOrgId';
-import type { DatasetEmbedConfig } from './datasetEmbedConfig';
-import type { DatasetLsProjectId } from './datasetLsProjectId';
-import type { DatasetLsProjectUrl } from './datasetLsProjectUrl';
-import type { DatasetStorageMode } from './datasetStorageMode';
-import type { DatasetDatasetMeta } from './datasetDatasetMeta';
+import type { TaskSpec } from "./taskSpec";
+import type { DatasetOrgId } from "./datasetOrgId";
+import type { DatasetEmbedConfig } from "./datasetEmbedConfig";
+import type { DatasetLsProjectId } from "./datasetLsProjectId";
+import type { DatasetLsProjectUrl } from "./datasetLsProjectUrl";
+import type { DatasetStorageMode } from "./datasetStorageMode";
+import type { DatasetDatasetMeta } from "./datasetDatasetMeta";
 
 export interface Dataset {
   id?: string;

@@ -4,14 +4,14 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { ScImportRequestMaxRows } from './scImportRequestMaxRows';
+import type { ScImportRequestMaxRows } from "./scImportRequestMaxRows";
 
 export interface ScImportRequest {
   source_inspection_time: string;
   source_wafer_key: number;
   /** @minLength 1 */
   dataset_name: string;
-  storage_mode?: 'file_shard_sparse';
+  storage_mode?: "file_shard_sparse";
   label_space?: string[];
   max_rows?: ScImportRequestMaxRows;
 }

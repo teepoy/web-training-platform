@@ -4,8 +4,8 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { ScSampleTableRowClusterId } from './scSampleTableRowClusterId';
-import type { ScSampleTableRowKillRatio } from './scSampleTableRowKillRatio';
+import type { ScSampleTableRowClusterId } from "./scSampleTableRowClusterId";
+import type { ScSampleTableRowKillRatio } from "./scSampleTableRowKillRatio";
 
 export interface ScSampleTableRow {
   defect_id: string;

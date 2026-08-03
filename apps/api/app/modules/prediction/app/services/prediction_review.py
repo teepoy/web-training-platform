@@ -26,7 +26,6 @@ from app.shared.infrastructure.label_studio.client import (
     LabelStudioError,
     platform_annotation_to_ls,
     platform_prediction_to_ls,
-    platform_text_prediction_to_ls,
 )
 
 
@@ -164,11 +163,7 @@ class PredictionReviewService:
                 errors.append(f"prediction {prediction.id} has runtime error")
                 continue
             try:
-                ls_result = (
-                    platform_text_prediction_to_ls(prediction.predicted_label)
-                    if prediction.target == "vqa"
-                    else platform_prediction_to_ls(prediction.predicted_label)
-                )
+                ls_result = platform_prediction_to_ls(prediction.predicted_label)
                 await ls_client.create_prediction(
                     task_id=sample.ls_task_id,
                     result=ls_result,

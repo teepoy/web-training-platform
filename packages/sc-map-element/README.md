@@ -24,6 +24,11 @@ The element exposes typed JavaScript properties rather than JSON attributes:
 - `defectSize`: rendered defect square size in CSS pixels
 - `zoom`: `{ x, y, w, h } | null`
 - `geometry`: wafer, die, and reticle geometry
+- `interactionMode`: `select`, `lasso`, `zoomin`, or `pan`
+
+Area selections are additive. Box selection emits `box-select`; lasso selection
+emits `lasso-select` with the polygon and its bounding region. Double-click emits
+`clear-selection`. Zoom reset is controlled explicitly by assigning `zoom = null`.
 
 `<sc-map>` owns both workers. Its Arrow worker retains and iterates the Arrow
 vectors directly for mode selection, zoom filtering, pixel-grid binning, and

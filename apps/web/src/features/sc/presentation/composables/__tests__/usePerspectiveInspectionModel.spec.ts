@@ -205,4 +205,90 @@ describe("usePerspectiveInspectionModel.highlightDefectsForIds", () => {
     // ignored. Map-selection updates change its filter result and must refresh.
     expect(model.sampleTableIgnoredUpdatePortIds.value).toEqual([2]);
   });
+
+  it("removes the map-selection filter after clearing so the sample table shows all rows", async () => {
+    let nextPort = 0;
+    const update = vi.fn(async () => undefined);
+    const table = {
+      make_port: vi.fn(async () => {
+        nextPort += 1;
+        return nextPort;
+      }),
+      update,
+    } as unknown as Table;
+    const model = usePerspectiveInspectionModel({
+      perspectiveTable: ref<Table | null>(table),
+      legendGroupBy: ref("class"),
+      tableFilter: ref({}),
+      reticleExpressions: ref({ reticle_x: '"die_x"', reticle_y: '"die_y"' }),
+    });
+
+    await model.appendMapSelection([1, 2]);
+    expect(model.sampleTableBaseViewConfig.value.filter).toEqual([["map_in_selection", "==", 1]]);
+
+    await model.clearMapSelection();
+
+    expect(update).toHaveBeenLastCalledWith(
+      {
+        defect_id: [1, 2],
+        map_in_selection: [0, 0],
+      },
+      { port_id: 1, format: null },
+    );
+    expect(model.mapSelectedDefectIds.value).toEqual([]);
+    expect(model.sampleTableBaseViewConfig.value.filter).toBeUndefined();
+  });
+
+  it("keeps sample and blink view filters synchronized across mixed selections and clear", async () => {
+    let nextPort = 0;
+    const update = vi.fn(async () => undefined);
+    const table = {
+      make_port: vi.fn(async () => {
+        nextPort += 1;
+        return nextPort;
+      }),
+      update,
+    } as unknown as Table;
+    const model = usePerspectiveInspectionModel({
+      perspectiveTable: ref<Table | null>(table),
+      legendGroupBy: ref("class"),
+      tableFilter: ref({}),
+      reticleExpressions: ref({ reticle_x: '"die_x"', reticle_y: '"die_y"' }),
+    });
+    const blinkViewConfig = capturedViewConfigs[0];
+    const selectionFilter = ["map_in_selection", "==", 1];
+
+    expect(model.sampleTableBaseViewConfig.value.filter).toBeUndefined();
+    expect(blinkViewConfig?.value.filter).toBeUndefined();
+
+    await model.applyMapSelection([10, 11]);
+    expect(model.sampleTableBaseViewConfig.value.filter).toContainEqual(selectionFilter);
+    expect(blinkViewConfig?.value.filter).toContainEqual(selectionFilter);
+
+    await model.appendMapSelection([11, 12]);
+    expect(model.mapSelectedDefectIds.value).toEqual([10, 11, 12]);
+    expect(model.sampleTableBaseViewConfig.value.filter).toContainEqual(selectionFilter);
+    expect(blinkViewConfig?.value.filter).toContainEqual(selectionFilter);
+
+    await model.applyMapSelection([20]);
+    expect(model.mapSelectedDefectIds.value).toEqual([20]);
+    expect(model.sampleTableBaseViewConfig.value.filter).toContainEqual(selectionFilter);
+    expect(blinkViewConfig?.value.filter).toContainEqual(selectionFilter);
+
+    model.setReviewMode(true);
+    expect(blinkViewConfig?.value.columns).toContain("review_image_ids_json");
+    expect(blinkViewConfig?.value.filter).toContainEqual(selectionFilter);
+
+    await model.clearMapSelection();
+    expect(model.mapSelectedDefectIds.value).toEqual([]);
+    expect(model.sampleTableBaseViewConfig.value.filter).not.toContainEqual(selectionFilter);
+    expect(blinkViewConfig?.value.filter).not.toContainEqual(selectionFilter);
+    expect(update).toHaveBeenLastCalledWith(
+      {
+        defect_id: [20],
+        map_in_selection: [0],
+      },
+      { port_id: 1, format: null },
+    );
+  });
 });

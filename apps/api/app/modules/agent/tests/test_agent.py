@@ -369,7 +369,7 @@ class TestPromptAssembler:
 
         prompt = assemble_prompt(
             dataset_name="Declared DS",
-            dataset_type="image_vqa",
+            dataset_type="image_classification",
             sample_count=50,
             label_space=[],
             annotation_stats={
@@ -378,15 +378,15 @@ class TestPromptAssembler:
                 "unlabeled_samples": 40,
                 "label_counts": {},
             },
-            metadata_dicts=[{"question": "What is this?"}],
+            metadata_dicts=[{"source": "camera-a"}],
             declared_metadata={
-                "question": {"type": "string", "description": "VQA question text"},
+                "source": {"type": "string", "description": "Image source name"},
             },
             has_predictions=False,
             has_embeddings=False,
         )
 
-        assert "VQA question text" in prompt
+        assert "Image source name" in prompt
         assert "declared" in prompt.lower()
 
 

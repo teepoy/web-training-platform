@@ -6,5 +6,5 @@
  */
 
 export type ExportParquetStreamApiV1PluginsExportParquetExportStreamPostParams = {
-dataset_id: string;
+  dataset_id: string;
 };

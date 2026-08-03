@@ -311,6 +311,23 @@ describe("useReclassifyPage - addLabel", () => {
     state.setAnnotationDraft("D001", "0");
     expect(state.annotationDraft.value.D001).toBe("0");
   });
+
+  it("publishes one draft update when labeling a large selection", async () => {
+    const { state } = await mountPage("ds-bulk-draft", DEFAULT_DATASET);
+    const defectIds = Array.from({ length: 10_000 }, (_, index) => `D-${index}`);
+    const initialDraft = state.annotationDraft.value;
+
+    state.setAnnotationDrafts(defectIds, "5");
+
+    expect(state.annotationDraft.value).not.toBe(initialDraft);
+    expect(Object.keys(state.annotationDraft.value)).toHaveLength(10_000);
+    expect(state.annotationDraft.value["D-0"]).toBe("5");
+    expect(state.annotationDraft.value["D-9999"]).toBe("5");
+
+    const publishedDraft = state.annotationDraft.value;
+    state.setAnnotationDrafts(defectIds, "5");
+    expect(state.annotationDraft.value).toBe(publishedDraft);
+  });
 });
 
 describe("useReclassifyPage - train defaults", () => {
@@ -334,6 +351,19 @@ describe("useReclassifyPage - train defaults", () => {
     await waitForCondition(() => state.activeClassCount.value === 1);
 
     expect(state.canTrainAndPredict.value).toBe(false);
+  });
+
+  it("explains the per-class training cap and validation pool", async () => {
+    const { state } = await mountPage("ds-training-cap", DEFAULT_DATASET, undefined, {
+      Scratch: 1_250,
+      Particle: 1_100,
+    });
+
+    await waitForCondition(() => state.trainingSampleLimitNotice.value !== null);
+
+    expect(state.trainingSampleLimitNotice.value).toContain("at most 1,000 annotations per class");
+    expect(state.trainingSampleLimitNotice.value).toContain("350 additional annotations");
+    expect(state.trainingSampleLimitNotice.value).toContain("validation pool");
   });
 
   it("passes the global filter condition to train-and-predict", async () => {
@@ -402,17 +432,30 @@ describe("useReclassifyPage - split plotPointsQuery / sampleRowsInfiniteQuery", 
     expect(state.hasMoreSamples.value).toBe(false);
   });
 
-  it("uses map box-selection IDs as BlinkTable data source filter", async () => {
+  it("uses map selection IDs as BlinkTable data source filter", async () => {
     const { state } = await mountPage("ds-filter-query", DEFAULT_DATASET);
-    state.handleBoxSelectionChange([274, 103]);
+    state.handleMapSelectionChange({
+      source: "box",
+      mode: "append",
+      ids: [274, 103],
+    });
 
     expect([...state.mapFilteredIds.value].sort()).toEqual(["274", "103"].sort());
   });
 
   it("clears the BlinkTable data source filter when the map emits an empty selection", async () => {
     const { state } = await mountPage("ds-box-filter", DEFAULT_DATASET);
-    state.handleBoxSelectionChange([103, 274]);
-    state.handleBoxSelectionChange([]);
+    state.handleMapSelectionChange({
+      source: "legend",
+      mode: "replace",
+      ids: [103, 274],
+      groupKey: 7,
+    });
+    state.handleMapSelectionChange({
+      source: "clear",
+      mode: "clear",
+      ids: [],
+    });
 
     expect(state.mapFilteredIds.value.size).toBe(0);
   });

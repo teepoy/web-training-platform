@@ -78,7 +78,6 @@ pulled from public registries.
 - All volumes use `emptyDir` — data is lost on pod restart. Use PVCs for persistence.
 - The `LABEL_STUDIO_EXTERNAL_URL` in the configmap should be updated to the actual
   browser-accessible URL for your cluster (e.g. via Ingress or NodePort).
-- The GPU worker requires `LLM_BASE_URL`, `LLM_MODEL`, and `LLM_API_KEY` for VQA workloads.
 - The GPU worker requests `nvidia.com/gpu: 1`. On clusters without NVIDIA GPU support,
   the GPU worker pod will not schedule unless this resource request is removed or
   the node has GPU capacity.

@@ -14,7 +14,6 @@ This is a high-level endpoint index for the current API surface. It is not a sch
 - `GET /api/v1/datasets/{dataset_id}`
 - `POST /api/v1/datasets/{dataset_id}/samples`
 - `POST /api/v1/datasets/{dataset_id}/samples/import` (bulk sample import via Label Studio `import_tasks`; each item may include optional `label`, and `null` means unlabeled task/sample)
-- `POST /api/v1/datasets/{dataset_id}/samples/import-vqa` (JSONL bulk import for VQA datasets)
 - `GET /api/v1/datasets/{dataset_id}/samples`
 - `GET /api/v1/datasets/{dataset_id}/samples/{sample_id}/images/{image_id}` — Serve an embedded sparse image from a dataset shard. Browser-native image callers must pass auth context by query parameter (`token`, and `org_id` when needed) because `<img>` requests cannot send platform headers.
 - `GET /api/v1/images/resolve?uri=` — Resolve storage-backed image URIs such as `s3://...` or `memory://...` through the backend image proxy. Frontend code should call `resolveImageUri()` / `resolveImageUris()` instead of hand-building this URL.

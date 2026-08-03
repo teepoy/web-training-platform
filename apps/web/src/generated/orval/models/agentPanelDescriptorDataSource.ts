@@ -4,8 +4,8 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { DataSourceApi } from './dataSourceApi';
-import type { DataSourceContext } from './dataSourceContext';
+import type { DataSourceApi } from "./dataSourceApi";
+import type { DataSourceContext } from "./dataSourceContext";
 
 /**
  * Reference to a data source

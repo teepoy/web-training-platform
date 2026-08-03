@@ -4,6 +4,6 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { UpdateScheduleRequestParametersAnyOf } from './updateScheduleRequestParametersAnyOf';
+import type { UpdateScheduleRequestParametersAnyOf } from "./updateScheduleRequestParametersAnyOf";
 
 export type UpdateScheduleRequestParameters = UpdateScheduleRequestParametersAnyOf | null;

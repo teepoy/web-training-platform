@@ -6,5 +6,5 @@
  */
 
 export type DownloadExportApiV1DownloadGetParams = {
-uri: string;
+  uri: string;
 };

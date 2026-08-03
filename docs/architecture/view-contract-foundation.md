@@ -15,7 +15,7 @@ In the current implementation, view contracts are **internal backend vocabulary*
 The system operates through a structured relationship between storage, semantics, IO, and runtime:
 
 - **StorageMode** (`db_full` | `file_shard_sparse`): Defines how data is physically stored and accessed.
-- **DatasetType** (`image_classification` | `image_vqa` | etc.): Defines the semantic meaning and schema of the dataset.
+- **DatasetType** (`image_classification` | `image_sc` | etc.): Defines the semantic meaning and schema of the dataset.
 - **ViewContract** (`LabeledImageV1` | `QAInputV1` | etc.): Defines the typed IO interface for a specific operation.
 - **TrainerSpec / PredictorSpec**: Catalog entries that declare which ViewContracts they require as input and which ModelType they produce or consume.
 

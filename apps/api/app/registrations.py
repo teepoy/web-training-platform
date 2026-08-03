@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-# ── Dataset types + Views (from consolidated datasets/ subdomains) ─────
+# ── Dataset types + Views ───────────────────────────────────────────────
 import app.modules.datasets.classification.models  # noqa: F401  # @dataset("image_classification"), image_input_v1, labeled_image_v1
-import app.modules.datasets.detection.models  # noqa: F401  # image_input_v1, box_detection_v1
-import app.modules.datasets.vqa.models  # noqa: F401  # image_input_v1, qa_input_v1
 import app.modules.sc.models  # noqa: F401  # @dataset("image_sc")
 
 # ── View rows listed explicitly by the import-safe capability catalog ──────

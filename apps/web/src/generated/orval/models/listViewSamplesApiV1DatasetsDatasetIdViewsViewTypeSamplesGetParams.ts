@@ -6,9 +6,9 @@
  */
 
 export type ListViewSamplesApiV1DatasetsDatasetIdViewsViewTypeSamplesGetParams = {
-offset?: number;
-limit?: number;
-order_by?: string;
-sampling_count?: number | null;
-sampleIds?: string | null;
+  offset?: number;
+  limit?: number;
+  order_by?: string;
+  sampling_count?: number | null;
+  sampleIds?: string | null;
 };

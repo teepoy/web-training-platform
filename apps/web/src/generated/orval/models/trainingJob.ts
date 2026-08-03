@@ -4,10 +4,10 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { JobStatus } from './jobStatus';
-import type { TrainingJobOrgId } from './trainingJobOrgId';
-import type { TrainingJobExternalJobId } from './trainingJobExternalJobId';
-import type { ArtifactRef } from './artifactRef';
+import type { JobStatus } from "./jobStatus";
+import type { TrainingJobOrgId } from "./trainingJobOrgId";
+import type { TrainingJobExternalJobId } from "./trainingJobExternalJobId";
+import type { ArtifactRef } from "./artifactRef";
 
 export interface TrainingJob {
   id?: string;

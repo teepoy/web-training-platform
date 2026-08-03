@@ -4,6 +4,6 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { TrainAndPredictRequestSampleFilterAnyOf } from './trainAndPredictRequestSampleFilterAnyOf';
+import type { TrainAndPredictRequestSampleFilterAnyOf } from "./trainAndPredictRequestSampleFilterAnyOf";
 
 export type TrainAndPredictRequestSampleFilter = TrainAndPredictRequestSampleFilterAnyOf | null;

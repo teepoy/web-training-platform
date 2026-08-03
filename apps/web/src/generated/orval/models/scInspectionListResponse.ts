@@ -4,7 +4,7 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { ScInspectionSummaryItem } from './scInspectionSummaryItem';
+import type { ScInspectionSummaryItem } from "./scInspectionSummaryItem";
 
 export interface ScInspectionListResponse {
   items: ScInspectionSummaryItem[];

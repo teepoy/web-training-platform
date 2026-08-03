@@ -6,5 +6,5 @@
  */
 
 export type ExportParquetApiV1PluginsExportParquetExportPostParams = {
-dataset_id: string;
+  dataset_id: string;
 };

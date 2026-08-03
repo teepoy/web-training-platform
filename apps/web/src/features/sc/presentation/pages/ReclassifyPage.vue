@@ -78,9 +78,7 @@ function clearSelectedDrafts(): void {
 
 function applyAnnotationCode(code: string): void {
   if (page.selectedDefectIds.value.size === 0) return;
-  for (const id of page.selectedDefectIds.value) {
-    page.setAnnotationDraft(id, code);
-  }
+  page.setAnnotationDrafts(page.selectedDefectIds.value, code);
 }
 
 async function handleTrainAndPredictClick(): Promise<void> {
@@ -257,6 +255,12 @@ function onSampleTableFilterChange(filter: ScSampleTableFilter): void {
             <NText v-if="page.trainPredictStatusMessage.value" depth="3" style="font-size: 11px">
               {{ page.trainPredictStatusMessage.value }}
             </NText>
+            <NTooltip v-if="page.trainingSampleLimitNotice.value" trigger="hover">
+              <template #trigger>
+                <NText type="warning" style="font-size: 11px">1,000/class limit</NText>
+              </template>
+              {{ page.trainingSampleLimitNotice.value }}
+            </NTooltip>
             <NButton
               v-if="page.trainPredictTaskId.value"
               size="small"
@@ -309,7 +313,7 @@ function onSampleTableFilterChange(filter: ScSampleTableFilter): void {
             :annotation-drafts="page.annotationDraft.value"
             @update:active-map-tab="page.setActiveMapTab"
             @update:reticle-options="page.updateReticleOptions"
-            @map-filter-change="({ ids }) => page.handleBoxSelectionChange(ids)"
+            @map-selection-change="page.handleMapSelectionChange"
             @zoom-in="page.setMapZoom"
             @update:table-filter="onSampleTableFilterChange"
             @table-selection-change="

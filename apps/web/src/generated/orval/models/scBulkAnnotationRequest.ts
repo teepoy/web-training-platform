@@ -4,7 +4,7 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { ScAnnotationItem } from './scAnnotationItem';
+import type { ScAnnotationItem } from "./scAnnotationItem";
 
 export interface ScBulkAnnotationRequest {
   annotations: ScAnnotationItem[];

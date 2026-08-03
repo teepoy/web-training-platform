@@ -48,7 +48,7 @@ describe("ScSampleTableVxe virtual paging", () => {
           clearCheckboxRow: vi.fn(),
           getScrollData: vi.fn(() => ({
             clientWidth: 400,
-            scrollLeft: 0,
+            scrollLeft: 640,
             scrollWidth: 2_400,
           })),
           loadData: vi.fn(async () => undefined),
@@ -78,6 +78,7 @@ describe("ScSampleTableVxe virtual paging", () => {
     await vi.waitFor(() => {
       expect(wrapper.attributes("data-hydrated-rows")).toBe("250");
     });
+    scrollTo.mockClear();
 
     expect(wrapper.get(".sst-vxe-scrollbar-rail--x").attributes("role")).toBe("scrollbar");
     expect(wrapper.get(".sst-vxe-scrollbar-rail--y").attributes("role")).toBe("scrollbar");
@@ -108,6 +109,7 @@ describe("ScSampleTableVxe virtual paging", () => {
         end_row: 500,
       });
       expect(scrollTo).toHaveBeenCalledWith(null, 4_500);
+      expect(scrollTo).toHaveBeenCalledWith(640, null);
     });
 
     expect(wrapper.attributes("data-hydrated-rows")).toBe("250");
@@ -223,9 +225,10 @@ describe("ScSampleTableVxe virtual paging", () => {
     wrapper.unmount();
   });
 
-  it("refreshes the total for repeated map-selection port updates", async () => {
+  it("reloads table rows for repeated map-selection port updates", async () => {
     let defectIds = [1, 2];
     let onViewUpdate: ((event: { port_id?: number }) => void) | undefined;
+    const reloadData = vi.fn(async () => undefined);
     const view = {
       num_rows: vi.fn(async () => defectIds.length),
       column_paths: vi.fn(async () => ["defect_id", "images"]),
@@ -266,7 +269,7 @@ describe("ScSampleTableVxe virtual paging", () => {
           loadData: vi.fn(async () => undefined),
           recalculate: vi.fn(async () => undefined),
           refreshScroll: vi.fn(async () => undefined),
-          reloadData: vi.fn(async () => undefined),
+          reloadData,
           scrollTo: vi.fn(async () => undefined),
           setCheckboxRowKey: vi.fn(),
         });
@@ -293,19 +296,146 @@ describe("ScSampleTableVxe virtual paging", () => {
     await vi.waitFor(() => {
       expect(wrapper.get(".sst-vxe-header-label").text()).toContain("2");
     });
+    expect(reloadData).toHaveBeenCalledTimes(1);
+    expect(reloadData.mock.calls[0]?.[0].map((row) => row.defect_id)).toEqual(["1", "2"]);
 
-    defectIds = [1, 2, 3];
+    defectIds = [99];
+    onViewUpdate?.({ port_id: 2 });
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    expect(reloadData).toHaveBeenCalledTimes(1);
+
+    defectIds = [7, 8, 9];
     onViewUpdate?.({ port_id: 1 });
     await vi.waitFor(() => {
       expect(wrapper.get(".sst-vxe-header-label").text()).toContain("3");
+      expect(reloadData).toHaveBeenCalledTimes(2);
     });
+    expect(reloadData.mock.calls[1]?.[0].map((row) => row.defect_id)).toEqual(["7", "8", "9"]);
 
-    defectIds = [1, 2, 3, 4];
+    defectIds = [10, 11, 12, 13];
     onViewUpdate?.({ port_id: 1 });
     await vi.waitFor(() => {
       expect(wrapper.get(".sst-vxe-header-label").text()).toContain("4");
+      expect(reloadData).toHaveBeenCalledTimes(3);
+    });
+    expect(reloadData.mock.calls[2]?.[0].map((row) => row.defect_id)).toEqual([
+      "10",
+      "11",
+      "12",
+      "13",
+    ]);
+
+    wrapper.unmount();
+  });
+
+  it("rebuilds selected and all-sample views across repeated select and clear cycles", async () => {
+    const selectedIds = [1, 2];
+    const allIds = [1, 2, 3, 4];
+    const views: Array<View & { delete: ReturnType<typeof vi.fn> }> = [];
+    const table = {
+      view: vi.fn(async (config: { filter?: unknown[] }) => {
+        const filtered = config.filter?.some(
+          (filter) =>
+            Array.isArray(filter) &&
+            filter[0] === "map_in_selection" &&
+            filter[1] === "==" &&
+            filter[2] === 1,
+        );
+        const defectIds = filtered ? selectedIds : allIds;
+        const view = {
+          num_rows: vi.fn(async () => defectIds.length),
+          column_paths: vi.fn(async () => ["defect_id", "images"]),
+          to_arrow: vi.fn(
+            async (options: {
+              start_row?: number;
+              end_row?: number;
+              start_col?: number;
+              end_col?: number;
+            }) => {
+              if (options.start_col !== undefined) return ipc({ defect_id: defectIds });
+              const start = options.start_row ?? 0;
+              const end = Math.min(options.end_row ?? defectIds.length, defectIds.length);
+              return ipc({
+                defect_id: defectIds.slice(start, end),
+                images: Array.from({ length: end - start }, () => 5),
+              });
+            },
+          ),
+          on_update: vi.fn(),
+          delete: vi.fn(async () => undefined),
+        } as unknown as View & { delete: ReturnType<typeof vi.fn> };
+        views.push(view);
+        return view;
+      }),
+    } as unknown as Table;
+    const reloadData = vi.fn(async () => undefined);
+    const VxeTableStub = defineComponent({
+      name: "VxeTable",
+      setup(_props, { expose }) {
+        expose({
+          clearCheckboxRow: vi.fn(),
+          getScrollData: vi.fn(() => ({
+            clientWidth: 400,
+            scrollLeft: 0,
+            scrollWidth: 2_400,
+          })),
+          loadData: vi.fn(async () => undefined),
+          recalculate: vi.fn(async () => undefined),
+          refreshScroll: vi.fn(async () => undefined),
+          reloadData,
+          scrollTo: vi.fn(async () => undefined),
+          setCheckboxRowKey: vi.fn(),
+        });
+        return {};
+      },
+      template: '<div class="vxe-table-stub" />',
+    });
+    const { wrapper } = await mountWithProviders(ScSampleTableVxe, {
+      props: {
+        perspectiveTable: table,
+        baseViewConfig: {
+          filter: [["map_in_selection", "==", 1]],
+        },
+      },
+      global: {
+        stubs: {
+          "vxe-table": VxeTableStub,
+          "vxe-column": true,
+        },
+      },
     });
 
+    await vi.waitFor(() => {
+      expect(wrapper.get(".sst-vxe-header-label").text()).toContain("2");
+    });
+
+    await wrapper.setProps({ baseViewConfig: {} });
+    await vi.waitFor(() => {
+      expect(wrapper.get(".sst-vxe-header-label").text()).toContain("4");
+      expect(table.view).toHaveBeenCalledTimes(2);
+    });
+
+    await wrapper.setProps({
+      baseViewConfig: { filter: [["map_in_selection", "==", 1]] },
+    });
+    await vi.waitFor(() => {
+      expect(wrapper.get(".sst-vxe-header-label").text()).toContain("2");
+      expect(table.view).toHaveBeenCalledTimes(3);
+    });
+
+    await wrapper.setProps({ baseViewConfig: {} });
+    await vi.waitFor(() => {
+      expect(wrapper.get(".sst-vxe-header-label").text()).toContain("4");
+      expect(table.view).toHaveBeenCalledTimes(4);
+    });
+
+    expect(reloadData.mock.calls.map(([rows]) => rows.map((row) => row.defect_id))).toEqual([
+      ["1", "2"],
+      ["1", "2", "3", "4"],
+      ["1", "2"],
+      ["1", "2", "3", "4"],
+    ]);
+    expect(views.slice(0, -1).every((view) => view.delete.mock.calls.length === 1)).toBe(true);
     wrapper.unmount();
   });
 
@@ -400,9 +530,9 @@ describe("ScSampleTableVxe virtual paging", () => {
     await new Promise((resolve) => setTimeout(resolve, 25));
     expect(table.view).toHaveBeenCalledTimes(2);
     expect(views[0]?.delete).toHaveBeenCalledTimes(1);
-    expect(reloadData).not.toHaveBeenCalled();
-    expect(loadData).toHaveBeenCalledTimes(1);
-    expect(loadData.mock.calls[0]?.[0]).toHaveLength(3);
+    expect(loadData).not.toHaveBeenCalled();
+    expect(reloadData).toHaveBeenCalledTimes(1);
+    expect(reloadData.mock.calls[0]?.[0]).toHaveLength(3);
     expect(scrollTo).toHaveBeenCalledWith(640, null);
 
     const emittedSort = wrapper.emitted("sort-change")?.at(-1)?.[0];

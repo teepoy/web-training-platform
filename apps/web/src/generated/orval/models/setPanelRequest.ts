@@ -4,7 +4,7 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { AgentPanelDescriptor } from './agentPanelDescriptor';
+import type { AgentPanelDescriptor } from "./agentPanelDescriptor";
 
 /**
  * Request body for adding / replacing a panel on a surface.

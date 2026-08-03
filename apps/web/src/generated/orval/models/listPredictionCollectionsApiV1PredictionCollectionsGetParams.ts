@@ -6,7 +6,7 @@
  */
 
 export type ListPredictionCollectionsApiV1PredictionCollectionsGetParams = {
-dataset_id: string;
-offset?: number;
-limit?: number;
+  dataset_id: string;
+  offset?: number;
+  limit?: number;
 };

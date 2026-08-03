@@ -4,6 +4,6 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { ScBoxFilterRequestFilterAnyOf } from './scBoxFilterRequestFilterAnyOf';
+import type { ScBoxFilterRequestFilterAnyOf } from "./scBoxFilterRequestFilterAnyOf";
 
 export type ScBoxFilterRequestFilter = ScBoxFilterRequestFilterAnyOf | null;

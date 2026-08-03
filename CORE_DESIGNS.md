@@ -143,6 +143,12 @@ Dataset image access 必须通过平台后端代理表达。`file_shard_sparse` 
 
 大数据集模式不追求与小数据集完全功能对齐。`file_shard_sparse` 的目标是大规模 ingest、批量预测、稀疏人工修正；不是重建完整 `SampleORM + Label Studio` 流程。
 
+SC Train & Predict 对每个有效标注类别最多选择 1,000 个样本进入训练物化。
+选择必须按稳定 sample identity 确定性执行，并在应用 workflow filter 后进行。
+超出上限的标注样本不进入训练物化，但仍保留在原始预测范围内，预测结果进入
+validation/review pool。前端必须在任一类别超过上限时向用户显示该规则，不能把
+1,000 条上限实现为未公开的 runtime 默认值。
+
 完整 capability matrix 和 SC sparse 路径详见 `docs/architecture/dataset-storage-modes.md`。Smoke 验证使用 `make smoke-tests`。
 
 ## 5. Label Studio 与 Prediction

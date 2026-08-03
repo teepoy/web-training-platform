@@ -6,10 +6,10 @@
  */
 
 export type ListJobsApiV1TrainingJobsGetParams = {
-/**
- * Filter by dataset
- */
-dataset_id?: string | null;
-offset?: number;
-limit?: number;
+  /**
+   * Filter by dataset
+   */
+  dataset_id?: string | null;
+  offset?: number;
+  limit?: number;
 };

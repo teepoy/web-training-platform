@@ -4,12 +4,12 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { ModelResponseName } from './modelResponseName';
-import type { ModelResponseFileSize } from './modelResponseFileSize';
-import type { ModelResponseFileHash } from './modelResponseFileHash';
-import type { ModelResponseFormat } from './modelResponseFormat';
-import type { ModelResponseCreatedAt } from './modelResponseCreatedAt';
-import type { ModelResponseMetadata } from './modelResponseMetadata';
+import type { ModelResponseName } from "./modelResponseName";
+import type { ModelResponseFileSize } from "./modelResponseFileSize";
+import type { ModelResponseFileHash } from "./modelResponseFileHash";
+import type { ModelResponseFormat } from "./modelResponseFormat";
+import type { ModelResponseCreatedAt } from "./modelResponseCreatedAt";
+import type { ModelResponseMetadata } from "./modelResponseMetadata";
 
 export interface ModelResponse {
   id: string;
