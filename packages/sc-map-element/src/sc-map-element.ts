@@ -159,6 +159,8 @@ export class ScMapElement extends HTMLElement {
   #dragInteractionMode: ScMapInteractionMode | null = null;
   #dragTransform: Transform | null = null;
   #dragViewport: ScMapRegion | null = null;
+  #rightPointerActive = false;
+  #suppressNextContextMenu = false;
   #lassoPoints: ScMapPoint[] = [];
   #previewZoom: ScMapRegion | null = null;
   #wheelInteraction: "pan" | "zoom" | null = null;
@@ -194,7 +196,7 @@ export class ScMapElement extends HTMLElement {
     this.#overlay.addEventListener("pointercancel", this.#onPointerCancel);
     this.#overlay.addEventListener("wheel", this.#onWheel, { passive: false });
     this.#overlay.addEventListener("dblclick", this.#onDoubleClick);
-    this.#overlay.addEventListener("contextmenu", (event) => event.preventDefault());
+    this.#overlay.addEventListener("contextmenu", this.#onContextMenu);
   }
 
   connectedCallback(): void {
@@ -866,10 +868,26 @@ export class ScMapElement extends HTMLElement {
     return { x: event.clientX - rect.left, y: event.clientY - rect.top };
   }
 
+  #onContextMenu = (event: MouseEvent): void => {
+    event.preventDefault();
+    if (this.#suppressNextContextMenu) {
+      this.#suppressNextContextMenu = false;
+      return;
+    }
+    this.dispatchEvent(
+      new CustomEvent("map-context-menu", {
+        detail: { x: event.clientX, y: event.clientY },
+        bubbles: true,
+      }),
+    );
+  };
+
   #onPointerDown = (event: PointerEvent): void => {
     if (event.button !== 0 && event.button !== 2) return;
     this.#flushWheelGesture();
     if (event.button === 2) event.preventDefault();
+    this.#rightPointerActive = event.button === 2;
+    this.#suppressNextContextMenu = false;
     this.#overlay.setPointerCapture?.(event.pointerId);
     this.#dragStart = this.#localPoint(event);
     this.#dragEnd = { ...this.#dragStart };
@@ -884,6 +902,12 @@ export class ScMapElement extends HTMLElement {
   #onPointerMove = (event: PointerEvent): void => {
     if (!this.#dragStart) return;
     this.#dragEnd = this.#localPoint(event);
+    if (
+      this.#rightPointerActive &&
+      Math.hypot(this.#dragEnd.x - this.#dragStart.x, this.#dragEnd.y - this.#dragStart.y) >= 4
+    ) {
+      this.#suppressNextContextMenu = true;
+    }
     if (this.#dragInteractionMode === "pan" && this.#dragTransform && this.#dragViewport) {
       const [startX, startY] = this.#toData(
         this.#dragTransform,
@@ -932,6 +956,7 @@ export class ScMapElement extends HTMLElement {
     const lassoPoints = this.#lassoPoints;
     const dragInteractionMode = this.#dragInteractionMode;
     const dragViewport = this.#dragViewport;
+    this.#rightPointerActive = false;
     this.#dragStart = null;
     this.#dragEnd = null;
     this.#dragInteractionMode = null;
@@ -1008,6 +1033,8 @@ export class ScMapElement extends HTMLElement {
   };
 
   #onPointerCancel = (): void => {
+    this.#rightPointerActive = false;
+    this.#suppressNextContextMenu = false;
     this.#dragStart = null;
     this.#dragEnd = null;
     this.#dragInteractionMode = null;

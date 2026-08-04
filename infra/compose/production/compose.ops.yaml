@@ -1,6 +1,9 @@
 # Operational one-shot services — run with --profile ops.
 # No long-running services here. These services exit after completion.
 # Use the same .env file as the platform project.
+# The platform environment block is intentionally repeated from
+# compose.platform.yaml: these are separate Compose projects and YAML anchors
+# cannot cross files. scripts/check_compose_parity.py guards the shared keys.
 
 x-platform-environment: &platform-environment
   APP_CONFIG_PROFILE: ${APP_CONFIG_PROFILE:?Set APP_CONFIG_PROFILE to pre-release or prod}

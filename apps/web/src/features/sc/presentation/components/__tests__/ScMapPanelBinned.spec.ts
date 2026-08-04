@@ -72,6 +72,60 @@ describe("ScMapPanelBinned unified map", () => {
     expect(wrapper.find('[data-testid="sc-map-reset-zoom-button"]').exists()).toBe(true);
   });
 
+  it("lets the user include or exclude selected defects from the map context menu", async () => {
+    const { wrapper } = await mountWithProviders(ScMapPanelBinned, {
+      props: { mapSelectionMode: "include", mapSelectionCount: 2, canUndoMapSelectionMode: true },
+    });
+    const map = wrapper.find('[data-testid="sc-unified-map"]');
+    map.element.dispatchEvent(new CustomEvent("map-context-menu", { detail: { x: 120, y: 240 } }));
+    await wrapper.vm.$nextTick();
+    await wrapper.vm.$nextTick();
+    const menu = wrapper
+      .findAllComponents(NDropdown)
+      .find((dropdown) => dropdown.props("trigger") === "manual");
+
+    expect(wrapper.find('[data-testid="sc-map-selection-mode"]').exists()).toBe(false);
+    expect(menu).toBeDefined();
+    if (!menu) throw new Error("map selection context menu was not mounted");
+    expect(menu.props("show")).toBe(true);
+    expect(menu.props("x")).toBe(120);
+    expect(menu.props("y")).toBe(240);
+    const options = menu.props("options") as Array<{
+      label?: string;
+      key?: string;
+      disabled?: boolean;
+      children?: Array<{ label?: string }>;
+    }>;
+    expect(options.slice(0, 4)).toEqual([
+      { label: "Exclude all others", key: "include", disabled: true },
+      { label: "Exclude selected", key: "exclude", disabled: false },
+      { label: "Invert selection", key: "invert-selection", disabled: false },
+      { label: "Copy selected defect IDs", key: "copy-selected-defect-ids", disabled: false },
+    ]);
+    expect(options[5]).toEqual({
+      label: "Undo selection filter",
+      key: "undo-selection-filter",
+      disabled: false,
+    });
+    expect(options[6]?.label).toBe("Selection tool");
+    expect(options[6]?.children?.map((option) => option.label)).toEqual([
+      "Box selection (append)",
+      "Lasso selection (append)",
+      "Drag to zoom",
+      "Pan map",
+    ]);
+
+    menu.vm.$emit("select", "exclude");
+    menu.vm.$emit("select", "invert-selection");
+    menu.vm.$emit("select", "copy-selected-defect-ids");
+    menu.vm.$emit("select", "undo-selection-filter");
+
+    expect(wrapper.emitted("update:mapSelectionMode")?.at(-1)).toEqual(["exclude"]);
+    expect(wrapper.emitted("invert-map-selection-mode")).toEqual([[]]);
+    expect(wrapper.emitted("copy-selected-defect-ids")).toEqual([[]]);
+    expect(wrapper.emitted("undo-map-selection-mode")).toEqual([[]]);
+  });
+
   it("offers one-step zoom in and zoom out controls", async () => {
     const { wrapper } = await mountWithProviders(ScMapPanelBinned, {
       props: {

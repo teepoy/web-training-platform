@@ -14,9 +14,6 @@ API_PORT    ?= 8000
 API_URL     ?= http://localhost:$(API_PORT)
 WEB_PORT    ?= 5173
 COMPOSE_DEV  := infra/compose/docker-compose.yaml -f infra/compose/docker-compose.dev.yaml
-COMPOSE_RELEASE_LOCAL := infra/compose/docker-compose.yaml -f infra/compose/docker-compose.prod.yaml
-LOCAL_PROD_PREFECT_AUTH ?= dangerous:dangerous
-LOCAL_RELEASE_PREFECT_AUTH ?= $(LOCAL_PROD_PREFECT_AUTH)
 DATA_DIR     := infra/compose/data
 IMAGE_PARSER_GRPC_ADDR_HOST ?= 127.0.0.1:9092
 SC_WAFER_MOCK_DEFECTS ?= 300000
@@ -147,11 +144,6 @@ install-web: ## Install frontend (pnpm) dependencies
 # ──────────────────────────────────────────────
 # Dev servers
 # ──────────────────────────────────────────────
-
-.PHONY: dev
-dev: ## [DEPRECATED] Use `make up-dev` instead. Redirects to compose dev mode.
-	@echo "⚠️  'make dev' is deprecated. Use 'make up-dev' for compose dev mode." >&2
-	@$(MAKE) up-dev
 
 .PHONY: dev-api
 dev-api: ## Start API dev server (default: 8000)
@@ -432,34 +424,13 @@ up-dev: ensure-fixtures ## Start compose dev stack (volume mounts, hot reload)
 up-dev-host-api: ensure-fixtures ## Start compose dev dependencies without Docker API/Web
 	docker compose -f $(COMPOSE_DEV) up -d --scale api=0 --scale web=0 $(ARGS)
 
-.PHONY: up-release-local
-up-release-local: ensure-fixtures ## Start the legacy local release-validation stack (not production)
-	PREFECT_SERVER_API_AUTH_STRING=$(LOCAL_RELEASE_PREFECT_AUTH) docker compose -f $(COMPOSE_RELEASE_LOCAL) up -d --wait --wait-timeout 300 postgres minio redis label-studio prefect-server sc-upstream image-parser
-	PREFECT_SERVER_API_AUTH_STRING=$(LOCAL_RELEASE_PREFECT_AUTH) docker compose -f $(COMPOSE_RELEASE_LOCAL) run --rm api /app/.venv/bin/python scripts/prepare_platform.py
-	PREFECT_SERVER_API_AUTH_STRING=$(LOCAL_RELEASE_PREFECT_AUTH) docker compose -f $(COMPOSE_RELEASE_LOCAL) up -d --wait --wait-timeout 300 api sc-data-provider web prefect-worker-cpu $(ARGS)
-
-.PHONY: up-prod
-up-prod: ## [DEPRECATED] Use `make up-release-local`; real production uses `make up-prod-all`
-	@echo "WARNING: 'make up-prod' is local validation, not production. Redirecting to 'make up-release-local'." >&2
-	@$(MAKE) up-release-local ARGS="$(ARGS)"
-
 .PHONY: build-dev
 build-dev: ## Build all dev-target Docker images
 	docker compose -f $(COMPOSE_DEV) build $(ARGS)
 
-.PHONY: build-release-local
-build-release-local: ## Build prod-target images for the legacy local validation stack
-	PREFECT_SERVER_API_AUTH_STRING=$(LOCAL_RELEASE_PREFECT_AUTH) docker compose -f $(COMPOSE_RELEASE_LOCAL) $(PROFILES) build $(ARGS)
-
-.PHONY: build-prod
-build-prod: ## [DEPRECATED] Use `make build-release-local`
-	@echo "WARNING: 'make build-prod' builds only the local validation stack." >&2
-	@$(MAKE) build-release-local ARGS="$(ARGS)" PROFILES="$(PROFILES)"
-
 .PHONY: check-config
-check-config: ## Render dev, local release-validation, pre-release, and production Compose configurations
+check-config: ## Render dev, local pre-release, deployed pre-release, and production configurations
 	docker compose -f $(COMPOSE_DEV) config --quiet
-	PREFECT_SERVER_API_AUTH_STRING=$(LOCAL_RELEASE_PREFECT_AUTH) docker compose -f $(COMPOSE_RELEASE_LOCAL) config --quiet
 	docker compose --env-file infra/compose/production/env-stateful.example -f $(COMPOSE_PROD_STATEFUL) config --quiet
 	APP_CONFIG_PROFILE=pre-release docker compose --env-file infra/compose/production/env-platform.example -f $(COMPOSE_PROD_PLATFORM) config --quiet
 	APP_CONFIG_PROFILE=prod docker compose --env-file infra/compose/production/env-platform.example -f $(COMPOSE_PROD_PLATFORM) config --quiet
@@ -474,28 +445,9 @@ check-config: ## Render dev, local release-validation, pre-release, and producti
 logs-dev: ## Tail dev compose logs (usage: make logs-dev ARGS="api")
 	docker compose -f $(COMPOSE_DEV) logs -f $(ARGS)
 
-.PHONY: logs-release-local
-logs-release-local: ## Tail legacy local release-validation logs (usage: ARGS="api")
-	PREFECT_SERVER_API_AUTH_STRING=$(LOCAL_RELEASE_PREFECT_AUTH) docker compose -f $(COMPOSE_RELEASE_LOCAL) logs -f $(ARGS)
-
-.PHONY: logs-prod
-logs-prod: ## [DEPRECATED] Use `make logs-release-local`
-	@echo "WARNING: 'make logs-prod' refers to local validation, not production." >&2
-	@$(MAKE) logs-release-local ARGS="$(ARGS)"
-
-.PHONY: build
-build: ## Build all dev-target Docker images (use build-dev/build-release-local explicitly)
-	docker compose -f $(COMPOSE_DEV) build
-
 .PHONY: export-bundle
 export-bundle: ## Export source snapshot and docker images to a tar bundle
 	bash scripts/export_bundle.sh $(ARGS)
-
-.PHONY: up
-up: ensure-fixtures ## [DEPRECATED] Use `make up-dev` instead. Redirects to dev mode.
-	@echo "⚠️  'make up' is deprecated. Use 'make up-dev' for development." >&2
-	@echo "⏳ Redirecting to 'make up-dev'..." >&2
-	@docker compose -f $(COMPOSE_DEV) up -d
 
 .PHONY: ensure-fixtures
 ensure-fixtures: ## Ensure host-side bind-mount fixture files exist (idempotent; safe to run anytime)
@@ -510,12 +462,6 @@ ensure-fixtures: ## Ensure host-side bind-mount fixture files exist (idempotent;
 			echo "⚠️  Missing optional fixture: $$f" >&2; \
 		fi; \
 	done
-
-.PHONY: up-stack
-up-stack: ensure-fixtures ## [DEPRECATED] Use `make up-dev ARGS="--scale web=0"`. Redirects to dev mode without web.
-	@echo "⚠️  'make up-stack' is deprecated. Use 'make up-dev ARGS=\"--scale web=0\"' instead." >&2
-	@echo "⏳ Redirecting to 'make up-dev ARGS=\"--scale web=0\"'..." >&2
-	@docker compose -f $(COMPOSE_DEV) up -d --scale web=0
 
 .PHONY: prune-dev
 prune-dev: ## Wipe ALL dev data: compose volumes (postgres, minio, label-studio, prometheus, grafana) + local SQLite files
@@ -567,10 +513,6 @@ db-migrate-compose: ## Run Alembic migrations inside Compose API container (dev 
 .PHONY: down
 down: ## Stop dev compose stack only
 	@docker compose -f $(COMPOSE_DEV) down --remove-orphans 2>/dev/null || true
-
-.PHONY: logs
-logs: ## Tail dev compose logs (use logs-dev/logs-release-local explicitly)
-	docker compose -f $(COMPOSE_DEV) logs -f $(ARGS) -n 1000
 
 # ──────────────────────────────────────────────
 # Canonical deployed release targets. Pre-release and prod use these exact

@@ -1,14 +1,12 @@
 # ─────────────────────────────────────────────────────────────────────
-# Dev override compose file
+# Source-mounted development overlay for docker-compose.yaml.
 # Usage: docker compose -f infra/compose/docker-compose.yaml -f infra/compose/docker-compose.dev.yaml up -d
 # With profiles:
 #   --profile observability  → start observability stack
 #   --profile gpu            → start GPU worker + dcgm-exporter (Linux/NVIDIA only)
 #
-# CRITICAL: Compose override files REPLACE list fields entirely.
-# Every service fully redeclares ALL list fields:
-#   volumes, command, environment, depends_on, healthcheck,
-#   restart, ports, profiles, devices, privileged, deploy
+# This file owns all local application/runtime services. Services in
+# docker-compose.yaml are infrastructure dependencies only.
 # ─────────────────────────────────────────────────────────────────────
 
 x-platform-environment: &platform-environment
@@ -116,7 +114,7 @@ x-api-runtime: &api-runtime
     prefect-server:
       condition: service_healthy
     redis:
-      condition: service_started
+      condition: service_healthy
     sc-upstream:
       condition: service_healthy
     image-parser:
@@ -228,21 +226,21 @@ services:
       resources:
         limits:
           memory: ${IMAGE_PARSER_MEMORY:-2g}
+    depends_on:
+      sc-upstream:
+        condition: service_healthy
     volumes:
       - ../../services/image-parser:/app/services/image-parser
     environment:
       PORT: "8090"
       GRPC_PORT: "9092"
-      CACHE_SIZE_MB: "1024"
+      CACHE_SIZE_MB: ${IMAGE_PARSER_CACHE_SIZE_MB:-1024}
       CACHE_DIR: /tmp/image-parser-cache
-      CACHE_TTL: 10m
-      CACHE_CLEANUP_INTERVAL: 5m
-      CACHE_MAX_BYTES: "1073741824"
+      CACHE_TTL: ${IMAGE_PARSER_CACHE_TTL:-10m}
+      CACHE_CLEANUP_INTERVAL: ${IMAGE_PARSER_CACHE_CLEANUP_INTERVAL:-5m}
+      CACHE_MAX_BYTES: ${IMAGE_PARSER_CACHE_MAX_BYTES:-1073741824}
       S3_MAX_CONNS: "1000"
       SC_UPSTREAM_ADDR: sc-upstream:9091
-    depends_on:
-      sc-upstream:
-        condition: service_healthy
     ports:
       - "8090:8090"
       - "9092:9092"
@@ -271,10 +269,13 @@ services:
       resources:
         limits:
           memory: ${SC_UPSTREAM_MEMORY:-2g}
+    depends_on:
+      redis:
+        condition: service_healthy
     volumes:
+      - ./data:/data
       - ../../services/sc-upstream:/app/services/sc-upstream
       - ../../libs/protos:/app/libs/protos
-      - ./data:/data
     command:
       [
         "/bin/sh",
@@ -286,10 +287,9 @@ services:
       GRPC_PORT: "9091"
       FLIGHT_PORT: "9093"
       CACHE_DIR: /data/cache
+      SC_UPSTREAM_CACHE_SIZE_LIMIT_BYTES: ${SC_UPSTREAM_CACHE_SIZE_LIMIT_BYTES:-10737418240}
+      SC_UPSTREAM_RAW_CACHE_CLEANUP_INTERVAL_SECONDS: ${SC_UPSTREAM_RAW_CACHE_CLEANUP_INTERVAL_SECONDS:-7200}
       REDIS_URL: redis://redis:6379/0
-    depends_on:
-      redis:
-        condition: service_started
     expose:
       - "9091"
       - "9093"

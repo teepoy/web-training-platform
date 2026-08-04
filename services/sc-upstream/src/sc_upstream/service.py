@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import grpc
-
 from datetime import datetime
+
+import grpc
 
 from proto_stubs.sc.v1 import upstream_pb2 as pb
 from proto_stubs.sc.v1 import upstream_pb2_grpc as pb_grpc
@@ -25,12 +25,12 @@ class ScUpstreamService(pb_grpc.ScUpstreamServicer):
         return pb.HealthResponse(status="ok")
 
     async def GetInspection(
-        self, request: pb.GetInspectionRequest, context: grpc.ServicerContext
+        self, request: pb.GetInspectionRequest, context: grpc.aio.ServicerContext
     ) -> pb.GetInspectionResponse:
         try:
             dt = datetime.fromisoformat(request.inspection_time)
         except ValueError:
-            context.abort(
+            await context.abort(
                 grpc.StatusCode.INVALID_ARGUMENT, "invalid inspection_time format"
             )
             return pb.GetInspectionResponse()
@@ -54,20 +54,20 @@ class ScUpstreamService(pb_grpc.ScUpstreamServicer):
                     return _to_inspection_response(cached)
             record = await self._db.get_inspection(dt, wk)
         if record is None:
-            context.abort(grpc.StatusCode.NOT_FOUND, "inspection not found")
+            await context.abort(grpc.StatusCode.NOT_FOUND, "inspection not found")
             return pb.GetInspectionResponse()
 
         await self._cache.set_inspection(it, wk, record)
         return _to_inspection_response(record)
 
     async def ListInspections(
-        self, request: pb.ListInspectionsRequest, context: grpc.ServicerContext
+        self, request: pb.ListInspectionsRequest, context: grpc.aio.ServicerContext
     ) -> pb.ListInspectionsResponse:
         try:
             start = datetime.fromisoformat(request.start_time)
             end = datetime.fromisoformat(request.end_time)
         except ValueError:
-            context.abort(grpc.StatusCode.INVALID_ARGUMENT, "invalid time format")
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "invalid time format")
             return pb.ListInspectionsResponse()
 
         lot_id = request.lot_id if hasattr(request, "lot_id") else ""
@@ -134,12 +134,14 @@ class ScUpstreamService(pb_grpc.ScUpstreamServicer):
         return pb.ListInspectionsResponse(items=items)
 
     async def GetInspectionPatchZips(
-        self, request: pb.GetInspectionPatchZipsRequest, context: grpc.ServicerContext
+        self,
+        request: pb.GetInspectionPatchZipsRequest,
+        context: grpc.aio.ServicerContext,
     ) -> pb.GetInspectionPatchZipsResponse:
         try:
             dt = datetime.fromisoformat(request.inspection_time)
         except ValueError:
-            context.abort(
+            await context.abort(
                 grpc.StatusCode.INVALID_ARGUMENT, "invalid inspection_time format"
             )
             return pb.GetInspectionPatchZipsResponse()
@@ -191,12 +193,14 @@ class ScUpstreamService(pb_grpc.ScUpstreamServicer):
         )
 
     async def GetReviewImageFileSpec(
-        self, request: pb.GetReviewImageFileSpecRequest, context: grpc.ServicerContext
+        self,
+        request: pb.GetReviewImageFileSpecRequest,
+        context: grpc.aio.ServicerContext,
     ) -> pb.GetReviewImageFileSpecResponse:
         try:
             dt = datetime.fromisoformat(request.inspection_time)
         except ValueError:
-            context.abort(
+            await context.abort(
                 grpc.StatusCode.INVALID_ARGUMENT, "invalid inspection_time format"
             )
             return pb.GetReviewImageFileSpecResponse()
@@ -213,7 +217,7 @@ class ScUpstreamService(pb_grpc.ScUpstreamServicer):
                     return pb.GetReviewImageFileSpecResponse(
                         image_filespec=img["image_filespec"]
                     )
-            context.abort(grpc.StatusCode.NOT_FOUND, "review image not found")
+            await context.abort(grpc.StatusCode.NOT_FOUND, "review image not found")
             return pb.GetReviewImageFileSpecResponse()
 
         it = request.inspection_time
@@ -236,16 +240,16 @@ class ScUpstreamService(pb_grpc.ScUpstreamServicer):
                 return pb.GetReviewImageFileSpecResponse(
                     image_filespec=img["image_filespec"]
                 )
-        context.abort(grpc.StatusCode.NOT_FOUND, "review image not found")
+        await context.abort(grpc.StatusCode.NOT_FOUND, "review image not found")
         return pb.GetReviewImageFileSpecResponse()
 
     async def ListReviewImages(
-        self, request: pb.ListReviewImagesRequest, context: grpc.ServicerContext
+        self, request: pb.ListReviewImagesRequest, context: grpc.aio.ServicerContext
     ) -> pb.ListReviewImagesResponse:
         try:
             dt = datetime.fromisoformat(request.inspection_time)
         except ValueError:
-            context.abort(
+            await context.abort(
                 grpc.StatusCode.INVALID_ARGUMENT, "invalid inspection_time format"
             )
             return pb.ListReviewImagesResponse()

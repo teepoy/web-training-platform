@@ -5,6 +5,7 @@ import type { ReticleMapOptions } from "@/features/sc/application/reticleMapOpti
 import type { ScDataColumn } from "@/features/sc/domain/workbenchDataSource";
 
 export type ScLegendSource = "class" | "bin" | "annotation" | "prediction" | "final_class";
+export type ScMapSelectionMode = "include" | "exclude";
 export type ScSelectionSource = "sample-table" | "blink-table";
 
 export interface ScMapRegion {

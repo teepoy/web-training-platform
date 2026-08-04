@@ -1,3 +1,6 @@
+# Local infrastructure and profile-gated observability only.
+# Layer docker-compose.dev.yaml on top for application/runtime services.
+
 services:
   postgres:
     image: pgvector/pgvector:pg16
@@ -58,6 +61,12 @@ services:
     volumes:
       - redis-data:/data
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
 
   prefect-server:
     image: prefecthq/prefect:3.6.25-python3.12
@@ -118,76 +127,6 @@ services:
       timeout: 5s
       retries: 10
       start_period: 30s
-
-  image-parser:
-    build:
-      context: ../..
-      dockerfile: services/image-parser/Dockerfile
-    deploy:
-      resources:
-        limits:
-          memory: ${IMAGE_PARSER_MEMORY:-2g}
-    depends_on:
-      sc-upstream:
-        condition: service_healthy
-    environment:
-      - PORT=8090
-      - GRPC_PORT=9092
-      - CACHE_SIZE_MB=${IMAGE_PARSER_CACHE_SIZE_MB:-1024}
-      - CACHE_DIR=/tmp/image-parser-cache
-      - CACHE_TTL=${IMAGE_PARSER_CACHE_TTL:-10m}
-      - CACHE_CLEANUP_INTERVAL=${IMAGE_PARSER_CACHE_CLEANUP_INTERVAL:-5m}
-      - CACHE_MAX_BYTES=${IMAGE_PARSER_CACHE_MAX_BYTES:-1073741824}
-      - S3_MAX_CONNS=1000
-      - SC_UPSTREAM_ADDR=sc-upstream:9091
-      # Mock S3 endpoint/credentials use image-parser service defaults.
-    ports:
-      - "8090:8090"
-      - "9092:9092"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8090/health"]
-      interval: 30s
-      timeout: 20s
-      retries: 10
-      start_period: 60s
-
-  sc-upstream:
-    build:
-      context: ../..
-      dockerfile: services/sc-upstream/Dockerfile
-    deploy:
-      resources:
-        limits:
-          memory: ${SC_UPSTREAM_MEMORY:-2g}
-    depends_on:
-      redis:
-        condition: service_started
-    environment:
-      - GRPC_PORT=9091
-      - FLIGHT_PORT=9093
-      - CACHE_DIR=/data/cache
-      - SC_UPSTREAM_CACHE_SIZE_LIMIT_BYTES=${SC_UPSTREAM_CACHE_SIZE_LIMIT_BYTES:-10737418240}
-      - SC_UPSTREAM_RAW_CACHE_CLEANUP_INTERVAL_SECONDS=${SC_UPSTREAM_RAW_CACHE_CLEANUP_INTERVAL_SECONDS:-7200}
-      - REDIS_URL=redis://redis:6379/0
-      # Mock SQLite DB paths use sc-upstream service defaults.
-    expose:
-      - "9091"
-      - "9093"
-    volumes:
-      - ./data:/data
-    restart: on-failure
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "python",
-          "-c",
-          "import socket; s=socket.create_connection(('localhost', 9091), timeout=20); s.close()",
-        ]
-      interval: 30s
-      timeout: 20s
-      retries: 12
-      start_period: 60s
 
   # ═══════════════════════════════════════════════════════════════════
   # Observability Stack — --profile observability

@@ -23,11 +23,8 @@ The repository provides split production manifests under
 - `compose.ops.yaml`
 - `compose.observability.yaml`
 
-The older base plus prod override files (`docker-compose.yaml` +
-`docker-compose.prod.yaml`) still deploy services as one logical project and
-contain literal development credentials. `make up-release-local` keeps this as
-a legacy local validation path. Do not use it as a production manifest;
-`make up-prod` is only a deprecated compatibility redirect.
+The former combined local release-validation stack was removed. Production and
+pre-release now have one source of truth: the split manifests above.
 
 ## Required Hardening
 
@@ -45,8 +42,8 @@ Before deployment:
 - Configure off-host PostgreSQL and object-storage backups.
 - Configure a real Alertmanager receiver.
 
-The values currently committed in `infra/compose/docker-compose.yaml` and
-`infra/compose/docker-compose.prod.yaml` are development defaults.
+The values committed in `infra/compose/docker-compose.yaml` are local
+development defaults and are unrelated to the production manifests.
 
 ## Host Preparation
 
@@ -268,72 +265,6 @@ Build and publish the four application images from these Dockerfiles:
 | `FINETUNE_WEB_IMAGE`        | `apps/web/Dockerfile`, target `prod`                    |
 | `FINETUNE_CPU_WORKER_IMAGE` | `apps/api/Dockerfile.prefect-worker-cpu`, target `prod` |
 | `FINETUNE_GPU_WORKER_IMAGE` | `apps/api/Dockerfile.prefect-worker-gpu`, target `prod` |
-
-## Legacy Local Bundle Validation
-
-The combined stack can be used on a private workstation for fast image and
-runtime validation. Prefer deployed `make up-pre-release` for release acceptance
-because it exercises the actual released images and split production manifests:
-
-```bash
-docker compose \
-  -p finetune-prod \
-  -f infra/compose/docker-compose.yaml \
-  -f infra/compose/docker-compose.prod.yaml \
-  config
-
-docker compose \
-  -p finetune-prod \
-  -f infra/compose/docker-compose.yaml \
-  -f infra/compose/docker-compose.prod.yaml \
-  build
-```
-
-Review the rendered configuration carefully. Do not expose this stack to
-production traffic while default credentials or `localhost` public URLs remain.
-
-Start stateful services first:
-
-```bash
-docker compose \
-  -p finetune-prod \
-  -f infra/compose/docker-compose.yaml \
-  -f infra/compose/docker-compose.prod.yaml \
-  up -d postgres minio prefect-server label-studio redis
-```
-
-Prepare the platform once before starting the API. This applies Alembic
-migrations, reconciles MinIO buckets and managed ILM rules, and registers
-Prefect pools and deployments under one PostgreSQL advisory lock:
-
-```bash
-docker compose \
-  -p finetune-prod \
-  -f infra/compose/docker-compose.yaml \
-  -f infra/compose/docker-compose.prod.yaml \
-  run --rm api \
-  /app/.venv/bin/python scripts/prepare_platform.py
-```
-
-Start the application:
-
-```bash
-docker compose \
-  -p finetune-prod \
-  -f infra/compose/docker-compose.yaml \
-  -f infra/compose/docker-compose.prod.yaml \
-  up -d api web prefect-worker-cpu
-```
-
-On a Linux NVIDIA host, add the GPU profile:
-
-```bash
-docker compose \
-  -p finetune-prod \
-  -f infra/compose/docker-compose.yaml \
-  -f infra/compose/docker-compose.prod.yaml \
-  --profile gpu up -d prefect-worker-gpu dcgm-exporter
-```
 
 ## Split-Stack Startup
 

@@ -19,6 +19,20 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+async def _shutdown_servers(
+    gserver: grpc.aio.Server, flight_server: UpstreamFlightServer
+) -> None:
+    # Flight shutdown blocks until in-flight requests finish. Keep it off the
+    # asyncio loop and use a daemon thread so a development reload is not held
+    # beyond the watcher's process grace period.
+    threading.Thread(
+        target=flight_server.shutdown,
+        name="sc-upstream-flight-shutdown",
+        daemon=True,
+    ).start()
+    await gserver.stop(0)
+
+
 async def serve() -> None:
     upstream_db_url = os.environ.get(
         "UPSTREAM_DB_URL", "sqlite:///./wafer_inspection.db"
@@ -63,9 +77,7 @@ async def serve() -> None:
             signal.signal(sig, lambda *_: _handle_signal())
 
     await stop_event.wait()
-    await gserver.stop(0)
-    flight_server.shutdown()
-    flight_thread.join(timeout=30)
+    await _shutdown_servers(gserver, flight_server)
 
 
 if __name__ == "__main__":

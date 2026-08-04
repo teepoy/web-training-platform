@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, h, ref, watch, type Component } from "vue";
+import { computed, h, nextTick, ref, watch, type Component } from "vue";
 import {
   defineScMapElement,
   type ScMapGeometry,
@@ -31,6 +31,7 @@ import ScLegend from "./ScLegend.vue";
 import ScReticleMapOptionsButton from "./ScReticleMapOptionsButton.vue";
 import { legendColor } from "./scMapUtils";
 import type { DefectList } from "../../generated/proto/sc/v1/sample_pb";
+import type { ScMapSelectionMode } from "@/features/sc/domain/workbenchInteraction";
 
 if (import.meta.env.MODE !== "test") defineScMapElement();
 
@@ -74,6 +75,9 @@ const props = withDefaults(
     colorMapScopeKey?: string;
 
     zoom?: { x: number; y: number; w: number; h: number } | null;
+    mapSelectionMode?: ScMapSelectionMode;
+    mapSelectionCount?: number;
+    canUndoMapSelectionMode?: boolean;
 
     /** IDs resolved against the Arrow snapshot already retained by <sc-map>. */
     highlightDefectIds?: number[];
@@ -83,6 +87,7 @@ const props = withDefaults(
   {
     showImageMarkers: true,
     defectSize: 2,
+    mapSelectionMode: "include",
   },
 );
 
@@ -100,6 +105,10 @@ const emit = defineEmits<{
   (e: "legend-hidden-change", payload: { source: LegendSource; hiddenKeys: string[] }): void;
   (e: "box-select", region: { x: number; y: number; w: number; h: number }): void;
   (e: "lasso-select", selection: ScMapLassoSelection): void;
+  (e: "update:mapSelectionMode", mode: ScMapSelectionMode): void;
+  (e: "invert-map-selection-mode"): void;
+  (e: "undo-map-selection-mode"): void;
+  (e: "copy-selected-defect-ids"): void;
   (e: "update:showImageMarkers", value: boolean): void;
   (e: "update:defectSize", value: number): void;
 }>();
@@ -327,6 +336,74 @@ const mapToolOptions = computed<DropdownOption[]>(() => [
     icon: mapToolIcon(MoveOutline),
   },
 ]);
+const mapSelectionContextOptions = computed<DropdownOption[]>(() => [
+  {
+    label: "Exclude all others",
+    key: "include",
+    disabled: props.mapSelectionMode === "include" || !props.mapSelectionCount,
+  },
+  {
+    label: "Exclude selected",
+    key: "exclude",
+    disabled: props.mapSelectionMode === "exclude" || !props.mapSelectionCount,
+  },
+  {
+    label: "Invert selection",
+    key: "invert-selection",
+    disabled: !props.mapSelectionCount,
+  },
+  {
+    label: "Copy selected defect IDs",
+    key: "copy-selected-defect-ids",
+    disabled: !props.mapSelectionCount,
+  },
+  { type: "divider", key: "selection-actions-divider" },
+  {
+    label: "Undo selection filter",
+    key: "undo-selection-filter",
+    disabled: !props.canUndoMapSelectionMode,
+  },
+  {
+    label: "Selection tool",
+    key: "selection-tool",
+    children: mapToolOptions.value,
+  },
+]);
+const mapSelectionContextVisible = ref(false);
+const mapSelectionContextX = ref(0);
+const mapSelectionContextY = ref(0);
+
+function onNativeMapContextMenu(event: Event): void {
+  const position = (event as CustomEvent<{ x: number; y: number }>).detail;
+  mapSelectionContextVisible.value = false;
+  mapSelectionContextX.value = position.x;
+  mapSelectionContextY.value = position.y;
+  void nextTick(() => {
+    mapSelectionContextVisible.value = true;
+  });
+}
+
+function handleMapSelectionContextSelect(key: string | number): void {
+  const action = String(key);
+  mapSelectionContextVisible.value = false;
+  if (action === "include" || action === "exclude") {
+    emit("update:mapSelectionMode", action);
+    return;
+  }
+  if (action === "invert-selection") {
+    emit("invert-map-selection-mode");
+    return;
+  }
+  if (action === "undo-selection-filter") {
+    emit("undo-map-selection-mode");
+    return;
+  }
+  if (action === "copy-selected-defect-ids") {
+    emit("copy-selected-defect-ids");
+    return;
+  }
+  handleMapToolSelect(action);
+}
 
 function handleMapToolSelect(key: string | number): void {
   const action = String(key);
@@ -636,6 +713,17 @@ function handleHiddenLegendKeysUpdate(keys: string[]): void {
 
       <div class="sc-map-body" data-testid="sc-map-toolbar-container">
         <div class="map-area">
+          <NDropdown
+            data-testid="sc-map-selection-context-menu"
+            trigger="manual"
+            placement="bottom-start"
+            :show="mapSelectionContextVisible"
+            :x="mapSelectionContextX"
+            :y="mapSelectionContextY"
+            :options="mapSelectionContextOptions"
+            @clickoutside="mapSelectionContextVisible = false"
+            @select="handleMapSelectionContextSelect"
+          />
           <div v-if="effectiveMapLoading" class="map-loading-overlay">
             <NSpin size="small" />
             <NText depth="3" class="map-loading-text">
@@ -661,6 +749,7 @@ function handleHiddenLegendKeysUpdate(keys: string[]): void {
             @zoom-in="onNativeZoom"
             @box-select="onNativeBoxSelect"
             @lasso-select="onNativeLassoSelect"
+            @map-context-menu="onNativeMapContextMenu"
             @clear-selection="onNativeClearSelection"
             @immediate-crosshair-points="onNativeImmediateCrosshair"
             @map-progress="onNativeMapProgress"

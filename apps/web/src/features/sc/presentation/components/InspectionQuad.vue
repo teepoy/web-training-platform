@@ -18,6 +18,7 @@ import type { ScTableSelectionConstraint } from "@/features/sc/domain/workbenchD
 import type {
   ScLegendSource,
   ScMapRegion,
+  ScMapSelectionMode,
   ScSelectionAction,
 } from "@/features/sc/domain/workbenchInteraction";
 import {
@@ -220,6 +221,32 @@ function handleLegendGroupByChange(source: ScLegendSource | null): void {
   legendGroupBy.value = source;
 }
 
+function handleMapSelectionModeChange(mode: ScMapSelectionMode): void {
+  model.setMapSelectionMode(mode);
+  clearGalleryRandomSamplingIfActive();
+}
+
+function handleInvertMapSelectionMode(): void {
+  model.invertMapSelectionMode();
+  clearGalleryRandomSamplingIfActive();
+}
+
+function handleUndoMapSelectionMode(): void {
+  model.undoMapSelectionMode();
+  clearGalleryRandomSamplingIfActive();
+}
+
+async function handleCopySelectedDefectIds(): Promise<void> {
+  try {
+    if (!navigator.clipboard) throw new Error("Clipboard API is unavailable");
+    const ids = model.mapSelectedDefectIds.value;
+    if (ids.length === 0) throw new Error("Current map selection is empty");
+    await navigator.clipboard.writeText(ids.join("\n"));
+  } catch (error) {
+    reportDataError("Copy selected defect IDs failed", error);
+  }
+}
+
 function handleTableFilterChange(filter: ScSampleTableFilter): void {
   tableFilter.value = cloneSampleTableFilter(filter);
   if (Object.keys(filter).length > 0) clearGalleryRandomSamplingIfActive();
@@ -257,6 +284,7 @@ watch(
     tableFilter.value = {};
     tableSort.value = null;
     localSelectedDefectIds.value = [];
+    model.resetMapSelectionMode();
     void model.clearMapSelection();
     model.setTableSelection({ kind: "ids", ids: [] });
     clearGalleryRandomSamplingIfActive();
@@ -675,6 +703,9 @@ function useMapSelectionQueue() {
           :legend-sources="enabledLegendSources"
           :color-map-scope-key="mapColorMapScopeKey"
           :zoom="zoom"
+          :map-selection-mode="model.mapSelectionMode.value"
+          :map-selection-count="model.mapSelectedDefectIds.value.length"
+          :can-undo-map-selection-mode="model.canUndoMapSelectionMode.value"
           :highlight-defect-ids="galleryHighlightDefectIds"
           :immediate-crosshair-defect-ids="mapImmediateCrosshairDefectIds"
           :immediate-crosshair-version="mapImmediateCrosshairVersion"
@@ -686,6 +717,10 @@ function useMapSelectionQueue() {
           :map-progress-percent="dataReady ? model.mapProgressPercent.value : 0"
           @update:active-map-tab="handleActiveMapTabChange"
           @update:reticle-options="handleReticleOptionsChange"
+          @update:map-selection-mode="handleMapSelectionModeChange"
+          @invert-map-selection-mode="handleInvertMapSelectionMode"
+          @undo-map-selection-mode="handleUndoMapSelectionMode"
+          @copy-selected-defect-ids="handleCopySelectedDefectIds"
           @clear-selection="handleClearMapSelection"
           @legend-select="handleLegendSelection"
           @legend-group-change="handleLegendGroupByChange"

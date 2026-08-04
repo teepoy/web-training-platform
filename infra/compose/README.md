@@ -14,13 +14,38 @@ The deployable split manifests are:
 
 The repository separates canonical deployed releases from local override stacks:
 
-| Mode                    | Command                     | Compose files                                    | Code source          |
-| ----------------------- | --------------------------- | ------------------------------------------------ | -------------------- |
-| Dev                     | `make up-dev`               | base + dev override                              | Bind-mounted source  |
-| Deployed pre-release    | `make up-pre-release`       | production manifests only                        | Released images      |
-| Production              | `make up-prod-all`          | production manifests only                        | Same released images |
-| Local pre-release       | `make up-pre-release-local` | production manifests + local acceptance overlays | Locally built images |
-| Legacy local validation | `make up-release-local`     | base + legacy prod override                      | Locally built images |
+| Mode                 | Command                     | Compose files                                    | Code source          |
+| -------------------- | --------------------------- | ------------------------------------------------ | -------------------- |
+| Dev                  | `make up-dev`               | infrastructure + dev                             | Bind-mounted source  |
+| Local pre-release    | `make up-pre-release-local` | production manifests + local acceptance overlays | Locally built images |
+| Deployed pre-release | `make up-pre-release`       | production manifests only                        | Released images      |
+| Production           | `make up-prod-all`          | production manifests only                        | Same released images |
+
+### How the files compose
+
+There is one local development stack and one canonical release stack:
+
+| Manifest                     | Role                           | Use alone?                        |
+| ---------------------------- | ------------------------------ | --------------------------------- |
+| `docker-compose.yaml`        | Local infrastructure           | Yes                               |
+| `docker-compose.dev.yaml`    | Local application/runtime      | No; layer on local infrastructure |
+| `production/compose.*.yaml`  | Canonical deployed split stack | Yes, as separate Compose projects |
+| `pre-release/compose.*.yaml` | Workstation acceptance overlay | No; layer on production manifests |
+
+The local base contains no application or SC runtime services. The pre-release
+overlays state only local build, port, and volume differences from production.
+Use `docker compose ... config` to inspect a merged result.
+
+Configuration ownership is also split by concern:
+
+- Compose manifests own container topology, commands, dependencies, mounts,
+  health checks, and resource limits.
+- `apps/api/config/*.yaml` owns application-profile defaults; Compose
+  environment variables provide deployment-specific overrides.
+- `x-platform-environment` is repeated where services run as separate Compose
+  projects because YAML anchors are file-local. In particular, platform and
+  one-shot ops manifests cannot share an anchor; `make check-config` enforces
+  parity for the settings they must share.
 
 ### Base Infrastructure (local stacks)
 
@@ -31,7 +56,6 @@ The repository separates canonical deployed releases from local override stacks:
 - **redis** (`:6379`): Redis cache/coordination dependency
 - **prefect-server** (`:4200`): Prefect 3 control plane
 - **label-studio** (`:8080`): Annotation UI
-- **sc-upstream** / **image-parser**: local SC upstream and parser services
 - Profile `--profile observability`: Prometheus, Grafana, Loki, Promtail, Alertmanager, cAdvisor, Node Exporter, Prefect Exporter
 - Profile `--profile gpu`: DCGM exporter
 
@@ -45,6 +69,7 @@ The repository separates canonical deployed releases from local override stacks:
 Adds via `docker-compose.dev.yaml`:
 
 - **api** with bind mounts + `uvicorn --reload`
+- **sc-data-provider** with bind mounts and its isolated Uvicorn process
 - **web** with bind mount + Vite dev server hot reload
 - **prefect-worker-cpu** with bind mounts for flow code changes
 - **prepare-platform** (ops profile): one-shot database, MinIO, and Prefect preparation
@@ -52,33 +77,6 @@ Adds via `docker-compose.dev.yaml`:
 - **sc-upstream** with `watchfiles` reload for Python service and protobuf changes
 - **image-parser** with Air reload for Go source changes
 - Profile `--profile gpu`: GPU Prefect worker (Linux/NVIDIA only)
-
-### Legacy Local Release Validation (`make up-release-local`)
-
-Adds via `docker-compose.prod.yaml`:
-
-- **api** with `uvicorn --workers 4` (no hot reload, no bind mounts)
-- **web** served via nginx (built into image)
-- **prefect-worker-cpu** with baked image (no bind mounts)
-- Profile `--profile gpu`: GPU Prefect worker (Linux/NVIDIA only)
-
-This local validation mode does **not** include pgadmin or a long-running
-bootstrap process. `make up-release-local` runs the idempotent platform
-preparation script before it starts
-the application services. The local
-Prefect auth value defaults to `dangerous:dangerous` and can be overridden with
-`LOCAL_RELEASE_PREFECT_AUTH=...`.
-
-`make up-prod` remains only as a deprecated compatibility redirect. It is not a
-production deployment command; use `make up-prod-all` for the split production
-stack.
-
-When invoking the two Compose files directly instead of using Make, export the
-same value explicitly:
-
-```bash
-export PREFECT_SERVER_API_AUTH_STRING=dangerous:dangerous
-```
 
 ### Deployed Pre-release and Production
 
@@ -170,7 +168,7 @@ environments cannot share state accidentally. The `test` API profile remains
 unit/integration-test-only and is never deployed.
 
 Run `make check-config` before starting or releasing a stack. It renders the
-dev, local release-validation, pre-release, production, ops, and observability
+dev, local pre-release, deployed pre-release, production, ops, and observability
 manifests without starting containers. It also runs
 `scripts/check_compose_parity.py`, which rejects pre-release drift in service
 sets, commands, dependencies, health checks, environment keys, mount targets,
@@ -178,21 +176,9 @@ shared environment values, or other runtime behavior. Lower resource limits,
 environment-specific credentials and public URLs, local build metadata,
 loopback ports, image names, and volume sources are intentional differences.
 
-### Migration Notes
-
-- `make up` → now redirects to `make up-dev` (deprecated)
-- `make up-stack` → now redirects to `make up-dev ARGS="--scale web=0"` (deprecated)
-- `make prod` → removed
-- `make up-prod` → deprecated redirect to `make up-release-local`
-- `make up-pre-release` now means deployed pre-release using released images.
-- Workstation acceptance moved to `make up-pre-release-local`.
-- Local release validation: `make up-release-local` performs platform preparation.
-- Split-stack production: run `make prepare-platform-prod` before starting the API.
-
 `docker-compose.yaml` is at `infra/compose/docker-compose.yaml` and provides always-on
-local infrastructure (postgres, minio, redis, prefect-server, label-studio,
-sc-upstream, image-parser). Dev and legacy local release overrides add API,
-web, and workers.
+local infrastructure (postgres, minio, redis, prefect-server, and label-studio).
+`docker-compose.dev.yaml` owns all local application and runtime services.
 
 Quick start:
 
@@ -220,16 +206,15 @@ default demo datasets are needed.
 
 The stack is split across multiple Compose files:
 
-- **Base infrastructure** (`docker-compose.yaml`): postgres, minio, redis, prefect-server, label-studio, sc-upstream, image-parser, profile-gated observability, profile-gated dcgm-exporter
-- **Dev add-ons** (`docker-compose.dev.yaml`): api (hot-reload), web (Vite dev), prefect-worker-cpu, prefect-worker-gpu (profile), prepare-platform (ops profile), pgadmin
-- **Legacy local release add-ons** (`docker-compose.prod.yaml`): api (uvicorn workers), isolated sc-data-provider, web (nginx), prefect-worker-cpu, prefect-worker-gpu (profile)
+- **Local infrastructure** (`docker-compose.yaml`): postgres, minio, redis, prefect-server, label-studio, profile-gated observability, profile-gated dcgm-exporter
+- **Local development** (`docker-compose.dev.yaml`): api, sc-data-provider, web, sc-upstream, image-parser, workers, prepare-platform (ops profile), pgadmin
 - **Production stateful** (`production/compose.stateful.yaml`): postgres, minio, redis, label-studio (data plane)
 - **Production platform** (`production/compose.platform.yaml`): prefect-server, api, web, prefect-worker-cpu, prefect-worker-gpu (app plane)
 - **Production ops** (`production/compose.ops.yaml`): prepare-platform (one-shot ops)
 - **Production observability** (`production/compose.observability.yaml`): prometheus, grafana, loki, promtail, alertmanager, cadvisor, node-exporter, prefect-exporter, dcgm-exporter
 
-Dev, local release, production-platform, and production-ops manifests define a
-top-level `x-platform-environment` anchor. API, SC data-provider, workers, and ops
+Dev, production-platform, and production-ops manifests define a top-level
+`x-platform-environment` anchor. API, SC data-provider, workers, and ops
 services inherit the same database, Prefect, Label Studio, MinIO/SC object-store,
 Redis, LLM, and runtime endpoint settings; service-specific values are merged on top.
 

@@ -8,7 +8,8 @@ Operational manifests for local Compose smoke runs and minikube/Kubeflow deploym
 
 | Task                    | Location                              | Notes                                                                                                           |
 | ----------------------- | ------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| Compose stack           | `compose/docker-compose.yaml`         | Postgres, MinIO, API (dev/validation)                                                                           |
+| Compose infrastructure  | `compose/docker-compose.yaml`         | Local PostgreSQL, MinIO, Redis, Prefect, Label Studio, and optional observability                               |
+| Compose development     | `compose/docker-compose.dev.yaml`     | Local API, web, workers, SC runtimes, preparation, and pgAdmin; layer on the infrastructure file                |
 | Compose split stack     | `compose/production/`                 | `compose.stateful.yaml`, `compose.platform.yaml`, `compose.ops.yaml`, `compose.observability.yaml` (production) |
 | Compose usage           | `compose/README.md`                   | Up/down command                                                                                                 |
 | K8s base apply          | `k8s/kustomization.yaml`              | Namespace + base resources                                                                                      |
@@ -75,7 +76,7 @@ When running the GPU worker **on the host** (outside Compose) simultaneously wit
 
 ```bash
 # Compose
-docker compose -f infra/compose/docker-compose.yaml up -d
+docker compose -f infra/compose/docker-compose.yaml -f infra/compose/docker-compose.dev.yaml up -d
 
 # K8s
 kubectl apply -k infra/k8s

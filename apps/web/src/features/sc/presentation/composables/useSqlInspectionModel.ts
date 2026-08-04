@@ -15,6 +15,7 @@ import type {
 } from "@/features/sc/domain/workbenchDataSource";
 import type {
   ScLegendSource,
+  ScMapSelectionMode,
   ScSampleTableDataSource,
 } from "@/features/sc/domain/workbenchInteraction";
 import type { ScMapLassoSelection } from "@platform/sc-map-element";
@@ -61,6 +62,9 @@ export function useSqlInspectionModel(args: {
   const mapProgressPercent = ref(0);
   const legendGroups = ref<Record<string, DefectList> | null>(null);
   const mapSelection = ref<IdSelectionState>({ ids: [] });
+  const mapSelectionMode = ref<ScMapSelectionMode>("include");
+  const mapSelectionModeHistory = ref<ScMapSelectionMode[]>([]);
+  const canUndoMapSelectionMode = computed(() => mapSelectionModeHistory.value.length > 0);
   const tableSelection = ref<ScTableSelectionConstraint>({ kind: "ids", ids: [] });
   const mapSelectedDefectIds = computed(() => mapSelection.value.ids);
   const reviewMode = ref(false);
@@ -83,7 +87,13 @@ export function useSqlInspectionModel(args: {
     ...randomSamplingFilters.value,
     ...reviewFilters.value,
     ...(mapSelection.value.ids.length
-      ? ([["defect_id", "in", mapSelection.value.ids]] as ScDataFilter[])
+      ? ([
+          [
+            "defect_id",
+            mapSelectionMode.value === "include" ? "in" : "not in",
+            mapSelection.value.ids,
+          ],
+        ] as ScDataFilter[])
       : []),
   ]);
   const aggregateFilters = computed<ScDataFilter[]>(() => [
@@ -330,6 +340,28 @@ export function useSqlInspectionModel(args: {
     mapSelection.value = { ids: [] };
   }
 
+  function setMapSelectionMode(mode: ScMapSelectionMode): void {
+    if (mode === mapSelectionMode.value) return;
+    mapSelectionModeHistory.value = [...mapSelectionModeHistory.value, mapSelectionMode.value];
+    mapSelectionMode.value = mode;
+  }
+
+  function invertMapSelectionMode(): void {
+    setMapSelectionMode(mapSelectionMode.value === "include" ? "exclude" : "include");
+  }
+
+  function undoMapSelectionMode(): void {
+    const previous = mapSelectionModeHistory.value.at(-1);
+    if (!previous) return;
+    mapSelectionModeHistory.value = mapSelectionModeHistory.value.slice(0, -1);
+    mapSelectionMode.value = previous;
+  }
+
+  function resetMapSelectionMode(): void {
+    mapSelectionModeHistory.value = [];
+    mapSelectionMode.value = "include";
+  }
+
   function setTableSelection(selection: ScTableSelectionConstraint): void {
     tableSelection.value =
       selection.kind === "all"
@@ -355,6 +387,8 @@ export function useSqlInspectionModel(args: {
     mapProgressPercent,
     retryMap: loadMap,
     mapSelectedDefectIds,
+    mapSelectionMode,
+    canUndoMapSelectionMode,
     reviewMode,
     tableSelection,
     loadGlobalDistinctValues,
@@ -369,5 +403,9 @@ export function useSqlInspectionModel(args: {
     applyMapSelection,
     appendMapSelection,
     clearMapSelection,
+    setMapSelectionMode,
+    invertMapSelectionMode,
+    undoMapSelectionMode,
+    resetMapSelectionMode,
   };
 }

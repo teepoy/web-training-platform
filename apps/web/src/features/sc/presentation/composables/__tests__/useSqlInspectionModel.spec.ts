@@ -92,6 +92,30 @@ describe("useSqlInspectionModel", () => {
     });
   });
 
+  it("can exclude the selected map defects from the table and gallery", async () => {
+    const { source } = createDataSource();
+    const model = mount(source);
+    if (!model) throw new Error("model was not created");
+
+    await model.applyMapSelection([9, 3, 9]);
+    model.setMapSelectionMode("exclude");
+
+    expect(model.mapSelectionMode.value).toBe("exclude");
+    expect(model.canUndoMapSelectionMode.value).toBe(true);
+    expect(model.galleryQuery.value.filters).toEqual([["defect_id", "not in", [3, 9]]]);
+    expect(model.sampleTableDataSource.value?.scopeKey).toContain(
+      JSON.stringify([["defect_id", "not in", [3, 9]]]),
+    );
+
+    model.invertMapSelectionMode();
+    expect(model.mapSelectionMode.value).toBe("include");
+    model.undoMapSelectionMode();
+    expect(model.mapSelectionMode.value).toBe("exclude");
+    model.undoMapSelectionMode();
+    expect(model.mapSelectionMode.value).toBe("include");
+    expect(model.canUndoMapSelectionMode.value).toBe(false);
+  });
+
   it("reloads map queries when an SSE revision invalidates the scope", async () => {
     const { source, invalidate } = createDataSource();
     mount(source);

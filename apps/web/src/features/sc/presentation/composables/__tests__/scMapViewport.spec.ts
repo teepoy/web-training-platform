@@ -118,25 +118,51 @@ describe("sc-map viewport interactions", () => {
     const overlay = element.shadowRoot?.querySelector<HTMLCanvasElement>(".overlay");
     const zoomEvents: Array<ScMapRegion | null> = [];
     let boxSelections = 0;
+    let contextMenus = 0;
     element.addEventListener("zoom-in", (event) => {
       zoomEvents.push((event as CustomEvent<ScMapRegion | null>).detail);
     });
     element.addEventListener("box-select", () => {
       boxSelections += 1;
     });
+    element.addEventListener("map-context-menu", () => {
+      contextMenus += 1;
+    });
 
     overlay?.dispatchEvent(pointerEvent("pointerdown", 2, 50, 50));
     overlay?.dispatchEvent(pointerEvent("pointermove", -1, 40, 50));
     overlay?.dispatchEvent(pointerEvent("pointerup", 2, 40, 50));
+    overlay?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
 
     expect(zoomEvents).toHaveLength(1);
     expect(zoomEvents[0]?.x).toBeCloseTo(-60_000_000);
     expect(boxSelections).toBe(0);
+    expect(contextMenus).toBe(0);
 
     overlay?.dispatchEvent(pointerEvent("pointerdown", 0, 20, 20));
     overlay?.dispatchEvent(pointerEvent("pointermove", -1, 40, 40));
     overlay?.dispatchEvent(pointerEvent("pointerup", 0, 40, 40));
     expect(boxSelections).toBe(1);
+  });
+
+  it("emits map context-menu coordinates for a right click", () => {
+    const element = createMapElement();
+    const overlay = element.shadowRoot?.querySelector<HTMLCanvasElement>(".overlay");
+    const positions: Array<{ x: number; y: number }> = [];
+    element.addEventListener("map-context-menu", (event) => {
+      positions.push((event as CustomEvent<{ x: number; y: number }>).detail);
+    });
+    const event = new MouseEvent("contextmenu", {
+      bubbles: true,
+      cancelable: true,
+      clientX: 23,
+      clientY: 47,
+    });
+
+    overlay?.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(positions).toEqual([{ x: 23, y: 47 }]);
   });
 
   it("cancels an uncommitted wheel viewport when the map mode changes", () => {

@@ -26,7 +26,9 @@ const model = vi.hoisted(() => ({
   sampleTableDataSource: { value: undefined as ScSampleTableDataSource | undefined },
   galleryLoading: { value: false },
   galleryQuery: { value: {} },
-  mapSelectedDefectIds: { value: [] },
+  mapSelectedDefectIds: { value: [] as number[] },
+  mapSelectionMode: { value: "include" },
+  canUndoMapSelectionMode: { value: false },
   reviewMode: { value: false },
   tableSelection: { value: { kind: "ids", ids: [] } },
   loadGlobalDistinctValues: vi.fn(async () => []),
@@ -41,6 +43,10 @@ const model = vi.hoisted(() => ({
   applyMapSelection: vi.fn(async () => undefined),
   appendMapSelection: vi.fn(async () => []),
   clearMapSelection: vi.fn(async () => undefined),
+  setMapSelectionMode: vi.fn(),
+  invertMapSelectionMode: vi.fn(),
+  undoMapSelectionMode: vi.fn(),
+  resetMapSelectionMode: vi.fn(),
 }));
 
 vi.mock("vue-echarts", () => ({
@@ -54,6 +60,9 @@ vi.mock("./ScMapPanelBinned.vue", () => ({
       "zoom",
       "reticleOptions",
       "legendGroupBy",
+      "mapSelectionMode",
+      "mapSelectionCount",
+      "canUndoMapSelectionMode",
       "waferGeometry",
       "highlightDefectIds",
       "immediateCrosshairDefectIds",
@@ -64,6 +73,10 @@ vi.mock("./ScMapPanelBinned.vue", () => ({
       "zoom-in",
       "legend-group-change",
       "legend-select",
+      "update:mapSelectionMode",
+      "invert-map-selection-mode",
+      "undo-map-selection-mode",
+      "copy-selected-defect-ids",
       "retry",
     ],
     template: "<div />",
@@ -138,6 +151,7 @@ describe("InspectionQuad state ownership", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     model.sampleTableDataSource.value = undefined;
+    model.mapSelectedDefectIds.value = [];
     model.reviewMode.value = false;
     model.loadGlobalDistinctValues.mockReset().mockResolvedValue([]);
     model.loadGlobalNumericRange.mockReset().mockResolvedValue(null);
@@ -347,6 +361,42 @@ describe("InspectionQuad state ownership", () => {
       expect(model.applyMapSelection).toHaveBeenCalledWith([]);
     });
     expect(wrapper.emitted("clear-gallery-random-sampling")).toHaveLength(1);
+  });
+
+  it("switches map selection between included and excluded", async () => {
+    const { wrapper } = await mountWithProviders(InspectionQuad, {
+      props: {
+        ...requiredProps,
+        galleryRandomSamplingDefectIds: new Set(["103", "274"]),
+      },
+    });
+
+    wrapper
+      .findComponent({ name: "ScMapPanelBinned" })
+      .vm.$emit("update:mapSelectionMode", "exclude");
+    wrapper.findComponent({ name: "ScMapPanelBinned" }).vm.$emit("invert-map-selection-mode");
+    wrapper.findComponent({ name: "ScMapPanelBinned" }).vm.$emit("undo-map-selection-mode");
+
+    expect(model.setMapSelectionMode).toHaveBeenCalledWith("exclude");
+    expect(model.invertMapSelectionMode).toHaveBeenCalledOnce();
+    expect(model.undoMapSelectionMode).toHaveBeenCalledOnce();
+    expect(wrapper.emitted("clear-gallery-random-sampling")).toHaveLength(3);
+  });
+
+  it("copies selected map defect IDs as newline-delimited text", async () => {
+    const writeText = vi.fn(async () => undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    model.mapSelectedDefectIds.value = [103, 274];
+    const { wrapper } = await mountWithProviders(InspectionQuad, {
+      props: requiredProps,
+    });
+
+    wrapper.findComponent({ name: "ScMapPanelBinned" }).vm.$emit("copy-selected-defect-ids");
+
+    await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith("103\n274"));
   });
 
   it("clears an active sampling cohort when Review mode changes", async () => {

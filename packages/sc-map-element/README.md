@@ -28,7 +28,8 @@ The element exposes typed JavaScript properties rather than JSON attributes:
 
 Area selections are additive. Box selection emits `box-select`; lasso selection
 emits `lasso-select` with the polygon and its bounding region. Double-click emits
-`clear-selection`. Zoom reset is controlled explicitly by assigning `zoom = null`.
+`clear-selection`. Right-click emits `map-context-menu` with the viewport `x` and
+`y` coordinates. Zoom reset is controlled explicitly by assigning `zoom = null`.
 
 Left-button dragging follows `interactionMode`. Right-button dragging always pans
 without changing that mode. Ordinary trackpad `wheel` input uses `deltaX` and
