@@ -98,6 +98,7 @@ describe("useSqlInspectionModel", () => {
     if (!model) throw new Error("model was not created");
 
     await model.applyMapSelection([9, 3, 9]);
+    expect(model.galleryQuery.value.filters).toEqual([]);
     model.setMapSelectionMode("exclude");
 
     expect(model.mapSelectionMode.value).toBe("exclude");
@@ -107,13 +108,21 @@ describe("useSqlInspectionModel", () => {
       JSON.stringify([["defect_id", "not in", [3, 9]]]),
     );
 
+    await model.applyMapSelection([7]);
+    expect(model.galleryQuery.value.filters).toEqual([["defect_id", "not in", [3, 9]]]);
+
     model.invertMapSelectionMode();
     expect(model.mapSelectionMode.value).toBe("include");
+    expect(model.galleryQuery.value.filters).toEqual([["defect_id", "in", [3, 9]]]);
     model.undoMapSelectionMode();
     expect(model.mapSelectionMode.value).toBe("exclude");
     model.undoMapSelectionMode();
-    expect(model.mapSelectionMode.value).toBe("include");
+    expect(model.mapSelectionMode.value).toBeNull();
+    expect(model.galleryQuery.value.filters).toEqual([]);
     expect(model.canUndoMapSelectionMode.value).toBe(false);
+
+    model.setMapSelectionMode("include");
+    expect(model.galleryQuery.value.filters).toEqual([["defect_id", "in", [7]]]);
   });
 
   it("reloads map queries when an SSE revision invalidates the scope", async () => {

@@ -66,6 +66,23 @@ function sampleRow(defectId: string, images: number): ScSampleTableDisplayRow {
 }
 
 describe("ScSampleTableTanStack", () => {
+  it("keeps the pinned selection and Defect ID cells in the same row", async () => {
+    const loadRows = vi.fn<ScSampleTableDataSource["loadRows"]>(async () => ({
+      items: [sampleRow("11", 1)],
+      total: 1,
+      nextAnchor: null,
+    }));
+    const dataSource: ScSampleTableDataSource = { scopeKey: "dataset:layout", loadRows };
+    const { wrapper } = await mountWithProviders(ScSampleTableTanStack, {
+      props: { dataSource, enableSelection: true },
+    });
+
+    await vi.waitFor(() => expect(loadRows).toHaveBeenCalledTimes(1));
+
+    expect(wrapper.get(".sst-tanstack-header").attributes("style")).toContain("display: flex");
+    expect(wrapper.get(".sst-tanstack-row").attributes("style")).toContain("display: flex");
+  });
+
   it("keeps 300k select-all symbolic", async () => {
     const loadRows = vi.fn<ScSampleTableDataSource["loadRows"]>(async () => ({
       items: [sampleRow("11", 1), sampleRow("12", 1)],

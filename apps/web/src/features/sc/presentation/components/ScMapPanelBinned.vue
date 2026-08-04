@@ -75,7 +75,7 @@ const props = withDefaults(
     colorMapScopeKey?: string;
 
     zoom?: { x: number; y: number; w: number; h: number } | null;
-    mapSelectionMode?: ScMapSelectionMode;
+    mapSelectionMode?: ScMapSelectionMode | null;
     mapSelectionCount?: number;
     canUndoMapSelectionMode?: boolean;
 
@@ -87,7 +87,6 @@ const props = withDefaults(
   {
     showImageMarkers: true,
     defectSize: 2,
-    mapSelectionMode: "include",
   },
 );
 
@@ -381,6 +380,10 @@ function onNativeMapContextMenu(event: Event): void {
   void nextTick(() => {
     mapSelectionContextVisible.value = true;
   });
+}
+
+function onNativeMapPointerDown(event: PointerEvent): void {
+  if (event.button === 0) mapSelectionContextVisible.value = false;
 }
 
 function handleMapSelectionContextSelect(key: string | number): void {
@@ -750,6 +753,7 @@ function handleHiddenLegendKeysUpdate(keys: string[]): void {
             @box-select="onNativeBoxSelect"
             @lasso-select="onNativeLassoSelect"
             @map-context-menu="onNativeMapContextMenu"
+            @pointerdown="onNativeMapPointerDown"
             @clear-selection="onNativeClearSelection"
             @immediate-crosshair-points="onNativeImmediateCrosshair"
             @map-progress="onNativeMapProgress"

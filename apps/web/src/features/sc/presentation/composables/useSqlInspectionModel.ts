@@ -24,6 +24,10 @@ interface IdSelectionState {
   ids: number[];
 }
 
+interface MapSelectionFilterState extends IdSelectionState {
+  mode: ScMapSelectionMode;
+}
+
 export interface ScSamplingCandidateOptions {
   reviewOnly: boolean;
   mapSelectionOnly: boolean;
@@ -62,9 +66,10 @@ export function useSqlInspectionModel(args: {
   const mapProgressPercent = ref(0);
   const legendGroups = ref<Record<string, DefectList> | null>(null);
   const mapSelection = ref<IdSelectionState>({ ids: [] });
-  const mapSelectionMode = ref<ScMapSelectionMode>("include");
-  const mapSelectionModeHistory = ref<ScMapSelectionMode[]>([]);
-  const canUndoMapSelectionMode = computed(() => mapSelectionModeHistory.value.length > 0);
+  const mapSelectionFilter = ref<MapSelectionFilterState | null>(null);
+  const mapSelectionFilterHistory = ref<Array<MapSelectionFilterState | null>>([]);
+  const mapSelectionMode = computed(() => mapSelectionFilter.value?.mode ?? null);
+  const canUndoMapSelectionMode = computed(() => mapSelectionFilterHistory.value.length > 0);
   const tableSelection = ref<ScTableSelectionConstraint>({ kind: "ids", ids: [] });
   const mapSelectedDefectIds = computed(() => mapSelection.value.ids);
   const reviewMode = ref(false);
@@ -86,12 +91,12 @@ export function useSqlInspectionModel(args: {
     ...globalFilters.value,
     ...randomSamplingFilters.value,
     ...reviewFilters.value,
-    ...(mapSelection.value.ids.length
+    ...(mapSelectionFilter.value
       ? ([
           [
             "defect_id",
-            mapSelectionMode.value === "include" ? "in" : "not in",
-            mapSelection.value.ids,
+            mapSelectionFilter.value.mode === "include" ? "in" : "not in",
+            mapSelectionFilter.value.ids,
           ],
         ] as ScDataFilter[])
       : []),
@@ -341,25 +346,49 @@ export function useSqlInspectionModel(args: {
   }
 
   function setMapSelectionMode(mode: ScMapSelectionMode): void {
-    if (mode === mapSelectionMode.value) return;
-    mapSelectionModeHistory.value = [...mapSelectionModeHistory.value, mapSelectionMode.value];
-    mapSelectionMode.value = mode;
+    const ids = sortedUniqueIds(mapSelection.value.ids);
+    if (ids.length === 0) return;
+    const current = mapSelectionFilter.value;
+    if (
+      current?.mode === mode &&
+      current.ids.length === ids.length &&
+      current.ids.every((id, index) => id === ids[index])
+    ) {
+      return;
+    }
+    mapSelectionFilterHistory.value = [
+      ...mapSelectionFilterHistory.value,
+      current ? { mode: current.mode, ids: [...current.ids] } : null,
+    ];
+    mapSelectionFilter.value = { mode, ids };
   }
 
   function invertMapSelectionMode(): void {
-    setMapSelectionMode(mapSelectionMode.value === "include" ? "exclude" : "include");
+    const current = mapSelectionFilter.value;
+    if (!current) {
+      setMapSelectionMode("exclude");
+      return;
+    }
+    mapSelectionFilterHistory.value = [
+      ...mapSelectionFilterHistory.value,
+      { mode: current.mode, ids: [...current.ids] },
+    ];
+    mapSelectionFilter.value = {
+      mode: current.mode === "include" ? "exclude" : "include",
+      ids: [...current.ids],
+    };
   }
 
   function undoMapSelectionMode(): void {
-    const previous = mapSelectionModeHistory.value.at(-1);
-    if (!previous) return;
-    mapSelectionModeHistory.value = mapSelectionModeHistory.value.slice(0, -1);
-    mapSelectionMode.value = previous;
+    if (mapSelectionFilterHistory.value.length === 0) return;
+    const previous = mapSelectionFilterHistory.value.at(-1) ?? null;
+    mapSelectionFilterHistory.value = mapSelectionFilterHistory.value.slice(0, -1);
+    mapSelectionFilter.value = previous ? { mode: previous.mode, ids: [...previous.ids] } : null;
   }
 
   function resetMapSelectionMode(): void {
-    mapSelectionModeHistory.value = [];
-    mapSelectionMode.value = "include";
+    mapSelectionFilterHistory.value = [];
+    mapSelectionFilter.value = null;
   }
 
   function setTableSelection(selection: ScTableSelectionConstraint): void {

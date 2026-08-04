@@ -3,6 +3,8 @@ import {
   clampRegionToBounds,
   defineScMapElement,
   normalizeWheelDelta,
+  overscanMapRegion,
+  SC_MAP_PROJECTION_OVERSCAN_RATIO,
   SC_MAP_WHEEL_ZOOM_COMMIT_DELAY_MS,
   type ScMapElement,
   type ScMapRegion,
@@ -33,6 +35,16 @@ describe("sc-map viewport interactions", () => {
       y: 60,
       w: 40,
       h: 40,
+    });
+  });
+
+  it("keeps projected map data around the zoomed viewport for smooth panning", () => {
+    expect(SC_MAP_PROJECTION_OVERSCAN_RATIO).toBe(0.2);
+    expect(overscanMapRegion({ x: 100, y: 200, w: 50, h: 100 })).toEqual({
+      x: 90,
+      y: 180,
+      w: 70,
+      h: 140,
     });
   });
 

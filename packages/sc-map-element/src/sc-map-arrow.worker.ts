@@ -3,6 +3,7 @@
 import { tableFromIPC, type Table, type Vector } from "apache-arrow";
 import type { ScMapRegion } from "./types";
 import { encodeLegendKey, normalizeLegendKey } from "./legend-key-codec";
+import { overscanMapRegion } from "./map-projection";
 
 type MapMode = "wafer" | "die" | "reticle";
 
@@ -147,6 +148,7 @@ function project(message: ProjectMessage): void {
   const interval = Math.max(1, Math.floor(totalRows / 100));
   let displayRows = 0;
   let processedRows = 0;
+  const projectionRegion = message.zoom ? overscanMapRegion(message.zoom) : null;
 
   for (const table of tables) {
     const xColumn = requireColumn(table, xName);
@@ -159,8 +161,13 @@ function project(message: ProjectMessage): void {
       const x = Number(xColumn.get(rowIndex));
       const y = Number(yColumn.get(rowIndex));
       if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
-      const zoom = message.zoom;
-      if (zoom && (x < zoom.x || x > zoom.x + zoom.w || y < zoom.y || y > zoom.y + zoom.h)) {
+      if (
+        projectionRegion &&
+        (x < projectionRegion.x ||
+          x > projectionRegion.x + projectionRegion.w ||
+          y < projectionRegion.y ||
+          y > projectionRegion.y + projectionRegion.h)
+      ) {
         continue;
       }
 

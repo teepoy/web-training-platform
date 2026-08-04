@@ -79,8 +79,8 @@ Key actions:
 
 The same wafer/die/reticle map triad as the preview page, integrated with annotation:
 
-- **Box selection** — draw a rectangle on the map to filter the Blink table to defects within that region.
-- **Selection behavior** — right-click the map and choose **Exclude all others** to show only selected defects, **Exclude selected** to hide them, or **Invert selection** to reverse the active selection filter. The menu can also copy selected defect IDs, undo selection-filter changes, and switch selection tools.
+- **Box selection** — draw a rectangle on the map to append defects to the active map selection.
+- **Selection behavior** — right-click the map and choose **Exclude all others** to show only the currently selected defects or **Exclude selected** to hide them. Each action stores the current ID set as a filter snapshot, so later map selections do not silently change an applied filter. **Invert selection** reverses the active snapshot, and **Undo selection filter** restores the complete previous snapshot. The menu can also copy selected defect IDs and switch selection tools.
 - **Legend coloring** — by bin, class number, annotation status, or prediction label.
 - **Custom colors** — label colors accept text labels as well as numeric classes and persist per
   dataset and legend source.

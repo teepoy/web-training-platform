@@ -170,6 +170,10 @@ const tableWidthStyle = computed<CSSProperties>(() => ({
   width: `${Math.max(totalColumnsWidth.value, pinnedWidth.value)}px`,
   minWidth: "100%",
 }));
+const tableHeaderStyle = computed<CSSProperties>(() => ({
+  ...tableWidthStyle.value,
+  display: "flex",
+}));
 const tableBodyStyle = computed<CSSProperties>(() => ({
   ...tableWidthStyle.value,
   height: `${totalRowsHeight.value}px`,
@@ -207,6 +211,7 @@ function rowAt(globalIndex: number): ScSampleTablePresentationRow | undefined {
 function rowStyle(start: number): CSSProperties {
   return {
     ...tableWidthStyle.value,
+    display: "flex",
     height: `${ROW_HEIGHT}px`,
     transform: `translateY(${start}px)`,
   };
@@ -696,7 +701,7 @@ defineExpose({
       data-testid="sc-sample-table-scroll"
       tabindex="0"
     >
-      <div class="sst-tanstack-header" :style="tableWidthStyle" role="row">
+      <div class="sst-tanstack-header" :style="tableHeaderStyle" role="row">
         <div
           v-if="selectionColumn"
           class="sst-tanstack-cell sst-tanstack-cell--header sst-tanstack-cell--pinned"
@@ -1009,6 +1014,7 @@ defineExpose({
 
 .sst-tanstack-header {
   position: sticky;
+  display: flex;
   top: 0;
   z-index: 30;
   height: 36px;
@@ -1022,6 +1028,7 @@ defineExpose({
 
 .sst-tanstack-row {
   position: absolute;
+  display: flex;
   top: 0;
   left: 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);

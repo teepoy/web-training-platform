@@ -126,6 +126,26 @@ describe("ScMapPanelBinned unified map", () => {
     expect(wrapper.emitted("undo-map-selection-mode")).toEqual([[]]);
   });
 
+  it("closes the map context menu on a left pointer down", async () => {
+    const { wrapper } = await mountWithProviders(ScMapPanelBinned, {
+      props: { mapSelectionCount: 2 },
+    });
+    const map = wrapper.find('[data-testid="sc-unified-map"]');
+    map.element.dispatchEvent(new CustomEvent("map-context-menu", { detail: { x: 12, y: 24 } }));
+    await wrapper.vm.$nextTick();
+    await wrapper.vm.$nextTick();
+    const menu = wrapper
+      .findAllComponents(NDropdown)
+      .find((dropdown) => dropdown.props("trigger") === "manual");
+    if (!menu) throw new Error("map selection context menu was not mounted");
+    expect(menu.props("show")).toBe(true);
+
+    map.element.dispatchEvent(new PointerEvent("pointerdown", { button: 0, bubbles: true }));
+    await wrapper.vm.$nextTick();
+
+    expect(menu.props("show")).toBe(false);
+  });
+
   it("offers one-step zoom in and zoom out controls", async () => {
     const { wrapper } = await mountWithProviders(ScMapPanelBinned, {
       props: {

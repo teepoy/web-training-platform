@@ -27,7 +27,7 @@ const model = vi.hoisted(() => ({
   galleryLoading: { value: false },
   galleryQuery: { value: {} },
   mapSelectedDefectIds: { value: [] as number[] },
-  mapSelectionMode: { value: "include" },
+  mapSelectionMode: { value: null as "include" | "exclude" | null },
   canUndoMapSelectionMode: { value: false },
   reviewMode: { value: false },
   tableSelection: { value: { kind: "ids", ids: [] } },

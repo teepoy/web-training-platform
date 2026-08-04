@@ -19,3 +19,4 @@ export type {
 } from "./sc-map-element";
 export type { ScMapBounds, ScMapData, ScMapRegion, ScMapViewport } from "./types";
 export { encodeLegendColorMap, encodeLegendKey, normalizeLegendKey } from "./legend-key-codec";
+export { overscanMapRegion, SC_MAP_PROJECTION_OVERSCAN_RATIO } from "./map-projection";
