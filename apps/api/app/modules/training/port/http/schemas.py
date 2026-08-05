@@ -16,12 +16,30 @@ class _StrictRequest(BaseModel):
 
 
 class CreateTrainingJobRequest(_StrictRequest):
-    dataset_id: str = Field(min_length=1)
+    dataset_id: str | None = Field(default=None, min_length=1)
+    collection_id: str | None = Field(default=None, min_length=1)
+    collection_revision_id: str | None = Field(default=None, min_length=1)
     trainer_id: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_data_source(self) -> CreateTrainingJobRequest:
+        self._data_source()
+        return self
+
+    def _data_source(self) -> None:
+        from app.shared.domain.data_source import RuntimeDataSourceRef
+
+        RuntimeDataSourceRef.from_fields(
+            dataset_id=self.dataset_id,
+            collection_id=self.collection_id,
+            collection_revision_id=self.collection_revision_id,
+        )
 
     def to_command(self, *, org_id: str, created_by: str) -> TrainingJobCommand:
         return TrainingJobCommand(
             dataset_id=self.dataset_id,
+            collection_id=self.collection_id,
+            collection_revision_id=self.collection_revision_id,
             trainer_id=self.trainer_id,
             org_id=org_id,
             created_by=created_by,
@@ -29,7 +47,9 @@ class CreateTrainingJobRequest(_StrictRequest):
 
 
 class TrainAndPredictRequest(_StrictRequest):
-    dataset_id: str = Field(min_length=1)
+    dataset_id: str | None = Field(default=None, min_length=1)
+    collection_id: str | None = Field(default=None, min_length=1)
+    collection_revision_id: str | None = Field(default=None, min_length=1)
     trainer_id: str = Field(min_length=1)
     target: str = Field(default="image_classification", min_length=1)
     model_version: str | None = None
@@ -40,6 +60,13 @@ class TrainAndPredictRequest(_StrictRequest):
 
     @model_validator(mode="after")
     def validate_sample_selection(self) -> TrainAndPredictRequest:
+        from app.shared.domain.data_source import RuntimeDataSourceRef
+
+        RuntimeDataSourceRef.from_fields(
+            dataset_id=self.dataset_id,
+            collection_id=self.collection_id,
+            collection_revision_id=self.collection_revision_id,
+        )
         if self.sample_ids is not None and self.sample_filter is not None:
             raise ValueError("sample_ids and sample_filter are mutually exclusive")
         if self.sample_filter is not None and not self.sample_filter:
@@ -49,6 +76,8 @@ class TrainAndPredictRequest(_StrictRequest):
     def to_command(self, *, org_id: str, created_by: str) -> TrainAndPredictCommand:
         return TrainAndPredictCommand(
             dataset_id=self.dataset_id,
+            collection_id=self.collection_id,
+            collection_revision_id=self.collection_revision_id,
             trainer_id=self.trainer_id,
             org_id=org_id,
             created_by=created_by,

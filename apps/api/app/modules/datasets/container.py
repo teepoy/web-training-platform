@@ -25,6 +25,7 @@ from app.modules.datasets.port.local import (
     IDatasetService,
     SampleSimilarityPort,
 )
+from app.modules.dataset_collections.port.local import CollectionDatasetUsagePort
 from app.modules.prediction.port.local import PredictionDatasetUsagePort
 from app.modules.training.port.local import TrainingDatasetUsagePort
 from app.modules.storage.container import StorageContext
@@ -73,10 +74,12 @@ class DatasetsModule(Module):
         self,
         training_usage: TrainingDatasetUsagePort,
         prediction_usage: PredictionDatasetUsagePort,
+        collection_usage: CollectionDatasetUsagePort,
     ) -> DatasetDeletionGuardPort:
         return DatasetDeletionGuard(
             training_usage=training_usage,
             prediction_usage=prediction_usage,
+            collection_usage=collection_usage,
         )
 
     @inject

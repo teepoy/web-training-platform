@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.modules.prediction.domain.review import ReviewAnnotationCommand
 from app.modules.prediction.domain.submission import PredictionJobCommand
@@ -16,10 +16,13 @@ class RunPredictionRequest(StrictRequest):
     """Request to run predictions on a dataset using a model."""
 
     model_id: str = Field(min_length=1, description="ID of the model artifact to use")
-    dataset_id: str = Field(
+    dataset_id: str | None = Field(
+        default=None,
         min_length=1,
         description="ID of the dataset to run predictions on",
     )
+    collection_id: str | None = Field(default=None, min_length=1)
+    collection_revision_id: str | None = Field(default=None, min_length=1)
     sample_ids: list[str] | None = Field(
         default=None,
         min_length=1,
@@ -46,9 +49,22 @@ class RunPredictionRequest(StrictRequest):
         ),
     )
 
+    @model_validator(mode="after")
+    def validate_data_source(self) -> RunPredictionRequest:
+        from app.shared.domain.data_source import RuntimeDataSourceRef
+
+        RuntimeDataSourceRef.from_fields(
+            dataset_id=self.dataset_id,
+            collection_id=self.collection_id,
+            collection_revision_id=self.collection_revision_id,
+        )
+        return self
+
     def to_command(self, *, org_id: str, created_by: str) -> PredictionJobCommand:
         return PredictionJobCommand(
             dataset_id=self.dataset_id,
+            collection_id=self.collection_id,
+            collection_revision_id=self.collection_revision_id,
             model_id=self.model_id,
             org_id=org_id,
             created_by=created_by,
@@ -78,6 +94,8 @@ class PredictionResultResponse(BaseModel):
 class PredictionJobResponse(BaseModel):
     id: str
     dataset_id: str | None
+    collection_id: str | None = None
+    collection_revision_id: str | None = None
     model_id: str
     status: str
     created_by: str

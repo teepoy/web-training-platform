@@ -25,6 +25,7 @@ import {
   renderSampleTableCell,
   sampleTablePresentationColumns,
   sampleTableRowDefectId,
+  sampleTableRowKey,
   type ScSampleTablePresentationColumn,
   type ScSampleTablePresentationRow,
 } from "./sampleTablePresentation";
@@ -68,7 +69,7 @@ const streamStatus = ref("");
 const isFetching = ref(false);
 const tableFilter = ref<ScSampleTableFilter>({ ...(props.filter ?? {}) });
 const tableSort = ref<ScSampleTableSort>(normalizeTableSort(props.sort));
-const selectionDeltaIds = ref<Set<number>>(new Set());
+const selectionDeltaIds = ref<Set<string>>(new Set());
 const allMatchingRowsSelected = ref(false);
 const filterPopoverVersion = ref(0);
 const filterState = ref<Record<string, { min: number | null; max: number | null }>>({});
@@ -120,7 +121,7 @@ const table = useVueTable({
     return tanstackColumns.value;
   },
   getCoreRowModel: getCoreRowModel(),
-  getRowId: (row) => row.defect_id,
+  getRowId: (row) => row.row_key,
   manualFiltering: true,
   manualSorting: true,
 });
@@ -509,14 +510,14 @@ function sortButtonLabel(field: string): string {
   return "Sort ascending";
 }
 
-function rowIsSelected(id: number): boolean {
+function rowIsSelected(id: string): boolean {
   return allMatchingRowsSelected.value
     ? !selectionDeltaIds.value.has(id)
     : selectionDeltaIds.value.has(id);
 }
 
 function emitSelection(): void {
-  const ids = Array.from(selectionDeltaIds.value).sort((left, right) => left - right);
+  const ids = Array.from(selectionDeltaIds.value).sort();
   emit(
     "selection-change",
     allMatchingRowsSelected.value ? { kind: "all", excludedIds: ids } : { kind: "ids", ids },
@@ -534,7 +535,7 @@ function handleSelectAll(event: Event): void {
 
 function toggleRowSelection(row: ScSampleTablePresentationRow | undefined): void {
   if (props.enableSelection !== true) return;
-  const id = sampleTableRowDefectId(row);
+  const id = sampleTableRowKey(row);
   if (id === null) return;
   const checked = !rowIsSelected(id);
   const next = new Set(selectionDeltaIds.value);
@@ -905,11 +906,11 @@ defineExpose({
             role="cell"
           >
             <input
-              v-if="sampleTableRowDefectId(rowAt(virtualRow.index)) !== null"
+              v-if="sampleTableRowKey(rowAt(virtualRow.index)) !== null"
               class="sst-tanstack-checkbox"
               type="checkbox"
               :aria-label="`Select sample ${rowAt(virtualRow.index)?.defect_id}`"
-              :checked="rowIsSelected(sampleTableRowDefectId(rowAt(virtualRow.index))!)"
+              :checked="rowIsSelected(sampleTableRowKey(rowAt(virtualRow.index))!)"
               @click.stop
               @change="handleRowCheckbox(rowAt(virtualRow.index), $event)"
             />

@@ -6,6 +6,9 @@ from typing import Any, cast
 from injector import Module, inject, provider, singleton
 
 from app.modules.training.adapter.clients.kubeflow_client import KubeflowClient
+from app.modules.dataset_collections.port.local import (
+    DatasetCollectionRevisionReaderPort,
+)
 from app.modules.training.adapter.engines.local_kubeflow import (
     KubeflowTrainingOperatorEngine,
     LocalProcessEngine,
@@ -101,6 +104,7 @@ def init_training(
     runtime_router: RuntimeRoutingPort,
     dataset_reader: DatasetReader,
     storage_factory: DatasetStorageFactoryPort,
+    collection_revisions: DatasetCollectionRevisionReaderPort,
 ) -> TrainingContext:
     kube_client = (
         _build_kubeflow_client(shared.config)
@@ -134,6 +138,7 @@ def init_training(
         prefect_client=shared.prefect_client,
         runtime_router=runtime_router,
         readiness=readiness,
+        collection_revisions=collection_revisions,
     )
     return TrainingContext(
         training_submission=submission,
@@ -154,12 +159,14 @@ class TrainingModule(Module):
         runtime_router: RuntimeRoutingPort,
         dataset_reader: DatasetReader,
         storage_factory: DatasetStorageFactoryPort,
+        collection_revisions: DatasetCollectionRevisionReaderPort,
     ) -> TrainingContext:
         return init_training(
             shared,
             runtime_router=runtime_router,
             dataset_reader=dataset_reader,
             storage_factory=storage_factory,
+            collection_revisions=collection_revisions,
         )
 
     @provider

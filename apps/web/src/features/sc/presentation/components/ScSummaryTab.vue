@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive } from "vue";
+import { computed, reactive } from "vue";
 import {
   NButton,
   NDataTable,
@@ -25,6 +25,7 @@ const props = defineProps<{
   eqpIdFilter: string;
   layerIdFilter: string;
   deviceFilter: string;
+  selectedRowKeys: string[];
 }>();
 
 const emit = defineEmits<{
@@ -35,11 +36,17 @@ const emit = defineEmits<{
   (e: "update:deviceFilter", value: string): void;
   (e: "search"): void;
   (e: "rowClick", row: InspectionSummaryItem): void;
+  (e: "update:selectedRowKeys", value: string[]): void;
 }>();
 
 function rowKey(row: InspectionSummaryItem): string {
   return `${row.inspection_time}_${row.wafer_key}`;
 }
+
+const selectableColumns = computed<DataTableColumns<InspectionSummaryItem>>(() => [
+  { type: "selection", multiple: true, width: 42 },
+  ...props.inspectionColumns,
+]);
 
 const clickableRowStyle = { cursor: "pointer" };
 const tablePagination = reactive<PaginationProps>({
@@ -119,21 +126,19 @@ function rowProps(row: InspectionSummaryItem): Record<string, unknown> {
         >
           Search
         </NButton>
-        <NText
-          v-if="lastOpenedSummaryLabel"
-          depth="3"
-          class="sc-preview-last-opened"
-        >
+        <NText v-if="lastOpenedSummaryLabel" depth="3" class="sc-preview-last-opened">
           Last opened: {{ lastOpenedSummaryLabel }}
         </NText>
       </NSpace>
     </div>
     <div class="sc-preview-table-wrapper">
       <NDataTable
-        :columns="inspectionColumns"
+        :columns="selectableColumns"
         :data="summaries"
         :loading="summariesLoading"
         :row-key="rowKey"
+        :checked-row-keys="selectedRowKeys"
+        @update:checked-row-keys="emit('update:selectedRowKeys', $event.map(String))"
         :row-props="rowProps"
         :pagination="tablePagination"
         :single-line="false"
@@ -146,16 +151,10 @@ function rowProps(row: InspectionSummaryItem): Record<string, unknown> {
       >
         <template #empty>
           <div class="sc-preview-empty">
-            <NText v-if="summariesError" type="error">{{
-              summariesError
-            }}</NText>
-            <NText v-else-if="summariesEmpty" depth="3"
-              >No inspections found</NText
-            >
+            <NText v-if="summariesError" type="error">{{ summariesError }}</NText>
+            <NText v-else-if="summariesEmpty" depth="3">No inspections found</NText>
             <NText v-else depth="3">Enter a time range to search</NText>
-            <NButton v-if="summariesError" size="small" @click="emit('search')">
-              Retry
-            </NButton>
+            <NButton v-if="summariesError" size="small" @click="emit('search')"> Retry </NButton>
           </div>
         </template>
       </NDataTable>

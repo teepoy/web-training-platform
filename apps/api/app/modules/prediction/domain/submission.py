@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from app.shared.domain.data_source import RuntimeDataSourceRef
+
 
 def _require_identifier(value: str, field_name: str) -> None:
     if not value.strip():
@@ -10,10 +12,12 @@ def _require_identifier(value: str, field_name: str) -> None:
 
 @dataclass(frozen=True, slots=True)
 class PredictionJobCommand:
-    dataset_id: str
     model_id: str
     org_id: str
     created_by: str
+    dataset_id: str | None = None
+    collection_id: str | None = None
+    collection_revision_id: str | None = None
     target: str = "image_classification"
     model_version: str | None = None
     sample_ids: tuple[str, ...] | None = None
@@ -22,13 +26,13 @@ class PredictionJobCommand:
 
     def __post_init__(self) -> None:
         for field_name in (
-            "dataset_id",
             "model_id",
             "org_id",
             "created_by",
             "target",
         ):
             _require_identifier(getattr(self, field_name), field_name)
+        self.data_source
         if self.sample_ids is not None:
             if not self.sample_ids:
                 raise ValueError("sample_ids must not be empty")
@@ -36,6 +40,14 @@ class PredictionJobCommand:
                 raise ValueError("sample_ids must not contain empty IDs")
         if self.predictor_id is not None:
             _require_identifier(self.predictor_id, "predictor_id")
+
+    @property
+    def data_source(self) -> RuntimeDataSourceRef:
+        return RuntimeDataSourceRef.from_fields(
+            dataset_id=self.dataset_id,
+            collection_id=self.collection_id,
+            collection_revision_id=self.collection_revision_id,
+        )
 
 
 class PredictionResourceNotFoundError(LookupError):

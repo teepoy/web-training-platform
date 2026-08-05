@@ -14,7 +14,7 @@ from app.modules.runtime.domain.executables import RuntimeOperation
 @flow(name="training-train-and-predict")
 async def train_and_predict_flow(
     job_id: str,
-    dataset_id: str,
+    dataset_id: str | None,
     trainer_id: str,
     org_id: str,
     created_by: str = "system",
@@ -33,6 +33,8 @@ async def train_and_predict_flow(
     algo_version: str | None = None,
     code_version: str | None = None,
     missing_image_policy: str | None = None,
+    collection_id: str | None = None,
+    collection_revision_id: str | None = None,
 ) -> object:
     del output_contract
     if catalog_id != trainer_id:
@@ -77,6 +79,8 @@ async def train_and_predict_flow(
                 sample_filter=sample_filter,
                 prompt=prompt,
                 missing_image_policy=missing_image_policy,
+                collection_id=collection_id,
+                collection_revision_id=collection_revision_id,
             ),
         )
     finally:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class ScInspectionSummaryItem(BaseModel):
@@ -77,6 +77,8 @@ class ScSampleTableRowsRequest(BaseModel):
 
 
 class ScSampleTableRow(BaseModel):
+    row_key: str
+    sample_id: str | None = None
     defect_id: str
     rough_bin: int
     class_number: int
@@ -142,9 +144,16 @@ class ScImportResponse(BaseModel):
 
 
 class ScAnnotationItem(BaseModel):
-    defect_id: str
+    sample_id: str | None = None
+    defect_id: str | None = None
     label: int | str
     annotator: str = "platform-user"
+
+    @model_validator(mode="after")
+    def validate_identity(self) -> ScAnnotationItem:
+        if bool(self.sample_id) == bool(self.defect_id):
+            raise ValueError("provide exactly one of sample_id or defect_id")
+        return self
 
 
 class ScBulkAnnotationRequest(BaseModel):

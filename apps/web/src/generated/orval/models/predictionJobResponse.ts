@@ -5,6 +5,8 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { PredictionJobResponseDatasetId } from "./predictionJobResponseDatasetId";
+import type { PredictionJobResponseCollectionId } from "./predictionJobResponseCollectionId";
+import type { PredictionJobResponseCollectionRevisionId } from "./predictionJobResponseCollectionRevisionId";
 import type { PredictionJobResponseModelVersion } from "./predictionJobResponseModelVersion";
 import type { PredictionJobResponseExternalJobId } from "./predictionJobResponseExternalJobId";
 import type { PredictionJobResponseSampleIds } from "./predictionJobResponseSampleIds";
@@ -13,6 +15,8 @@ import type { PredictionJobResponseSummary } from "./predictionJobResponseSummar
 export interface PredictionJobResponse {
   id: string;
   dataset_id: PredictionJobResponseDatasetId;
+  collection_id?: PredictionJobResponseCollectionId;
+  collection_revision_id?: PredictionJobResponseCollectionRevisionId;
   model_id: string;
   status: string;
   created_by: string;

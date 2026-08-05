@@ -30,6 +30,8 @@ import type {
   CancelJobResponse,
   ChatRequest,
   CreateAnnotationRequest,
+  CreateDatasetCollectionRequest,
+  CreateDatasetCollectionRevisionRequest,
   CreateDatasetRequest,
   CreateOrgRequest,
   CreateReviewActionRequest,
@@ -41,6 +43,10 @@ import type {
   DashboardResponse,
   Dataset,
   DatasetAnnotationStats,
+  DatasetCollectionMemberResponse,
+  DatasetCollectionMembershipResponse,
+  DatasetCollectionResponse,
+  DatasetCollectionRevisionResponse,
   DatasetStatusResponse,
   DeleteAnnotationApiV1AnnotationsAnnotationIdDeleteParams,
   DeleteSensorSubscriptionApiV1SensorsSensorIdSubscriptionsSubIdDelete200,
@@ -64,7 +70,9 @@ import type {
   HTTPValidationError,
   HealthHealthGet200,
   ImportParquetApiV1PluginsImportParquetImportPostParams,
+  LinkDatasetCollectionMembersRequest,
   ListAnnotationVersionsApiV1PredictionReviewsActionIdAnnotationVersionsGetParams,
+  ListCollectionsApiV1DatasetCollectionsGetParams,
   ListDatasetsApiV1DatasetsGetParams,
   ListJobsApiV1TrainingJobsGetParams,
   ListLatestPredictionsApiV1DatasetsDatasetIdLatestPredictionsGetParams,
@@ -95,6 +103,7 @@ import type {
   OrgResponse,
   PaginatedResponseAnnotationVersionResponse,
   PaginatedResponseDataset,
+  PaginatedResponseDatasetCollectionResponse,
   PaginatedResponseModelResponse,
   PaginatedResponsePredictionCollectionResponse,
   PaginatedResponsePredictionEventResponse,
@@ -116,6 +125,7 @@ import type {
   QueryDatasetDataApiV1DatasetsDatasetIdQueryPost200,
   ReadinessReadyGet200,
   RegisterRequest,
+  ReplaceDatasetCollectionMembersRequest,
   ResolveImageApiV1ImagesResolveGetParams,
   ReviewActionResponse,
   RunLogResponse,
@@ -161,7 +171,9 @@ import type {
   TrainAndPredictRequest,
   TrainAndPredictResponse,
   TrainingJob,
+  UnlinkMemberApiV1DatasetCollectionsCollectionIdMembersMemberIdDeleteParams,
   UpdateAnnotationRequest,
+  UpdateDatasetCollectionRequest,
   UpdateDatasetRequest,
   UpdateLabelSpaceRequest,
   UpdateModelRequest,
@@ -3841,6 +3853,1289 @@ export function useDownloadArtifactApiV1ArtifactsArtifactIdDownloadGet<
     artifactId,
     options,
   );
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  query.queryKey = unref(queryOptions).queryKey as DataTag<QueryKey, TData, TError>;
+
+  return query;
+}
+
+/**
+ * @summary Create Collection
+ */
+export const getCreateCollectionApiV1DatasetCollectionsPostUrl = () => {
+  return `/api/v1/dataset-collections`;
+};
+
+export const createCollectionApiV1DatasetCollectionsPost = async (
+  createDatasetCollectionRequest: CreateDatasetCollectionRequest,
+  options?: RequestInit,
+): Promise<DatasetCollectionResponse> => {
+  return orvalFetcher<DatasetCollectionResponse>(
+    getCreateCollectionApiV1DatasetCollectionsPostUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(createDatasetCollectionRequest),
+    },
+  );
+};
+
+export const getCreateCollectionApiV1DatasetCollectionsPostMutationOptions = <
+  TError = ErrorType<HTTPValidationError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createCollectionApiV1DatasetCollectionsPost>>,
+    TError,
+    { data: BodyType<CreateDatasetCollectionRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof orvalFetcher>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createCollectionApiV1DatasetCollectionsPost>>,
+  TError,
+  { data: BodyType<CreateDatasetCollectionRequest> },
+  TContext
+> => {
+  const mutationKey = ["createCollectionApiV1DatasetCollectionsPost"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createCollectionApiV1DatasetCollectionsPost>>,
+    { data: BodyType<CreateDatasetCollectionRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createCollectionApiV1DatasetCollectionsPost(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateCollectionApiV1DatasetCollectionsPostMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createCollectionApiV1DatasetCollectionsPost>>
+>;
+export type CreateCollectionApiV1DatasetCollectionsPostMutationBody =
+  BodyType<CreateDatasetCollectionRequest>;
+export type CreateCollectionApiV1DatasetCollectionsPostMutationError =
+  ErrorType<HTTPValidationError>;
+
+/**
+ * @summary Create Collection
+ */
+export const useCreateCollectionApiV1DatasetCollectionsPost = <
+  TError = ErrorType<HTTPValidationError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createCollectionApiV1DatasetCollectionsPost>>,
+    TError,
+    { data: BodyType<CreateDatasetCollectionRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof orvalFetcher>;
+}): UseMutationReturnType<
+  Awaited<ReturnType<typeof createCollectionApiV1DatasetCollectionsPost>>,
+  TError,
+  { data: BodyType<CreateDatasetCollectionRequest> },
+  TContext
+> => {
+  const mutationOptions = getCreateCollectionApiV1DatasetCollectionsPostMutationOptions(options);
+
+  return useMutation(mutationOptions);
+};
+
+/**
+ * @summary List Collections
+ */
+export const getListCollectionsApiV1DatasetCollectionsGetUrl = (
+  params?: ListCollectionsApiV1DatasetCollectionsGetParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  return normalizedParams.size
+    ? `/api/v1/dataset-collections?${normalizedParams.toString()}`
+    : `/api/v1/dataset-collections`;
+};
+
+export const listCollectionsApiV1DatasetCollectionsGet = async (
+  params?: ListCollectionsApiV1DatasetCollectionsGetParams,
+  options?: RequestInit,
+): Promise<PaginatedResponseDatasetCollectionResponse> => {
+  return orvalFetcher<PaginatedResponseDatasetCollectionResponse>(
+    getListCollectionsApiV1DatasetCollectionsGetUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListCollectionsApiV1DatasetCollectionsGetQueryKey = (
+  params?: MaybeRef<ListCollectionsApiV1DatasetCollectionsGetParams>,
+) => {
+  return ["api", "v1", "dataset-collections", ...(params ? [params] : [])] as const;
+};
+
+export const getListCollectionsApiV1DatasetCollectionsGetQueryOptions = <
+  TData = Awaited<ReturnType<typeof listCollectionsApiV1DatasetCollectionsGet>>,
+  TError = ErrorType<HTTPValidationError>,
+>(
+  params?: MaybeRef<ListCollectionsApiV1DatasetCollectionsGetParams>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof listCollectionsApiV1DatasetCollectionsGet>>,
+        TError,
+        TData
+      >
+    >;
+    request?: SecondParameter<typeof orvalFetcher>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = getListCollectionsApiV1DatasetCollectionsGetQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listCollectionsApiV1DatasetCollectionsGet>>
+  > = ({ signal }) =>
+    listCollectionsApiV1DatasetCollectionsGet(unref(params), { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listCollectionsApiV1DatasetCollectionsGet>>,
+    TError,
+    TData
+  >;
+};
+
+export type ListCollectionsApiV1DatasetCollectionsGetQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listCollectionsApiV1DatasetCollectionsGet>>
+>;
+export type ListCollectionsApiV1DatasetCollectionsGetQueryError = ErrorType<HTTPValidationError>;
+
+/**
+ * @summary List Collections
+ */
+
+export function useListCollectionsApiV1DatasetCollectionsGet<
+  TData = Awaited<ReturnType<typeof listCollectionsApiV1DatasetCollectionsGet>>,
+  TError = ErrorType<HTTPValidationError>,
+>(
+  params?: MaybeRef<ListCollectionsApiV1DatasetCollectionsGetParams>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof listCollectionsApiV1DatasetCollectionsGet>>,
+        TError,
+        TData
+      >
+    >;
+    request?: SecondParameter<typeof orvalFetcher>;
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getListCollectionsApiV1DatasetCollectionsGetQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  query.queryKey = unref(queryOptions).queryKey as DataTag<QueryKey, TData, TError>;
+
+  return query;
+}
+
+/**
+ * @summary Get Collection
+ */
+export const getGetCollectionApiV1DatasetCollectionsCollectionIdGetUrl = (collectionId: string) => {
+  return `/api/v1/dataset-collections/${collectionId}`;
+};
+
+export const getCollectionApiV1DatasetCollectionsCollectionIdGet = async (
+  collectionId: string,
+  options?: RequestInit,
+): Promise<DatasetCollectionResponse> => {
+  return orvalFetcher<DatasetCollectionResponse>(
+    getGetCollectionApiV1DatasetCollectionsCollectionIdGetUrl(collectionId),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetCollectionApiV1DatasetCollectionsCollectionIdGetQueryKey = (
+  collectionId: MaybeRef<string>,
+) => {
+  return ["api", "v1", "dataset-collections", collectionId] as const;
+};
+
+export const getGetCollectionApiV1DatasetCollectionsCollectionIdGetQueryOptions = <
+  TData = Awaited<ReturnType<typeof getCollectionApiV1DatasetCollectionsCollectionIdGet>>,
+  TError = ErrorType<HTTPValidationError>,
+>(
+  collectionId: MaybeRef<string>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getCollectionApiV1DatasetCollectionsCollectionIdGet>>,
+        TError,
+        TData
+      >
+    >;
+    request?: SecondParameter<typeof orvalFetcher>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = getGetCollectionApiV1DatasetCollectionsCollectionIdGetQueryKey(collectionId);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getCollectionApiV1DatasetCollectionsCollectionIdGet>>
+  > = ({ signal }) =>
+    getCollectionApiV1DatasetCollectionsCollectionIdGet(unref(collectionId), {
+      signal,
+      ...requestOptions,
+    });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: computed(() => !!unref(collectionId)),
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getCollectionApiV1DatasetCollectionsCollectionIdGet>>,
+    TError,
+    TData
+  >;
+};
+
+export type GetCollectionApiV1DatasetCollectionsCollectionIdGetQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getCollectionApiV1DatasetCollectionsCollectionIdGet>>
+>;
+export type GetCollectionApiV1DatasetCollectionsCollectionIdGetQueryError =
+  ErrorType<HTTPValidationError>;
+
+/**
+ * @summary Get Collection
+ */
+
+export function useGetCollectionApiV1DatasetCollectionsCollectionIdGet<
+  TData = Awaited<ReturnType<typeof getCollectionApiV1DatasetCollectionsCollectionIdGet>>,
+  TError = ErrorType<HTTPValidationError>,
+>(
+  collectionId: MaybeRef<string>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof getCollectionApiV1DatasetCollectionsCollectionIdGet>>,
+        TError,
+        TData
+      >
+    >;
+    request?: SecondParameter<typeof orvalFetcher>;
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetCollectionApiV1DatasetCollectionsCollectionIdGetQueryOptions(
+    collectionId,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  query.queryKey = unref(queryOptions).queryKey as DataTag<QueryKey, TData, TError>;
+
+  return query;
+}
+
+/**
+ * @summary Update Collection
+ */
+export const getUpdateCollectionApiV1DatasetCollectionsCollectionIdPatchUrl = (
+  collectionId: string,
+) => {
+  return `/api/v1/dataset-collections/${collectionId}`;
+};
+
+export const updateCollectionApiV1DatasetCollectionsCollectionIdPatch = async (
+  collectionId: string,
+  updateDatasetCollectionRequest: UpdateDatasetCollectionRequest,
+  options?: RequestInit,
+): Promise<DatasetCollectionResponse> => {
+  return orvalFetcher<DatasetCollectionResponse>(
+    getUpdateCollectionApiV1DatasetCollectionsCollectionIdPatchUrl(collectionId),
+    {
+      ...options,
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(updateDatasetCollectionRequest),
+    },
+  );
+};
+
+export const getUpdateCollectionApiV1DatasetCollectionsCollectionIdPatchMutationOptions = <
+  TError = ErrorType<HTTPValidationError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateCollectionApiV1DatasetCollectionsCollectionIdPatch>>,
+    TError,
+    { collectionId: string; data: BodyType<UpdateDatasetCollectionRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof orvalFetcher>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateCollectionApiV1DatasetCollectionsCollectionIdPatch>>,
+  TError,
+  { collectionId: string; data: BodyType<UpdateDatasetCollectionRequest> },
+  TContext
+> => {
+  const mutationKey = ["updateCollectionApiV1DatasetCollectionsCollectionIdPatch"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateCollectionApiV1DatasetCollectionsCollectionIdPatch>>,
+    { collectionId: string; data: BodyType<UpdateDatasetCollectionRequest> }
+  > = (props) => {
+    const { collectionId, data } = props ?? {};
+
+    return updateCollectionApiV1DatasetCollectionsCollectionIdPatch(
+      collectionId,
+      data,
+      requestOptions,
+    );
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateCollectionApiV1DatasetCollectionsCollectionIdPatchMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateCollectionApiV1DatasetCollectionsCollectionIdPatch>>
+>;
+export type UpdateCollectionApiV1DatasetCollectionsCollectionIdPatchMutationBody =
+  BodyType<UpdateDatasetCollectionRequest>;
+export type UpdateCollectionApiV1DatasetCollectionsCollectionIdPatchMutationError =
+  ErrorType<HTTPValidationError>;
+
+/**
+ * @summary Update Collection
+ */
+export const useUpdateCollectionApiV1DatasetCollectionsCollectionIdPatch = <
+  TError = ErrorType<HTTPValidationError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateCollectionApiV1DatasetCollectionsCollectionIdPatch>>,
+    TError,
+    { collectionId: string; data: BodyType<UpdateDatasetCollectionRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof orvalFetcher>;
+}): UseMutationReturnType<
+  Awaited<ReturnType<typeof updateCollectionApiV1DatasetCollectionsCollectionIdPatch>>,
+  TError,
+  { collectionId: string; data: BodyType<UpdateDatasetCollectionRequest> },
+  TContext
+> => {
+  const mutationOptions =
+    getUpdateCollectionApiV1DatasetCollectionsCollectionIdPatchMutationOptions(options);
+
+  return useMutation(mutationOptions);
+};
+
+/**
+ * @summary Delete Collection
+ */
+export const getDeleteCollectionApiV1DatasetCollectionsCollectionIdDeleteUrl = (
+  collectionId: string,
+) => {
+  return `/api/v1/dataset-collections/${collectionId}`;
+};
+
+export const deleteCollectionApiV1DatasetCollectionsCollectionIdDelete = async (
+  collectionId: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return orvalFetcher<void>(
+    getDeleteCollectionApiV1DatasetCollectionsCollectionIdDeleteUrl(collectionId),
+    {
+      ...options,
+      method: "DELETE",
+    },
+  );
+};
+
+export const getDeleteCollectionApiV1DatasetCollectionsCollectionIdDeleteMutationOptions = <
+  TError = ErrorType<HTTPValidationError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteCollectionApiV1DatasetCollectionsCollectionIdDelete>>,
+    TError,
+    { collectionId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof orvalFetcher>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteCollectionApiV1DatasetCollectionsCollectionIdDelete>>,
+  TError,
+  { collectionId: string },
+  TContext
+> => {
+  const mutationKey = ["deleteCollectionApiV1DatasetCollectionsCollectionIdDelete"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteCollectionApiV1DatasetCollectionsCollectionIdDelete>>,
+    { collectionId: string }
+  > = (props) => {
+    const { collectionId } = props ?? {};
+
+    return deleteCollectionApiV1DatasetCollectionsCollectionIdDelete(collectionId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteCollectionApiV1DatasetCollectionsCollectionIdDeleteMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteCollectionApiV1DatasetCollectionsCollectionIdDelete>>
+>;
+
+export type DeleteCollectionApiV1DatasetCollectionsCollectionIdDeleteMutationError =
+  ErrorType<HTTPValidationError>;
+
+/**
+ * @summary Delete Collection
+ */
+export const useDeleteCollectionApiV1DatasetCollectionsCollectionIdDelete = <
+  TError = ErrorType<HTTPValidationError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteCollectionApiV1DatasetCollectionsCollectionIdDelete>>,
+    TError,
+    { collectionId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof orvalFetcher>;
+}): UseMutationReturnType<
+  Awaited<ReturnType<typeof deleteCollectionApiV1DatasetCollectionsCollectionIdDelete>>,
+  TError,
+  { collectionId: string },
+  TContext
+> => {
+  const mutationOptions =
+    getDeleteCollectionApiV1DatasetCollectionsCollectionIdDeleteMutationOptions(options);
+
+  return useMutation(mutationOptions);
+};
+
+/**
+ * @summary List Members
+ */
+export const getListMembersApiV1DatasetCollectionsCollectionIdMembersGetUrl = (
+  collectionId: string,
+) => {
+  return `/api/v1/dataset-collections/${collectionId}/members`;
+};
+
+export const listMembersApiV1DatasetCollectionsCollectionIdMembersGet = async (
+  collectionId: string,
+  options?: RequestInit,
+): Promise<DatasetCollectionMemberResponse[]> => {
+  return orvalFetcher<DatasetCollectionMemberResponse[]>(
+    getListMembersApiV1DatasetCollectionsCollectionIdMembersGetUrl(collectionId),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListMembersApiV1DatasetCollectionsCollectionIdMembersGetQueryKey = (
+  collectionId: MaybeRef<string>,
+) => {
+  return ["api", "v1", "dataset-collections", collectionId, "members"] as const;
+};
+
+export const getListMembersApiV1DatasetCollectionsCollectionIdMembersGetQueryOptions = <
+  TData = Awaited<ReturnType<typeof listMembersApiV1DatasetCollectionsCollectionIdMembersGet>>,
+  TError = ErrorType<HTTPValidationError>,
+>(
+  collectionId: MaybeRef<string>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof listMembersApiV1DatasetCollectionsCollectionIdMembersGet>>,
+        TError,
+        TData
+      >
+    >;
+    request?: SecondParameter<typeof orvalFetcher>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    getListMembersApiV1DatasetCollectionsCollectionIdMembersGetQueryKey(collectionId);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listMembersApiV1DatasetCollectionsCollectionIdMembersGet>>
+  > = ({ signal }) =>
+    listMembersApiV1DatasetCollectionsCollectionIdMembersGet(unref(collectionId), {
+      signal,
+      ...requestOptions,
+    });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: computed(() => !!unref(collectionId)),
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listMembersApiV1DatasetCollectionsCollectionIdMembersGet>>,
+    TError,
+    TData
+  >;
+};
+
+export type ListMembersApiV1DatasetCollectionsCollectionIdMembersGetQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listMembersApiV1DatasetCollectionsCollectionIdMembersGet>>
+>;
+export type ListMembersApiV1DatasetCollectionsCollectionIdMembersGetQueryError =
+  ErrorType<HTTPValidationError>;
+
+/**
+ * @summary List Members
+ */
+
+export function useListMembersApiV1DatasetCollectionsCollectionIdMembersGet<
+  TData = Awaited<ReturnType<typeof listMembersApiV1DatasetCollectionsCollectionIdMembersGet>>,
+  TError = ErrorType<HTTPValidationError>,
+>(
+  collectionId: MaybeRef<string>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof listMembersApiV1DatasetCollectionsCollectionIdMembersGet>>,
+        TError,
+        TData
+      >
+    >;
+    request?: SecondParameter<typeof orvalFetcher>;
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getListMembersApiV1DatasetCollectionsCollectionIdMembersGetQueryOptions(
+    collectionId,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  query.queryKey = unref(queryOptions).queryKey as DataTag<QueryKey, TData, TError>;
+
+  return query;
+}
+
+/**
+ * @summary Link Members
+ */
+export const getLinkMembersApiV1DatasetCollectionsCollectionIdMembersPostUrl = (
+  collectionId: string,
+) => {
+  return `/api/v1/dataset-collections/${collectionId}/members`;
+};
+
+export const linkMembersApiV1DatasetCollectionsCollectionIdMembersPost = async (
+  collectionId: string,
+  linkDatasetCollectionMembersRequest: LinkDatasetCollectionMembersRequest,
+  options?: RequestInit,
+): Promise<DatasetCollectionMembershipResponse> => {
+  return orvalFetcher<DatasetCollectionMembershipResponse>(
+    getLinkMembersApiV1DatasetCollectionsCollectionIdMembersPostUrl(collectionId),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(linkDatasetCollectionMembersRequest),
+    },
+  );
+};
+
+export const getLinkMembersApiV1DatasetCollectionsCollectionIdMembersPostMutationOptions = <
+  TError = ErrorType<HTTPValidationError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof linkMembersApiV1DatasetCollectionsCollectionIdMembersPost>>,
+    TError,
+    { collectionId: string; data: BodyType<LinkDatasetCollectionMembersRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof orvalFetcher>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof linkMembersApiV1DatasetCollectionsCollectionIdMembersPost>>,
+  TError,
+  { collectionId: string; data: BodyType<LinkDatasetCollectionMembersRequest> },
+  TContext
+> => {
+  const mutationKey = ["linkMembersApiV1DatasetCollectionsCollectionIdMembersPost"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof linkMembersApiV1DatasetCollectionsCollectionIdMembersPost>>,
+    { collectionId: string; data: BodyType<LinkDatasetCollectionMembersRequest> }
+  > = (props) => {
+    const { collectionId, data } = props ?? {};
+
+    return linkMembersApiV1DatasetCollectionsCollectionIdMembersPost(
+      collectionId,
+      data,
+      requestOptions,
+    );
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type LinkMembersApiV1DatasetCollectionsCollectionIdMembersPostMutationResult = NonNullable<
+  Awaited<ReturnType<typeof linkMembersApiV1DatasetCollectionsCollectionIdMembersPost>>
+>;
+export type LinkMembersApiV1DatasetCollectionsCollectionIdMembersPostMutationBody =
+  BodyType<LinkDatasetCollectionMembersRequest>;
+export type LinkMembersApiV1DatasetCollectionsCollectionIdMembersPostMutationError =
+  ErrorType<HTTPValidationError>;
+
+/**
+ * @summary Link Members
+ */
+export const useLinkMembersApiV1DatasetCollectionsCollectionIdMembersPost = <
+  TError = ErrorType<HTTPValidationError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof linkMembersApiV1DatasetCollectionsCollectionIdMembersPost>>,
+    TError,
+    { collectionId: string; data: BodyType<LinkDatasetCollectionMembersRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof orvalFetcher>;
+}): UseMutationReturnType<
+  Awaited<ReturnType<typeof linkMembersApiV1DatasetCollectionsCollectionIdMembersPost>>,
+  TError,
+  { collectionId: string; data: BodyType<LinkDatasetCollectionMembersRequest> },
+  TContext
+> => {
+  const mutationOptions =
+    getLinkMembersApiV1DatasetCollectionsCollectionIdMembersPostMutationOptions(options);
+
+  return useMutation(mutationOptions);
+};
+
+/**
+ * @summary Replace Members
+ */
+export const getReplaceMembersApiV1DatasetCollectionsCollectionIdMembersPutUrl = (
+  collectionId: string,
+) => {
+  return `/api/v1/dataset-collections/${collectionId}/members`;
+};
+
+export const replaceMembersApiV1DatasetCollectionsCollectionIdMembersPut = async (
+  collectionId: string,
+  replaceDatasetCollectionMembersRequest: ReplaceDatasetCollectionMembersRequest,
+  options?: RequestInit,
+): Promise<DatasetCollectionMembershipResponse> => {
+  return orvalFetcher<DatasetCollectionMembershipResponse>(
+    getReplaceMembersApiV1DatasetCollectionsCollectionIdMembersPutUrl(collectionId),
+    {
+      ...options,
+      method: "PUT",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(replaceDatasetCollectionMembersRequest),
+    },
+  );
+};
+
+export const getReplaceMembersApiV1DatasetCollectionsCollectionIdMembersPutMutationOptions = <
+  TError = ErrorType<HTTPValidationError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof replaceMembersApiV1DatasetCollectionsCollectionIdMembersPut>>,
+    TError,
+    { collectionId: string; data: BodyType<ReplaceDatasetCollectionMembersRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof orvalFetcher>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof replaceMembersApiV1DatasetCollectionsCollectionIdMembersPut>>,
+  TError,
+  { collectionId: string; data: BodyType<ReplaceDatasetCollectionMembersRequest> },
+  TContext
+> => {
+  const mutationKey = ["replaceMembersApiV1DatasetCollectionsCollectionIdMembersPut"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof replaceMembersApiV1DatasetCollectionsCollectionIdMembersPut>>,
+    { collectionId: string; data: BodyType<ReplaceDatasetCollectionMembersRequest> }
+  > = (props) => {
+    const { collectionId, data } = props ?? {};
+
+    return replaceMembersApiV1DatasetCollectionsCollectionIdMembersPut(
+      collectionId,
+      data,
+      requestOptions,
+    );
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ReplaceMembersApiV1DatasetCollectionsCollectionIdMembersPutMutationResult = NonNullable<
+  Awaited<ReturnType<typeof replaceMembersApiV1DatasetCollectionsCollectionIdMembersPut>>
+>;
+export type ReplaceMembersApiV1DatasetCollectionsCollectionIdMembersPutMutationBody =
+  BodyType<ReplaceDatasetCollectionMembersRequest>;
+export type ReplaceMembersApiV1DatasetCollectionsCollectionIdMembersPutMutationError =
+  ErrorType<HTTPValidationError>;
+
+/**
+ * @summary Replace Members
+ */
+export const useReplaceMembersApiV1DatasetCollectionsCollectionIdMembersPut = <
+  TError = ErrorType<HTTPValidationError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof replaceMembersApiV1DatasetCollectionsCollectionIdMembersPut>>,
+    TError,
+    { collectionId: string; data: BodyType<ReplaceDatasetCollectionMembersRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof orvalFetcher>;
+}): UseMutationReturnType<
+  Awaited<ReturnType<typeof replaceMembersApiV1DatasetCollectionsCollectionIdMembersPut>>,
+  TError,
+  { collectionId: string; data: BodyType<ReplaceDatasetCollectionMembersRequest> },
+  TContext
+> => {
+  const mutationOptions =
+    getReplaceMembersApiV1DatasetCollectionsCollectionIdMembersPutMutationOptions(options);
+
+  return useMutation(mutationOptions);
+};
+
+/**
+ * @summary Unlink Member
+ */
+export const getUnlinkMemberApiV1DatasetCollectionsCollectionIdMembersMemberIdDeleteUrl = (
+  collectionId: string,
+  memberId: string,
+  params: UnlinkMemberApiV1DatasetCollectionsCollectionIdMembersMemberIdDeleteParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  return normalizedParams.size
+    ? `/api/v1/dataset-collections/${collectionId}/members/${memberId}?${normalizedParams.toString()}`
+    : `/api/v1/dataset-collections/${collectionId}/members/${memberId}`;
+};
+
+export const unlinkMemberApiV1DatasetCollectionsCollectionIdMembersMemberIdDelete = async (
+  collectionId: string,
+  memberId: string,
+  params: UnlinkMemberApiV1DatasetCollectionsCollectionIdMembersMemberIdDeleteParams,
+  options?: RequestInit,
+): Promise<DatasetCollectionMembershipResponse> => {
+  return orvalFetcher<DatasetCollectionMembershipResponse>(
+    getUnlinkMemberApiV1DatasetCollectionsCollectionIdMembersMemberIdDeleteUrl(
+      collectionId,
+      memberId,
+      params,
+    ),
+    {
+      ...options,
+      method: "DELETE",
+    },
+  );
+};
+
+export const getUnlinkMemberApiV1DatasetCollectionsCollectionIdMembersMemberIdDeleteMutationOptions =
+  <TError = ErrorType<HTTPValidationError>, TContext = unknown>(options?: {
+    mutation?: UseMutationOptions<
+      Awaited<
+        ReturnType<typeof unlinkMemberApiV1DatasetCollectionsCollectionIdMembersMemberIdDelete>
+      >,
+      TError,
+      {
+        collectionId: string;
+        memberId: string;
+        params: UnlinkMemberApiV1DatasetCollectionsCollectionIdMembersMemberIdDeleteParams;
+      },
+      TContext
+    >;
+    request?: SecondParameter<typeof orvalFetcher>;
+  }): UseMutationOptions<
+    Awaited<
+      ReturnType<typeof unlinkMemberApiV1DatasetCollectionsCollectionIdMembersMemberIdDelete>
+    >,
+    TError,
+    {
+      collectionId: string;
+      memberId: string;
+      params: UnlinkMemberApiV1DatasetCollectionsCollectionIdMembersMemberIdDeleteParams;
+    },
+    TContext
+  > => {
+    const mutationKey = ["unlinkMemberApiV1DatasetCollectionsCollectionIdMembersMemberIdDelete"];
+    const { mutation: mutationOptions, request: requestOptions } = options
+      ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+        ? options
+        : { ...options, mutation: { ...options.mutation, mutationKey } }
+      : { mutation: { mutationKey }, request: undefined };
+
+    const mutationFn: MutationFunction<
+      Awaited<
+        ReturnType<typeof unlinkMemberApiV1DatasetCollectionsCollectionIdMembersMemberIdDelete>
+      >,
+      {
+        collectionId: string;
+        memberId: string;
+        params: UnlinkMemberApiV1DatasetCollectionsCollectionIdMembersMemberIdDeleteParams;
+      }
+    > = (props) => {
+      const { collectionId, memberId, params } = props ?? {};
+
+      return unlinkMemberApiV1DatasetCollectionsCollectionIdMembersMemberIdDelete(
+        collectionId,
+        memberId,
+        params,
+        requestOptions,
+      );
+    };
+
+    return { mutationFn, ...mutationOptions };
+  };
+
+export type UnlinkMemberApiV1DatasetCollectionsCollectionIdMembersMemberIdDeleteMutationResult =
+  NonNullable<
+    Awaited<ReturnType<typeof unlinkMemberApiV1DatasetCollectionsCollectionIdMembersMemberIdDelete>>
+  >;
+
+export type UnlinkMemberApiV1DatasetCollectionsCollectionIdMembersMemberIdDeleteMutationError =
+  ErrorType<HTTPValidationError>;
+
+/**
+ * @summary Unlink Member
+ */
+export const useUnlinkMemberApiV1DatasetCollectionsCollectionIdMembersMemberIdDelete = <
+  TError = ErrorType<HTTPValidationError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<
+      ReturnType<typeof unlinkMemberApiV1DatasetCollectionsCollectionIdMembersMemberIdDelete>
+    >,
+    TError,
+    {
+      collectionId: string;
+      memberId: string;
+      params: UnlinkMemberApiV1DatasetCollectionsCollectionIdMembersMemberIdDeleteParams;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof orvalFetcher>;
+}): UseMutationReturnType<
+  Awaited<ReturnType<typeof unlinkMemberApiV1DatasetCollectionsCollectionIdMembersMemberIdDelete>>,
+  TError,
+  {
+    collectionId: string;
+    memberId: string;
+    params: UnlinkMemberApiV1DatasetCollectionsCollectionIdMembersMemberIdDeleteParams;
+  },
+  TContext
+> => {
+  const mutationOptions =
+    getUnlinkMemberApiV1DatasetCollectionsCollectionIdMembersMemberIdDeleteMutationOptions(options);
+
+  return useMutation(mutationOptions);
+};
+
+/**
+ * @summary Create Revision
+ */
+export const getCreateRevisionApiV1DatasetCollectionsCollectionIdRevisionsPostUrl = (
+  collectionId: string,
+) => {
+  return `/api/v1/dataset-collections/${collectionId}/revisions`;
+};
+
+export const createRevisionApiV1DatasetCollectionsCollectionIdRevisionsPost = async (
+  collectionId: string,
+  createDatasetCollectionRevisionRequest: CreateDatasetCollectionRevisionRequest,
+  options?: RequestInit,
+): Promise<DatasetCollectionRevisionResponse> => {
+  return orvalFetcher<DatasetCollectionRevisionResponse>(
+    getCreateRevisionApiV1DatasetCollectionsCollectionIdRevisionsPostUrl(collectionId),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(createDatasetCollectionRevisionRequest),
+    },
+  );
+};
+
+export const getCreateRevisionApiV1DatasetCollectionsCollectionIdRevisionsPostMutationOptions = <
+  TError = ErrorType<HTTPValidationError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createRevisionApiV1DatasetCollectionsCollectionIdRevisionsPost>>,
+    TError,
+    { collectionId: string; data: BodyType<CreateDatasetCollectionRevisionRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof orvalFetcher>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createRevisionApiV1DatasetCollectionsCollectionIdRevisionsPost>>,
+  TError,
+  { collectionId: string; data: BodyType<CreateDatasetCollectionRevisionRequest> },
+  TContext
+> => {
+  const mutationKey = ["createRevisionApiV1DatasetCollectionsCollectionIdRevisionsPost"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createRevisionApiV1DatasetCollectionsCollectionIdRevisionsPost>>,
+    { collectionId: string; data: BodyType<CreateDatasetCollectionRevisionRequest> }
+  > = (props) => {
+    const { collectionId, data } = props ?? {};
+
+    return createRevisionApiV1DatasetCollectionsCollectionIdRevisionsPost(
+      collectionId,
+      data,
+      requestOptions,
+    );
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateRevisionApiV1DatasetCollectionsCollectionIdRevisionsPostMutationResult =
+  NonNullable<
+    Awaited<ReturnType<typeof createRevisionApiV1DatasetCollectionsCollectionIdRevisionsPost>>
+  >;
+export type CreateRevisionApiV1DatasetCollectionsCollectionIdRevisionsPostMutationBody =
+  BodyType<CreateDatasetCollectionRevisionRequest>;
+export type CreateRevisionApiV1DatasetCollectionsCollectionIdRevisionsPostMutationError =
+  ErrorType<HTTPValidationError>;
+
+/**
+ * @summary Create Revision
+ */
+export const useCreateRevisionApiV1DatasetCollectionsCollectionIdRevisionsPost = <
+  TError = ErrorType<HTTPValidationError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createRevisionApiV1DatasetCollectionsCollectionIdRevisionsPost>>,
+    TError,
+    { collectionId: string; data: BodyType<CreateDatasetCollectionRevisionRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof orvalFetcher>;
+}): UseMutationReturnType<
+  Awaited<ReturnType<typeof createRevisionApiV1DatasetCollectionsCollectionIdRevisionsPost>>,
+  TError,
+  { collectionId: string; data: BodyType<CreateDatasetCollectionRevisionRequest> },
+  TContext
+> => {
+  const mutationOptions =
+    getCreateRevisionApiV1DatasetCollectionsCollectionIdRevisionsPostMutationOptions(options);
+
+  return useMutation(mutationOptions);
+};
+
+/**
+ * @summary List Revisions
+ */
+export const getListRevisionsApiV1DatasetCollectionsCollectionIdRevisionsGetUrl = (
+  collectionId: string,
+) => {
+  return `/api/v1/dataset-collections/${collectionId}/revisions`;
+};
+
+export const listRevisionsApiV1DatasetCollectionsCollectionIdRevisionsGet = async (
+  collectionId: string,
+  options?: RequestInit,
+): Promise<DatasetCollectionRevisionResponse[]> => {
+  return orvalFetcher<DatasetCollectionRevisionResponse[]>(
+    getListRevisionsApiV1DatasetCollectionsCollectionIdRevisionsGetUrl(collectionId),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListRevisionsApiV1DatasetCollectionsCollectionIdRevisionsGetQueryKey = (
+  collectionId: MaybeRef<string>,
+) => {
+  return ["api", "v1", "dataset-collections", collectionId, "revisions"] as const;
+};
+
+export const getListRevisionsApiV1DatasetCollectionsCollectionIdRevisionsGetQueryOptions = <
+  TData = Awaited<ReturnType<typeof listRevisionsApiV1DatasetCollectionsCollectionIdRevisionsGet>>,
+  TError = ErrorType<HTTPValidationError>,
+>(
+  collectionId: MaybeRef<string>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof listRevisionsApiV1DatasetCollectionsCollectionIdRevisionsGet>>,
+        TError,
+        TData
+      >
+    >;
+    request?: SecondParameter<typeof orvalFetcher>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    getListRevisionsApiV1DatasetCollectionsCollectionIdRevisionsGetQueryKey(collectionId);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listRevisionsApiV1DatasetCollectionsCollectionIdRevisionsGet>>
+  > = ({ signal }) =>
+    listRevisionsApiV1DatasetCollectionsCollectionIdRevisionsGet(unref(collectionId), {
+      signal,
+      ...requestOptions,
+    });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: computed(() => !!unref(collectionId)),
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listRevisionsApiV1DatasetCollectionsCollectionIdRevisionsGet>>,
+    TError,
+    TData
+  >;
+};
+
+export type ListRevisionsApiV1DatasetCollectionsCollectionIdRevisionsGetQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listRevisionsApiV1DatasetCollectionsCollectionIdRevisionsGet>>
+>;
+export type ListRevisionsApiV1DatasetCollectionsCollectionIdRevisionsGetQueryError =
+  ErrorType<HTTPValidationError>;
+
+/**
+ * @summary List Revisions
+ */
+
+export function useListRevisionsApiV1DatasetCollectionsCollectionIdRevisionsGet<
+  TData = Awaited<ReturnType<typeof listRevisionsApiV1DatasetCollectionsCollectionIdRevisionsGet>>,
+  TError = ErrorType<HTTPValidationError>,
+>(
+  collectionId: MaybeRef<string>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof listRevisionsApiV1DatasetCollectionsCollectionIdRevisionsGet>>,
+        TError,
+        TData
+      >
+    >;
+    request?: SecondParameter<typeof orvalFetcher>;
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getListRevisionsApiV1DatasetCollectionsCollectionIdRevisionsGetQueryOptions(
+    collectionId,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  query.queryKey = unref(queryOptions).queryKey as DataTag<QueryKey, TData, TError>;
+
+  return query;
+}
+
+/**
+ * @summary Get Revision
+ */
+export const getGetRevisionApiV1DatasetCollectionsCollectionIdRevisionsRevisionIdGetUrl = (
+  collectionId: string,
+  revisionId: string,
+) => {
+  return `/api/v1/dataset-collections/${collectionId}/revisions/${revisionId}`;
+};
+
+export const getRevisionApiV1DatasetCollectionsCollectionIdRevisionsRevisionIdGet = async (
+  collectionId: string,
+  revisionId: string,
+  options?: RequestInit,
+): Promise<DatasetCollectionRevisionResponse> => {
+  return orvalFetcher<DatasetCollectionRevisionResponse>(
+    getGetRevisionApiV1DatasetCollectionsCollectionIdRevisionsRevisionIdGetUrl(
+      collectionId,
+      revisionId,
+    ),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetRevisionApiV1DatasetCollectionsCollectionIdRevisionsRevisionIdGetQueryKey = (
+  collectionId: MaybeRef<string>,
+  revisionId: MaybeRef<string>,
+) => {
+  return ["api", "v1", "dataset-collections", collectionId, "revisions", revisionId] as const;
+};
+
+export const getGetRevisionApiV1DatasetCollectionsCollectionIdRevisionsRevisionIdGetQueryOptions = <
+  TData = Awaited<
+    ReturnType<typeof getRevisionApiV1DatasetCollectionsCollectionIdRevisionsRevisionIdGet>
+  >,
+  TError = ErrorType<HTTPValidationError>,
+>(
+  collectionId: MaybeRef<string>,
+  revisionId: MaybeRef<string>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<
+          ReturnType<typeof getRevisionApiV1DatasetCollectionsCollectionIdRevisionsRevisionIdGet>
+        >,
+        TError,
+        TData
+      >
+    >;
+    request?: SecondParameter<typeof orvalFetcher>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = getGetRevisionApiV1DatasetCollectionsCollectionIdRevisionsRevisionIdGetQueryKey(
+    collectionId,
+    revisionId,
+  );
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getRevisionApiV1DatasetCollectionsCollectionIdRevisionsRevisionIdGet>>
+  > = ({ signal }) =>
+    getRevisionApiV1DatasetCollectionsCollectionIdRevisionsRevisionIdGet(
+      unref(collectionId),
+      unref(revisionId),
+      { signal, ...requestOptions },
+    );
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: computed(() => !!(unref(collectionId) && unref(revisionId))),
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<
+      ReturnType<typeof getRevisionApiV1DatasetCollectionsCollectionIdRevisionsRevisionIdGet>
+    >,
+    TError,
+    TData
+  >;
+};
+
+export type GetRevisionApiV1DatasetCollectionsCollectionIdRevisionsRevisionIdGetQueryResult =
+  NonNullable<
+    Awaited<ReturnType<typeof getRevisionApiV1DatasetCollectionsCollectionIdRevisionsRevisionIdGet>>
+  >;
+export type GetRevisionApiV1DatasetCollectionsCollectionIdRevisionsRevisionIdGetQueryError =
+  ErrorType<HTTPValidationError>;
+
+/**
+ * @summary Get Revision
+ */
+
+export function useGetRevisionApiV1DatasetCollectionsCollectionIdRevisionsRevisionIdGet<
+  TData = Awaited<
+    ReturnType<typeof getRevisionApiV1DatasetCollectionsCollectionIdRevisionsRevisionIdGet>
+  >,
+  TError = ErrorType<HTTPValidationError>,
+>(
+  collectionId: MaybeRef<string>,
+  revisionId: MaybeRef<string>,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<
+          ReturnType<typeof getRevisionApiV1DatasetCollectionsCollectionIdRevisionsRevisionIdGet>
+        >,
+        TError,
+        TData
+      >
+    >;
+    request?: SecondParameter<typeof orvalFetcher>;
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions =
+    getGetRevisionApiV1DatasetCollectionsCollectionIdRevisionsRevisionIdGetQueryOptions(
+      collectionId,
+      revisionId,
+      options,
+    );
 
   const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & {
     queryKey: DataTag<QueryKey, TData, TError>;

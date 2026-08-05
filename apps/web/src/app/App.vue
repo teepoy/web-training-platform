@@ -130,7 +130,7 @@
 import { computed, h, onMounted, watch, type Component } from "vue";
 import { useRouter, useRoute, RouterView } from "vue-router";
 import { darkTheme, NIcon, type GlobalThemeOverrides, type MenuOption } from "naive-ui";
-import { AlbumsOutline, CubeOutline, ImagesOutline } from "@vicons/ionicons5";
+import { AlbumsOutline, CubeOutline, ImagesOutline, LayersOutline } from "@vicons/ionicons5";
 import { useQueryClient } from "@tanstack/vue-query";
 import VxeUI from "vxe-pc-ui";
 import { useUiStore } from "@/features/auth/application/ui";
@@ -180,6 +180,7 @@ const themeOverrides: GlobalThemeOverrides = {
 const activeRoute = computed(() => {
   const p = route.path;
   if (p.startsWith("/datasets")) return "/datasets";
+  if (p.startsWith("/dataset-collections")) return "/dataset-collections";
   if (p.startsWith("/models")) return "/models";
   if (p.startsWith("/sc")) return "/sc";
   if (p.startsWith("/sensors")) return "/sensors";
@@ -202,6 +203,11 @@ function renderMenuIcon(icon: Component) {
 const menuOptions: MenuOption[] = [
   { label: "Patch", key: "/sc", icon: renderMenuIcon(ImagesOutline) },
   { label: "Datasets", key: "/datasets", icon: renderMenuIcon(AlbumsOutline) },
+  {
+    label: "Collections",
+    key: "/dataset-collections",
+    icon: renderMenuIcon(LayersOutline),
+  },
   { label: "Models", key: "/models", icon: renderMenuIcon(CubeOutline) },
 ];
 

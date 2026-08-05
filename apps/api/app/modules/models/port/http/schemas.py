@@ -41,8 +41,11 @@ class ModelResponse(BaseModel):
     created_at: datetime | None = None
     metadata: dict = Field(default_factory=dict)
     job_id: str
-    dataset_id: str
-    dataset_name: str
+    dataset_id: str | None = None
+    dataset_name: str | None = None
+    collection_id: str | None = None
+    collection_revision_id: str | None = None
+    collection_name: str | None = None
     trainer_name: str
     created_by: str = "system"
     creator_name: str = ""

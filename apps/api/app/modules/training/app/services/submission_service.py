@@ -5,6 +5,11 @@ import asyncio
 from injector import inject
 
 from app.modules.datasets.port.dataset_reader import DatasetReader
+from app.modules.dataset_collections.domain.errors import DatasetCollectionNotFoundError
+from app.modules.dataset_collections.domain.models import DatasetCollectionRevision
+from app.modules.dataset_collections.port.local import (
+    DatasetCollectionRevisionReaderPort,
+)
 from app.modules.datasets.port.local import (
     validate_predictor_for_dataset,
     validate_trainer_for_dataset,
@@ -25,8 +30,9 @@ from app.modules.training.domain.submission import (
     TrainingSubmissionError,
 )
 from app.modules.training.domain.repository import TrainingRepository
+from app.modules.training.domain.readiness import TrainingReadinessReport
 from app.shared.application.artifacts import ArtifactService
-from app.shared.api.schemas import TrainingEvent, TrainingJob
+from app.shared.api.schemas import Dataset, TrainingEvent, TrainingJob
 from app.shared.api.schemas import JobStatus
 from app.shared.domain.protocols import (
     NotificationSink,
@@ -47,6 +53,7 @@ class TrainingSubmissionService:
         prefect_client: PrefectClient,
         runtime_router: RuntimeRoutingPort,
         readiness: TrainingReadinessService,
+        collection_revisions: DatasetCollectionRevisionReaderPort,
     ) -> None:
         self.engine = engine
         self.notification_sink = notification_sink
@@ -56,24 +63,25 @@ class TrainingSubmissionService:
         self._prefect_client = prefect_client
         self._runtime_router = runtime_router
         self._readiness = readiness
+        self._collection_revisions = collection_revisions
 
     async def submit_job(self, command: TrainingJobCommand) -> TrainingJob:
-        dataset = await self._dataset_reader.get_dataset(
-            command.dataset_id,
-            org_id=command.org_id,
-        )
-        if dataset is None:
-            raise TrainingDatasetNotFoundError(command.dataset_id)
-        validate_trainer_for_dataset(
+        dataset, revision = await self._validate_source(
+            command,
             trainer_id=command.trainer_id,
-            view_types=dataset.view_types,
         )
-        readiness_report = await self._readiness.assess_classes(dataset=dataset)
+        readiness_report = (
+            await self._readiness.assess_classes(dataset=dataset)
+            if dataset is not None
+            else self._revision_readiness(command, revision)
+        )
         if not readiness_report.ready:
             raise TrainingReadinessError(readiness_report)
         return await self._start_job(
             TrainingJob(
                 dataset_id=command.dataset_id,
+                collection_id=command.collection_id,
+                collection_revision_id=command.collection_revision_id,
                 trainer_id=command.trainer_id,
                 created_by=command.created_by,
                 org_id=command.org_id,
@@ -84,38 +92,52 @@ class TrainingSubmissionService:
         self,
         command: TrainAndPredictCommand,
     ) -> TrainAndPredictSubmission:
-        dataset = await self._dataset_reader.get_dataset(
-            command.dataset_id,
-            org_id=command.org_id,
-        )
-        if dataset is None:
-            raise TrainingDatasetNotFoundError(command.dataset_id)
-        validate_trainer_for_dataset(
+        dataset, revision = await self._validate_source(
+            command,
             trainer_id=command.trainer_id,
-            view_types=dataset.view_types,
         )
         predictor_id = runtime_catalog.resolve_predictor_id(
             command.trainer_id,
             requested_predictor_id=command.predictor_id,
         )
-        validate_predictor_for_dataset(
-            predictor_id=predictor_id,
-            view_types=dataset.view_types,
-        )
-        if command.sample_filter is not None and dataset.dataset_type != "image_sc":
+        if dataset is not None:
+            validate_predictor_for_dataset(
+                predictor_id=predictor_id,
+                view_types=dataset.view_types,
+            )
+        else:
+            assert revision is not None
+            predictor = runtime_catalog.get_predictor_meta(predictor_id)
+            if predictor.input_view.view_id != revision.target_view_id:
+                raise ValueError(
+                    f"Predictor '{predictor_id}' requires view "
+                    f"'{predictor.input_view.view_id}', collection revision provides "
+                    f"'{revision.target_view_id}'"
+                )
+        if command.sample_filter is not None and (
+            dataset is None or dataset.dataset_type != "image_sc"
+        ):
             raise ValueError("sample_filter is only supported for image_sc datasets")
 
         try:
             route = self._runtime_router.train_and_predict_route(command.trainer_id)
         except RuntimeError as exc:
             raise TrainingRuntimeUnavailableError(str(exc)) from exc
-        readiness_report = await self._readiness.assess(
-            dataset=dataset,
-            sample_ids=(
-                list(command.sample_ids) if command.sample_ids is not None else None
-            ),
-            sample_filter=command.sample_filter,
-            missing_image_policy=route.missing_image_policy,
+        readiness_report = (
+            await self._readiness.assess(
+                dataset=dataset,
+                sample_ids=(
+                    list(command.sample_ids) if command.sample_ids is not None else None
+                ),
+                sample_filter=command.sample_filter,
+                missing_image_policy=route.missing_image_policy,
+            )
+            if dataset is not None
+            else self._revision_readiness(
+                command,
+                revision,
+                missing_image_policy=str(route.missing_image_policy or ""),
+            )
         )
         if not readiness_report.ready:
             raise TrainingReadinessError(readiness_report)
@@ -132,6 +154,8 @@ class TrainingSubmissionService:
             job = await self.repository.create_job(
                 TrainingJob(
                     dataset_id=command.dataset_id,
+                    collection_id=command.collection_id,
+                    collection_revision_id=command.collection_revision_id,
                     trainer_id=command.trainer_id,
                     created_by=command.created_by,
                     org_id=command.org_id,
@@ -178,6 +202,77 @@ class TrainingSubmissionService:
         return TrainAndPredictSubmission(
             train_job=job,
             workflow_run_id=workflow_run_id,
+        )
+
+    async def _validate_source(
+        self,
+        command: TrainingJobCommand,
+        *,
+        trainer_id: str,
+    ) -> tuple[Dataset | None, DatasetCollectionRevision | None]:
+        source = command.data_source
+        if source.kind == "dataset":
+            assert source.dataset_id is not None
+            dataset = await self._dataset_reader.get_dataset(
+                source.dataset_id,
+                org_id=command.org_id,
+            )
+            if dataset is None:
+                raise TrainingDatasetNotFoundError(source.dataset_id)
+            validate_trainer_for_dataset(
+                trainer_id=trainer_id,
+                view_types=dataset.view_types,
+            )
+            return dataset, None
+        assert source.collection_id is not None
+        assert source.collection_revision_id is not None
+        try:
+            revision = await self._collection_revisions.get_revision(
+                source.collection_id,
+                source.collection_revision_id,
+                command.org_id,
+            )
+        except DatasetCollectionNotFoundError as exc:
+            raise TrainingDatasetNotFoundError(source.identity) from exc
+        if revision.status != "ready" or revision.manifest_uri is None:
+            raise ValueError(
+                f"Collection revision '{revision.id}' is not ready for runtime use"
+            )
+        trainer = runtime_catalog.get_trainer_meta(trainer_id)
+        if trainer.input_view.view_id != revision.target_view_id:
+            raise ValueError(
+                f"Trainer '{trainer_id}' requires view '{trainer.input_view.view_id}', "
+                f"collection revision provides '{revision.target_view_id}'"
+            )
+        return None, revision
+
+    @staticmethod
+    def _revision_readiness(
+        command: TrainingJobCommand,
+        revision: DatasetCollectionRevision | None,
+        *,
+        missing_image_policy: str = "",
+    ) -> TrainingReadinessReport:
+        assert revision is not None
+        active_labels = sorted(
+            label for label, count in revision.label_counts.items() if count > 0
+        )
+        reasons = (
+            ()
+            if len(active_labels) >= 2
+            else (f"training requires at least 2 active labels; got {active_labels}",)
+        )
+        annotated = sum(revision.label_counts.values())
+        return TrainingReadinessReport(
+            dataset_id=command.data_source.identity,
+            missing_image_policy=missing_image_policy,
+            annotated_samples=annotated,
+            readable_samples=annotated,
+            runtime_resolvable_samples=0,
+            unusable_samples=0,
+            skipped_samples=0,
+            label_counts=dict(revision.label_counts),
+            failure_reasons=reasons,
         )
 
     async def _start_job(self, job: TrainingJob) -> TrainingJob:

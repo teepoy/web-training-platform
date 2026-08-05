@@ -1106,7 +1106,9 @@ def _apply_sample_table_sort(
     )
 
 
-def _sample_table_row_from_dict(row: dict[str, Any]) -> ScSampleTableRow:
+def _sample_table_row_from_dict(
+    row: dict[str, Any], *, inspection_time: datetime, wafer_key: int
+) -> ScSampleTableRow:
     def int_or_zero(value: Any) -> int:
         if value is None:
             return 0
@@ -1115,6 +1117,7 @@ def _sample_table_row_from_dict(row: dict[str, Any]) -> ScSampleTableRow:
         return int(value)
 
     return ScSampleTableRow(
+        row_key=(f"{inspection_time.isoformat()}::{wafer_key}::{row['defect_id']}"),
         defect_id=str(row["defect_id"]),
         rough_bin=int_or_zero(row["rough_bin"]),
         class_number=int_or_zero(row["class_number"]),
@@ -1190,7 +1193,10 @@ async def _build_sample_table_rows_response(
 
     total_matched = len(samples_df)
     page_df = samples_df.slice(offset, limit)
-    matched = [_sample_table_row_from_dict(row) for row in page_df.to_dicts()]
+    matched = [
+        _sample_table_row_from_dict(row, inspection_time=insp_dt, wafer_key=wafer_key)
+        for row in page_df.to_dicts()
+    ]
     next_offset = offset + len(matched)
     next_anchor = str(next_offset) if next_offset < total_matched else None
 
@@ -1496,7 +1502,9 @@ async def sc_bulk_create_annotations(
         raise HTTPException(status_code=404, detail="dataset not found")
 
     storage = await storage_factory.open(dataset_id, org.id)
-    defect_ids = {item.defect_id for item in payload.annotations}
+    defect_ids = {
+        item.defect_id for item in payload.annotations if item.defect_id is not None
+    }
     mapping = await ScDatasetAgg(storage, batch_reader).map_defect_ids_to_sample_ids(
         defect_ids
     )
@@ -1504,7 +1512,7 @@ async def sc_bulk_create_annotations(
     created_labels: set[str] = set()
     items: list[tuple[str, str | None]] = []
     for item in payload.annotations:
-        sample_id = mapping.get(item.defect_id)
+        sample_id = item.sample_id or mapping.get(str(item.defect_id))
         if sample_id is None:
             continue
         label = str(item.label)

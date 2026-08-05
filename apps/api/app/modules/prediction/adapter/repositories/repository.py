@@ -92,6 +92,8 @@ class PredictionRepository:
                     id=job.id,
                     org_id=org_id,
                     dataset_id=job.dataset_id,
+                    dataset_collection_id=job.collection_id,
+                    dataset_collection_revision_id=job.collection_revision_id,
                     model_id=job.model_id,
                     status=job.status.value,
                     target=job.target,
@@ -145,6 +147,8 @@ class PredictionRepository:
                 org_id=row.org_id,
                 org_name=await _org_name_for(session, row.org_id),
                 dataset_id=row.dataset_id,
+                collection_id=row.dataset_collection_id,
+                collection_revision_id=row.dataset_collection_revision_id,
                 model_id=row.model_id,
                 status=cast(JobStatus, row.status),
                 created_by=row.created_by,
@@ -161,10 +165,12 @@ class PredictionRepository:
         self,
         org_id: str | None = None,
         dataset_id: str | None = None,
+        collection_id: str | None = None,
     ) -> list[PredictionJob]:
         items, _ = await self.list_prediction_jobs_paginated(
             org_id=org_id,
             dataset_id=dataset_id,
+            collection_id=collection_id,
             offset=0,
             limit=None,
         )
@@ -174,6 +180,7 @@ class PredictionRepository:
         self,
         org_id: str | None = None,
         dataset_id: str | None = None,
+        collection_id: str | None = None,
         *,
         offset: int = 0,
         limit: int | None = 50,
@@ -184,6 +191,10 @@ class PredictionRepository:
                 conditions.append(PredictionJobORM.org_id == org_id)
             if dataset_id is not None:
                 conditions.append(PredictionJobORM.dataset_id == dataset_id)
+            if collection_id is not None:
+                conditions.append(
+                    PredictionJobORM.dataset_collection_id == collection_id
+                )
             total = int(
                 await session.scalar(
                     select(func.count())
@@ -215,6 +226,8 @@ class PredictionRepository:
                         org_id=row.org_id,
                         org_name=str(org_name or ""),
                         dataset_id=row.dataset_id,
+                        collection_id=row.dataset_collection_id,
+                        collection_revision_id=row.dataset_collection_revision_id,
                         model_id=row.model_id,
                         status=cast(JobStatus, row.status),
                         created_by=row.created_by,

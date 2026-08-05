@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from app.shared.api.schemas import TrainingJob
+from app.shared.domain.data_source import RuntimeDataSourceRef
 
 from app.modules.training.domain.readiness import TrainingReadinessReport
 
@@ -14,14 +15,25 @@ def _require_identifier(value: str, field_name: str) -> None:
 
 @dataclass(frozen=True, slots=True)
 class TrainingJobCommand:
-    dataset_id: str
     trainer_id: str
     org_id: str
     created_by: str
+    dataset_id: str | None = None
+    collection_id: str | None = None
+    collection_revision_id: str | None = None
 
     def __post_init__(self) -> None:
-        for field_name in ("dataset_id", "trainer_id", "org_id", "created_by"):
+        for field_name in ("trainer_id", "org_id", "created_by"):
             _require_identifier(getattr(self, field_name), field_name)
+        self.data_source
+
+    @property
+    def data_source(self) -> RuntimeDataSourceRef:
+        return RuntimeDataSourceRef.from_fields(
+            dataset_id=self.dataset_id,
+            collection_id=self.collection_id,
+            collection_revision_id=self.collection_revision_id,
+        )
 
 
 @dataclass(frozen=True, slots=True)

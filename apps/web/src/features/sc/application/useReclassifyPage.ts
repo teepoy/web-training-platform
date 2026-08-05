@@ -12,6 +12,7 @@ import {
   useListTrainersRouteApiV1TrainersGet,
   getJobApiV1TrainingJobsJobIdGet,
   getAnnotationStatsApiV1DatasetsDatasetIdAnnotationStatsGet,
+  getRevisionApiV1DatasetCollectionsCollectionIdRevisionsRevisionIdGet,
   createTrainAndPredictJobApiV1TrainingJobsTrainAndPredictPost,
 } from "@/generated/orval/endpoints/api";
 import { listPredictionJobs } from "@/shared/api/predictions";
@@ -112,6 +113,14 @@ export interface ReclassifyPageState {
 export function useReclassifyPage(): ReclassifyPageState {
   const route = useRoute();
   const datasetId = computed(() => route.params.id as string);
+  const collectionId = computed(() => {
+    const value = route.params.collectionId;
+    return typeof value === "string" && value.length > 0 ? value : null;
+  });
+  const collectionRevisionId = computed(() => {
+    const value = route.query.revisionId;
+    return typeof value === "string" && value.length > 0 ? value : null;
+  });
   const message = useMessage();
   const queryClient = useQueryClient();
   const reclassifyStore = useScReclassifyStore();
@@ -205,7 +214,32 @@ export function useReclassifyPage(): ReclassifyPageState {
     retry: false,
   });
 
+  const collectionRevisionQuery = useQuery({
+    queryKey: computed(() => [
+      "dataset-collections",
+      collectionId.value,
+      "revisions",
+      collectionRevisionId.value,
+    ]),
+    queryFn: () => {
+      if (!collectionId.value || !collectionRevisionId.value) {
+        throw new Error("Collection revision is required");
+      }
+      return getRevisionApiV1DatasetCollectionsCollectionIdRevisionsRevisionIdGet(
+        collectionId.value,
+        collectionRevisionId.value,
+      );
+    },
+    enabled: computed(() => !!collectionId.value && !!collectionRevisionId.value),
+    retry: false,
+  });
+
   const activeClassCount = computed<number>(() => {
+    if (collectionId.value) {
+      return Object.values(collectionRevisionQuery.data.value?.label_counts ?? {}).filter(
+        (count) => Number(count) > 0,
+      ).length;
+    }
     const stats = annotationStatsQuery.data.value as DatasetAnnotationStats | undefined;
     const counts = stats?.label_counts ?? {};
     return Object.values(counts).filter((count) => Number(count) > 0).length;
@@ -444,7 +478,7 @@ export function useReclassifyPage(): ReclassifyPageState {
     );
   });
 
-  // ── Submit annotations (SC-specific endpoint, defect_id-based) ─────
+  // ── Submit annotations using the stable dataset sample identity ───
 
   const bulkAnnotateMutation =
     useScBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPost({
@@ -485,8 +519,8 @@ export function useReclassifyPage(): ReclassifyPageState {
     bulkAnnotateMutation.mutate({
       datasetId: datasetId.value,
       data: {
-        annotations: entries.map<ScAnnotationItem>(([defect_id, label]) => ({
-          defect_id,
+        annotations: entries.map<ScAnnotationItem>(([sample_id, label]) => ({
+          sample_id,
           label,
           annotator: "platform-user",
         })),
@@ -565,10 +599,11 @@ export function useReclassifyPage(): ReclassifyPageState {
   }
 
   function resolveTrainSampleFilter(globalFilter: ScSampleTableFilter): ScSampleTableFilter | null {
+    if (collectionId.value) return null;
     const filter: ScSampleTableFilter = { ...globalFilter };
     const sampledIds = [...galleryRandomSamplingDefectIds.value];
     if (sampledIds.length > 0) {
-      filter.defect_id = { filterType: "set", values: sampledIds };
+      filter.row_key = { filterType: "set", values: sampledIds };
     }
     return Object.keys(filter).length > 0 ? filter : null;
   }
@@ -630,9 +665,11 @@ export function useReclassifyPage(): ReclassifyPageState {
       "sc",
       "train-predict-prediction-jobs",
       datasetId.value,
+      collectionId.value,
       trainPredictTaskId.value,
     ]),
-    queryFn: () => listPredictionJobs(datasetId.value),
+    queryFn: () =>
+      listPredictionJobs(collectionId.value ? null : datasetId.value, collectionId.value),
     enabled: computed(() => !!trainPredictTaskId.value),
     refetchInterval: computed(() => (isTrainPredictRunning.value ? 1500 : false)),
   });
@@ -766,8 +803,16 @@ export function useReclassifyPage(): ReclassifyPageState {
     trainPredictStatusMessage.value = "Starting train and predict workflow...";
 
     try {
+      if (collectionId.value && !collectionRevisionId.value) {
+        throw new Error("Open a ready collection revision before starting training");
+      }
       const workflow = await createTrainAndPredictJobApiV1TrainingJobsTrainAndPredictPost({
-        dataset_id: datasetId.value,
+        ...(collectionId.value
+          ? {
+              collection_id: collectionId.value,
+              collection_revision_id: collectionRevisionId.value,
+            }
+          : { dataset_id: datasetId.value }),
         trainer_id: trainerId,
         target: "image_classification",
         sample_filter: sampleFilter,

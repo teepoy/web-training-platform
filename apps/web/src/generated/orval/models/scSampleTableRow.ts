@@ -4,10 +4,13 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
+import type { ScSampleTableRowSampleId } from "./scSampleTableRowSampleId";
 import type { ScSampleTableRowClusterId } from "./scSampleTableRowClusterId";
 import type { ScSampleTableRowKillRatio } from "./scSampleTableRowKillRatio";
 
 export interface ScSampleTableRow {
+  row_key: string;
+  sample_id?: ScSampleTableRowSampleId;
   defect_id: string;
   rough_bin: number;
   class_number: number;

@@ -11,6 +11,10 @@ from app.core.settings.container import SettingsContext, SettingsModule
 from app.modules.agent.container import AgentContext, AgentModule
 from app.modules.auth.container import AuthContext, AuthModule
 from app.modules.dashboard.container import DashboardContext, DashboardModule
+from app.modules.dataset_collections.container import (
+    DatasetCollectionsContext,
+    DatasetCollectionsModule,
+)
 from app.modules.datasets.container import DatasetsContext, DatasetsModule
 from app.modules.jobs.container import JobsContext, JobsModule
 from app.shared.infrastructure.storage.memory import InMemoryArtifactStorage
@@ -166,6 +170,7 @@ def build_app_context(cfg: AppConfig) -> AppContext:
             SettingsModule(),
             StorageModule(),
             DatasetsModule(),
+            DatasetCollectionsModule(),
             ModelsModule(),
             RuntimeModule(),
             PredictionModule(),
@@ -181,6 +186,7 @@ def build_app_context(cfg: AppConfig) -> AppContext:
     ctx.settings = injector.get(SettingsContext)
     ctx.storage = injector.get(StorageContext)
     ctx.datasets = injector.get(DatasetsContext)
+    ctx.dataset_collections = injector.get(DatasetCollectionsContext)
     ctx.models = injector.get(ModelsContext)
     ctx.runtime = injector.get(RuntimeContext)
     ctx.prediction = injector.get(PredictionContext)

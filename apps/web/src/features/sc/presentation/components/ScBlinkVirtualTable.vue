@@ -31,6 +31,7 @@ import type {
 
 interface BlinkSample {
   rowIndex: number;
+  rowKey: string;
   sampleId?: string | null;
   defectId: number;
   reviewImages: number[];
@@ -197,6 +198,7 @@ const INITIAL_GALLERY_WINDOW_ROWS = 250;
 function samplesFromArrow(data: unknown, offset: number, review: boolean): BlinkSample[] {
   const table = tableFromIPC(data as Uint8Array);
   const defectIds = table.getChild("defect_id");
+  const rowKeys = table.getChild("row_key");
   const sampleIds = table.getChild("sample_id");
   const reviewImages = table.getChild("review_image_ids_json");
   const annotationLabels = table.getChild("annotation_label");
@@ -205,10 +207,13 @@ function samplesFromArrow(data: unknown, offset: number, review: boolean): Blink
 
   return Array.from({ length: table.numRows }, (_, index) => {
     const confidence = predictionConfidences?.get(index);
+    const defectId = numeric(defectIds?.get(index));
+    const sampleId = stringOrNull(sampleIds?.get(index));
     return {
       rowIndex: offset + index,
-      sampleId: review ? stringOrNull(sampleIds?.get(index)) : null,
-      defectId: numeric(defectIds?.get(index)),
+      rowKey: String(rowKeys?.get(index) ?? sampleId ?? defectId),
+      sampleId: review ? sampleId : null,
+      defectId,
       reviewImages: review ? parseReviewImages(reviewImages?.get(index)) : EMPTY_REVIEW_IMAGES,
       annotationLabel: stringOrNull(annotationLabels?.get(index)),
       predictionLabel: stringOrNull(predictionLabels?.get(index)),
@@ -513,16 +518,11 @@ const { rubberBandStyle, onMouseDown } = useBlinkRubberBand({
 
 const requestedSpriteUrls = ref<Set<string>>(new Set());
 
-function isSelected(defectId: number | string): boolean {
-  const idStr = defectIdKey(defectId);
+function isSelected(sampleKey: string): boolean {
   if (props.selectedDefectIds instanceof Set) {
-    return props.selectedDefectIds.has(idStr);
+    return props.selectedDefectIds.has(sampleKey);
   }
-  return props.selectedDefectIds.includes(idStr);
-}
-
-function defectIdKey(defectId: number | string): string {
-  return String(defectId);
+  return props.selectedDefectIds.includes(sampleKey);
 }
 
 const selectionAnchorRowIndex = ref<number | null>(null);
@@ -538,7 +538,7 @@ async function defectIdsBetween(start: number, end: number): Promise<string[]> {
   ) {
     return galleryWindow.items
       .slice(rangeStart - galleryWindow.offset, rangeEnd - galleryWindow.offset)
-      .map((sample) => defectIdKey(sample.defectId));
+      .map((sample) => sample.rowKey);
   }
 
   if (!props.dataSource) return [];
@@ -550,14 +550,16 @@ async function defectIdsBetween(start: number, end: number): Promise<string[]> {
   });
   if (!page.ipc) return [];
   const table = tableFromIPC(page.ipc);
+  const rowKeys = table.getChild("row_key");
+  const sampleIds = table.getChild("sample_id");
   const defectIds = table.getChild("defect_id");
   return Array.from({ length: table.numRows }, (_, index) =>
-    defectIdKey(numeric(defectIds?.get(index))),
+    String(rowKeys?.get(index) ?? sampleIds?.get(index) ?? numeric(defectIds?.get(index))),
   );
 }
 
 async function handleSampleClick(sample: BlinkSample, event: MouseEvent): Promise<void> {
-  const targetId = defectIdKey(sample.defectId);
+  const targetId = sample.rowKey;
   const ctrlOrMeta = event.ctrlKey || event.metaKey;
   if (event.shiftKey) {
     const anchorRowIndex = selectionAnchorRowIndex.value ?? sample.rowIndex;
@@ -1093,9 +1095,9 @@ defineExpose({ scrollRef });
             <div class="sbt-row" :style="{ minWidth: rowMinWidthStr }">
               <div
                 v-for="sample in samplesForVirtualRow(virtualRow.index)"
-                :key="sample.defectId"
+                :key="sample.rowKey"
                 class="sbt-sample-block"
-                :class="{ 'sbt-sample-block--selected': isSelected(sample.defectId) }"
+                :class="{ 'sbt-sample-block--selected': isSelected(sample.rowKey) }"
                 :data-defect-id="sample.defectId"
                 :style="{ width: sampleBlockWidthStr(sample) }"
                 @click.stop="handleSampleClick(sample, $event)"
@@ -1183,13 +1185,13 @@ defineExpose({ scrollRef });
                 <!-- Prediction / Annotation / Draft Badges -->
                 <div v-if="showPredictionBadges" class="sbt-prediction-row">
                   <n-tag
-                    v-if="annotationDrafts[defectIdKey(sample.defectId)]"
+                    v-if="annotationDrafts[sample.rowKey]"
                     type="warning"
                     size="small"
                     class="sbt-prediction-badge"
                     title="Draft (unsubmitted)"
                   >
-                    D: {{ annotationDrafts[defectIdKey(sample.defectId)] }}
+                    D: {{ annotationDrafts[sample.rowKey] }}
                   </n-tag>
                   <n-tag
                     v-if="sample.annotationLabel"

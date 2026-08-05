@@ -1,12 +1,13 @@
 import { createRouter, createWebHistory } from "vue-router";
-import { getStoredToken } from '@/features/auth/application/store';
-import { useAuthStore } from '@/features/auth/application/store';
+import { getStoredToken } from "@/features/auth/application/store";
+import { useAuthStore } from "@/features/auth/application/store";
 import { sandboxRoutes } from "@/features/sandbox/router";
 import AdminLayout from "@/app/layouts/AdminLayout.vue";
 import SettingsLayout from "@/app/layouts/SettingsLayout.vue";
 import { authRoutes } from "@/features/auth/router";
 import { dashboardRoutes } from "@/features/dashboard/router";
 import { datasetRoutes } from "@/features/datasets/router";
+import { datasetCollectionRoutes } from "@/features/dataset-collections/router";
 import { modelRoutes } from "@/features/models/router";
 import { predictionRoutes } from "@/features/prediction/router";
 import { scRoutes } from "@/features/sc/router";
@@ -25,6 +26,7 @@ export const router = createRouter({
     ...dashboardRoutes,
     ...taskTrackerRoutes,
     ...datasetRoutes,
+    ...datasetCollectionRoutes,
     ...modelRoutes,
     ...trainingRoutes,
     ...predictionRoutes,
@@ -36,7 +38,10 @@ export const router = createRouter({
       component: AdminLayout,
       children: [
         { path: "", redirect: "/admin/dashboard" },
-        { path: "dashboard", component: () => import("@/features/dashboard/presentation/pages/DashboardView.vue") },
+        {
+          path: "dashboard",
+          component: () => import("@/features/dashboard/presentation/pages/DashboardView.vue"),
+        },
       ],
     },
     {
@@ -44,7 +49,10 @@ export const router = createRouter({
       component: SettingsLayout,
       children: [
         { path: "", redirect: "/settings/access-keys" },
-        { path: "access-keys", component: () => import("@/features/settings/presentation/pages/SettingsView.vue") },
+        {
+          path: "access-keys",
+          component: () => import("@/features/settings/presentation/pages/SettingsView.vue"),
+        },
       ],
     },
     ...(import.meta.env.DEV ? sandboxRoutes : []),

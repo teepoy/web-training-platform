@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onBeforeUnmount, ref } from "vue";
+import { useQuery } from "@tanstack/vue-query";
 import {
   NSpin,
   NEmpty,
@@ -14,10 +15,11 @@ import {
   NDescriptions,
   NDescriptionsItem,
   NAlert,
+  NTag,
   useThemeVars,
   useMessage,
 } from "naive-ui";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { FullScreenLayout } from "@/shared/components/full-screen-layout";
 import { useReclassifyPage } from "../../application/useReclassifyPage";
 import { toUserMessage } from "@/shared/api";
@@ -25,11 +27,45 @@ import InspectionQuad from "@/features/sc/presentation/components/InspectionQuad
 import ReclassifyAnnotationSidebar from "../components/ReclassifyAnnotationSidebar.vue";
 import ReclassifyTaskProgressModal from "../components/ReclassifyTaskProgressModal.vue";
 import type { ScSampleTableFilter } from "@/features/sc/domain/sampleTable";
+import {
+  getCollectionApiV1DatasetCollectionsCollectionIdGet,
+  getDatasetApiV1DatasetsDatasetIdGet,
+  listMembersApiV1DatasetCollectionsCollectionIdMembersGet,
+} from "@/generated/orval/endpoints/api";
 
 const page = useReclassifyPage();
 const themeVars = useThemeVars();
 const message = useMessage();
 const router = useRouter();
+const route = useRoute();
+const collectionId = computed(() => {
+  const value = route.params.collectionId;
+  return typeof value === "string" && value.length > 0 ? value : null;
+});
+const collectionStackQuery = useQuery({
+  queryKey: computed(() => ["dataset-collections", collectionId.value, "classify-stack"]),
+  enabled: computed(() => !!collectionId.value),
+  queryFn: async () => {
+    const id = collectionId.value;
+    if (!id) throw new Error("Collection id is required");
+    const [collection, members] = await Promise.all([
+      getCollectionApiV1DatasetCollectionsCollectionIdGet(id),
+      listMembersApiV1DatasetCollectionsCollectionIdMembersGet(id),
+    ]);
+    const datasets = await Promise.all(
+      [...members]
+        .sort((left, right) => left.position - right.position)
+        .map((member) => getDatasetApiV1DatasetsDatasetIdGet(member.source_dataset_id)),
+    );
+    return { collection, datasets };
+  },
+});
+const stackDatasetOptions = computed(() =>
+  (collectionStackQuery.data.value?.datasets ?? []).map((dataset, index) => ({
+    label: `${index + 1}. ${dataset.name}`,
+    value: String(dataset.id ?? ""),
+  })),
+);
 const taskInsightVisible = ref(false);
 const inspectionQuad = ref<{
   getGlobalFilter: () => ScSampleTableFilter;
@@ -72,7 +108,19 @@ const containerStyle = computed(() => ({
 }));
 
 function goBack() {
+  if (collectionId.value) {
+    void router.push(`/dataset-collections/${collectionId.value}`);
+    return;
+  }
   router.back();
+}
+
+function openStackDataset(datasetId: string): void {
+  if (!collectionId.value || datasetId === page.datasetId.value) return;
+  void router.push({
+    path: `/dataset-collections/${collectionId.value}/classify/${datasetId}`,
+    query: route.query,
+  });
 }
 
 const selectedDraftCount = computed(() => {
@@ -253,6 +301,19 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
         <div class="sc-header">
           <div class="sc-header-left">
             <NButton text size="small" @click="goBack">← Back</NButton>
+            <NTag v-if="collectionId" size="small" type="info">
+              {{ collectionStackQuery.data.value?.collection.name ?? "Collection" }}
+            </NTag>
+            <NSelect
+              v-if="collectionId"
+              :value="page.datasetId.value"
+              :options="stackDatasetOptions"
+              :loading="collectionStackQuery.isLoading.value"
+              size="small"
+              :style="{ width: '220px' }"
+              aria-label="Collection dataset"
+              @update:value="openStackDataset"
+            />
             <div class="sc-dataset-title" data-testid="sc-dataset-name">
               <NTooltip>
                 <template #trigger>

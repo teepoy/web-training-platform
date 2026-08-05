@@ -20,6 +20,7 @@ from app.modules.storage.port.local import DatasetStorageFactoryPort
 
 
 _SAMPLE_COLUMN_DTYPES = {
+    "row_key": pl.Utf8,
     "defect_id": pl.Int32,
     "sample_id": pl.Utf8,
     "inspection_time": pl.Utf8,
@@ -58,7 +59,7 @@ _WORKBENCH_OWNED_SOURCE_COLUMNS = (
     "prediction_confidence",
     "final_class",
 )
-_SAMPLES_BASE_FORMAT_VERSION = "v2-full-source-columns"
+_SAMPLES_BASE_FORMAT_VERSION = "v3-stable-row-key"
 
 
 @dataclass(frozen=True)
@@ -220,7 +221,12 @@ class ScDataMaterializer:
             sparse_lf = await load_sparse_lazyframe()
             review_df = await load_review_images()
             await _sink_lazyframe(
-                _normalize_dataset_base_lazyframe(sparse_lf, review_df), path
+                _normalize_dataset_base_lazyframe(
+                    sparse_lf,
+                    review_df,
+                    dataset_id=scope.identity,
+                ),
+                path,
             )
 
         review_images, base = await asyncio.gather(
@@ -324,6 +330,15 @@ class ScDataMaterializer:
                 frame = cast(pl.DataFrame, pl.from_arrow(batch))
                 normalized = _normalize_samples_frame(
                     _attach_review_metadata(frame, aggregate)
+                ).with_columns(
+                    pl.concat_str(
+                        [
+                            pl.lit(parsed_time.isoformat()),
+                            pl.lit(str(wafer_key)),
+                            pl.col("defect_id").cast(pl.Utf8),
+                        ],
+                        separator="::",
+                    ).alias("row_key")
                 )
                 table = normalized.to_arrow()
                 if writer is None:
@@ -350,7 +365,7 @@ class ScDataMaterializer:
         if lazyframe is None:
             return None
         overlay = cast(pl.LazyFrame, lazyframe).select(
-            pl.col("sample_id").cast(pl.Int32, strict=False).alias("defect_id"),
+            pl.col("sample_id").cast(pl.Utf8).alias("row_key"),
             pl.col("label").cast(pl.Utf8).alias("annotation_label"),
         )
         return await self._cache.get_or_build_file(
@@ -372,7 +387,7 @@ class ScDataMaterializer:
         if lazyframe is None:
             return None
         overlay = cast(pl.LazyFrame, lazyframe).select(
-            pl.col("sample_id").cast(pl.Int32, strict=False).alias("defect_id"),
+            pl.col("sample_id").cast(pl.Utf8).alias("row_key"),
             pl.col("predicted_label").cast(pl.Utf8).alias("prediction_label"),
             pl.col("confidence")
             .cast(pl.Float64, strict=False)
@@ -486,6 +501,8 @@ def _attach_review_metadata(
 def _normalize_dataset_base_lazyframe(
     sparse_lf: pl.LazyFrame,
     review_df: pl.DataFrame,
+    *,
+    dataset_id: str = "",
 ) -> pl.LazyFrame:
     sparse_schema = sparse_lf.collect_schema()
     schema_names = set(sparse_schema.names())
@@ -500,7 +517,15 @@ def _normalize_dataset_base_lazyframe(
         sparse_lf = sparse_lf.drop("images")
         schema_names.remove("images")
     base = _rename_workbench_owned_source_columns(sparse_lf).with_columns(
-        pl.col("defect_id").cast(pl.Int32, strict=False)
+        pl.col("defect_id").cast(pl.Int32, strict=False),
+        (
+            pl.col("sample_id").cast(pl.Utf8)
+            if "sample_id" in schema_names
+            else pl.concat_str(
+                [pl.lit(dataset_id), pl.col("defect_id").cast(pl.Utf8)],
+                separator="::",
+            )
+        ).alias("row_key"),
     )
     base = base.join(_review_aggregate(review_df).lazy(), on="defect_id", how="left")
     available = set(base.collect_schema().names())

@@ -332,7 +332,7 @@ class DuckDbQueryExecutor:
             )
             annotation_expression = "annotation.annotation_label"
             annotation_join = (
-                "LEFT JOIN _annotation_overlay AS annotation USING (defect_id)"
+                "LEFT JOIN _annotation_overlay AS annotation USING (row_key)"
             )
 
         prediction_label_expression = "NULL::VARCHAR"
@@ -346,7 +346,7 @@ class DuckDbQueryExecutor:
             prediction_label_expression = "prediction.prediction_label"
             prediction_confidence_expression = "prediction.prediction_confidence"
             prediction_join = (
-                "LEFT JOIN _prediction_overlay AS prediction USING (defect_id)"
+                "LEFT JOIN _prediction_overlay AS prediction USING (row_key)"
             )
         self._connection.execute(
             f"""

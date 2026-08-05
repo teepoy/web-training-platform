@@ -15,7 +15,7 @@ from app.shared.context import AppContext
 async def execute_prediction_runtime(
     *,
     job_id: str,
-    dataset_id: str,
+    dataset_id: str | None,
     model_id: str,
     org_id: str,
     predictor_id: str,
@@ -25,6 +25,8 @@ async def execute_prediction_runtime(
     sample_ids: list[str] | None = None,
     sample_filter: dict[str, Any] | None = None,
     prompt: str | None = None,
+    collection_id: str | None = None,
+    collection_revision_id: str | None = None,
     app_context: AppContext | None = None,
 ) -> object:
     owns_context = app_context is None
@@ -47,6 +49,8 @@ async def execute_prediction_runtime(
                 sample_ids=sample_ids,
                 sample_filter=sample_filter,
                 prompt=prompt,
+                collection_id=collection_id,
+                collection_revision_id=collection_revision_id,
             ),
         )
     finally:
@@ -57,7 +61,7 @@ async def execute_prediction_runtime(
 @flow(name="prediction-predict-job")
 async def predict_job_flow(
     job_id: str,
-    dataset_id: str,
+    dataset_id: str | None,
     model_id: str,
     org_id: str,
     created_by: str = "system",
@@ -76,6 +80,8 @@ async def predict_job_flow(
     algo_version: str | None = None,
     code_version: str | None = None,
     missing_image_policy: str | None = None,
+    collection_id: str | None = None,
+    collection_revision_id: str | None = None,
 ) -> object:
     del output_contract, missing_image_policy
     if predictor_id is None or catalog_id != predictor_id:
@@ -107,6 +113,8 @@ async def predict_job_flow(
         sample_ids=sample_ids,
         sample_filter=sample_filter,
         prompt=prompt,
+        collection_id=collection_id,
+        collection_revision_id=collection_revision_id,
     )
 
 

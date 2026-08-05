@@ -22,6 +22,16 @@ class TrainingJobORM(Base):
     dataset_id: Mapped[str | None] = mapped_column(
         ForeignKey("datasets.id", ondelete="SET NULL"), nullable=True
     )
+    collection_id: Mapped[str | None] = mapped_column(
+        ForeignKey("dataset_collections.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+    collection_revision_id: Mapped[str | None] = mapped_column(
+        ForeignKey("dataset_collection_revisions.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
     trainer_id: Mapped[str] = mapped_column(String(64), nullable=False)
     status: Mapped[str] = mapped_column(String(64), nullable=False)
     is_public: Mapped[bool] = mapped_column(

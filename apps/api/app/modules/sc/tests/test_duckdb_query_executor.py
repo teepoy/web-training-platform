@@ -41,6 +41,7 @@ def _materialized(tmp_path: Path) -> MaterializedScScope:
         tmp_path / "samples.parquet",
         pa.table(
             {
+                "row_key": ["1", "2", "3"],
                 "defect_id": [1, 2, 3],
                 "rough_bin": [10, 20, 20],
                 "annotation_label": [None, None, None],
@@ -99,14 +100,14 @@ async def test_joins_annotation_and_prediction_overlays_independently(
     materialized = _materialized(tmp_path)
     annotation = _cached_table(
         tmp_path / "annotations.parquet",
-        pa.table({"defect_id": [2], "annotation_label": ["manual"]}),
+        pa.table({"row_key": ["2"], "annotation_label": ["manual"]}),
         object_id="annotations",
     )
     prediction = _cached_table(
         tmp_path / "predictions.parquet",
         pa.table(
             {
-                "defect_id": [1, 2],
+                "row_key": ["1", "2"],
                 "prediction_label": ["predicted", "ignored"],
                 "prediction_confidence": [0.9, 0.8],
             }

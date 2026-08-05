@@ -4,6 +4,9 @@ from dataclasses import dataclass
 
 from injector import Module, inject, provider, singleton
 
+from app.modules.dataset_collections.port.local import (
+    DatasetCollectionRevisionReaderPort,
+)
 from app.modules.datasets.port.dataset_reader import DatasetReader
 from app.modules.datasets.port.local import IDatasetService
 from app.modules.models.port.local import ModelCatalogPort
@@ -52,6 +55,7 @@ def init_prediction(
     model_catalog: ModelCatalogPort,
     dataset_storage_factory: DatasetStorageFactoryPort,
     runtime_router: RuntimeRoutingPort,
+    collection_revisions: DatasetCollectionRevisionReaderPort,
 ) -> PredictionContext:
     prediction_repository = SqlPredictionRepository(
         session_factory=shared.session_factory.sessionmaker
@@ -79,6 +83,7 @@ def init_prediction(
         runtime_router=runtime_router,
         dataset_reader=dataset_reader,
         model_catalog=model_catalog,
+        collection_revisions=collection_revisions,
     )
     return PredictionContext(
         prediction_repository=prediction_repository,
@@ -103,6 +108,7 @@ class PredictionModule(Module):
         model_catalog: ModelCatalogPort,
         dataset_storage_factory: DatasetStorageFactoryPort,
         runtime_router: RuntimeRoutingPort,
+        collection_revisions: DatasetCollectionRevisionReaderPort,
     ) -> PredictionContext:
         return init_prediction(
             shared,
@@ -111,6 +117,7 @@ class PredictionModule(Module):
             model_catalog=model_catalog,
             dataset_storage_factory=dataset_storage_factory,
             runtime_router=runtime_router,
+            collection_revisions=collection_revisions,
         )
 
     @provider

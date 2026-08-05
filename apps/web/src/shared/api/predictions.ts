@@ -33,7 +33,10 @@ async function collectAll<T>(
   }
 }
 
-export async function listPredictionJobs(datasetId?: string | null): Promise<PredictionJob[]> {
+export async function listPredictionJobs(
+  datasetId?: string | null,
+  collectionId?: string | null,
+): Promise<PredictionJob[]> {
   const jobs: PredictionJob[] = [];
   const pageSize = 200;
   let offset = 0;
@@ -41,6 +44,7 @@ export async function listPredictionJobs(datasetId?: string | null): Promise<Pre
   while (true) {
     const response = await listPredictionJobsApiV1PredictionJobsGet({
       dataset_id: datasetId ?? undefined,
+      collection_id: collectionId ?? undefined,
       offset,
       limit: pageSize,
     });

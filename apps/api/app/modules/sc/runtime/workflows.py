@@ -87,6 +87,9 @@ async def _run_sc_train_and_predict(
                 sample_ids=ctx.sample_ids,
                 sample_filter=ctx.sample_filter,
                 missing_image_policy=ctx.missing_image_policy,
+                org_id=ctx.org_id,
+                collection_id=ctx.collection_id,
+                collection_revision_id=ctx.collection_revision_id,
             ),
         )
         model_id = await _latest_model_artifact_id(ctx)
@@ -111,6 +114,8 @@ async def _run_sc_train_and_predict(
     prediction_job = await prediction_repository.create_prediction_job(
         PredictionJob(
             dataset_id=ctx.dataset_id,
+            collection_id=ctx.collection_id,
+            collection_revision_id=ctx.collection_revision_id,
             model_id=model_id,
             created_by=ctx.created_by,
             target=ctx.target,
@@ -155,6 +160,8 @@ async def _run_sc_train_and_predict(
                 sample_ids=ctx.sample_ids,
                 sample_filter=ctx.sample_filter,
                 prompt=ctx.prompt,
+                collection_id=ctx.collection_id,
+                collection_revision_id=ctx.collection_revision_id,
             ),
         )
     except Exception as exc:

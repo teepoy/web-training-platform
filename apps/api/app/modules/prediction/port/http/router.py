@@ -102,6 +102,8 @@ def _prediction_job_to_response(job) -> PredictionJobResponse:
     return PredictionJobResponse(
         id=job.id,
         dataset_id=job.dataset_id,
+        collection_id=job.collection_id,
+        collection_revision_id=job.collection_revision_id,
         model_id=job.model_id,
         status=status,
         created_by=job.created_by,
@@ -156,12 +158,17 @@ async def list_prediction_jobs(
         default=None,
         description="Filter prediction jobs to one dataset.",
     ),
+    collection_id: str | None = Query(
+        default=None,
+        description="Filter prediction jobs to one dataset collection.",
+    ),
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=200),
 ) -> PaginatedResponse[PredictionJobResponse]:
     jobs, total = await repo.list_prediction_jobs_paginated(
         org_id=org.id,
         dataset_id=dataset_id,
+        collection_id=collection_id,
         offset=offset,
         limit=limit,
     )

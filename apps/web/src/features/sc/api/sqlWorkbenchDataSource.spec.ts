@@ -296,7 +296,7 @@ describe("SQL workbench data source", () => {
     const rowsRequest = requests.find(
       (request) => request.description === "sc-workbench.table.rows",
     );
-    expect(rowsRequest?.sql).toContain('WITH "__sc_page_ids" AS (SELECT "defect_id" FROM samples');
+    expect(rowsRequest?.sql).toContain('WITH "__sc_page_ids" AS (SELECT "row_key" FROM samples');
     expect(rowsRequest?.sql).not.toContain("COUNT(*) OVER");
     expect(rowsRequest?.sql).toContain('ORDER BY "future_metric" DESC, "defect_id" ASC');
     expect(rowsRequest?.parameters).toEqual([10, 20, 25, 0]);
@@ -397,13 +397,13 @@ describe("SQL workbench data source", () => {
       offset: 0,
       limit: 20,
       tableFilter: { rough_bin: { filterType: "set", values: [7] } },
-      tableSelection: { kind: "all", excludedIds: [8, 9] },
+      tableSelection: { kind: "all", excludedIds: ["sample-8", "sample-9"] },
     });
 
     expect(requests[0]?.sql).not.toContain('defect_id" = ANY');
     expect(requests[0]?.parameters).toEqual([[7], 20, 0]);
-    expect(requests[1]?.sql).toContain('NOT ("defect_id" = ANY(?))');
-    expect(requests[1]?.parameters).toEqual([[7], [8, 9], 20, 0]);
+    expect(requests[1]?.sql).toContain('NOT ("row_key" = ANY(?))');
+    expect(requests[1]?.parameters).toEqual([[7], ["sample-8", "sample-9"], 20, 0]);
   });
 
   it("discards a response older than the latest observed revision", async () => {

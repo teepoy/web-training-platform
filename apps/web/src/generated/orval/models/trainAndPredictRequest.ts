@@ -4,6 +4,9 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
+import type { TrainAndPredictRequestDatasetId } from "./trainAndPredictRequestDatasetId";
+import type { TrainAndPredictRequestCollectionId } from "./trainAndPredictRequestCollectionId";
+import type { TrainAndPredictRequestCollectionRevisionId } from "./trainAndPredictRequestCollectionRevisionId";
 import type { TrainAndPredictRequestModelVersion } from "./trainAndPredictRequestModelVersion";
 import type { TrainAndPredictRequestSampleIds } from "./trainAndPredictRequestSampleIds";
 import type { TrainAndPredictRequestSampleFilter } from "./trainAndPredictRequestSampleFilter";
@@ -11,8 +14,9 @@ import type { TrainAndPredictRequestPrompt } from "./trainAndPredictRequestPromp
 import type { TrainAndPredictRequestPredictorId } from "./trainAndPredictRequestPredictorId";
 
 export interface TrainAndPredictRequest {
-  /** @minLength 1 */
-  dataset_id: string;
+  dataset_id?: TrainAndPredictRequestDatasetId;
+  collection_id?: TrainAndPredictRequestCollectionId;
+  collection_revision_id?: TrainAndPredictRequestCollectionRevisionId;
   /** @minLength 1 */
   trainer_id: string;
   /** @minLength 1 */

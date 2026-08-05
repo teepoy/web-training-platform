@@ -1120,6 +1120,369 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HTTPValidationError"
+  /api/v1/dataset-collections:
+    post:
+      tags:
+        - dataset-collections
+      summary: Create Collection
+      operationId: create_collection_api_v1_dataset_collections_post
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDatasetCollectionRequest"
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatasetCollectionResponse"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+    get:
+      tags:
+        - dataset-collections
+      summary: List Collections
+      operationId: list_collections_api_v1_dataset_collections_get
+      parameters:
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+            title: Offset
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            maximum: 200
+            minimum: 1
+            default: 50
+            title: Limit
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedResponse_DatasetCollectionResponse_"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /api/v1/dataset-collections/{collection_id}:
+    get:
+      tags:
+        - dataset-collections
+      summary: Get Collection
+      operationId: get_collection_api_v1_dataset_collections__collection_id__get
+      parameters:
+        - name: collection_id
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Collection Id
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatasetCollectionResponse"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+    patch:
+      tags:
+        - dataset-collections
+      summary: Update Collection
+      operationId: update_collection_api_v1_dataset_collections__collection_id__patch
+      parameters:
+        - name: collection_id
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Collection Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateDatasetCollectionRequest"
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatasetCollectionResponse"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+    delete:
+      tags:
+        - dataset-collections
+      summary: Delete Collection
+      operationId: delete_collection_api_v1_dataset_collections__collection_id__delete
+      parameters:
+        - name: collection_id
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Collection Id
+      responses:
+        "204":
+          description: Successful Response
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /api/v1/dataset-collections/{collection_id}/members:
+    get:
+      tags:
+        - dataset-collections
+      summary: List Members
+      operationId: list_members_api_v1_dataset_collections__collection_id__members_get
+      parameters:
+        - name: collection_id
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Collection Id
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DatasetCollectionMemberResponse"
+                title: Response List Members Api V1 Dataset Collections  Collection
+                  Id  Members Get
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+    post:
+      tags:
+        - dataset-collections
+      summary: Link Members
+      operationId: link_members_api_v1_dataset_collections__collection_id__members_post
+      parameters:
+        - name: collection_id
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Collection Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LinkDatasetCollectionMembersRequest"
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatasetCollectionMembershipResponse"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+    put:
+      tags:
+        - dataset-collections
+      summary: Replace Members
+      operationId: replace_members_api_v1_dataset_collections__collection_id__members_put
+      parameters:
+        - name: collection_id
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Collection Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReplaceDatasetCollectionMembersRequest"
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatasetCollectionMembershipResponse"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /api/v1/dataset-collections/{collection_id}/members/{member_id}:
+    delete:
+      tags:
+        - dataset-collections
+      summary: Unlink Member
+      operationId: unlink_member_api_v1_dataset_collections__collection_id__members__member_id__delete
+      parameters:
+        - name: collection_id
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Collection Id
+        - name: member_id
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Member Id
+        - name: expected_definition_version
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 0
+            title: Expected Definition Version
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatasetCollectionMembershipResponse"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /api/v1/dataset-collections/{collection_id}/revisions:
+    post:
+      tags:
+        - dataset-collections
+      summary: Create Revision
+      operationId: create_revision_api_v1_dataset_collections__collection_id__revisions_post
+      parameters:
+        - name: collection_id
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Collection Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDatasetCollectionRevisionRequest"
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatasetCollectionRevisionResponse"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+    get:
+      tags:
+        - dataset-collections
+      summary: List Revisions
+      operationId: list_revisions_api_v1_dataset_collections__collection_id__revisions_get
+      parameters:
+        - name: collection_id
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Collection Id
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DatasetCollectionRevisionResponse"
+                title: Response List Revisions Api V1 Dataset Collections  Collection
+                  Id  Revisions Get
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /api/v1/dataset-collections/{collection_id}/revisions/{revision_id}:
+    get:
+      tags:
+        - dataset-collections
+      summary: Get Revision
+      operationId: get_revision_api_v1_dataset_collections__collection_id__revisions__revision_id__get
+      parameters:
+        - name: collection_id
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Collection Id
+        - name: revision_id
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Revision Id
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatasetCollectionRevisionResponse"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
   /api/v1/sessions/{session_id}/surfaces/{surface_id}:
     get:
       tags:
@@ -2021,6 +2384,16 @@ paths:
             description: Filter prediction jobs to one dataset.
             title: Dataset Id
           description: Filter prediction jobs to one dataset.
+        - name: collection_id
+          in: query
+          required: false
+          schema:
+            anyOf:
+              - type: string
+              - type: "null"
+            description: Filter prediction jobs to one dataset collection.
+            title: Collection Id
+          description: Filter prediction jobs to one dataset collection.
         - name: offset
           in: query
           required: false
@@ -5385,6 +5758,50 @@ components:
         - sample_id
         - label
       title: CreateAnnotationRequest
+    CreateDatasetCollectionRequest:
+      properties:
+        name:
+          type: string
+          maxLength: 255
+          minLength: 1
+          title: Name
+        description:
+          type: string
+          maxLength: 10000
+          title: Description
+        target_view_id:
+          type: string
+          maxLength: 128
+          minLength: 1
+          title: Target View Id
+        duplicate_policy:
+          type: string
+          const: keep_all
+          title: Duplicate Policy
+        missing_data_policy:
+          type: string
+          const: fail
+          title: Missing Data Policy
+      additionalProperties: false
+      type: object
+      required:
+        - name
+        - description
+        - target_view_id
+        - duplicate_policy
+        - missing_data_policy
+      title: CreateDatasetCollectionRequest
+    CreateDatasetCollectionRevisionRequest:
+      properties:
+        expected_definition_version:
+          type: integer
+          minimum: 1.0
+          title: Expected Definition Version
+      additionalProperties: false
+      type: object
+      required:
+        - expected_definition_version
+      title: CreateDatasetCollectionRevisionRequest
     CreateDatasetRequest:
       properties:
         name:
@@ -5518,9 +5935,23 @@ components:
     CreateTrainingJobRequest:
       properties:
         dataset_id:
-          type: string
-          minLength: 1
+          anyOf:
+            - type: string
+              minLength: 1
+            - type: "null"
           title: Dataset Id
+        collection_id:
+          anyOf:
+            - type: string
+              minLength: 1
+            - type: "null"
+          title: Collection Id
+        collection_revision_id:
+          anyOf:
+            - type: string
+              minLength: 1
+            - type: "null"
+          title: Collection Revision Id
         trainer_id:
           type: string
           minLength: 1
@@ -5528,7 +5959,6 @@ components:
       additionalProperties: false
       type: object
       required:
-        - dataset_id
         - trainer_id
       title: CreateTrainingJobRequest
     DashboardResponse:
@@ -5691,6 +6121,281 @@ components:
           title: Label Counts
       type: object
       title: DatasetAnnotationStats
+    DatasetCollectionMemberInput:
+      properties:
+        source_dataset_id:
+          type: string
+          maxLength: 64
+          minLength: 1
+          title: Source Dataset Id
+        position:
+          type: integer
+          minimum: 0.0
+          title: Position
+        filter_spec:
+          additionalProperties: true
+          type: object
+          title: Filter Spec
+        label_mapping:
+          additionalProperties:
+            type: string
+          type: object
+          title: Label Mapping
+        sampling_spec:
+          additionalProperties: true
+          type: object
+          title: Sampling Spec
+      additionalProperties: false
+      type: object
+      required:
+        - source_dataset_id
+        - position
+      title: DatasetCollectionMemberInput
+    DatasetCollectionMemberResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        collection_id:
+          type: string
+          title: Collection Id
+        source_dataset_id:
+          type: string
+          title: Source Dataset Id
+        position:
+          type: integer
+          title: Position
+        linked_definition_version:
+          type: integer
+          title: Linked Definition Version
+        unlinked_definition_version:
+          anyOf:
+            - type: integer
+            - type: "null"
+          title: Unlinked Definition Version
+        filter_spec:
+          additionalProperties: true
+          type: object
+          title: Filter Spec
+        label_mapping:
+          additionalProperties:
+            type: string
+          type: object
+          title: Label Mapping
+        sampling_spec:
+          additionalProperties: true
+          type: object
+          title: Sampling Spec
+        linked_by:
+          type: string
+          title: Linked By
+        linked_at:
+          type: string
+          format: date-time
+          title: Linked At
+        unlinked_by:
+          anyOf:
+            - type: string
+            - type: "null"
+          title: Unlinked By
+        unlinked_at:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: "null"
+          title: Unlinked At
+      type: object
+      required:
+        - id
+        - collection_id
+        - source_dataset_id
+        - position
+        - linked_definition_version
+        - unlinked_definition_version
+        - filter_spec
+        - label_mapping
+        - sampling_spec
+        - linked_by
+        - linked_at
+        - unlinked_by
+        - unlinked_at
+      title: DatasetCollectionMemberResponse
+    DatasetCollectionMembershipResponse:
+      properties:
+        collection:
+          $ref: "#/components/schemas/DatasetCollectionResponse"
+        members:
+          items:
+            $ref: "#/components/schemas/DatasetCollectionMemberResponse"
+          type: array
+          title: Members
+      type: object
+      required:
+        - collection
+        - members
+      title: DatasetCollectionMembershipResponse
+    DatasetCollectionResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        org_id:
+          type: string
+          title: Org Id
+        name:
+          type: string
+          title: Name
+        description:
+          type: string
+          title: Description
+        target_view_id:
+          type: string
+          title: Target View Id
+        target_view_contract:
+          type: string
+          title: Target View Contract
+        target_schema_version:
+          type: string
+          title: Target Schema Version
+        duplicate_policy:
+          type: string
+          title: Duplicate Policy
+        missing_data_policy:
+          type: string
+          title: Missing Data Policy
+        definition_version:
+          type: integer
+          title: Definition Version
+        created_by:
+          type: string
+          title: Created By
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        updated_at:
+          type: string
+          format: date-time
+          title: Updated At
+      type: object
+      required:
+        - id
+        - org_id
+        - name
+        - description
+        - target_view_id
+        - target_view_contract
+        - target_schema_version
+        - duplicate_policy
+        - missing_data_policy
+        - definition_version
+        - created_by
+        - created_at
+        - updated_at
+      title: DatasetCollectionResponse
+    DatasetCollectionRevisionResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        collection_id:
+          type: string
+          title: Collection Id
+        revision_number:
+          type: integer
+          title: Revision Number
+        definition_version:
+          type: integer
+          title: Definition Version
+        definition_hash:
+          type: string
+          title: Definition Hash
+        target_view_id:
+          type: string
+          title: Target View Id
+        target_view_contract:
+          type: string
+          title: Target View Contract
+        target_schema_version:
+          type: string
+          title: Target Schema Version
+        status:
+          type: string
+          title: Status
+        source_snapshot:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Source Snapshot
+        row_count:
+          anyOf:
+            - type: integer
+            - type: "null"
+          title: Row Count
+        label_counts:
+          additionalProperties:
+            type: integer
+          type: object
+          title: Label Counts
+        manifest_uri:
+          anyOf:
+            - type: string
+            - type: "null"
+          title: Manifest Uri
+        provenance_uri:
+          anyOf:
+            - type: string
+            - type: "null"
+          title: Provenance Uri
+        trigger_kind:
+          type: string
+          title: Trigger Kind
+        trigger_ref:
+          anyOf:
+            - type: string
+            - type: "null"
+          title: Trigger Ref
+        created_by:
+          type: string
+          title: Created By
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        error_code:
+          anyOf:
+            - type: string
+            - type: "null"
+          title: Error Code
+        error_detail:
+          anyOf:
+            - type: string
+            - type: "null"
+          title: Error Detail
+      type: object
+      required:
+        - id
+        - collection_id
+        - revision_number
+        - definition_version
+        - definition_hash
+        - target_view_id
+        - target_view_contract
+        - target_schema_version
+        - status
+        - source_snapshot
+        - row_count
+        - label_counts
+        - manifest_uri
+        - provenance_uri
+        - trigger_kind
+        - trigger_ref
+        - created_by
+        - created_at
+        - error_code
+        - error_detail
+      title: DatasetCollectionRevisionResponse
     DatasetStatusResponse:
       properties:
         allow_train:
@@ -5825,6 +6530,24 @@ components:
         - created_by
         - created_at
       title: LatestAnnotation
+    LinkDatasetCollectionMembersRequest:
+      properties:
+        expected_definition_version:
+          type: integer
+          minimum: 0.0
+          title: Expected Definition Version
+        members:
+          items:
+            $ref: "#/components/schemas/DatasetCollectionMemberInput"
+          type: array
+          minItems: 1
+          title: Members
+      additionalProperties: false
+      type: object
+      required:
+        - expected_definition_version
+        - members
+      title: LinkDatasetCollectionMembersRequest
     LoginRequest:
       properties:
         email:
@@ -5955,11 +6678,30 @@ components:
           type: string
           title: Job Id
         dataset_id:
-          type: string
+          anyOf:
+            - type: string
+            - type: "null"
           title: Dataset Id
         dataset_name:
-          type: string
+          anyOf:
+            - type: string
+            - type: "null"
           title: Dataset Name
+        collection_id:
+          anyOf:
+            - type: string
+            - type: "null"
+          title: Collection Id
+        collection_revision_id:
+          anyOf:
+            - type: string
+            - type: "null"
+          title: Collection Revision Id
+        collection_name:
+          anyOf:
+            - type: string
+            - type: "null"
+          title: Collection Name
         trainer_name:
           type: string
           title: Trainer Name
@@ -5977,8 +6719,6 @@ components:
         - uri
         - kind
         - job_id
-        - dataset_id
-        - dataset_name
         - trainer_name
       title: ModelResponse
     ModelUploadTemplateResponse:
@@ -6084,6 +6824,21 @@ components:
         - items
         - total
       title: PaginatedResponse[AnnotationVersionResponse]
+    PaginatedResponse_DatasetCollectionResponse_:
+      properties:
+        items:
+          items:
+            $ref: "#/components/schemas/DatasetCollectionResponse"
+          type: array
+          title: Items
+        total:
+          type: integer
+          title: Total
+      type: object
+      required:
+        - items
+        - total
+      title: PaginatedResponse[DatasetCollectionResponse]
     PaginatedResponse_Dataset_:
       properties:
         items:
@@ -6448,6 +7203,16 @@ components:
             - type: string
             - type: "null"
           title: Dataset Id
+        collection_id:
+          anyOf:
+            - type: string
+            - type: "null"
+          title: Collection Id
+        collection_revision_id:
+          anyOf:
+            - type: string
+            - type: "null"
+          title: Collection Revision Id
         model_id:
           type: string
           title: Model Id
@@ -6623,6 +7388,23 @@ components:
         - password
         - name
       title: RegisterRequest
+    ReplaceDatasetCollectionMembersRequest:
+      properties:
+        expected_definition_version:
+          type: integer
+          minimum: 0.0
+          title: Expected Definition Version
+        members:
+          items:
+            $ref: "#/components/schemas/DatasetCollectionMemberInput"
+          type: array
+          title: Members
+      additionalProperties: false
+      type: object
+      required:
+        - expected_definition_version
+        - members
+      title: ReplaceDatasetCollectionMembersRequest
     ReviewActionResponse:
       properties:
         id:
@@ -6700,10 +7482,24 @@ components:
           title: Model Id
           description: ID of the model artifact to use
         dataset_id:
-          type: string
-          minLength: 1
+          anyOf:
+            - type: string
+              minLength: 1
+            - type: "null"
           title: Dataset Id
           description: ID of the dataset to run predictions on
+        collection_id:
+          anyOf:
+            - type: string
+              minLength: 1
+            - type: "null"
+          title: Collection Id
+        collection_revision_id:
+          anyOf:
+            - type: string
+              minLength: 1
+            - type: "null"
+          title: Collection Revision Id
         sample_ids:
           anyOf:
             - items:
@@ -6744,7 +7540,6 @@ components:
       type: object
       required:
         - model_id
-        - dataset_id
       title: RunPredictionRequest
       description: Request to run predictions on a dataset using a model.
     RunResponse:
@@ -6931,8 +7726,15 @@ components:
       description: Response after saving reviewed annotations.
     ScAnnotationItem:
       properties:
+        sample_id:
+          anyOf:
+            - type: string
+            - type: "null"
+          title: Sample Id
         defect_id:
-          type: string
+          anyOf:
+            - type: string
+            - type: "null"
           title: Defect Id
         label:
           anyOf:
@@ -6945,7 +7747,6 @@ components:
           default: platform-user
       type: object
       required:
-        - defect_id
         - label
       title: ScAnnotationItem
     ScBoxFilterRequest:
@@ -7252,6 +8053,14 @@ components:
       title: ScSampleTableRangeFilter
     ScSampleTableRow:
       properties:
+        row_key:
+          type: string
+          title: Row Key
+        sample_id:
+          anyOf:
+            - type: string
+            - type: "null"
+          title: Sample Id
         defect_id:
           type: string
           title: Defect Id
@@ -7324,6 +8133,7 @@ components:
           title: Kill Ratio
       type: object
       required:
+        - row_key
         - defect_id
         - rough_bin
         - class_number
@@ -8426,9 +9236,23 @@ components:
     TrainAndPredictRequest:
       properties:
         dataset_id:
-          type: string
-          minLength: 1
+          anyOf:
+            - type: string
+              minLength: 1
+            - type: "null"
           title: Dataset Id
+        collection_id:
+          anyOf:
+            - type: string
+              minLength: 1
+            - type: "null"
+          title: Collection Id
+        collection_revision_id:
+          anyOf:
+            - type: string
+              minLength: 1
+            - type: "null"
+          title: Collection Revision Id
         trainer_id:
           type: string
           minLength: 1
@@ -8471,7 +9295,6 @@ components:
       additionalProperties: false
       type: object
       required:
-        - dataset_id
         - trainer_id
       title: TrainAndPredictRequest
     TrainAndPredictResponse:
@@ -8521,6 +9344,16 @@ components:
             - type: string
             - type: "null"
           title: Dataset Id
+        collection_id:
+          anyOf:
+            - type: string
+            - type: "null"
+          title: Collection Id
+        collection_revision_id:
+          anyOf:
+            - type: string
+            - type: "null"
+          title: Collection Revision Id
         trainer_id:
           type: string
           title: Trainer Id
@@ -8580,6 +9413,24 @@ components:
         - dataset_id
         - label
       title: UpdateAnnotationRequest
+    UpdateDatasetCollectionRequest:
+      properties:
+        name:
+          anyOf:
+            - type: string
+              maxLength: 255
+              minLength: 1
+            - type: "null"
+          title: Name
+        description:
+          anyOf:
+            - type: string
+              maxLength: 10000
+            - type: "null"
+          title: Description
+      additionalProperties: false
+      type: object
+      title: UpdateDatasetCollectionRequest
     UpdateDatasetRequest:
       properties:
         name:

@@ -9,7 +9,6 @@ from typing import Any, cast
 
 from prefect import get_run_logger
 
-from app.core.registry import resolve_view_types
 from app.modules.runtime.domain.context import TrainingRuntimeContext
 from app.modules.runtime.domain.executables import (
     RuntimeOperation,
@@ -28,11 +27,10 @@ from app.modules.sc.capabilities import (
     SC_YOLO_MODEL_V1,
 )
 from app.modules.sc.materialization.port.local import ScInspectionMaterializerPort
+from app.modules.sc.runtime.data_source import open_sc_runtime_source
 from app.modules.sc.runtime.materialized_input import parquet_paths_from_manifest
 from app.modules.sc.runtime.router import SC_RUNTIME_ROUTER
-from app.modules.storage.port.local import DatasetStorageFactoryPort
 from app.shared.db.models.artifacts import ArtifactORM
-from app.shared.db.models.datasets import DatasetORM
 from app.shared.domain.data_plane import DataPlaneManifest
 
 logger = logging.getLogger(__name__)
@@ -161,6 +159,8 @@ def _trained_model_metadata(
         "predictor_ids": list(trainer.predictor_ids),
         "label_space": runtime_labels,
         "source_dataset_id": runtime_ctx.dataset_id,
+        "source_collection_id": runtime_ctx.collection_id,
+        "source_collection_revision_id": runtime_ctx.collection_revision_id,
     }
 
 
@@ -178,84 +178,67 @@ async def _run_sc_training(
     if runtime_ctx.missing_image_policy not in {"fail", "skip"}:
         raise ValueError("SC training requires missing_image_policy='fail' or 'skip'")
 
-    async with app_context.shared.session_factory() as session:
-        dataset_row = await session.get(DatasetORM, runtime_ctx.dataset_id)
-        if dataset_row is None:
-            raise ValueError(f"Dataset not found: {runtime_ctx.dataset_id}")
-        dataset_type = dataset_row.dataset_type
-        dataset_org_id = dataset_row.org_id
-        dataset_meta = (
-            dict(dataset_row.dataset_meta)
-            if isinstance(dataset_row.dataset_meta, dict)
-            else {}
-        )
-    if dataset_type != "image_sc":
-        raise ValueError(
-            f"SC trainer {runtime_ctx.trainer_id!r} requires image_sc dataset"
-        )
-    if SC_PATCH_IMAGE_V1.view_id not in resolve_view_types(dataset_type):
-        raise ValueError(
-            f"Dataset type {dataset_type!r} does not provide "
-            f"{SC_PATCH_IMAGE_V1.view_id!r}"
-        )
-
-    storage_factory = app_context.injector.get(DatasetStorageFactoryPort)
-    storage = await storage_factory.open(
-        runtime_ctx.dataset_id,
-        org_id=dataset_org_id,
-    )
-    rows = await storage.list_samples(
+    async with open_sc_runtime_source(
+        runtime_ctx,
         with_labels=True,
         with_predictions=runtime_ctx.sample_filter is not None,
-        return_lazyframe=True,
-        sample_ids=runtime_ctx.sample_ids,
-    )
-    if runtime_ctx.sample_filter is not None:
-        rows = parse_and_apply_workflow_sample_filter(
-            cast(Any, rows), runtime_ctx.sample_filter
-        )
-    rows = limit_sc_training_rows_per_class(rows)
-    selected_rows = int(
-        (await rows.select(pl.len().alias("rows")).collect_async()).item(0, "rows")
-    )
-    max_rows = app_context.shared.config.sc.pipeline.training_max_rows
-    if selected_rows > max_rows:
-        raise ValueError(
-            f"SC training selection exceeds configured row budget: "
-            f"{selected_rows} > {max_rows}"
-        )
-
-    materializer = app_context.injector.get(ScInspectionMaterializerPort)
-    _runtime_logger().info(
-        "SC trainer materializing input: trainer=%s rows=%d",
-        runtime_ctx.trainer_id,
-        selected_rows,
-    )
-    async with AsyncExitStack() as exit_stack:
-        materialization = await materializer.materialize(
-            rows_lazyframe=rows,
-            dataset_id=runtime_ctx.dataset_id,
-            job_id=runtime_ctx.job_id,
-            image_types=["patch_template", "patch_defective"],
-            max_output_bytes=(
-                app_context.shared.config.sc.pipeline.training_max_materialized_bytes
-            ),
-        )
-        exit_stack.callback(materialization.cleanup)
-        if materialization.errors and runtime_ctx.missing_image_policy != "skip":
+    ) as source:
+        if source.dataset_type not in {"image_sc", "image_sc_collection"}:
             raise ValueError(
-                f"SC training materialization failed for "
-                f"{len(materialization.errors)} image(s); first error: "
-                f"{materialization.errors[0]}"
+                f"SC trainer {runtime_ctx.trainer_id!r} requires image_sc data"
             )
-        train_result = await _train_kernel(
-            runtime_ctx=runtime_ctx,
-            label_space=list(dataset_meta.get("label_space", [])),
-            artifact_storage=app_context.shared.artifact_storage,
-            materialization_manifest=materialization.manifest,
-            kernel=kernel,
-            missing_image_policy=runtime_ctx.missing_image_policy,
+        if SC_PATCH_IMAGE_V1.view_id not in source.view_types:
+            raise ValueError(
+                f"Runtime source does not provide {SC_PATCH_IMAGE_V1.view_id!r}"
+            )
+        rows = source.rows
+        if runtime_ctx.sample_filter is not None:
+            rows = parse_and_apply_workflow_sample_filter(
+                cast(Any, rows), runtime_ctx.sample_filter
+            )
+        rows = limit_sc_training_rows_per_class(rows)
+        selected_rows = int(
+            (await rows.select(pl.len().alias("rows")).collect_async()).item(0, "rows")
         )
+        max_rows = app_context.shared.config.sc.pipeline.training_max_rows
+        if selected_rows > max_rows:
+            raise ValueError(
+                f"SC training selection exceeds configured row budget: "
+                f"{selected_rows} > {max_rows}"
+            )
+
+        materializer = app_context.injector.get(ScInspectionMaterializerPort)
+        _runtime_logger().info(
+            "SC trainer materializing input: trainer=%s rows=%d",
+            runtime_ctx.trainer_id,
+            selected_rows,
+        )
+        async with AsyncExitStack() as exit_stack:
+            materialization = await materializer.materialize(
+                rows_lazyframe=rows,
+                dataset_id=source.source_identity,
+                job_id=runtime_ctx.job_id,
+                image_types=["patch_template", "patch_defective"],
+                max_output_bytes=(
+                    app_context.shared.config.sc.pipeline.training_max_materialized_bytes
+                ),
+            )
+            exit_stack.callback(materialization.cleanup)
+            if materialization.errors and runtime_ctx.missing_image_policy != "skip":
+                raise ValueError(
+                    f"SC training materialization failed for "
+                    f"{len(materialization.errors)} image(s); first error: "
+                    f"{materialization.errors[0]}"
+                )
+            train_result = await _train_kernel(
+                runtime_ctx=runtime_ctx,
+                label_space=list(source.label_space),
+                artifact_storage=app_context.shared.artifact_storage,
+                materialization_manifest=materialization.manifest,
+                kernel=kernel,
+                missing_image_policy=runtime_ctx.missing_image_policy,
+            )
+        label_space = list(source.label_space)
 
     artifacts: list[dict[str, Any]] = [
         {
@@ -263,7 +246,7 @@ async def _run_sc_training(
             "kind": "model",
             "metadata": _trained_model_metadata(
                 runtime_ctx=runtime_ctx,
-                label_space=list(dataset_meta.get("label_space", [])),
+                label_space=label_space,
                 metadata=cast(dict[str, Any], train_result["metadata"]),
             ),
         }

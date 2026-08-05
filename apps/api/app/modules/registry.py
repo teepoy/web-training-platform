@@ -8,6 +8,9 @@ from app.modules.agent.classify.port.http.router import router as classify_route
 from app.modules.dashboard.port.http.router import (
     router as dashboard_router,
 )
+from app.modules.dataset_collections.port.http.router import (
+    router as dataset_collections_router,
+)
 from app.modules.datasets.port.http.extensions.import_parquet_router import (
     router as import_parquet_router,
 )
@@ -40,6 +43,7 @@ MODULE_ROUTERS: list[APIRouter] = [
     export_parquet_router,
     datasets_prediction_router,
     datasets_router,
+    dataset_collections_router,
     agent_router,
     auth_router,
     classify_router,

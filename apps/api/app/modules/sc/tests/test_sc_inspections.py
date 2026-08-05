@@ -504,6 +504,8 @@ def test_inspection_split_preview_endpoints_success(
             assert table_body["next_anchor"] is None
             assert [row["defect_id"] for row in table_body["items"]] == ["3", "1", "2"]
             assert set(table_body["items"][0]) == {
+                "row_key",
+                "sample_id",
                 "defect_id",
                 "rough_bin",
                 "class_number",

@@ -15,12 +15,15 @@ from app.shared.context import AppContext
 async def execute_training_runtime(
     *,
     job_id: str,
-    dataset_id: str,
+    dataset_id: str | None,
     trainer_id: str,
     created_by: str,
     sample_ids: list[str] | None = None,
     sample_filter: dict[str, Any] | None = None,
     missing_image_policy: str | None = None,
+    org_id: str = "",
+    collection_id: str | None = None,
+    collection_revision_id: str | None = None,
     app_context: AppContext | None = None,
 ) -> object:
     owns_context = app_context is None
@@ -39,6 +42,9 @@ async def execute_training_runtime(
                 sample_ids=sample_ids,
                 sample_filter=sample_filter,
                 missing_image_policy=missing_image_policy,
+                org_id=org_id,
+                collection_id=collection_id,
+                collection_revision_id=collection_revision_id,
             ),
         )
     finally:
@@ -49,7 +55,7 @@ async def execute_training_runtime(
 @flow(name="training-train-job")
 async def train_job_flow(
     job_id: str,
-    dataset_id: str,
+    dataset_id: str | None,
     trainer_id: str,
     created_by: str = "system",
     catalog_id: str | None = None,
@@ -61,6 +67,9 @@ async def train_job_flow(
     algo_version: str | None = None,
     code_version: str | None = None,
     missing_image_policy: str | None = None,
+    org_id: str = "",
+    collection_id: str | None = None,
+    collection_revision_id: str | None = None,
 ) -> object:
     if catalog_id != trainer_id:
         raise ValueError("Training flow requires catalog_id matching trainer_id")
@@ -85,6 +94,9 @@ async def train_job_flow(
         trainer_id=trainer_id,
         created_by=created_by,
         missing_image_policy=missing_image_policy,
+        org_id=org_id,
+        collection_id=collection_id,
+        collection_revision_id=collection_revision_id,
     )
 
 

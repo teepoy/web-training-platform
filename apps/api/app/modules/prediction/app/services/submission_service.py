@@ -5,6 +5,11 @@ from datetime import UTC, datetime
 
 from injector import inject
 
+from app.modules.dataset_collections.domain.errors import DatasetCollectionNotFoundError
+from app.modules.dataset_collections.domain.models import DatasetCollectionRevision
+from app.modules.dataset_collections.port.local import (
+    DatasetCollectionRevisionReaderPort,
+)
 from app.modules.datasets.port.dataset_reader import DatasetReader
 from app.modules.datasets.port.local import validate_predictor_for_dataset
 from app.modules.models.port.local import ModelCatalogPort
@@ -22,6 +27,7 @@ from app.modules.prediction.app.services.submission_parameters import (
 from app.modules.runtime.port.local import RuntimeRoutingPort
 from app.modules.runtime.catalog import runtime_catalog
 from app.shared.api.schemas import JobStatus, PredictionEvent, PredictionJob
+from app.shared.api.schemas import Dataset
 from app.shared.domain.protocols import PrefectClient
 
 
@@ -34,12 +40,14 @@ class PredictionSubmissionService:
         runtime_router: RuntimeRoutingPort,
         dataset_reader: DatasetReader,
         model_catalog: ModelCatalogPort,
+        collection_revisions: DatasetCollectionRevisionReaderPort | None = None,
     ) -> None:
         self._prefect_client = prefect_client
         self._repository = repository
         self._runtime_router = runtime_router
         self._dataset_reader = dataset_reader
         self._model_catalog = model_catalog
+        self._collection_revisions = collection_revisions
 
     @staticmethod
     def _extract_summary_from_run(run: dict | None) -> dict:
@@ -64,14 +72,7 @@ class PredictionSubmissionService:
         return {}
 
     async def submit_job(self, command: PredictionJobCommand) -> PredictionJob:
-        dataset = await self._dataset_reader.get_dataset(
-            command.dataset_id,
-            org_id=command.org_id,
-        )
-        if dataset is None:
-            raise PredictionResourceNotFoundError(
-                f"Dataset '{command.dataset_id}' not found"
-            )
+        dataset, revision = await self._resolve_source(command)
         model = await self._model_catalog.get_model(
             command.model_id,
             org_id=command.org_id,
@@ -92,10 +93,20 @@ class PredictionSubmissionService:
             )
         except (KeyError, ValueError) as exc:
             raise PredictionSubmissionRejectedError(str(exc)) from exc
-        validate_predictor_for_dataset(
-            predictor_id=predictor_id,
-            view_types=dataset.view_types,
-        )
+        if dataset is not None:
+            validate_predictor_for_dataset(
+                predictor_id=predictor_id,
+                view_types=dataset.view_types,
+            )
+        else:
+            assert revision is not None
+            predictor = runtime_catalog.get_predictor_meta(predictor_id)
+            if predictor.input_view.view_id != revision.target_view_id:
+                raise PredictionSubmissionRejectedError(
+                    f"Predictor '{predictor_id}' requires view "
+                    f"'{predictor.input_view.view_id}', collection revision provides "
+                    f"'{revision.target_view_id}'"
+                )
         model_metadata = model.metadata if isinstance(model.metadata, dict) else {}
         try:
             runtime_catalog.validate_predictor_model_contract(
@@ -124,6 +135,8 @@ class PredictionSubmissionService:
             job = await self._repository.create_prediction_job(
                 PredictionJob(
                     dataset_id=command.dataset_id,
+                    collection_id=command.collection_id,
+                    collection_revision_id=command.collection_revision_id,
                     model_id=command.model_id,
                     created_by=command.created_by,
                     target=command.target,
@@ -181,6 +194,43 @@ class PredictionSubmissionService:
         return (
             await self._repository.get_prediction_job(job.id, org_id=job.org_id)
         ) or job
+
+    async def _resolve_source(
+        self, command: PredictionJobCommand
+    ) -> tuple[Dataset | None, DatasetCollectionRevision | None]:
+        source = command.data_source
+        if source.kind == "dataset":
+            assert source.dataset_id is not None
+            dataset = await self._dataset_reader.get_dataset(
+                source.dataset_id,
+                org_id=command.org_id,
+            )
+            if dataset is None:
+                raise PredictionResourceNotFoundError(
+                    f"Dataset '{source.dataset_id}' not found"
+                )
+            return dataset, None
+        assert source.collection_id is not None
+        assert source.collection_revision_id is not None
+        if self._collection_revisions is None:
+            raise PredictionRuntimeUnavailableError(
+                "Collection revision reader is not configured"
+            )
+        try:
+            revision = await self._collection_revisions.get_revision(
+                source.collection_id,
+                source.collection_revision_id,
+                command.org_id,
+            )
+        except DatasetCollectionNotFoundError as exc:
+            raise PredictionResourceNotFoundError(
+                f"Collection revision '{source.identity}' not found"
+            ) from exc
+        if revision.status != "ready" or revision.manifest_uri is None:
+            raise PredictionSubmissionRejectedError(
+                f"Collection revision '{revision.id}' is not ready for runtime use"
+            )
+        return None, revision
 
     async def _poll_run(self, job_id: str, external_id: str) -> None:
         last_log_count = 0

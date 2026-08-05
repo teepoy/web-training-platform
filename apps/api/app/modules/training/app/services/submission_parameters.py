@@ -16,6 +16,8 @@ def train_and_predict_workflow_parameters(
     return {
         "job_id": job_id,
         "dataset_id": command.dataset_id,
+        "collection_id": command.collection_id,
+        "collection_revision_id": command.collection_revision_id,
         "trainer_id": command.trainer_id,
         "org_id": command.org_id,
         "created_by": command.created_by,

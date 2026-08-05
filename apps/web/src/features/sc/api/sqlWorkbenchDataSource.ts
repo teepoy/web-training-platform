@@ -66,6 +66,7 @@ const SAMPLE_COLUMNS = [
 ] as const;
 const DEFAULT_ALLOWED_COLUMNS = new Set<string>([
   ...SAMPLE_COLUMNS,
+  "row_key",
   "sample_id",
   "inspection_time",
   "wafer_key",
@@ -263,6 +264,8 @@ function nullableString(value: unknown): string | null {
 function sampleRow(row: Record<string, unknown>): ScSampleTableDisplayRow {
   return {
     ...row,
+    row_key: String(row.row_key ?? row.sample_id ?? row.defect_id ?? ""),
+    sample_id: row.sample_id == null ? null : String(row.sample_id),
     defect_id: String(row.defect_id ?? ""),
     rough_bin: numeric(row.rough_bin),
     class_number: numeric(row.class_number),
@@ -372,7 +375,7 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
       ...(query.filters ?? []),
       ...filtersFromTableFilter(query.filter, undefined, allowedColumns),
       ...(query.defectIds.length > 0
-        ? ([["defect_id", "in", query.defectIds.map(Number)]] as ScDataFilter[])
+        ? ([["row_key", "in", query.defectIds]] as ScDataFilter[])
         : []),
     ];
     const compiled = compileScWhere(filters, query.reticle, allowedColumns);
@@ -401,9 +404,9 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
     const rowsRequest = this.query(
       "sc-workbench.table.rows",
       `WITH "__sc_page_ids" AS (` +
-        `SELECT "defect_id" FROM samples${compiled.sql}${stableOrder} LIMIT ? OFFSET ?` +
+        `SELECT "row_key" FROM samples${compiled.sql}${stableOrder} LIMIT ? OFFSET ?` +
         `) SELECT ${columns.join(", ")} FROM samples ` +
-        `INNER JOIN "__sc_page_ids" USING ("defect_id")${stableOrder}`,
+        `INNER JOIN "__sc_page_ids" USING ("row_key")${stableOrder}`,
       [...compiled.parameters, query.limit, offset],
       query.signal,
     );
@@ -422,6 +425,7 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
     const galleryColumns =
       query.mode === "review"
         ? [
+            "row_key",
             "sample_id",
             "defect_id",
             "review_image_ids_json",
@@ -429,7 +433,14 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
             "prediction_label",
             "prediction_confidence",
           ]
-        : ["defect_id", "annotation_label", "prediction_label", "prediction_confidence"];
+        : [
+            "row_key",
+            "sample_id",
+            "defect_id",
+            "annotation_label",
+            "prediction_label",
+            "prediction_confidence",
+          ];
     const allowedColumns = await this.allowedColumnsFor([
       ...galleryColumns,
       ...Object.keys(query.tableFilter ?? {}),
@@ -440,10 +451,10 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
       ...(query.filters ?? []),
       ...filtersFromTableFilter(query.tableFilter, undefined, allowedColumns),
       ...(query.tableSelection?.kind === "ids" && query.tableSelection.ids.length > 0
-        ? ([["defect_id", "in", [...query.tableSelection.ids]]] as ScDataFilter[])
+        ? ([["row_key", "in", [...query.tableSelection.ids]]] as ScDataFilter[])
         : []),
       ...(query.tableSelection?.kind === "all" && query.tableSelection.excludedIds.length > 0
-        ? ([["defect_id", "not in", [...query.tableSelection.excludedIds]]] as ScDataFilter[])
+        ? ([["row_key", "not in", [...query.tableSelection.excludedIds]]] as ScDataFilter[])
         : []),
       ...(query.mode === "review" ? ([["images", ">", 0]] as ScDataFilter[]) : []),
     ];

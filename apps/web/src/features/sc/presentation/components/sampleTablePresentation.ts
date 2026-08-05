@@ -4,6 +4,7 @@ import { SC_RECLASSIFY_TABLE_COLUMNS, SC_SAMPLE_TABLE_COLUMNS } from "./scSample
 
 export interface ScSampleTablePresentationRow
   extends Partial<ScSampleTableDisplayRow>, Record<string, unknown> {
+  row_key: string;
   defect_id: string;
   _isHydrated?: boolean;
 }
@@ -76,6 +77,12 @@ export function sampleTableRowDefectId(
   if (!row) return null;
   const id = Number(row.defect_id);
   return Number.isFinite(id) ? id : null;
+}
+
+export function sampleTableRowKey(row: ScSampleTablePresentationRow | undefined): string | null {
+  if (!row) return null;
+  const key = String(row.row_key ?? "").trim();
+  return key.length > 0 ? key : null;
 }
 
 export function renderSampleTableCell(

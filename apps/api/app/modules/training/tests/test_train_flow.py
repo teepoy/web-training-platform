@@ -48,3 +48,39 @@ async def test_train_flow_rejects_mismatched_catalog_id() -> None:
             trainer_id="resnet50-sc-v1",
             catalog_id="yolo-sc-v1",
         )
+
+
+@pytest.mark.asyncio
+async def test_train_flow_passes_collection_revision_source_to_runtime() -> None:
+    with (
+        patch(
+            "app.modules.training.flows.train_job.execute_training_runtime",
+            new_callable=AsyncMock,
+            return_value={"status": "completed"},
+        ) as execute,
+        patch(
+            "app.modules.training.flows.train_job.get_run_logger",
+            return_value=Mock(),
+        ),
+    ):
+        await train_job_flow.fn(
+            job_id="job-collection",
+            dataset_id=None,
+            collection_id="collection-1",
+            collection_revision_id="revision-1",
+            org_id="org-1",
+            trainer_id="resnet50-sc-v1",
+            catalog_id="resnet50-sc-v1",
+            input_contract="sc.patch_image.v1",
+            output_contract="sc.resnet50.model.v1",
+            resource_profile="gpu",
+            owner="local_compat",
+            algo_id="resnet50-sc",
+            algo_version="1",
+            missing_image_policy="fail",
+        )
+
+    assert execute.await_args is not None
+    assert execute.await_args.kwargs["dataset_id"] is None
+    assert execute.await_args.kwargs["collection_id"] == "collection-1"
+    assert execute.await_args.kwargs["collection_revision_id"] == "revision-1"

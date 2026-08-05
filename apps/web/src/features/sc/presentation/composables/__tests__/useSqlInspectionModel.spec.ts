@@ -70,11 +70,17 @@ describe("useSqlInspectionModel", () => {
 
     await model.applyMapSelection([9, 2, 9]);
     await model.appendMapSelection([7, 2]);
-    model.setTableSelection({ kind: "ids", ids: [8, 3, 8] });
+    model.setTableSelection({ kind: "ids", ids: ["sample-8", "sample-3", "sample-8"] });
 
     expect(model.mapSelectedDefectIds.value).toEqual([2, 7, 9]);
-    expect(model.tableSelection.value).toEqual({ kind: "ids", ids: [3, 8] });
-    expect(model.galleryQuery.value.tableSelection).toEqual({ kind: "ids", ids: [3, 8] });
+    expect(model.tableSelection.value).toEqual({
+      kind: "ids",
+      ids: ["sample-3", "sample-8"],
+    });
+    expect(model.galleryQuery.value.tableSelection).toEqual({
+      kind: "ids",
+      ids: ["sample-3", "sample-8"],
+    });
     expect(source.resolveSelection).not.toHaveBeenCalled();
   });
 
@@ -83,12 +89,18 @@ describe("useSqlInspectionModel", () => {
     const model = mount(source);
     if (!model) throw new Error("model was not created");
 
-    model.setTableSelection({ kind: "all", excludedIds: [9, 3, 9] });
+    model.setTableSelection({
+      kind: "all",
+      excludedIds: ["sample-9", "sample-3", "sample-9"],
+    });
 
-    expect(model.tableSelection.value).toEqual({ kind: "all", excludedIds: [3, 9] });
+    expect(model.tableSelection.value).toEqual({
+      kind: "all",
+      excludedIds: ["sample-3", "sample-9"],
+    });
     expect(model.galleryQuery.value.tableSelection).toEqual({
       kind: "all",
-      excludedIds: [3, 9],
+      excludedIds: ["sample-3", "sample-9"],
     });
   });
 

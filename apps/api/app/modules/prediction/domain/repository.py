@@ -52,6 +52,7 @@ class PredictionRepository(Protocol):
         self,
         org_id: str | None = None,
         dataset_id: str | None = None,
+        collection_id: str | None = None,
         *,
         offset: int = 0,
         limit: int = 50,

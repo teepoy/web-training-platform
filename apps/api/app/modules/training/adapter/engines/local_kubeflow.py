@@ -41,10 +41,11 @@ class LocalProcessEngine:
             run["state"] = "CANCELLED"
             return
         try:
-            dataset_id = job.dataset_id
-            if dataset_id is None:
+            if job.dataset_id is None and (
+                job.collection_id is None or job.collection_revision_id is None
+            ):
                 raise ValueError(
-                    f"Source dataset for training job '{job.id}' was deleted"
+                    f"Source data for training job '{job.id}' is unavailable"
                 )
             run["events"].append(
                 TrainingEvent(
@@ -58,10 +59,13 @@ class LocalProcessEngine:
 
             result = await execute_training_runtime(
                 job_id=job.id,
-                dataset_id=dataset_id,
+                dataset_id=job.dataset_id,
                 trainer_id=job.trainer_id,
                 created_by=job.created_by,
                 missing_image_policy="fail",
+                org_id=job.org_id or "",
+                collection_id=job.collection_id,
+                collection_revision_id=job.collection_revision_id,
             )
             run["result"] = result
             run["state"] = "COMPLETED"
@@ -228,10 +232,11 @@ class KubeflowTrainingOperatorEngine:
             run["state"] = "CANCELLED"
             return
         try:
-            dataset_id = job.dataset_id
-            if dataset_id is None:
+            if job.dataset_id is None and (
+                job.collection_id is None or job.collection_revision_id is None
+            ):
                 raise ValueError(
-                    f"Source dataset for training job '{job.id}' was deleted"
+                    f"Source data for training job '{job.id}' is unavailable"
                 )
             run["events"].append(
                 TrainingEvent(
@@ -245,7 +250,10 @@ class KubeflowTrainingOperatorEngine:
                 deployment_name="training-train-job",
                 parameters={
                     "job_id": job.id,
-                    "dataset_id": dataset_id,
+                    "dataset_id": job.dataset_id,
+                    "collection_id": job.collection_id,
+                    "collection_revision_id": job.collection_revision_id,
+                    "org_id": job.org_id or "",
                     "trainer_id": job.trainer_id,
                     "created_by": job.created_by,
                 },

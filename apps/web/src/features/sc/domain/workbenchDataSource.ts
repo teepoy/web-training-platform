@@ -28,8 +28,8 @@ export interface ScMapDataQuery extends ScDataQueryContext {
 }
 
 export type ScTableSelectionConstraint =
-  | { kind: "ids"; ids: readonly number[] }
-  | { kind: "all"; excludedIds: readonly number[] };
+  | { kind: "ids"; ids: readonly string[] }
+  | { kind: "all"; excludedIds: readonly string[] };
 
 export interface ScGalleryDataQuery extends ScDataQueryContext {
   mode: "patch" | "review";

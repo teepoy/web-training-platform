@@ -10,6 +10,11 @@ import type { ModelResponseFileHash } from "./modelResponseFileHash";
 import type { ModelResponseFormat } from "./modelResponseFormat";
 import type { ModelResponseCreatedAt } from "./modelResponseCreatedAt";
 import type { ModelResponseMetadata } from "./modelResponseMetadata";
+import type { ModelResponseDatasetId } from "./modelResponseDatasetId";
+import type { ModelResponseDatasetName } from "./modelResponseDatasetName";
+import type { ModelResponseCollectionId } from "./modelResponseCollectionId";
+import type { ModelResponseCollectionRevisionId } from "./modelResponseCollectionRevisionId";
+import type { ModelResponseCollectionName } from "./modelResponseCollectionName";
 
 export interface ModelResponse {
   id: string;
@@ -22,8 +27,11 @@ export interface ModelResponse {
   created_at?: ModelResponseCreatedAt;
   metadata?: ModelResponseMetadata;
   job_id: string;
-  dataset_id: string;
-  dataset_name: string;
+  dataset_id?: ModelResponseDatasetId;
+  dataset_name?: ModelResponseDatasetName;
+  collection_id?: ModelResponseCollectionId;
+  collection_revision_id?: ModelResponseCollectionRevisionId;
+  collection_name?: ModelResponseCollectionName;
   trainer_name: string;
   created_by?: string;
   creator_name?: string;

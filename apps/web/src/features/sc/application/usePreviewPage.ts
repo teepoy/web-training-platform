@@ -133,6 +133,7 @@ export interface PreviewPageState {
   importError: Ref<string>;
   storageModeOptions: { label: string; value: string }[];
   handleImport: () => Promise<void>;
+  importInspection: (item: InspectionSummaryItem, notify?: boolean) => Promise<string>;
   openImportForInspection: (item: InspectionSummaryItem) => void;
   startImportDirectly: (item: InspectionSummaryItem) => void;
   importedDatasetIdForInspection: (item: InspectionSummaryItem) => string | null;
@@ -747,7 +748,7 @@ export function usePreviewPage(): PreviewPageState {
 
   // ── Import handlers ──────────────────────────────
 
-  async function handleImport(): Promise<void> {
+  async function runImport(req: ScImportPayload, notify: boolean): Promise<string> {
     importError.value = "";
     isImporting.value = true;
     importProgress.value = {
@@ -757,12 +758,6 @@ export function usePreviewPage(): PreviewPageState {
     };
 
     try {
-      const req: ScImportPayload = {
-        source_inspection_time: importSourceInspectionTime.value.trim(),
-        source_wafer_key: importSourceWaferKey.value,
-        dataset_name: importDatasetName.value.trim(),
-        storage_mode: importStorageMode.value,
-      };
       const dataEvent = await streamApiSse("/sc/import/stream", {
         method: "POST",
         body: req,
@@ -785,7 +780,6 @@ export function usePreviewPage(): PreviewPageState {
         imported_count: typeof payload.imported_count === "number" ? payload.imported_count : 0,
         error: typeof payload.error === "string" ? payload.error : null,
       };
-      isImporting.value = false;
       showImportModal.value = false;
       if (resp.status === "completed" && resp.dataset_id) {
         datasetId.value = resp.dataset_id;
@@ -798,13 +792,48 @@ export function usePreviewPage(): PreviewPageState {
           imported_count: resp.imported_count ?? 0,
           remaining_count: 0,
         };
-        message.success(`Import complete: ${resp.imported_count ?? 0} samples imported`);
-      } else if (resp.status === "failed") {
-        message.error(resp.error || "Import failed");
+        if (notify) {
+          message.success(`Import complete: ${resp.imported_count ?? 0} samples imported`);
+        }
+        return resp.dataset_id;
       }
+      throw new Error(resp.error || "Import failed");
     } catch (err: unknown) {
-      isImporting.value = false;
       importError.value = err instanceof Error ? err.message : String(err);
+      if (notify) message.error(importError.value);
+      throw err;
+    } finally {
+      isImporting.value = false;
+    }
+  }
+
+  async function importInspection(item: InspectionSummaryItem, notify = true): Promise<string> {
+    const existing = importedDatasetIdForInspection(item);
+    if (existing) return existing;
+    return runImport(
+      {
+        source_inspection_time: item.inspection_time,
+        source_wafer_key: item.wafer_key,
+        dataset_name: `Patch_${item.lot_id}_${item.wafer_id}_${sanitizeInspectionTime(item.inspection_time)}`,
+        storage_mode: importStorageMode.value,
+      },
+      notify,
+    );
+  }
+
+  async function handleImport(): Promise<void> {
+    try {
+      await runImport(
+        {
+          source_inspection_time: importSourceInspectionTime.value.trim(),
+          source_wafer_key: importSourceWaferKey.value,
+          dataset_name: importDatasetName.value.trim(),
+          storage_mode: importStorageMode.value,
+        },
+        true,
+      );
+    } catch {
+      // runImport already records and surfaces the transport error.
     }
   }
 
@@ -859,6 +888,7 @@ export function usePreviewPage(): PreviewPageState {
     importError,
     storageModeOptions,
     handleImport,
+    importInspection,
     openImportForInspection,
     startImportDirectly,
     importedDatasetIdForInspection,

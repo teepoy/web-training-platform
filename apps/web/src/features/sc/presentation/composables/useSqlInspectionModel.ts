@@ -37,6 +37,10 @@ function sortedUniqueIds(ids: readonly number[]): number[] {
   return [...new Set(ids.filter(Number.isFinite))].sort((left, right) => left - right);
 }
 
+function sortedUniqueKeys(ids: readonly string[]): string[] {
+  return [...new Set(ids.filter((id) => id.length > 0))].sort();
+}
+
 function legendColumn(source: ScLegendSource | null | undefined): string {
   if (source === "bin") return "rough_bin";
   if (source === "annotation") return "annotation_label";
@@ -394,8 +398,8 @@ export function useSqlInspectionModel(args: {
   function setTableSelection(selection: ScTableSelectionConstraint): void {
     tableSelection.value =
       selection.kind === "all"
-        ? { kind: "all", excludedIds: sortedUniqueIds(selection.excludedIds) }
-        : { kind: "ids", ids: sortedUniqueIds(selection.ids) };
+        ? { kind: "all", excludedIds: sortedUniqueKeys(selection.excludedIds) }
+        : { kind: "ids", ids: sortedUniqueKeys(selection.ids) };
   }
 
   function setReviewMode(value: boolean): void {

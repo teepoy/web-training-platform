@@ -278,7 +278,7 @@ describe("useReclassifyPage - review sampling", () => {
       }),
     ).toEqual({
       final_class: { filterType: "set", values: ["Scratch"] },
-      defect_id: { filterType: "set", values: ["3", "9"] },
+      row_key: { filterType: "set", values: ["3", "9"] },
     });
   });
 });

@@ -4,6 +4,9 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
+import type { RunPredictionRequestDatasetId } from "./runPredictionRequestDatasetId";
+import type { RunPredictionRequestCollectionId } from "./runPredictionRequestCollectionId";
+import type { RunPredictionRequestCollectionRevisionId } from "./runPredictionRequestCollectionRevisionId";
 import type { RunPredictionRequestSampleIds } from "./runPredictionRequestSampleIds";
 import type { RunPredictionRequestModelVersion } from "./runPredictionRequestModelVersion";
 import type { RunPredictionRequestPrompt } from "./runPredictionRequestPrompt";
@@ -18,11 +21,10 @@ export interface RunPredictionRequest {
    * @minLength 1
    */
   model_id: string;
-  /**
-   * ID of the dataset to run predictions on
-   * @minLength 1
-   */
-  dataset_id: string;
+  /** ID of the dataset to run predictions on */
+  dataset_id?: RunPredictionRequestDatasetId;
+  collection_id?: RunPredictionRequestCollectionId;
+  collection_revision_id?: RunPredictionRequestCollectionRevisionId;
   /** Optional list of sample IDs. If None, runs on all samples in dataset */
   sample_ids?: RunPredictionRequestSampleIds;
   /** Optional version tag for Label Studio filtering */

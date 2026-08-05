@@ -7,6 +7,7 @@ import polars as pl
 from app.modules.sc.schemas import ScSampleTableRowsRequest
 
 SAMPLE_TABLE_FILTER_COLUMNS = {
+    "row_key": "sample_id",
     "defect_id": "defect_id",
     "rough_bin": "rough_bin",
     "class_number": "class_number",
@@ -63,7 +64,7 @@ def apply_sample_table_filter(
             concrete_values = [value for value in values if value != missing_value]
             predicate = (
                 pl.col(column).cast(pl.Utf8).is_in([str(value) for value in values])
-                if field == "defect_id"
+                if field in {"defect_id", "row_key"}
                 else pl.col(column).is_in(concrete_values)
             )
             if include_missing:

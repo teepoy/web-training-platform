@@ -65,3 +65,35 @@ async def test_prediction_flow_invokes_runtime_host() -> None:
 
     assert result == {"processed": 1}
     execute.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_prediction_flow_passes_collection_revision_source_to_runtime() -> None:
+    with (
+        patch(
+            "app.modules.prediction.flows.predict_job.execute_prediction_runtime",
+            new_callable=AsyncMock,
+            return_value={"processed": 2},
+        ) as execute,
+        patch(
+            "app.modules.prediction.flows.predict_job.get_run_logger",
+            return_value=Mock(),
+        ),
+    ):
+        await predict_job_flow.fn(
+            job_id="job-collection",
+            dataset_id=None,
+            collection_id="collection-1",
+            collection_revision_id="revision-1",
+            model_id="model-1",
+            org_id="org-1",
+            predictor_id="resnet50-sc-v1",
+            catalog_id="resnet50-sc-v1",
+            input_contract="sc.patch_image.v1",
+            owner="local_compat",
+        )
+
+    assert execute.await_args is not None
+    assert execute.await_args.kwargs["dataset_id"] is None
+    assert execute.await_args.kwargs["collection_id"] == "collection-1"
+    assert execute.await_args.kwargs["collection_revision_id"] == "revision-1"

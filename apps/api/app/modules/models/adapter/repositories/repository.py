@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.shared.api.schemas import ArtifactRef, Model
 from app.shared.db.models.artifacts import ArtifactORM
 from app.shared.db.models.datasets import DatasetORM
+from app.shared.db.models.dataset_collections import DatasetCollectionORM
 from app.shared.db.models.training import TrainingJobORM
 from app.shared.db.models.auth import UserORM
 
@@ -67,7 +68,7 @@ class ModelArtifactRepository:
             joins = (
                 select(ArtifactORM.id)
                 .join(TrainingJobORM, ArtifactORM.job_id == TrainingJobORM.id)
-                .join(DatasetORM, TrainingJobORM.dataset_id == DatasetORM.id)
+                .outerjoin(DatasetORM, TrainingJobORM.dataset_id == DatasetORM.id)
                 .where(*conditions)
             )
             total = int(
@@ -76,10 +77,19 @@ class ModelArtifactRepository:
             )
             stmt = (
                 select(
-                    ArtifactORM, TrainingJobORM, DatasetORM, UserORM.name, UserORM.email
+                    ArtifactORM,
+                    TrainingJobORM,
+                    DatasetORM,
+                    DatasetCollectionORM,
+                    UserORM.name,
+                    UserORM.email,
                 )
                 .join(TrainingJobORM, ArtifactORM.job_id == TrainingJobORM.id)
-                .join(DatasetORM, TrainingJobORM.dataset_id == DatasetORM.id)
+                .outerjoin(DatasetORM, TrainingJobORM.dataset_id == DatasetORM.id)
+                .outerjoin(
+                    DatasetCollectionORM,
+                    TrainingJobORM.collection_id == DatasetCollectionORM.id,
+                )
                 .outerjoin(UserORM, UserORM.id == TrainingJobORM.created_by)
                 .where(*conditions)
                 .order_by(
@@ -105,13 +115,18 @@ class ModelArtifactRepository:
                     created_at=artifact.created_at,
                     job_id=_assert_str(artifact.job_id),
                     dataset_id=job.dataset_id,
-                    dataset_name=dataset.name,
+                    dataset_name=dataset.name if dataset is not None else None,
+                    collection_id=job.collection_id,
+                    collection_revision_id=job.collection_revision_id,
+                    collection_name=(
+                        collection.name if collection is not None else None
+                    ),
                     trainer_id=job.trainer_id,
                     trainer_name=job.trainer_id,
                     created_by=job.created_by,
                     creator_name=_creator_name(job.created_by, user_name, user_email),
                 )
-                for artifact, job, dataset, user_name, user_email in rows
+                for artifact, job, dataset, collection, user_name, user_email in rows
             ], total
 
     async def get_model(
@@ -130,10 +145,19 @@ class ModelArtifactRepository:
                 )  # noqa: E712
             stmt = (
                 select(
-                    ArtifactORM, TrainingJobORM, DatasetORM, UserORM.name, UserORM.email
+                    ArtifactORM,
+                    TrainingJobORM,
+                    DatasetORM,
+                    DatasetCollectionORM,
+                    UserORM.name,
+                    UserORM.email,
                 )
                 .join(TrainingJobORM, ArtifactORM.job_id == TrainingJobORM.id)
-                .join(DatasetORM, TrainingJobORM.dataset_id == DatasetORM.id)
+                .outerjoin(DatasetORM, TrainingJobORM.dataset_id == DatasetORM.id)
+                .outerjoin(
+                    DatasetCollectionORM,
+                    TrainingJobORM.collection_id == DatasetCollectionORM.id,
+                )
                 .outerjoin(UserORM, UserORM.id == TrainingJobORM.created_by)
                 .where(ArtifactORM.id == artifact_id)
                 .where(ArtifactORM.kind == "model")
@@ -142,7 +166,7 @@ class ModelArtifactRepository:
             row = (await session.execute(stmt)).first()
             if row is None:
                 return None
-            artifact, job, dataset, user_name, user_email = row
+            artifact, job, dataset, collection, user_name, user_email = row
             return Model(
                 id=artifact.id,
                 uri=artifact.uri,
@@ -155,7 +179,10 @@ class ModelArtifactRepository:
                 created_at=artifact.created_at,
                 job_id=_assert_str(artifact.job_id),
                 dataset_id=job.dataset_id,
-                dataset_name=dataset.name,
+                dataset_name=dataset.name if dataset is not None else None,
+                collection_id=job.collection_id,
+                collection_revision_id=job.collection_revision_id,
+                collection_name=collection.name if collection is not None else None,
                 trainer_id=job.trainer_id,
                 trainer_name=job.trainer_id,
                 created_by=job.created_by,
@@ -168,10 +195,19 @@ class ModelArtifactRepository:
         async with self.session_factory() as session:
             stmt = (
                 select(
-                    ArtifactORM, TrainingJobORM, DatasetORM, UserORM.name, UserORM.email
+                    ArtifactORM,
+                    TrainingJobORM,
+                    DatasetORM,
+                    DatasetCollectionORM,
+                    UserORM.name,
+                    UserORM.email,
                 )
                 .join(TrainingJobORM, ArtifactORM.job_id == TrainingJobORM.id)
-                .join(DatasetORM, TrainingJobORM.dataset_id == DatasetORM.id)
+                .outerjoin(DatasetORM, TrainingJobORM.dataset_id == DatasetORM.id)
+                .outerjoin(
+                    DatasetCollectionORM,
+                    TrainingJobORM.collection_id == DatasetCollectionORM.id,
+                )
                 .outerjoin(UserORM, UserORM.id == TrainingJobORM.created_by)
                 .where(ArtifactORM.id == artifact_id)
                 .where(ArtifactORM.kind == "model")
@@ -180,7 +216,7 @@ class ModelArtifactRepository:
             row = (await session.execute(stmt)).first()
             if row is None:
                 return None
-            artifact, job, dataset, user_name, user_email = row
+            artifact, job, dataset, collection, user_name, user_email = row
             artifact.name = name
             await session.commit()
             return Model(
@@ -195,7 +231,10 @@ class ModelArtifactRepository:
                 created_at=artifact.created_at,
                 job_id=_assert_str(artifact.job_id),
                 dataset_id=job.dataset_id,
-                dataset_name=dataset.name,
+                dataset_name=dataset.name if dataset is not None else None,
+                collection_id=job.collection_id,
+                collection_revision_id=job.collection_revision_id,
+                collection_name=collection.name if collection is not None else None,
                 trainer_id=job.trainer_id,
                 trainer_name=job.trainer_id,
                 created_by=job.created_by,

@@ -32,6 +32,7 @@ if TYPE_CHECKING:
     from app.modules.agent.container import AgentContext
     from app.modules.auth.container import AuthContext
     from app.modules.dashboard.container import DashboardContext
+    from app.modules.dataset_collections.container import DatasetCollectionsContext
     from app.modules.datasets.container import DatasetsContext
     from app.modules.models.container import ModelsContext
     from app.modules.prediction.container import PredictionContext
@@ -79,6 +80,7 @@ class AppContext:
 
     # Module contexts — all optional, filled by composition root
     datasets: DatasetsContext | None = None
+    dataset_collections: DatasetCollectionsContext | None = None
     prediction: PredictionContext | None = None
     training: TrainingContext | None = None
     storage: StorageContext | None = None

@@ -52,6 +52,9 @@ class Model(ArtifactRef):
     job_id: str
     dataset_id: str | None = None
     dataset_name: str | None = None
+    collection_id: str | None = None
+    collection_revision_id: str | None = None
+    collection_name: str | None = None
     trainer_id: str | None = None
     trainer_name: str | None = None
     created_by: str = "system"
@@ -115,6 +118,8 @@ class TrainingJob(BaseModel):
     # ON DELETE SET NULL, so read models must preserve that state instead of
     # failing every job-list query after a dataset is removed.
     dataset_id: str | None
+    collection_id: str | None = None
+    collection_revision_id: str | None = None
     trainer_id: str
     status: JobStatus = JobStatus.QUEUED
     created_by: str
@@ -232,6 +237,8 @@ class PredictionJob(BaseModel):
     # See TrainingJob.dataset_id: prediction history is retained after the
     # source dataset is deleted.
     dataset_id: str | None
+    collection_id: str | None = None
+    collection_revision_id: str | None = None
     model_id: str
     status: JobStatus = JobStatus.QUEUED
     created_by: str
