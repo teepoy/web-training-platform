@@ -14,15 +14,15 @@
 
 平台分为五个主要运行层：
 
-| 层                   | 包                                                   | 职责                                                                                             | 禁止事项                                                        |
-| -------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------ | --------------------------------------------------------------- |
-| Control plane        | `apps/api`                                           | HTTP API、权限、业务参数校验、catalog metadata、任务创建、状态与结果持久化、runtime service 调度 | API route 不执行训练/预测 callable                              |
-| Runtime services     | `services/*`                                         | out-of-process trainer、predictor、image/parser/upstream adapter 等重依赖运行时                  | 不 import `apps/api` 内部 service/repository/ORM/FastAPI router |
-| Data plane interface | API 暴露的窄接口 / manifest / object storage handoff | 向 runtime services 提供 dataset view、artifact、prediction commit、progress report 等稳定边界   | 不暴露 API module 内部对象或把内部 Python service 当 SDK 使用   |
+| 层                   | 包                                                   | 职责                                                                                            | 禁止事项                                                        |
+| -------------------- | ---------------------------------------------------- | ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| Control plane        | `apps/api`                                           | HTTP API、权限、业务参数校验、runtime capability 查询、任务创建、状态与结果持久化、runtime 调度 | API route 不执行训练/预测 callable                              |
+| Runtime services     | `services/*`                                         | out-of-process trainer、predictor、image/parser/upstream adapter 等重依赖运行时                 | 不 import `apps/api` 内部 service/repository/ORM/FastAPI router |
+| Data plane interface | API 暴露的窄接口 / manifest / object storage handoff | 向 runtime services 提供 dataset view、artifact、prediction commit、progress report 等稳定边界  | 不暴露 API module 内部对象或把内部 Python service 当 SDK 使用   |
 
 ### Runtime Service 边界
 
-训练、预测、嵌入等带 Torch/CUDA/大型图像依赖的执行逻辑属于 out-of-process runtime services，不属于 API 进程。API 只负责 control plane：创建任务、校验权限和参数、将 catalog entry 路由到 Prefect deployment、持久化业务状态、提供前端查询表面。
+训练、预测、嵌入等带 Torch/CUDA/大型图像依赖的执行逻辑属于 runtime worker/service，不在 HTTP route 请求路径执行。API control plane 负责创建任务、校验权限和参数、按 runtime route 提交执行、持久化业务状态和提供前端查询表面。当前 SC compatibility worker 的轻量注册函数可以位于 `apps/api/app/modules/sc`；重 ML 依赖仍只在被选中的注册函数内延迟 import，不得进入 HTTP server image 的必需依赖。
 
 - `libs/ml` 是可选的同进程 ML kernel/data-loading library，不是 transport
   contract。API-local compatibility runtime 只能在选中的 executable callable 内
@@ -92,7 +92,9 @@ API 可以通过调度器或 runtime service client 创建后台任务、查询�
 
 ## 3. Runtime 与任务状态
 
-后台编排系统是运行时执行状态来源。API 是产品业务状态事实来源。前端只通过平台 API 查询任务，不直接消费 Prefect、service queue、runtime service 的内部 payload。
+后台执行系统是运行时执行状态来源。API 是产品业务状态事实来源。前端只通过平台 API 查询任务，不直接消费 Prefect、service queue、runtime service 的内部 payload。Prefect 是当前 deployment transport 和 execution-state backend，不是 trainer/predictor 注册模型的必需抽象。
+
+通用层不定义训练/预测步骤图、数据集构建流程、materialization 流程或 prediction chunk 策略。它只提供 submission/dispatch、runtime context 构建、执行入口和平台任务状态接线。业务操作如需组合 train + predict，由拥有该算法的 module 注册一个组合 callable，不由中心 orchestration service 推断步骤。
 
 长任务状态边界：
 
@@ -173,21 +175,25 @@ Label Studio 是人工标注界面和临时同步界面，不是平台 predictio
 
 - View 使用 `@view` 注册。
 - Dataset type 使用 dataset registry 和 per-type adapter 注册。
-- 版本化 view contract 是 materializer 与 trainer/predictor 的唯一数据兼容边界。
+- 版本化 view contract 是 dataset 与 trainer/predictor 的数据兼容边界。
   每个 view descriptor 同时声明稳定 `view_id`、canonical data-plane contract 和
   schema version；不同版本必须是不同 descriptor，可以同时存在。
 - 每个版本化 view 由一个 metadata-only `ViewDefinition` 描述。Definition 同时保存
   `ViewContractRef`、row type import path 和 Arrow schema import path；`@view(id=...)`
   只绑定 catalog ID，不允许在 row class 再复制 name、annotation flag 或 contract。
   Data-plane schema registry 从 definition 构建，不维护第二份 view-to-schema map。
-- View definition、materializer、trainer、predictor metadata 和 executable routing
-  必须通过显式的 module-owned registration 进入中心 registry/catalog。一个算法注册
-  可以作为 product metadata、executable binding 和 Prefect deployment routing 的共同
-  声明来源；中心层负责唯一性、版本、引用和配对校验，不依赖目录扫描发现能力。
-- Materializer 声明自己产生的精确 `ViewContractRef`，以及支持的 purpose、format
-  和 storage mode。Trainer/predictor 只声明消费的精确 `ViewContractRef`，不直接
-  绑定具体 materializer；调用方按 view + purpose + storage mode 显式选择
-  materializer，没有匹配项时失败，不允许换 view fallback。
+- Trainer/predictor 通过 module-owned `RuntimeRouter` decorator 注册。每个
+  注册项在同一处声明 metadata、executable callable、`algo_id`/版本和
+  operation routes；中心 `RuntimeCapabilityCatalog` 只聚合这些 router 并校验
+  ID 唯一性、view/model contract、trainer/predictor 配对与 route 完整性。
+  不再保留 metadata-only trainer/predictor catalog、第二份 executable registry、
+  `trainer = register_trainer` / `predictor = register_predictor` 全局别名或目录扫描。
+- 被注册的算法函数拥有自己的 dataset construction、view projection、
+  materialization/loading、prediction chunk/batch、输出持久化和错误语义。
+  平台不设置中心 materializer registry，不按 view + purpose + storage mode 为
+  所有算法统一选择，也不强制统一的 train/predict 输入输出 DTO。
+  通用 runtime context 只传递 job/dataset/model/org identity、请求选项与可用的
+  平台上下文；具体 module 再选择 storage/domain/data-plane port。
 - Trainer 必须显式声明一个或多个配对 predictor。Train-and-predict 在只有一个配对
   predictor 时可以确定性解析；存在多个配对项时必须由请求显式选择，禁止根据同名
   ID、目录名或模型名猜测。
@@ -195,20 +201,24 @@ Label Studio 是人工标注界面和临时同步界面，不是平台 predictio
   `ModelContractRef`。配对关系同时要求 view contract 和 model contract 精确匹配；
   训练产物必须持久化 model contract/version，预测提交时必须验证，不能只凭
   `trainer_id` 推断模型可加载。
-- API 侧 trainer/predictor catalog 只保存 metadata，用于列表展示、参数 schema、
-  权限与兼容性校验。
-- Prefect deployment 是 executable capability 边界。算法局部模块可以共同维护 metadata、
-  executable binding、Prefect task/flow、算法版本和默认 deployment route；中心 registry
-  从同一注册声明生成 catalog 和 deployment routing，已有的 view/model contract 不得在
-  route 中重复。
+- `RuntimeRouter` 注册项是 API 侧 capability 查询、兼容性校验和本地
+  compatibility execution 的共同来源。注册模块可以被 API 进程导入，
+  但不得在 import 时加载 Torch/CUDA/模型权重；重依赖位于 `libs/ml`
+  或 external runtime，并在被选中的 callable 内延迟 import。
+- Runtime route 表达 operation 的 deployment 寻址、resource profile、owner、
+  missing-image policy 和结果 contract，用于 submission、deployment seed 和环境
+  override；它不表达算法内部步骤或 chunk 拓扑。已有的 view/model
+  contract 从注册 metadata 派生，不在 route 中重复声明。
   环境配置只能覆盖 deployment name、resource profile、owner 和 code version。
 - Runtime route 必须显式声明 `owner=local_compat|external`。API 只 seed/update
   `local_compat` deployment；`external` deployment 由 runtime service 拥有，API
   只能解析和调用，禁止覆盖其 entrypoint/work pool。
 - Training/prediction job dispatch 根据 catalog id、数据 contract、资源 profile 和
   module-owned registration 创建 Prefect flow run；环境配置只提供部署差异覆盖。
-  算法可以分别提供 train、predict、train-and-predict flow，也可以由更高层 flow 组合；
-  flow 的层级、数量和 Python 模块位置不属于核心设计约束。
+  Prefect wrapper 只校验 route envelope、构建 runtime context 并调用已注册 callable。
+  如某算法需要 `@task`/`@flow`，它们必须在被注册函数内显式定义/调用
+  或与该函数同 module 声明。禁止恢复通用 `predict-chunk`、通用
+  materialize task 或中心 train-and-predict 步骤编排。
   第一版 resource profile 只有 `cpu` / `gpu`。不要保留 `container.gpu_worker`
   这类过期执行入口，也不要在通用 API route/service 中硬连某个具体 ML 实现作为扩展机制。
 - **Mapper** 使用全局 `MapperRegistry`（`app.core.mapper_registry.mapper`）注册类型间转换函数。`@mapper.register(from_types, to_types)` 接受 type 或 ClassVar 字符串，注册笛卡尔积 key。调用方通过 `mapper.get_mapper(src, dst)` 获取转换函数，不再调用 model 类上的 `from_sample` / `to_sample` / `get_adapter` / `as_*` 方法。每个 module 的 mapper 统一放在 `<module>/domain/mapper.py`，由 `app/registrations.py` 触发注册副作用。Mapper 函数必须包含完整转换逻辑，不允许在 model 类上保留内联转换方法；model 类只保留字段定义和 ClassVar 标识。

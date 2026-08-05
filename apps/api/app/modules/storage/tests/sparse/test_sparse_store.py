@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from app.shared.domain.runtime import ArtifactStorage
+from app.shared.domain.protocols import ArtifactStorage
 from app.modules.storage.domain.sparse.models import DatasetManifest, ShardEntry
 from app.modules.storage.domain.sparse.store import DatasetPayloadStore
 

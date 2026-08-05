@@ -93,16 +93,14 @@ class GlobalAgent:
         In-memory sidebar panel state (for classify page).
     repository:
         SQL repository for data access.
-    orchestrator:
-        Training job orchestrator.
-    prediction_orchestrator:
-        Prediction job orchestrator.
+    training_submission:
+        Training job submission service.
+    prediction_submission:
+        Prediction job submission service.
     scheduler_service:
         Schedule CRUD.
     model_service:
         Model listing.
-    trainer_registry:
-        Trainer listing/lookup.
     label_studio_client:
         Label Studio project creation (needed for create_dataset).
     """
@@ -119,8 +117,8 @@ class GlobalAgent:
         training_repository: TrainingRepository,
         prediction_repository: PredictionRepository,
         dataset_storage_factory: DatasetStorageFactoryPort,
-        orchestrator: TrainingExecutionPort,
-        prediction_orchestrator: PredictionExecutionPort,
+        training_submission: TrainingExecutionPort,
+        prediction_submission: PredictionExecutionPort,
         scheduler_service: ScheduleManagementPort,
         model_service: ModelCatalogPort,
         label_studio_client: LabelStudioClient,
@@ -134,8 +132,8 @@ class GlobalAgent:
         self._training_repository = training_repository
         self._prediction_repository = prediction_repository
         self._dataset_storage_factory = dataset_storage_factory
-        self._orchestrator = orchestrator
-        self._prediction_orchestrator = prediction_orchestrator
+        self._training_submission = training_submission
+        self._prediction_submission = prediction_submission
         self._scheduler_service = scheduler_service
         self._model_service = model_service
         self._label_studio_client = label_studio_client
@@ -389,7 +387,7 @@ class GlobalAgent:
                     dataset_id=args.get("dataset_id", ""),
                     trainer_id=args.get("trainer_id", ""),
                     org_id=org_id,
-                    orchestrator=self._orchestrator,
+                    submission=self._training_submission,
                     user_id=user_id,
                 )
             if name == "run_predictions":
@@ -398,7 +396,7 @@ class GlobalAgent:
                     model_id=args.get("model_id", ""),
                     target=args.get("target"),
                     org_id=org_id,
-                    prediction_orchestrator=self._prediction_orchestrator,
+                    submission=self._prediction_submission,
                     user_id=user_id,
                 )
             if name == "create_schedule":
@@ -415,7 +413,7 @@ class GlobalAgent:
             if name == "cancel_training_job":
                 return await execute_cancel_training_job(
                     job_id=args.get("job_id", ""),
-                    orchestrator=self._orchestrator,
+                    submission=self._training_submission,
                     repository=self._training_repository,
                     org_id=org_id,
                 )

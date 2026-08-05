@@ -90,7 +90,7 @@ def test_environment_cannot_override_capability_contracts() -> None:
 
 
 def test_unknown_runtime_capability_fails() -> None:
-    with pytest.raises(KeyError, match="Unknown runtime capability"):
+    with pytest.raises(KeyError, match="Unknown trainer capability"):
         ConfigRuntimeRoutingService(_config()).training_route("missing")
 
 

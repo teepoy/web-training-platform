@@ -338,8 +338,9 @@ def test_production_code_imports_materializers_from_materializer_module() -> Non
 def test_api_runtime_contracts_do_not_import_web_or_db_infra() -> None:
     repo_root = APP_ROOT.parents[2]
     roots = [
-        APP_ROOT / "shared" / "domain" / "runtime.py",
         APP_ROOT / "shared" / "domain" / "data_plane.py",
+        APP_ROOT / "modules" / "runtime" / "domain" / "context.py",
+        APP_ROOT / "modules" / "runtime" / "domain" / "executables.py",
     ]
     forbidden_prefixes = (
         "fastapi",

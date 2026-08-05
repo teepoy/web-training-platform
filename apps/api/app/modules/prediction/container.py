@@ -13,8 +13,8 @@ from app.modules.prediction.adapter.repositories.repository import (
 from app.modules.runtime.port.local import RuntimeRoutingPort
 from app.modules.storage.port.local import DatasetStorageFactoryPort
 from app.shared.context import SharedInfra
-from app.modules.prediction.app.services.prediction_orchestrator import (
-    PredictionOrchestrator,
+from app.modules.prediction.app.services.submission_service import (
+    PredictionSubmissionService,
 )
 from app.modules.prediction.app.services.prediction_query import PredictionQueryService
 from app.modules.prediction.app.services.prediction_review import (
@@ -40,7 +40,7 @@ class PredictionContext:
     prediction_runtime_service: PredictionRuntimeService
     prediction_query_service: PredictionQueryService
     prediction_review_service: PredictionReviewService
-    prediction_orchestrator: PredictionOrchestrator
+    prediction_submission: PredictionSubmissionService
     dataset_service: IDatasetService
     dataset_storage_factory: DatasetStorageFactoryPort
 
@@ -73,7 +73,7 @@ def init_prediction(
         dataset_reader=dataset_reader,
         model_catalog=model_catalog,
     )
-    orchestrator = PredictionOrchestrator(
+    submission = PredictionSubmissionService(
         prefect_client=shared.prefect_client,
         repository=prediction_repository,
         runtime_router=runtime_router,
@@ -85,7 +85,7 @@ def init_prediction(
         prediction_runtime_service=runtime_service,
         prediction_query_service=query_service,
         prediction_review_service=review_service,
-        prediction_orchestrator=orchestrator,
+        prediction_submission=submission,
         dataset_service=dataset_service,
         dataset_storage_factory=dataset_storage_factory,
     )
@@ -150,10 +150,10 @@ class PredictionModule(Module):
 
     @provider
     @singleton
-    def provide_prediction_orchestrator(
+    def provide_prediction_submission(
         self, context: PredictionContext
-    ) -> PredictionOrchestrator:
-        return context.prediction_orchestrator
+    ) -> PredictionSubmissionService:
+        return context.prediction_submission
 
     @provider
     @singleton
@@ -188,4 +188,4 @@ class PredictionModule(Module):
     def provide_prediction_execution(
         self, context: PredictionContext
     ) -> PredictionExecutionPort:
-        return context.prediction_orchestrator
+        return context.prediction_submission

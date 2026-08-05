@@ -4,102 +4,48 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from app.modules.prediction.domain.repository import PredictionRepository
-from app.modules.training.domain.repository import TrainingRepository
-from app.shared.api.schemas import JobStatus, PredictionJob
-from app.workflows.train_predict import predict_stage
-
-
-class _Injector:
-    def __init__(
-        self,
-        prediction_repository: PredictionRepository,
-        training_repository: TrainingRepository,
-    ) -> None:
-        self._prediction_repository = prediction_repository
-        self._training_repository = training_repository
-
-    def get(self, interface: object) -> object:
-        if interface is PredictionRepository:
-            return self._prediction_repository
-        if interface is TrainingRepository:
-            return self._training_repository
-        raise LookupError(interface)
+from app.modules.runtime.domain.context import TrainAndPredictRuntimeContext
+from app.modules.runtime.domain.executables import RuntimeOperation
+from app.workflows.train_predict import train_and_predict_flow
 
 
 @pytest.mark.asyncio
-async def test_predict_failure_preserves_model_and_marks_prediction_failed() -> None:
-    prediction_repository = Mock(spec=PredictionRepository)
-    prediction_repository.create_prediction_job = AsyncMock()
-    prediction_repository.add_prediction_event = AsyncMock()
-    prediction_repository.update_prediction_job_status = AsyncMock()
-    training_repository = Mock(spec=TrainingRepository)
-    training_repository.add_event = AsyncMock()
-
-    prediction_job = PredictionJob(
-        id="prediction-job-1",
-        dataset_id="dataset-1",
-        model_id="model-1",
-        created_by="user-1",
-        org_id="org-1",
-        summary={"source_training_job_id": "training-job-1"},
-    )
-    prediction_repository.create_prediction_job.return_value = prediction_job
-
-    context = Mock()
-    context.injector = _Injector(
-        prediction_repository,
-        training_repository,
-    )
-
+async def test_train_and_predict_flow_invokes_registered_workflow() -> None:
+    app_context = object()
     with (
         patch(
             "app.workflows.train_predict.build_flow_app_context",
-            return_value=context,
+            return_value=app_context,
         ),
         patch(
             "app.workflows.train_predict.close_flow_app_context",
             new_callable=AsyncMock,
         ),
         patch(
-            "app.workflows.train_predict._run_prediction_job_with_context",
+            "app.workflows.train_predict.runtime_catalog.invoke",
             new_callable=AsyncMock,
-            side_effect=RuntimeError("prediction runtime failed"),
-        ),
+            return_value={"model_id": "model-1"},
+        ) as invoke,
         patch(
             "app.workflows.train_predict.get_run_logger",
             return_value=Mock(),
         ),
     ):
-        with pytest.raises(RuntimeError, match="prediction runtime failed"):
-            await predict_stage.fn(
-                source_training_job_id="training-job-1",
-                dataset_id="dataset-1",
-                model_id="model-1",
-                org_id="org-1",
-                created_by="user-1",
-                target="image_classification",
-                model_version=None,
-                sample_ids=None,
-                sample_filter=None,
-                prompt=None,
-                predictor_id="resnet50-sc-v1",
-            )
+        result = await train_and_predict_flow.fn(
+            job_id="job-1",
+            dataset_id="dataset-1",
+            trainer_id="resnet50-sc-v1",
+            org_id="org-1",
+            predictor_id="resnet50-sc-v1",
+            catalog_id="resnet50-sc-v1",
+            input_contract="sc.patch_image.v1",
+            owner="local_compat",
+            missing_image_policy="skip",
+        )
 
-    prediction_repository.update_prediction_job_status.assert_awaited_once()
-    submitted_prediction_job = (
-        prediction_repository.create_prediction_job.await_args.args[0]
-    )
-    assert submitted_prediction_job.summary["result_pool"] == "validation"
-    status_call = prediction_repository.update_prediction_job_status.await_args
-    assert status_call.args[:2] == ("prediction-job-1", JobStatus.FAILED)
-    assert status_call.kwargs["summary"]["model_id"] == "model-1"
-    assert status_call.kwargs["summary"]["retryable"] is True
-
-    training_events = [
-        call.args[0] for call in training_repository.add_event.await_args_list
-    ]
-    failure_event = training_events[-1]
-    assert failure_event.payload["status"] == JobStatus.COMPLETED.value
-    assert failure_event.payload["model_id"] == "model-1"
-    assert failure_event.payload["prediction_status"] == JobStatus.FAILED.value
+    assert result == {"model_id": "model-1"}
+    assert invoke.await_args is not None
+    operation, trainer_id, context = invoke.await_args.args
+    assert operation is RuntimeOperation.TRAIN_AND_PREDICT
+    assert trainer_id == "resnet50-sc-v1"
+    assert isinstance(context, TrainAndPredictRuntimeContext)

@@ -18,10 +18,5 @@ class RuntimeRoutingPort(Protocol):
         trainer_id: str,
     ) -> RuntimeDeploymentRoute: ...
 
-    def materialization_route(
-        self,
-        materializer_id: str,
-    ) -> RuntimeDeploymentRoute: ...
-
 
 __all__ = ["RuntimeRoutingPort"]

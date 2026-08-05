@@ -6,13 +6,12 @@ from typing import Any
 from omegaconf import OmegaConf
 from pydantic import BaseModel
 
-from app.modules.runtime.catalog import runtime_capabilities
+from app.modules.runtime.catalog import runtime_catalog
 from app.modules.runtime.domain.executables import (
     RuntimeCapabilityCatalog,
     RuntimeOperation,
 )
 from app.modules.runtime.domain.routing import RuntimeDeploymentRoute
-from app.modules.types import catalog
 
 _OVERRIDABLE_ROUTE_FIELDS = frozenset(
     {"deployment", "resource_profile", "owner", "code_version"}
@@ -26,7 +25,7 @@ class ConfigRuntimeRoutingService:
         self,
         config: Any,
         *,
-        capability_catalog: RuntimeCapabilityCatalog = runtime_capabilities,
+        capability_catalog: RuntimeCapabilityCatalog = runtime_catalog,
     ) -> None:
         self._routing = _get_config_value(config, "runtime_routing") or {}
         self._capabilities = capability_catalog
@@ -39,14 +38,6 @@ class ConfigRuntimeRoutingService:
 
     def train_and_predict_route(self, trainer_id: str) -> RuntimeDeploymentRoute:
         return self._route(RuntimeOperation.TRAIN_AND_PREDICT, trainer_id)
-
-    def materialization_route(
-        self,
-        materializer_id: str,
-    ) -> RuntimeDeploymentRoute:
-        raise KeyError(
-            f"No module-owned materialization runtime route for {materializer_id!r}"
-        )
 
     def validate_catalog_routes(self) -> None:
         errors: list[str] = []
@@ -63,18 +54,18 @@ class ConfigRuntimeRoutingService:
         operation: RuntimeOperation,
         catalog_id: str,
     ) -> RuntimeDeploymentRoute:
-        executable = self._capabilities.executable(catalog_id)
+        registration = self._capabilities.registration_for(operation, catalog_id)
         definition = self._capabilities.route(operation, catalog_id)
         if operation is RuntimeOperation.PREDICT:
-            metadata = catalog.get_predictor_meta(catalog_id)
+            metadata = self._capabilities.get_predictor_meta(catalog_id)
             input_contract = metadata.input_view.contract
         else:
-            metadata = catalog.get_trainer_meta(catalog_id)
+            metadata = self._capabilities.get_trainer_meta(catalog_id)
             input_contract = metadata.input_view.contract
 
         output_contract = definition.output_contract
         if output_contract == "trainer_model":
-            trainer = catalog.get_trainer_meta(catalog_id)
+            trainer = self._capabilities.get_trainer_meta(catalog_id)
             output_contract = trainer.output_model.contract
 
         raw: dict[str, Any] = {
@@ -83,8 +74,8 @@ class ConfigRuntimeRoutingService:
             "output_contract": output_contract,
             "resource_profile": definition.resource_profile,
             "owner": definition.owner,
-            "algo_id": executable.algo_id,
-            "algo_version": executable.algo_version,
+            "algo_id": registration.algo_id,
+            "algo_version": registration.algo_version,
             "missing_image_policy": definition.missing_image_policy,
         }
         override = self._override(operation.value, catalog_id)

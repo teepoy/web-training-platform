@@ -1,49 +1,29 @@
 from __future__ import annotations
 
-from app.modules.runtime.app.services.executable_loader import (
-    list_local_executable_bindings,
-    validate_local_executable_bindings,
-)
-from app.modules.runtime.domain.executables import (
-    ExecutableKind,
-)
-from app.runtime_compat.materializers import (
-    list_local_materializer_bindings,
-    validate_local_materializer_bindings,
-)
-from app.modules.types import catalog
+from app.modules.runtime.catalog import runtime_catalog
+from app.modules.runtime.domain.executables import RuntimeOperation
 
 
-def test_worker_local_bindings_are_separate_from_catalog_metadata() -> None:
-    validate_local_executable_bindings()
-
-    binding_keys = {
-        (binding.kind, binding.catalog_id)
-        for binding in list_local_executable_bindings()
+def test_runtime_catalog_is_the_single_trainer_predictor_source() -> None:
+    assert set(runtime_catalog.list_trainer_ids()) == {
+        "resnet50-sc-v1",
+        "yolo-sc-v1",
     }
-    assert binding_keys == {
-        (ExecutableKind.TRAINER, "resnet50-sc-v1"),
-        (ExecutableKind.TRAINER, "yolo-sc-v1"),
-        (ExecutableKind.PREDICTOR, "resnet50-sc-v1"),
-        (ExecutableKind.PREDICTOR, "yolo-sc-v1"),
-    }
-    assert set(catalog.list_predictor_ids()) == {
-        binding.catalog_id
-        for binding in list_local_executable_bindings()
-        if binding.kind is ExecutableKind.PREDICTOR
+    assert set(runtime_catalog.list_predictor_ids()) == {
+        "resnet50-sc-v1",
+        "yolo-sc-v1",
     }
 
 
-def test_trainers_declare_explicit_predictor_pairing() -> None:
-    for trainer in catalog.list_trainers():
-        predictor = catalog.get_predictor_meta(trainer.predictor_id)
-        assert predictor.view_id == trainer.view_id
-        assert predictor.input_model == trainer.output_model
-
-
-def test_local_materializer_bindings_reference_catalog_metadata() -> None:
-    validate_local_materializer_bindings()
-
-    assert {
-        binding.catalog_id for binding in list_local_materializer_bindings()
-    } == {"sc-inspection-patch-image-v1"}
+def test_registered_capabilities_include_metadata_callables_and_routes() -> None:
+    for trainer_id in runtime_catalog.list_trainer_ids():
+        trainer = runtime_catalog.get_trainer(trainer_id)
+        predictor = runtime_catalog.get_predictor(trainer.metadata.predictor_id)
+        assert callable(trainer.callable)
+        assert callable(trainer.train_and_predict_callable)
+        assert callable(predictor.callable)
+        assert predictor.metadata.input_view == trainer.metadata.input_view
+        assert predictor.metadata.input_model == trainer.metadata.output_model
+        assert runtime_catalog.route(RuntimeOperation.TRAIN, trainer_id)
+        assert runtime_catalog.route(RuntimeOperation.TRAIN_AND_PREDICT, trainer_id)
+        assert runtime_catalog.route(RuntimeOperation.PREDICT, predictor.id)

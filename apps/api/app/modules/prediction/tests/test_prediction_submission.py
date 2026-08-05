@@ -5,8 +5,8 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from app.modules.prediction.app.services.prediction_orchestrator import (
-    PredictionOrchestrator,
+from app.modules.prediction.app.services.submission_service import (
+    PredictionSubmissionService,
 )
 from app.modules.prediction.domain.submission import (
     PredictionJobCommand,
@@ -26,7 +26,7 @@ def _command() -> PredictionJobCommand:
     )
 
 
-def _orchestrator(*, deployment_id: str | None = "deployment-1"):
+def _submission(*, deployment_id: str | None = "deployment-1"):
     dataset_reader = Mock()
     dataset_reader.get_dataset = AsyncMock(
         return_value=SimpleNamespace(view_types=["patch_image_v1"])
@@ -62,32 +62,32 @@ def _orchestrator(*, deployment_id: str | None = "deployment-1"):
         resource_profile="gpu",
         owner="local_compat",
     )
-    orchestrator = PredictionOrchestrator(
+    submission = PredictionSubmissionService(
         prefect_client=prefect_client,
         repository=repository,
         runtime_router=runtime_router,
         dataset_reader=dataset_reader,
         model_catalog=model_catalog,
     )
-    return orchestrator, repository, prefect_client
+    return submission, repository, prefect_client
 
 
 @pytest.mark.asyncio
 async def test_submission_validates_runtime_before_persisting_job() -> None:
-    orchestrator, repository, _prefect_client = _orchestrator(deployment_id=None)
+    submission, repository, _prefect_client = _submission(deployment_id=None)
 
     with pytest.raises(PredictionRuntimeUnavailableError, match="not registered"):
-        await orchestrator.submit_job(_command())
+        await submission.submit_job(_command())
 
     repository.create_prediction_job.assert_not_awaited()
 
 
 @pytest.mark.asyncio
 async def test_submission_builds_runtime_parameters_from_command_and_route() -> None:
-    orchestrator, repository, prefect_client = _orchestrator()
-    orchestrator._poll_run = AsyncMock()
+    submission, repository, prefect_client = _submission()
+    submission._poll_run = AsyncMock()
 
-    job = await orchestrator.submit_job(_command())
+    job = await submission.submit_job(_command())
 
     repository.create_prediction_job.assert_awaited_once()
     prefect_client.create_flow_run_from_deployment.assert_awaited_once()

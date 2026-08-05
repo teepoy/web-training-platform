@@ -120,10 +120,6 @@ agent:
   metadata_sample_size: 100
 
 prediction:
-  sparse_chunk_size: 32
-  progress_flush_rows: 5000
-  progress_flush_seconds: 5.0
-  write_batch_rows: 5000
   compaction_memory_limit: 512MiB
   compaction_temp_limit: 4GiB
   compaction_row_group_rows: 100000
@@ -144,6 +140,9 @@ sc:
     materialization_batch_rows: 512
     materialization_max_error_records: 1000
     prediction_max_materialized_bytes: 17179869184
+    prediction_progress_flush_rows: 5000
+    prediction_progress_flush_seconds: 5.0
+    prediction_write_batch_rows: 5000
     training_max_rows: 100000
     training_max_materialized_bytes: 8589934592
   data_provider:

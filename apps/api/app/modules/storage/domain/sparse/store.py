@@ -7,7 +7,7 @@ import hashlib
 from collections import OrderedDict
 from pathlib import Path
 
-from app.shared.domain.runtime import ArtifactStorage
+from app.shared.domain.protocols import ArtifactStorage
 from app.modules.storage.domain.sparse.models import (
     DatasetManifest,
     SampleLocator,

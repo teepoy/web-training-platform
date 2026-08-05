@@ -1,254 +1,147 @@
 # Runtime Registration Contract
 
-Status: draft
-Date: 2026-06-18
+Status: accepted
+Date: 2026-08-05
 
-This contract defines how trainer and predictor capabilities are registered after splitting execution into runtime services while keeping Prefect as the execution engine.
+This contract defines one registration model for trainer and predictor metadata,
+execution, algorithm identity, and deployment routing. `CORE_DESIGNS.md` is
+authoritative.
 
-## Goals
+## One Module-Owned Registration
 
-- Keep Prefect as the execution engine.
-- Keep API trainer/predictor catalog free of executable callables and heavy ML imports.
-- Use Prefect deployments as the runtime capability boundary.
-- Route jobs through stable data-plane contracts and object-store manifests.
-- Keep executable binding, algorithm identity, and default routes in one
-  module-owned runtime capability descriptor.
-- Limit environment configuration to deployment-specific overrides.
+Each algorithm-owning module exposes a `RuntimeRouter`, analogous to an HTTP
+router. Decorators register complete capabilities:
 
-## Core Model
+```python
+SC_RUNTIME_ROUTER = RuntimeRouter()
 
-Runtime registration has three surfaces:
+@SC_RUNTIME_ROUTER.trainer(
+    id="resnet50-sc-v1",
+    name="ResNet-50 SC Defect Classifier",
+    input_view=SC_PATCH_IMAGE_V1,
+    output_model=SC_RESNET_MODEL_V1,
+    predictor_ids=("resnet50-sc-v1",),
+    algo_id="resnet50-sc",
+    algo_version="1",
+    routes=(TRAIN_ROUTE, TRAIN_AND_PREDICT_ROUTE),
+)
+async def train(ctx: TrainingRuntimeContext) -> object:
+    ...
+```
 
-1. **API Catalog**
+A trainer registration contains:
 
-   Product/control-plane metadata only:
-   - trainer/predictor id
-   - display name
-   - parameter schema
-   - supported task/view/data contracts
-   - compatibility and authorization rules
-   - default routing hints
+- product ID and display metadata;
+- exact input `ViewContractRef`;
+- output `ModelContractRef` and explicit predictor IDs;
+- algorithm ID/version;
+- executable callable;
+- operation routes, and optionally a registered train-and-predict callable.
 
-   The API catalog must not import executable trainer/predictor callables.
-   Catalog entries are typed Python metadata descriptors so parameter and
-   compatibility validation can share the API type system. They are not YAML
-   presets and do not identify importable implementation modules.
+A predictor registration contains the corresponding input view/model contracts,
+algorithm identity, executable callable, and prediction route.
 
-   The catalog is assembled from module-owned `CapabilityBundle` declarations.
-   This allows a domain module to keep its declarations nearby while retaining
-   one central validation surface. A bundle may declare:
-   - versioned view definitions, including canonical row type and Arrow schema
-     import paths;
-   - materializers that produce an exact view version;
-   - trainers and predictors that consume an exact view version and matching
-     versioned model contract;
-   - explicit trainer-to-predictor pairings.
+`RuntimeCapabilityCatalog` aggregates module routers and is the single query
+surface. It validates duplicate IDs, known views, trainer/predictor pairings,
+model contracts, and required routes. Do not create a metadata-only
+trainer/predictor catalog, a second executable registry, global
+`register_trainer`/`register_predictor` aliases, YAML capability presets, or
+filesystem discovery.
 
-   Registration is explicit. Filesystem scanning and executable import side
-   effects are not capability discovery mechanisms. API startup imports view
-   row modules from the paths in the explicit catalog, so there is no second
-   hand-maintained view import list.
+View definitions remain metadata-only in the type catalog because they also
+bind canonical row and Arrow schemas. The split applies to view schema
+registration, not to trainer/predictor capabilities.
 
-2. **Prefect Deployment Routing**
+## What Routes Mean
 
-   Prefect deployments are the executable capability boundary.
+`RuntimeRouteDefinition` describes how the platform submits one registered
+operation:
 
-   A deployment represents an executable runtime capability such as:
-   - `train.sc-resnet.gpu`
-   - `predict.sc-resnet.gpu`
-   - `materialize.sc-patch-image.cpu`
+- operation (`train`, `predict`, or `train-and-predict`);
+- deployment name;
+- resource profile;
+- deployment owner (`local_compat` or `external`);
+- explicit missing-image policy;
+- output contract selection.
 
-   Deployment granularity is by capability and resource profile. A module-owned
-   runtime descriptor connects a product catalog ID to its lazy executable
-   binding, algorithm identity, and default routes. API dispatch resolves that
-   descriptor and then applies an optional environment override. DB-backed
-   overrides can come later if runtime routing needs UI editing, dynamic
-   rollout, or audit workflows.
+Routes serve submission, deployment seeding, observability, and environment
+deployment overrides. They do not describe the algorithm's internal steps,
+materialization pipeline, batching, chunking, or task graph.
 
-3. **Data Plane Contract**
+Environment configuration may override only deployment name, resource profile,
+owner, and code version. View/model contracts, algorithm identity, and failure
+policy remain code-owned. The API seeds `local_compat` deployments only;
+external runtime packages own `external` deployments.
 
-   Dataset input and result output cross a stable data-plane boundary:
-   - view contract id and schema version
-   - labels and image role requirements
-   - manifest format, preferably Parquet/Arrow plus signed refs for large data
-   - artifact output contract
-   - prediction writeback contract
-
-   Normative contract: `docs/architecture/data-plane-manifest-contract.md`.
-
-## Dispatch Flow
+## Dispatch
 
 ```text
-API receives train/predict request
-  -> resolve API catalog entry
-  -> validate params, auth, dataset compatibility
-  -> validate required data-plane view contract
-  -> resolve Prefect deployment routing
-  -> create platform job record
-  -> prepare or authorize input manifest / view request
-  -> create Prefect flow run with stable parameters
-  -> runtime reports progress and writes artifacts/predictions
-  -> API commits final product state
+request
+  -> resolve one RuntimeRouter registration
+  -> validate auth, dataset/view/model compatibility, and route availability
+  -> persist platform job
+  -> submit route to the configured execution backend
+  -> runtime host builds a narrow context
+  -> invoke the registered callable
 ```
 
-Prefect flow run parameters must be transport-stable:
+The current backend uses Prefect deployments, but Prefect is a submission and
+execution-state mechanism rather than a second capability registry. A
+repository-local Prefect wrapper only validates the route envelope, builds a
+runtime context, and invokes the selected registration.
 
-```json
-{
-  "job_id": "job_123",
-  "catalog_id": "sc-resnet-classifier",
-  "catalog_version": "1",
-  "params": {},
-  "input": {
-    "view_contract": "sc.patch_image.v1",
-    "manifest_ref": "s3://...",
-    "dataset_id": "ds_123"
-  },
-  "output": {
-    "artifact_contract": "model.bundle.v1",
-    "model_contract": "sc.resnet50.model.v1",
-    "prediction_contract": "sample.predictions.v1"
-  }
-}
-```
+Flow parameters remain transport-safe identifiers and values. Never pass
+repositories, ORM rows, injector containers, platform service instances, or
+Python callables as deployment parameters.
 
-Do not pass API service instances, repositories, ORM objects, `DatasetStorageAgg`, or Python callables as flow parameters.
+## Algorithm-Owned Data And Execution Strategy
 
-## Runtime Descriptor And Environment Overrides
+The registered callable owns all algorithm-specific execution decisions:
 
-Static runtime information is code-owned and unified in a module
-`RuntimeCapabilityBundle`:
+- dataset construction and sample selection;
+- storage/domain port selection;
+- view projection and materialization/loading;
+- image validation and failure semantics;
+- prediction batch/chunk/concurrency policy;
+- output persistence and progress cadence;
+- any internal task or flow topology.
 
-- product catalog ID;
-- lazy trainer/predictor module paths;
-- algorithm ID and version;
-- operation-specific default deployment, resource profile, owner, missing-image
-  policy, and output contract selection.
+The platform does not provide a global materializer registry or resolve a
+materializer by `(view, purpose, storage_mode)`. A module may inject and use its
+own materializer or data-plane client. No universal train/predict input or output
+DTO is required. Runtime contexts carry only relevant platform identity,
+request options, and access to the available platform context; the registered
+module chooses the concrete ports it needs.
 
-Input contracts and trainer model output contracts are resolved from the
-product capability catalog. They are not copied into the runtime descriptor or
-configuration.
+If Prefect `@task` or an algorithm-specific `@flow` is useful, declare and invoke
+it explicitly inside the registered callable or in the same algorithm module.
+Do not add generic `predict-chunk`, generic materialization tasks, or a central
+train-and-predict step graph.
 
-Environment YAML is optional and contains overrides only:
+## Import And Process Boundaries
 
-```yaml
-# yaml-language-server: $schema=./runtime-routing.schema.json
-runtime_routing:
-  training_routes:
-    resnet50-sc-v1:
-      deployment: train.sc-resnet.gpu
-      resource_profile: gpu
-      owner: external
-      code_version: "2026.07.31"
-```
+Registration modules must be import-safe. They may contain lightweight Python
+callables but must not import Torch, CUDA libraries, model weights, or other
+heavy optional dependencies at module import time. Local compatibility handlers
+load `ml_library` inside the selected callable. `libs/ml` must not import API
+internals.
 
-Overrides may contain only `deployment`, `resource_profile`, `owner`, and
-`code_version`. The schema is a code-reviewed guardrail for editors; Python
-parsing validates it before use. Static fields such as contracts, algorithm
-identity, and missing-image policy cannot be overridden.
+Production executables may move to `services/*`. An external runtime consumes
+generated OpenAPI/protobuf/Arrow/manifest contracts and must not import API
+services, repositories, ORM models, FastAPI dependencies, `AppContext`, or the
+API injector.
 
-The code-owned route must declare `owner`; an environment override may replace
-it. `local_compat` means the repository-local compatibility flow owns the
-deployment and the API may seed it in development. `external` means another
-runtime package owns deployment creation and executable code; the API routes
-to it but never imports or seeds it.
+## Required Validation
 
-SC executable module imports and routes are declared once in
-`app.modules.sc.runtime.descriptor`. Each executable definition contains its
-catalog ID, algorithm identity, lazy module paths to Torch-free adapters, and
-operation routes.
-Adapters load the optional `ml_library` package only after Prefect routing selects
-the capability. Catalog/listing/startup code never imports `ml_library`; Prefect
-deployments remain the executable boundary.
+CI must verify:
 
-## View And Materialization Relationships
-
-```text
-Dataset storage
-  -> materializer(view + version, purpose, storage mode)
-  -> DataPlaneManifest(view contract + schema version)
-  -> trainer or predictor consuming the same ViewContractRef
-```
-
-A view has two identities during the legacy API transition:
-
-- `view_id`, used by dataset adapters and API compatibility checks;
-- canonical data-plane `contract` plus `schema_version`, used in routing and
-  manifests.
-
-Both identities live in one `ViewContractRef`; call sites must not translate
-them through ad-hoc dictionaries. A future v2 is a new descriptor and may
-coexist with v1. A materializer cannot claim to produce an undeclared view
-version. Trainer/predictor pairing requires the same exact `ViewContractRef`
-and `ModelContractRef`.
-
-Materializer selection is independent from trainer selection. Multiple
-materializers may produce the same view for different storage modes, purposes,
-or transports. A trainer does not name one materializer; orchestration resolves
-the materializer by the requested view, purpose, and storage mode.
-Train and predict use the same resolution rule and keep the resulting
-materialization in an execution-scoped exit stack so temporary shards are
-cleaned after completion or failure.
-
-CI must cross-check product catalog entries and runtime capability descriptors:
-
-- every catalog trainer has training and train-and-predict routes;
-- every catalog predictor has a prediction route;
-- route input contracts match the catalog view contract;
-- training route output contracts match the trainer model contract;
-- every trainer's explicit predictor pairing resolves;
-- paired trainers and predictors use the same model contract;
-- every runtime executable references an existing catalog entry;
-- route contracts derived from catalog metadata match each operation;
-- environment overrides contain no static descriptor fields.
-
-## Deployment Metadata
-
-Where feasible, Prefect deployments should carry equivalent metadata in deployment description/tags/parameters:
-
-- `kind=train|predict|materialize`
-- `catalog_id`
-- `input_contract`
-- `output_contract`
-- `owner=local_compat|external`
-- `resource_profile`
-- `runtime_service`
-- `runtime_version`
-- `algo_id`
-- `algo_version`
-- `code_version` or image digest
-
-The module-owned runtime capability catalog is the API-side routing source of
-truth. Prefect metadata may mirror it for observability, but must not introduce
-another independently maintained definition.
-
-## Boundaries
-
-- API catalog code may define metadata, schemas, and compatibility. It must not import Torch or runtime executable callables.
-- Runtime flow code may import heavy ML libraries inside runtime services/workers. It must not import API module internals.
-- `libs/ml` is an optional execution package, not a shared
-  cross-process contract. It must not import API internals. Trainer and
-  predictor execution can move to `services/*` once a concrete external runtime
-  consumer exists.
-- Runtime code reads inputs through data-plane contracts/manifests, not through direct API Python aggregates.
-- Prediction/artifact writes go through stable writeback contracts.
-- Prefect remains the execution engine, but frontend and product state continue to go through the platform API.
-- Runtime access uses service credentials plus job-scoped authorization. Do not pass long-lived user tokens through Prefect parameters.
-- Resource profiles are `cpu` and `gpu` in the first version.
-- Every image-bearing train/predict route declares `missing_image_policy`
-  explicitly. There is no global implicit default.
-- Under `skip`, skipped samples do not produce prediction results.
-- Train jobs fail fast on required data/image/schema failures. Predict jobs may complete partially with counters and an error table/manifest.
-- Train/predict job records must store flow/deployment version, code version or image digest, algo id, algo version, catalog id, and catalog version.
-- Local development should reuse the existing Prefect GPU worker target under a runtime-oriented name.
-
-## When To Add Dynamic Capabilities Later
-
-Do not add a separate runtime capability service until needed.
-
-A dynamic capability handshake becomes useful only if:
-
-- non-Prefect runtimes need to participate,
-- deployments are created and destroyed dynamically,
-- multiple runtime services compete for the same catalog id,
-- routing needs live health/resource negotiation beyond Prefect deployment status.
+- each registration ID is unique;
+- every referenced view exists;
+- every trainer has at least one paired predictor;
+- paired trainer/predictor view and model contracts match exactly;
+- every trainer has a training route;
+- every predictor has only a prediction route;
+- a declared train-and-predict route has a registered callable;
+- environment overrides contain no static capability fields;
+- generic runtime hosts contain no materializer selection or chunk strategy;
+- importing registration modules does not import heavy ML libraries.

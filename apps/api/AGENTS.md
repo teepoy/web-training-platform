@@ -6,37 +6,37 @@ FastAPI service with async SQLAlchemy persistence, OmegaConf profiles, Protocol-
 
 ## WHERE TO LOOK
 
-| Task                            | Location                                                                                             | Notes                                                                                                                                                                    |
-| ------------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| HTTP routes                     | `app/main.py`                                                                                        | Main API surface, SSE, export persist endpoint                                                                                                                           |
-| Composition root                | `app/composition.py`                                                                                 | `build_app_context()` + per-module `init_*()` factories                                                                                                                  |
-| Module context                  | `app/modules/*/container.py`                                                                         | Per-module `init_*()` factory; creates module-internal repos/services                                                                                                    |
-| Shared infra                    | `app/shared/context.py`                                                                              | `SharedInfra` (pure infra) + `AppContext` (all module contexts)                                                                                                          |
-| Per-module deps                 | `app/modules/*/port/http/deps.py`                                                                    | Typed FastAPI `Depends()` functions and Annotated types                                                                                                                  |
-| Per-module Protocols            | `app/modules/*/domain/repository.py`                                                                 | Domain interfaces for constructor injection                                                                                                                              |
-| Config profile logic            | `app/core/config.py` + `config/*.yaml`                                                               | Env overrides plus profile merge                                                                                                                                         |
-| DB session/bootstrap            | `app/shared/db/session.py`                                                                           | Async engine, session factory, optional auto-create in tests                                                                                                             |
-| Schema/migrations               | `app/db/models.py` + `alembic/`                                                                      | Use migration files for non-smoke envs                                                                                                                                   |
-| Job execution                   | `app/modules/training/app/services/orchestrator.py`                                                  | Core training lifecycle                                                                                                                                                  |
-| Runtime dispatch                | training/prediction orchestrators + Prefect deployment routing                                       | Selects executable deployments by catalog id, data contract, and resource profile; API does not import executable ML callables                                           |
-| Artifact persistence            | `app/shared/infrastructure/storage/`                                                                 | Memory or MinIO backends                                                                                                                                                 |
-| Tests                           | `tests/`                                                                                             | Pytest integration tests                                                                                                                                                 |
-| Add/manage cron schedules       | `app/modules/jobs/schedules/app/services/scheduler.py`                                               | `SchedulerService` — Prefect REST client                                                                                                                                 |
-| Background/runtime jobs         | module orchestrators / runtime service clients                                                       | Prefect, queues, or service APIs are implementation details behind typed ports                                                                                           |
-| Agent runtime                   | `app/modules/agent/`                                                                                 | Domain-oriented agent modules                                                                                                                                            |
-| Dataset type modules            | `app/modules/datasets/classification/`, `app/modules/sc/`                                            | Implemented dataset domains; add future types only with an end-to-end capability implementation                                                                          |
-| Capability catalogs             | `app/modules/types/catalog.py`, `app/modules/runtime/catalog.py`, module capability manifests        | Product metadata stays in `CapabilityBundle`; SC binding, algorithm, and route defaults are unified in its runtime descriptor; optional Torch kernels live in `libs/ml`. |
-| Registry                        | `app/core/registry.py`                                                                               | `@view`, metadata catalog entries, `@dataset` (dataclass-based); dynamic `_dataset_type_registry` with query API                                                         |
-| Mapper registry                 | `app/core/mapper_registry.py`                                                                        | `@mapper.register(from_types, to_types)` — type-to-type conversion; `mapper.get_mapper(src, dst)` for lookup                                                             |
-| Per-module mappers              | `app/modules/*/domain/mapper.py`                                                                     | Conversion functions registered via `@mapper.register`; full conversion logic lives here, not on model classes                                                           |
-| Registration barrel             | `app/registrations.py`                                                                               | Central import file that controls decorator side-effect order                                                                                                            |
-| Dataset storage aggregate       | `app/modules/datasets/domain/storage_agg.py` + `app/modules/datasets/adapter/storage_factory.py`     | `DatasetStorageAgg` Protocol and factory dispatch by `storage_mode`                                                                                                      |
-| Dataset storage implementations | `app/modules/datasets/adapter/db_full_storage.py` + `app/modules/datasets/adapter/sparse_storage.py` | `db_full` and `file_shard_sparse` implementations of `DatasetStorageAgg`                                                                                                 |
-| Dataset payload store           | `app/modules/datasets/app/services/dataset_payload_store.py`                                         | Shard and manifest management                                                                                                                                            |
-| Dataset image serving           | `app/modules/datasets/port/http/router.py` + `app/modules/datasets/adapter/sparse_storage.py`        | `/samples/{sample_id}/images/{image_id}?dataset_id=...` reads sparse v2 embedded images with column projection                                                           |
-| SC dataset aggregate            | `app/modules/sc/sc_dataset_agg.py`                                                                   | SC-specific domain wrapper over `DatasetStorageAgg` for wafer/defect semantics                                                                                           |
-| SC image compatibility API      | `app/modules/sc/port/http/router.py` + `app/modules/sc/domain/image_fetcher.py`                      | `/sc/images/{inspection_time}/{wafer_key}/{defect_id}/{image_type}` for upstream/mock SC image access                                                                    |
-| Canonical transport contract    | `../../openapi/openapi.yaml`                                                                         | Single source of truth for backend/frontend transport types                                                                                                              |
+| Task                            | Location                                                                                             | Notes                                                                                                                                                   |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| HTTP routes                     | `app/main.py`                                                                                        | Main API surface, SSE, export persist endpoint                                                                                                          |
+| Composition root                | `app/composition.py`                                                                                 | `build_app_context()` + per-module `init_*()` factories                                                                                                 |
+| Module context                  | `app/modules/*/container.py`                                                                         | Per-module `init_*()` factory; creates module-internal repos/services                                                                                   |
+| Shared infra                    | `app/shared/context.py`                                                                              | `SharedInfra` (pure infra) + `AppContext` (all module contexts)                                                                                         |
+| Per-module deps                 | `app/modules/*/port/http/deps.py`                                                                    | Typed FastAPI `Depends()` functions and Annotated types                                                                                                 |
+| Per-module Protocols            | `app/modules/*/domain/repository.py`                                                                 | Domain interfaces for constructor injection                                                                                                             |
+| Config profile logic            | `app/core/config.py` + `config/*.yaml`                                                               | Env overrides plus profile merge                                                                                                                        |
+| DB session/bootstrap            | `app/shared/db/session.py`                                                                           | Async engine, session factory, optional auto-create in tests                                                                                            |
+| Schema/migrations               | `app/db/models.py` + `alembic/`                                                                      | Use migration files for non-smoke envs                                                                                                                  |
+| Job submission                  | training/prediction `app/services/submission_service.py`                                             | Validates and persists product jobs, then submits the registered runtime route                                                                          |
+| Runtime registration/dispatch   | `app/modules/runtime/` + module-owned `runtime/router.py`                                            | One source for metadata, callable, algorithm identity, and deployment routes; generic hosts only build context and invoke                               |
+| Artifact persistence            | `app/shared/infrastructure/storage/`                                                                 | Memory or MinIO backends                                                                                                                                |
+| Tests                           | `tests/`                                                                                             | Pytest integration tests                                                                                                                                |
+| Add/manage cron schedules       | `app/modules/jobs/schedules/app/services/scheduler.py`                                               | `SchedulerService` — Prefect REST client                                                                                                                |
+| Background/runtime jobs         | module submission services / runtime clients                                                         | Prefect, queues, or service APIs are implementation details behind typed ports                                                                          |
+| Agent runtime                   | `app/modules/agent/`                                                                                 | Domain-oriented agent modules                                                                                                                           |
+| Dataset type modules            | `app/modules/datasets/classification/`, `app/modules/sc/`                                            | Implemented dataset domains; add future types only with an end-to-end capability implementation                                                         |
+| Capability catalogs             | `app/modules/types/catalog.py`, `app/modules/runtime/catalog.py`, module runtime routers             | Type catalog owns views; runtime routers unify trainer/predictor metadata, callables, algorithms, and routes; optional Torch kernels live in `libs/ml`. |
+| Registry                        | `app/core/registry.py`                                                                               | `@view`, metadata catalog entries, `@dataset` (dataclass-based); dynamic `_dataset_type_registry` with query API                                        |
+| Mapper registry                 | `app/core/mapper_registry.py`                                                                        | `@mapper.register(from_types, to_types)` — type-to-type conversion; `mapper.get_mapper(src, dst)` for lookup                                            |
+| Per-module mappers              | `app/modules/*/domain/mapper.py`                                                                     | Conversion functions registered via `@mapper.register`; full conversion logic lives here, not on model classes                                          |
+| Registration barrel             | `app/registrations.py`                                                                               | Central import file that controls decorator side-effect order                                                                                           |
+| Dataset storage aggregate       | `app/modules/datasets/domain/storage_agg.py` + `app/modules/datasets/adapter/storage_factory.py`     | `DatasetStorageAgg` Protocol and factory dispatch by `storage_mode`                                                                                     |
+| Dataset storage implementations | `app/modules/datasets/adapter/db_full_storage.py` + `app/modules/datasets/adapter/sparse_storage.py` | `db_full` and `file_shard_sparse` implementations of `DatasetStorageAgg`                                                                                |
+| Dataset payload store           | `app/modules/datasets/app/services/dataset_payload_store.py`                                         | Shard and manifest management                                                                                                                           |
+| Dataset image serving           | `app/modules/datasets/port/http/router.py` + `app/modules/datasets/adapter/sparse_storage.py`        | `/samples/{sample_id}/images/{image_id}?dataset_id=...` reads sparse v2 embedded images with column projection                                          |
+| SC dataset aggregate            | `app/modules/sc/sc_dataset_agg.py`                                                                   | SC-specific domain wrapper over `DatasetStorageAgg` for wafer/defect semantics                                                                          |
+| SC image compatibility API      | `app/modules/sc/port/http/router.py` + `app/modules/sc/domain/image_fetcher.py`                      | `/sc/images/{inspection_time}/{wafer_key}/{defect_id}/{image_type}` for upstream/mock SC image access                                                   |
+| Canonical transport contract    | `../../openapi/openapi.yaml`                                                                         | Single source of truth for backend/frontend transport types                                                                                             |
 
 ## STRUCTURE
 
@@ -155,7 +155,11 @@ app/modules/datasets/
 - Conversion between storage (`Sample`), domain (`ClassificationSample`, etc.), and view (`LabeledImageV1Row`, etc.) types goes through `MapperRegistry`, not through inline methods on model classes.
 - Per-dataset-type mappers live in `app/modules/datasets/domain/mapper.py`; SC mappers in `app/modules/sc/domain/mapper.py`.
 - `ViewService` delegates per-sample projection to per-type adapters via `adapter.view_for(view_type, sample)`.
-- Trainer/predictor entries under `app/modules/types/` are API catalog metadata for listing, schema, compatibility, and authorization. They must not be executable ML callables imported by the API process.
+- Trainer/predictor capabilities are registered through module-owned
+  `RuntimeRouter` decorators. Metadata, callable, algorithm identity, and routes
+  belong to the same registration and are queried through
+  `RuntimeCapabilityCatalog`; do not add a second executable registry or
+  metadata-only trainer/predictor catalog.
 - View types use `@view(id=...)` on canonical Pydantic row classes. Name,
   annotation flag, versioned contract, row import path, and Arrow schema import
   path belong to the module-owned `ViewDefinition`; do not duplicate literal
@@ -165,12 +169,19 @@ app/modules/datasets/
 
 ## RUNTIME SERVICES
 
-Training, prediction, embedding, image parsing, and other heavy dependency execution should run in root `services/*` processes or equivalent out-of-process runtimes. API orchestrators talk to them through typed ports, runtime clients, transport contracts, manifests, or signed object-store refs.
+Training, prediction, embedding, image parsing, and other heavy dependency execution should run in root `services/*` processes or equivalent runtime workers. API submission services talk to them through typed ports, runtime clients, transport contracts, manifests, or signed object-store refs.
 
-- API catalog entries describe trainer/predictor metadata; Prefect deployments represent executable capabilities.
-- API must not import executable trainer/predictor callables or Torch/CUDA dependencies.
+- Module runtime routers are the single source for trainer/predictor metadata,
+  executable bindings, algorithm identity, and operation routes. Prefect is the
+  current submission/execution-state backend, not another capability registry.
+- Registration modules may import lightweight callables. They must not import
+  Torch/CUDA libraries or load model weights at module import time.
 - Runtime services must not import `apps/api/app/modules/*` service/repository/ORM/FastAPI internals.
 - Dataset views exposed to runtime services should cross a stable data-plane boundary, not raw Python aggregate objects.
+- Generic runtime hosts must not select materializers, build algorithm datasets,
+  define prediction chunks, or impose common train/predict input/output DTOs.
+  Registered callables own those decisions. Algorithm-specific Prefect tasks
+  live inside the callable or in the same module.
 
 ### Torch Discipline
 
@@ -189,7 +200,9 @@ Training, prediction, embedding, image parsing, and other heavy dependency execu
           raise RuntimeError("torch not available (install with [gpu] extra)")
   ```
 
-- API modules must not import torch. SC adapters import `ml_library` only inside selected executable callables; `libs/ml` owns all direct Torch/Ultralytics imports.
+- API modules must not import torch. SC registered callables import `ml_library`
+  only inside the selected function; `libs/ml` owns all direct
+  Torch/Ultralytics imports.
 
 ## CONVENTIONS
 

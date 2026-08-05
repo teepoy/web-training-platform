@@ -45,7 +45,7 @@ results fall into these categories:
 The route converts its strict HTTP DTO into `PredictionJobCommand` and delegates to
 `PredictionExecutionPort`. Dataset/model lookup, predictor compatibility, runtime route
 resolution, deployment availability, job persistence, and Prefect submission are owned by
-`PredictionOrchestrator` in that order. Configuration failures do not leave queued orphan jobs.
+`PredictionSubmissionService` in that order. Configuration failures do not leave queued orphan jobs.
 
 ### `POST /predictions/single`
 
@@ -91,11 +91,11 @@ The current architecture is correct for the scale it targets.
 
 ## Evidence
 
-- `apps/api/app/modules/prediction/app/services/prediction_orchestrator.py`
+- `apps/api/app/modules/prediction/app/services/submission_service.py`
 - `apps/api/app/modules/prediction/app/services/prediction_runtime.py`
 - `apps/api/app/modules/prediction/app/services/submission_parameters.py`
 - `apps/api/app/modules/prediction/domain/submission.py`
 
 ---
 
-_Updated: 2026-07-29. Re-run `rg -n "predict_batch|embed_batch" apps/api/app --glob '!**/flows/**' --glob '!**/workers/**'` to verify coverage after any refactor._
+_Updated: 2026-08-05. Re-run `rg -n "predict_batch|embed_batch" apps/api/app --glob '!**/flows/**' --glob '!**/workers/**'` to verify coverage after any refactor._

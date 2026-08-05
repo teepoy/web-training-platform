@@ -22,7 +22,7 @@ from app.modules.models.port.http.schemas import (
 )
 from app.modules.training.port.http.deps import (
     RepositoryDep,
-    TrainingOrchestratorDep,
+    TrainingSubmissionDep,
 )
 from app.modules.training.port.http.schemas import (
     CreateTrainingJobRequest,
@@ -37,7 +37,8 @@ from app.modules.training.domain.submission import (
     TrainingRuntimeUnavailableError,
     TrainingSubmissionError,
 )
-from app.modules.types import catalog
+from app.modules.runtime.catalog import runtime_catalog
+from app.modules.types.capabilities import TrainerMetadata
 from app.shared.api.schemas import CancelJobResponse
 from app.shared.sse.emit import emit_sse
 from app.shared.sse.events import SSEEvent, TrainingStatusEvent
@@ -61,8 +62,8 @@ async def list_trainers_route(
     ]
 
 
-def _list_trainer_metadata() -> list[catalog.TrainerMetadata]:
-    return list(catalog.list_trainers())
+def _list_trainer_metadata() -> list[TrainerMetadata]:
+    return list(runtime_catalog.list_trainers())
 
 
 @router.get("/trainers/{trainer_id}")
@@ -72,7 +73,7 @@ async def get_trainer_route(
     org: Organization = Depends(get_current_org),
 ) -> dict:
     try:
-        trainer_meta = catalog.get_trainer_meta(trainer_id)
+        trainer_meta = runtime_catalog.get_trainer_meta(trainer_id)
     except KeyError:
         raise HTTPException(status_code=404, detail="Trainer not found") from None
     return {
@@ -86,12 +87,12 @@ async def get_trainer_route(
 @router.post("/training-jobs", response_model=TrainingJob)
 async def create_training_job(
     payload: CreateTrainingJobRequest,
-    orchestrator: TrainingOrchestratorDep,
+    submission: TrainingSubmissionDep,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
 ) -> TrainingJob:
     try:
-        return await orchestrator.submit_job(
+        return await submission.submit_job(
             payload.to_command(org_id=org.id, created_by=current_user.id)
         )
     except TrainingDatasetNotFoundError:
@@ -112,12 +113,12 @@ async def create_training_job(
 @router.post("/training-jobs/train-and-predict", response_model=TrainAndPredictResponse)
 async def create_train_and_predict_job(
     payload: TrainAndPredictRequest,
-    orchestrator: TrainingOrchestratorDep,
+    submission: TrainingSubmissionDep,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
 ) -> TrainAndPredictResponse:
     try:
-        submission = await orchestrator.submit_train_and_predict(
+        result = await submission.submit_train_and_predict(
             payload.to_command(org_id=org.id, created_by=current_user.id)
         )
     except TrainingDatasetNotFoundError:
@@ -140,8 +141,8 @@ async def create_train_and_predict_job(
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     return TrainAndPredictResponse(
-        train_job=submission.train_job,
-        workflow_run_id=submission.workflow_run_id,
+        train_job=result.train_job,
+        workflow_run_id=result.workflow_run_id,
     )
 
 
@@ -179,12 +180,12 @@ async def get_job(
 @router.post("/training-jobs/{job_id}/cancel", response_model=CancelJobResponse)
 async def cancel_job(
     job_id: str,
-    orchestrator: TrainingOrchestratorDep,
+    submission: TrainingSubmissionDep,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
 ) -> CancelJobResponse:
     try:
-        ok = await orchestrator.cancel_job(job_id)
+        ok = await submission.cancel_job(job_id)
     except HTTPException:
         raise
     except Exception as exc:

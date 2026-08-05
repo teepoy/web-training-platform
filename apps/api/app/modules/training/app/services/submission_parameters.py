@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from app.modules.runtime.domain.routing import RuntimeDeploymentRoute
-from app.modules.types import catalog
+from app.modules.runtime.catalog import runtime_catalog
 from app.modules.training.domain.submission import TrainAndPredictCommand
 
 
@@ -26,7 +26,7 @@ def train_and_predict_workflow_parameters(
         ),
         "sample_filter": command.sample_filter,
         "prompt": command.prompt,
-        "predictor_id": catalog.resolve_predictor_id(
+        "predictor_id": runtime_catalog.resolve_predictor_id(
             command.trainer_id,
             requested_predictor_id=command.predictor_id,
         ),

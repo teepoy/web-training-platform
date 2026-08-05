@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from app.shared.domain.runtime import ArtifactStorage
+from app.shared.domain.protocols import ArtifactStorage
 
 _SPARSE_ANNOTATION_SCHEMA = pa.schema(
     [

@@ -13,7 +13,7 @@ import pyarrow.parquet as pq
 from app.modules.storage.domain.sparse.models import ColumnSchema
 
 if TYPE_CHECKING:
-    from app.shared.domain.runtime import ArtifactStorage
+    from app.shared.domain.protocols import ArtifactStorage
 
 _logger = logging.getLogger(__name__)
 

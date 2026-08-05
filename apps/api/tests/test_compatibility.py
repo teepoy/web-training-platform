@@ -59,10 +59,10 @@ def test_validate_view_rejects_disabled_view() -> None:
 
 def test_validate_trainer_uses_catalog_view_contract() -> None:
     from app.modules.types import catalog
-    from app.modules.types.catalog import ModelContractRef, TrainerMetadata
+    from app.modules.types.capabilities import ModelContractRef, TrainerMetadata
 
     with patch(
-        "app.modules.datasets.domain.compatibility.catalog.get_trainer_meta",
+        "app.modules.datasets.domain.compatibility.runtime_catalog.get_trainer_meta",
         return_value=TrainerMetadata(
             id="trainer",
             name="Trainer",
@@ -85,10 +85,10 @@ def test_validate_trainer_uses_catalog_view_contract() -> None:
 
 def test_validate_predictor_uses_catalog_view_contract() -> None:
     from app.modules.types import catalog
-    from app.modules.types.catalog import ModelContractRef, PredictorMetadata
+    from app.modules.types.capabilities import ModelContractRef, PredictorMetadata
 
     with patch(
-        "app.modules.datasets.domain.compatibility.catalog.get_predictor_meta",
+        "app.modules.datasets.domain.compatibility.runtime_catalog.get_predictor_meta",
         return_value=PredictorMetadata(
             id="predictor",
             name="Predictor",
@@ -116,7 +116,8 @@ def test_unknown_runtime_type_is_rejected(
 ) -> None:
     with (
         patch(
-            f"app.modules.datasets.domain.compatibility.catalog.{catalog_method}",
+            "app.modules.datasets.domain.compatibility.runtime_catalog."
+            f"{catalog_method}",
             side_effect=KeyError("missing"),
         ),
         pytest.raises(

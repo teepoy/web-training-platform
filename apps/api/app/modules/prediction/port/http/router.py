@@ -16,7 +16,7 @@ from app.modules.prediction.port.http.deps import (
     DatasetReaderDep,
     DatasetServiceDep,
     PredictionCollectionDep,
-    PredictionOrchestratorDep,
+    PredictionSubmissionDep,
     PredictionQueryDep,
     PredictionRepositoryDep,
     PredictionReviewDep,
@@ -125,10 +125,10 @@ async def run_predictions(
     payload: RunPredictionRequest,
     current_user: CurrentUserDep,
     org: CurrentOrgDep,
-    prediction_orchestrator: PredictionOrchestratorDep,
+    prediction_submission: PredictionSubmissionDep,
 ) -> PredictionJobResponse:
     try:
-        started = await prediction_orchestrator.submit_job(
+        started = await prediction_submission.submit_job(
             payload.to_command(org_id=org.id, created_by=current_user.id)
         )
     except PredictionResourceNotFoundError as exc:
@@ -246,9 +246,9 @@ async def cancel_prediction_job(
     job_id: str,
     current_user: CurrentUserDep,
     org: CurrentOrgDep,
-    prediction_orchestrator: PredictionOrchestratorDep,
+    prediction_submission: PredictionSubmissionDep,
 ) -> CancelJobResponse:
-    cancelled = await prediction_orchestrator.cancel_job(job_id, org_id=org.id)
+    cancelled = await prediction_submission.cancel_job(job_id, org_id=org.id)
     if not cancelled:
         raise HTTPException(
             status_code=404, detail="Prediction job not found or not cancellable"

@@ -31,8 +31,8 @@ from app.modules.prediction.port.local import (
     PredictionReviewPort,
     PredictionRuntimePort,
 )
-from app.modules.prediction.app.services.prediction_orchestrator import (
-    PredictionOrchestrator,
+from app.modules.prediction.app.services.submission_service import (
+    PredictionSubmissionService,
 )
 from app.modules.prediction.app.services.prediction_query import PredictionQueryService
 from app.modules.prediction.app.services.prediction_review import (
@@ -51,7 +51,9 @@ from app.modules.storage.port.local import DatasetStorageFactoryPort
 from app.modules.jobs.task_tracker.port.task_tracker_port import TaskTrackerPort
 from app.modules.training.domain.repository import TrainingRepository
 from app.modules.training.port.local import TrainingExecutionPort
-from app.modules.training.app.services.orchestrator import TrainingOrchestrator
+from app.modules.training.app.services.submission_service import (
+    TrainingSubmissionService,
+)
 from app.modules.training.port.http import deps as training_deps
 from app.shared.context import SharedInfra
 
@@ -102,15 +104,15 @@ async def test_app_context_injector_binds_existing_instances() -> None:
         assert injector.get(TrainingRepository) is ctx.training.repository
         assert (
             injector.get(TrainingExecutionPort)
-            is injector.get(TrainingOrchestrator)
+            is injector.get(TrainingSubmissionService)
         )
         assert (
             injector.get(PredictionExecutionPort)
-            is ctx.prediction.prediction_orchestrator
+            is ctx.prediction.prediction_submission
         )
         assert (
-            injector.get(PredictionOrchestrator)
-            is ctx.prediction.prediction_orchestrator
+            injector.get(PredictionSubmissionService)
+            is ctx.prediction.prediction_submission
         )
         assert (
             injector.get(PredictionRuntimeService)
@@ -181,16 +183,16 @@ async def test_migrated_http_deps_resolve_from_injector() -> None:
         assert agent_deps.get_session_store(request) is ctx.agent.session_store
         assert agent_deps.get_model_service(request) is ctx.models.model_repository
         assert (
-            agent_deps.get_orchestrator(request)
-            is injector.get(TrainingOrchestrator)
+            agent_deps.get_training_submission(request)
+            is injector.get(TrainingSubmissionService)
         )
         assert dataset_deps.get_repository(request) is ctx.datasets.dataset_repository
         assert dataset_deps.get_dataset_service(request) is ctx.datasets.dataset_service
         assert dashboard_deps.get_repository(request) is ctx.dashboard.task_tracker_port
         assert model_deps.get_model_service(request) is injector.get(ModelService)
         assert (
-            training_deps.get_training_orchestrator(request)
-            is injector.get(TrainingOrchestrator)
+            training_deps.get_training_submission(request)
+            is injector.get(TrainingSubmissionService)
         )
         assert sc_deps.get_prefect_client(request) is ctx.shared.prefect_client
         assert sc_deps.get_image_fetcher(request) is ctx.sc.image_fetcher

@@ -150,7 +150,7 @@ def test_cancel_prediction_job() -> None:
         assert run_resp.status_code == 202
         pjob_id = run_resp.json()["id"]
 
-        # Cancel — prediction_orchestrator.cancel_job delegates to repo
+        # Cancel — prediction submission delegates to the repository
         resp = c.post(f"/api/v1/prediction-jobs/{pjob_id}/cancel")
         # May be 200 or 404 depending on job state; just check it doesn't 500
         assert resp.status_code in (200, 404)

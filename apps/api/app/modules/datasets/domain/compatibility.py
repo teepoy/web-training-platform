@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.modules.types import catalog
+from app.modules.runtime.catalog import runtime_catalog
 
 
 class DatasetCompatibilityError(ValueError):
@@ -20,7 +20,7 @@ def validate_trainer_for_dataset(
     """
     # ── trainer lookup ───────────────────────────────────────────────
     try:
-        trainer_meta = catalog.get_trainer_meta(trainer_id)
+        trainer_meta = runtime_catalog.get_trainer_meta(trainer_id)
     except KeyError:
         raise DatasetCompatibilityError(
             f"Trainer '{trainer_id}' is not registered"
@@ -48,7 +48,7 @@ def validate_predictor_for_dataset(
     """
     # ── predictor lookup ─────────────────────────────────────────────
     try:
-        predictor_meta = catalog.get_predictor_meta(predictor_id)
+        predictor_meta = runtime_catalog.get_predictor_meta(predictor_id)
     except KeyError:
         raise DatasetCompatibilityError(
             f"Predictor '{predictor_id}' is not registered"

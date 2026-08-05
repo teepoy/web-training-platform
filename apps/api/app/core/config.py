@@ -145,16 +145,9 @@ class RuntimeRoutingConfig(ConfigSection):
     prediction_routes: dict[str, RuntimeDeploymentOverride] = Field(
         default_factory=dict
     )
-    materialization_routes: dict[str, RuntimeDeploymentOverride] = Field(
-        default_factory=dict
-    )
 
 
 class PredictionConfig(ConfigSection):
-    sparse_chunk_size: int = 32
-    progress_flush_rows: int = 5_000
-    progress_flush_seconds: float = 5.0
-    write_batch_rows: int = 5_000
     compaction_memory_limit: str = "512MiB"
     compaction_temp_limit: str = "4GiB"
     compaction_row_group_rows: int = 100_000
@@ -254,6 +247,9 @@ class ScPipelineConfig(ConfigSection):
     materialization_batch_rows: int
     materialization_max_error_records: int
     prediction_max_materialized_bytes: int
+    prediction_progress_flush_rows: int
+    prediction_progress_flush_seconds: float
+    prediction_write_batch_rows: int
     training_max_rows: int
     training_max_materialized_bytes: int
 
@@ -546,6 +542,18 @@ def load_config(skip_runtime_validation: bool = False) -> AppConfig:
             "prediction_max_materialized_bytes",
             int,
         ),
+        "SC_PIPELINE_PREDICTION_PROGRESS_FLUSH_ROWS": (
+            "prediction_progress_flush_rows",
+            int,
+        ),
+        "SC_PIPELINE_PREDICTION_PROGRESS_FLUSH_SECONDS": (
+            "prediction_progress_flush_seconds",
+            float,
+        ),
+        "SC_PIPELINE_PREDICTION_WRITE_BATCH_ROWS": (
+            "prediction_write_batch_rows",
+            int,
+        ),
         "SC_PIPELINE_TRAINING_MAX_ROWS": ("training_max_rows", int),
         "SC_PIPELINE_TRAINING_MAX_MATERIALIZED_BYTES": (
             "training_max_materialized_bytes",
@@ -557,9 +565,6 @@ def load_config(skip_runtime_validation: bool = False) -> AppConfig:
         if raw_value is not None:
             cfg.sc.pipeline[field_name] = converter(raw_value)
     prediction_environment = {
-        "PREDICTION_PROGRESS_FLUSH_ROWS": ("progress_flush_rows", int),
-        "PREDICTION_PROGRESS_FLUSH_SECONDS": ("progress_flush_seconds", float),
-        "PREDICTION_WRITE_BATCH_ROWS": ("write_batch_rows", int),
         "PREDICTION_COMPACTION_MEMORY_LIMIT": ("compaction_memory_limit", str),
         "PREDICTION_COMPACTION_TEMP_LIMIT": ("compaction_temp_limit", str),
         "PREDICTION_COMPACTION_ROW_GROUP_ROWS": ("compaction_row_group_rows", int),

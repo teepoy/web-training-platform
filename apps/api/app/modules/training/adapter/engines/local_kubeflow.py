@@ -54,13 +54,14 @@ class LocalProcessEngine:
                     payload={"phase": "running"},
                 )
             )
-            from app.modules.training.flows.train_job import run_training_pipeline
+            from app.modules.training.flows.train_job import execute_training_runtime
 
-            result = await run_training_pipeline(
+            result = await execute_training_runtime(
                 job_id=job.id,
                 dataset_id=dataset_id,
                 trainer_id=job.trainer_id,
-                artifact_storage=self.storage,
+                created_by=job.created_by,
+                missing_image_policy="fail",
             )
             run["result"] = result
             run["state"] = "COMPLETED"

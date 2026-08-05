@@ -16,10 +16,6 @@
     "train_and_predict_routes": {
       "type": "object",
       "additionalProperties": { "$ref": "#/$defs/deploymentOverride" }
-    },
-    "materialization_routes": {
-      "type": "object",
-      "additionalProperties": { "$ref": "#/$defs/deploymentOverride" }
     }
   },
   "$defs": {

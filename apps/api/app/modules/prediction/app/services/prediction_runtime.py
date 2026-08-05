@@ -19,7 +19,7 @@ from app.modules.prediction.app.services.submission_parameters import (
     prediction_workflow_parameters,
 )
 from app.modules.runtime.port.local import RuntimeRoutingPort
-from app.modules.types import catalog
+from app.modules.runtime.catalog import runtime_catalog
 from app.shared.application.compatibility import validate_model_prediction
 
 
@@ -136,12 +136,12 @@ class PredictionRuntimeService:
         trainer_id = model.trainer_id or model.trainer_name or ""
         if not trainer_id:
             raise ValueError(f"Model '{model_id}' has no associated predictor")
-        predictor_id = catalog.resolve_predictor_id(
+        predictor_id = runtime_catalog.resolve_predictor_id(
             trainer_id,
             requested_predictor_id=predictor_id,
         )
         model_metadata = model.metadata if isinstance(model.metadata, dict) else {}
-        catalog.validate_predictor_model_contract(
+        runtime_catalog.validate_predictor_model_contract(
             predictor_id,
             model_contract=model_metadata.get("model_contract"),
             model_schema_version=model_metadata.get("model_schema_version"),

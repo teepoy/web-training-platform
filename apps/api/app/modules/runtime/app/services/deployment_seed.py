@@ -5,7 +5,7 @@ from typing import Any
 from app.modules.runtime.app.services.routing_service import (
     ConfigRuntimeRoutingService,
 )
-from app.modules.runtime.catalog import runtime_capabilities
+from app.modules.runtime.catalog import runtime_catalog
 from app.modules.runtime.domain.executables import RuntimeOperation
 from app.modules.runtime.domain.routing import RuntimeDeploymentRoute
 
@@ -52,7 +52,7 @@ _CPU_DEPLOYMENT_SPECS: tuple[dict[str, str], ...] = (
 def runtime_prefect_deployment_specs(config: Any) -> list[dict[str, str]]:
     routing = ConfigRuntimeRoutingService(config)
     specs_by_name: dict[str, dict[str, str]] = {}
-    for catalog_id, definition in runtime_capabilities.list_routes():
+    for catalog_id, definition in runtime_catalog.list_routes():
         route = _resolve_route(routing, definition.operation, catalog_id)
         if route.owner == "external":
             continue
@@ -83,7 +83,7 @@ def required_prefect_deployment_names(config: Any) -> set[str]:
     """Return all deployments the API must resolve, including external routes."""
     routing = ConfigRuntimeRoutingService(config)
     names = {spec["deployment_name"] for spec in _CPU_DEPLOYMENT_SPECS}
-    for catalog_id, definition in runtime_capabilities.list_routes():
+    for catalog_id, definition in runtime_catalog.list_routes():
         route = _resolve_route(routing, definition.operation, catalog_id)
         names.add(route.deployment)
     return names

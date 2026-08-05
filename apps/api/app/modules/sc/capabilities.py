@@ -2,10 +2,7 @@ from __future__ import annotations
 
 from app.modules.types.capabilities import (
     CapabilityBundle,
-    MaterializerMetadata,
     ModelContractRef,
-    PredictorMetadata,
-    TrainerMetadata,
     ViewContractRef,
     ViewDefinition,
 )
@@ -55,45 +52,6 @@ SC_CAPABILITIES = CapabilityBundle(
                 "app.modules.storage.domain.data_plane.schemas:"
                 "SC_REVIEW_IMAGE_V1_SCHEMA"
             ),
-        ),
-    ),
-    materializers=(
-        MaterializerMetadata(
-            id="sc-inspection-patch-image-v1",
-            output_view=SC_PATCH_IMAGE_V1,
-            purposes=("train", "predict"),
-            formats=("parquet",),
-            storage_modes=("db_full", "file_shard_sparse"),
-        ),
-    ),
-    trainers=(
-        TrainerMetadata(
-            id="resnet50-sc-v1",
-            name="ResNet-50 SC Defect Classifier",
-            input_view=SC_PATCH_IMAGE_V1,
-            output_model=SC_RESNET_MODEL_V1,
-            predictor_ids=("resnet50-sc-v1",),
-        ),
-        TrainerMetadata(
-            id="yolo-sc-v1",
-            name="YOLO SC Detection Trainer",
-            input_view=SC_PATCH_IMAGE_V1,
-            output_model=SC_YOLO_MODEL_V1,
-            predictor_ids=("yolo-sc-v1",),
-        ),
-    ),
-    predictors=(
-        PredictorMetadata(
-            id="resnet50-sc-v1",
-            name="ResNet-50 SC Defect Prediction",
-            input_view=SC_PATCH_IMAGE_V1,
-            input_model=SC_RESNET_MODEL_V1,
-        ),
-        PredictorMetadata(
-            id="yolo-sc-v1",
-            name="YOLO SC Detection Predictor",
-            input_view=SC_PATCH_IMAGE_V1,
-            input_model=SC_YOLO_MODEL_V1,
         ),
     ),
 )

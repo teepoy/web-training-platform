@@ -11,6 +11,6 @@ import app.modules.types.view_registration  # noqa: F401
 import app.modules.sc.domain.mapper  # noqa: F401
 import app.modules.datasets.domain.mapper  # noqa: F401
 
-# ── Versioned view/trainer/predictor/materializer metadata is aggregated by
-# ── app.modules.types.catalog. SC executable adapters are lazy-loaded from
-# ── app.modules.sc.runtime and optional ML kernels are never imported here. ──
+# ── Runtime registration ──────────────────────────────────────────────────
+# Runtime metadata, callables, and routes are registered together by each
+# module's RuntimeRouter. Optional ML kernels remain lazy imports in handlers.

@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.modules.sc.wafer_data_gen import build_patch_sample
 from app.modules.training.port.http.deps import (
-    get_training_orchestrator,
+    get_training_submission,
 )
 
 
@@ -26,7 +26,7 @@ def test_cancel_training_job_nonexistent() -> None:
     with TestClient(app) as c:
         resp = c.post("/api/v1/training-jobs/nonexistent/cancel")
         assert resp.status_code == 200
-        # orchestrator.cancel_job returns False for missing jobs
+        # submission.cancel_job returns False for missing jobs
         assert resp.json()["cancelled"] is False
 
 
@@ -52,17 +52,17 @@ def test_set_job_public_disabled() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Error handling: orchestrator failures become 502
+# Error handling: submission failures become 502
 # ---------------------------------------------------------------------------
 
-def test_cancel_training_job_orchestrator_failure() -> None:
-    """When orchestrator.cancel_job raises, the route returns 502."""
+def test_cancel_training_job_submission_failure() -> None:
+    """When submission.cancel_job raises, the route returns 502."""
     with TestClient(app) as c:
-        orchestrator = app.state.app_context.training.training_orchestrator
-        with patch.object(orchestrator, "cancel_job", side_effect=RuntimeError("connection refused")):
-            app.dependency_overrides[get_training_orchestrator] = lambda: orchestrator
+        submission = app.state.app_context.training.training_submission
+        with patch.object(submission, "cancel_job", side_effect=RuntimeError("connection refused")):
+            app.dependency_overrides[get_training_submission] = lambda: submission
             resp = c.post("/api/v1/training-jobs/some-id/cancel")
-            app.dependency_overrides.pop(get_training_orchestrator, None)
+            app.dependency_overrides.pop(get_training_submission, None)
         assert resp.status_code == 502
 
 
@@ -132,8 +132,8 @@ def test_train_and_predict_submits_readable_seed_images() -> None:
     )
 
     with TestClient(app) as c:
-        orchestrator = app.state.app_context.training.training_orchestrator
-        with patch.object(orchestrator, "_prefect_client", prefect_client):
+        submission = app.state.app_context.training.training_submission
+        with patch.object(submission, "_prefect_client", prefect_client):
             dataset_response = c.post(
                 "/api/v1/datasets",
                 json={

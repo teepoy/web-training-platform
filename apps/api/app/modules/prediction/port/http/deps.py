@@ -57,7 +57,7 @@ def get_prediction_review(request: Request) -> PredictionReviewPort:
     return resolve(request, PredictionReviewPort)
 
 
-def get_prediction_orchestrator(request: Request) -> PredictionExecutionPort:
+def get_prediction_submission(request: Request) -> PredictionExecutionPort:
     return resolve(request, PredictionExecutionPort)
 
 
@@ -99,8 +99,8 @@ PredictionReviewDep = Annotated[
     PredictionReviewPort,
     Depends(get_prediction_review),
 ]
-PredictionOrchestratorDep = Annotated[
-    PredictionExecutionPort, Depends(get_prediction_orchestrator)
+PredictionSubmissionDep = Annotated[
+    PredictionExecutionPort, Depends(get_prediction_submission)
 ]
 DatasetServiceDep = Annotated[
     IDatasetService,

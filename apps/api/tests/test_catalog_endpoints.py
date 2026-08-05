@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.modules.types import catalog
+from app.modules.runtime.catalog import runtime_catalog
 
 
 def test_trainer_catalog_endpoint_preserves_baseline_shape() -> None:
@@ -33,7 +33,7 @@ def test_predictor_catalog_listing_preserves_baseline_shape() -> None:
             "name": predictor.name,
             "view_type": predictor.view_id,
         }
-        for predictor in catalog.list_predictors()
+        for predictor in runtime_catalog.list_predictors()
     ]
 
     assert isinstance(body, list)

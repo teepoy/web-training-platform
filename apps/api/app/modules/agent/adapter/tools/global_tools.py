@@ -394,9 +394,9 @@ async def execute_get_training_job(
 
 
 async def execute_list_trainers(*, trainer_registry: Any = None) -> dict[str, Any]:
-    from app.modules.types import catalog
+    from app.modules.runtime.catalog import runtime_catalog
 
-    trainers = catalog.list_trainers()
+    trainers = runtime_catalog.list_trainers()
     return {
         "trainers": [
             {
@@ -615,7 +615,7 @@ async def execute_start_training_job(
     dataset_id: str,
     trainer_id: str,
     org_id: str,
-    orchestrator: TrainingExecutionPort,
+    submission: TrainingExecutionPort,
     user_id: str,
 ) -> dict[str, Any]:
     from app.modules.datasets.port.local import DatasetCompatibilityError
@@ -627,7 +627,7 @@ async def execute_start_training_job(
     )
 
     try:
-        started = await orchestrator.submit_job(
+        started = await submission.submit_job(
             TrainingJobCommand(
                 dataset_id=dataset_id,
                 trainer_id=trainer_id,
@@ -657,7 +657,7 @@ async def execute_run_predictions(
     model_id: str,
     target: str | None,
     org_id: str,
-    prediction_orchestrator: PredictionExecutionPort,
+    submission: PredictionExecutionPort,
     user_id: str,
 ) -> dict[str, Any]:
     """Run predictions on a dataset."""
@@ -671,7 +671,7 @@ async def execute_run_predictions(
     )
 
     try:
-        started = await prediction_orchestrator.submit_job(
+        started = await submission.submit_job(
             PredictionJobCommand(
                 dataset_id=dataset_id,
                 model_id=model_id,
@@ -732,7 +732,7 @@ async def execute_create_schedule(
 async def execute_cancel_training_job(
     *,
     job_id: str,
-    orchestrator: TrainingExecutionPort,
+    submission: TrainingExecutionPort,
     repository: TrainingRepository,
     org_id: str,
 ) -> dict[str, Any]:
@@ -740,7 +740,7 @@ async def execute_cancel_training_job(
     job = await repository.get_job(job_id, org_id=org_id)
     if job is None:
         return {"error": f"Training job '{job_id}' not found"}
-    ok = await orchestrator.cancel_job(job_id)
+    ok = await submission.cancel_job(job_id)
     if ok:
         return {"id": job_id, "status": "cancelled"}
     return {

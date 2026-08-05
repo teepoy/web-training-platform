@@ -7,7 +7,7 @@ from pathlib import Path
 import pyarrow.parquet as pq
 
 from app.modules.storage.domain.sparse.models import SampleLocator, SparseIndexEntry
-from app.shared.domain.runtime import ArtifactStorage
+from app.shared.domain.protocols import ArtifactStorage
 
 
 class SparseIndexReader:

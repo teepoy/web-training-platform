@@ -1,42 +1,10 @@
 from __future__ import annotations
 
 import functools
-import inspect
 from dataclasses import dataclass
-from typing import Any, Callable, Generic, TypeVar
+from typing import Any
 
 from app.modules.types import catalog
-
-T_co = TypeVar("T_co", contravariant=True)
-R = TypeVar("R", covariant=True)
-
-
-@dataclass
-class Trainer(Generic[T_co, R]):
-    trainer_id: str
-    name: str
-    view_id: str
-    func: Callable[..., Any]
-
-    async def __call__(self, *args: Any, **kwargs: Any) -> R:
-        result = self.func(*args, **kwargs)
-        if inspect.isawaitable(result):
-            return await result
-        return result
-
-
-@dataclass
-class Predictor(Generic[T_co, R]):
-    predictor_id: str
-    name: str
-    view_id: str
-    func: Callable[..., Any]
-
-    async def __call__(self, *args: Any, **kwargs: Any) -> Any:
-        result = self.func(*args, **kwargs)
-        if inspect.isawaitable(result):
-            return await result
-        return result
 
 
 @dataclass
@@ -174,26 +142,10 @@ def list_dataset_types() -> list[str]:
 
 
 class _Registry:
-    """Central type registry.
-
-    Holds three registration namespaces:
-
-    * ``_views`` — view types (``@view`` decorator), API-side always populated.
-    * ``_trainers`` — **executable** trainer registrations. Runtime code may
-      populate these by importing executable modules; catalog declarations never
-      import executable modules.
-    * ``_predictors`` — **executable** predictor registrations. Same semantics
-      as ``_trainers``: only entries registered via ``@predictor`` decorator
-      are executable.
-
-    Metadata-only lookups (for API listing / compatibility) go through
-    :mod:`app.modules.types.catalog`, NOT through the executable dicts.
-    """
+    """Registry for API view row types only."""
 
     def __init__(self) -> None:
         self._views: dict[str, type] = {}
-        self._trainers: dict[str, Trainer[Any, Any]] = {}
-        self._predictors: dict[str, Predictor[Any, Any]] = {}
 
     def register_view(
         self,
@@ -238,146 +190,10 @@ class _Registry:
     def list_views(self) -> list[type]:
         return list(self._views.values())
 
-    def register_trainer(
-        self,
-        func: Callable[..., Any] | None = None,
-        *,
-        id: str,
-        name: str | None = None,
-        view_id: str | None = None,
-    ) -> Any:
-        if func is None:
-            return functools.partial(
-                self.register_trainer, id=id, name=name, view_id=view_id
-            )
-        try:
-            metadata = catalog.get_trainer_meta(id)
-        except KeyError as exc:
-            raise ValueError(
-                f"Executable trainer '{id}' has no API catalog metadata"
-            ) from exc
-        if name is not None and name != metadata.name:
-            raise ValueError(
-                f"Executable trainer '{id}' name does not match catalog: "
-                f"{name!r} != {metadata.name!r}"
-            )
-        if view_id is not None and view_id != metadata.view_id:
-            raise ValueError(
-                f"Executable trainer '{id}' view does not match catalog: "
-                f"{view_id!r} != {metadata.view_id!r}"
-            )
-        instance = Trainer[Any, Any](
-            trainer_id=id,
-            name=metadata.name,
-            view_id=metadata.view_id,
-            func=func,
-        )
-        self._trainers[id] = instance
-        return instance
-
-    def get_trainer_by_id(self, trainer_id: str) -> Trainer[Any, Any] | None:
-        return self._trainers.get(trainer_id)
-
-    def get_trainer(self, trainer_id: str) -> Trainer[Any, Any] | None:
-        return self.get_trainer_by_id(trainer_id)
-
-    def list_trainers(self) -> list[dict[str, Any]]:
-        return [
-            {
-                "id": t.trainer_id,
-                "name": t.name,
-                "view_type": t.view_id,
-            }
-            for t in self._trainers.values()
-        ]
-
-    def register_predictor(
-        self,
-        func: Callable[..., Any] | None = None,
-        *,
-        id: str,
-        name: str | None = None,
-        view_id: str | None = None,
-    ) -> Any:
-        if func is None:
-            return functools.partial(
-                self.register_predictor, id=id, name=name, view_id=view_id
-            )
-        try:
-            metadata = catalog.get_predictor_meta(id)
-        except KeyError as exc:
-            raise ValueError(
-                f"Executable predictor '{id}' has no API catalog metadata"
-            ) from exc
-        if name is not None and name != metadata.name:
-            raise ValueError(
-                f"Executable predictor '{id}' name does not match catalog: "
-                f"{name!r} != {metadata.name!r}"
-            )
-        if view_id is not None and view_id != metadata.view_id:
-            raise ValueError(
-                f"Executable predictor '{id}' view does not match catalog: "
-                f"{view_id!r} != {metadata.view_id!r}"
-            )
-        setattr(func, "_view_id", metadata.view_id)
-        instance = Predictor[Any, Any](
-            predictor_id=id,
-            name=metadata.name,
-            view_id=metadata.view_id,
-            func=func,
-        )
-        self._predictors[id] = instance
-        return instance
-
-    def get_predictor(self, predictor_id: str) -> Predictor[Any, Any]:
-        """Return an **executable** predictor by ID.
-
-        Only returns predictors registered via ``@predictor`` decorator.
-        Metadata-only queries belong to :mod:`app.modules.types.catalog`.
-
-        Raises:
-            KeyError: No executable predictor registered for *predictor_id*.
-        """
-        predictor = self._predictors.get(predictor_id)
-        if predictor is None:
-            raise KeyError(
-                f"No executable predictor registered for '{predictor_id}'. "
-                f"Use catalog.get_predictor_meta() for metadata-only lookups, "
-                f"or ensure the predictor module is imported in the worker runtime."
-            )
-        return predictor
-
-    def get_predictor_by_id(self, predictor_id: str) -> Predictor[Any, Any] | None:
-        return self._predictors.get(predictor_id)
-
-    def list_predictors(self) -> list[dict[str, Any]]:
-        return [
-            {
-                "id": p.predictor_id,
-                "name": p.name,
-                "view_type": p.view_id,
-            }
-            for p in self._predictors.values()
-        ]
-
 
 _registry = _Registry()
 
 view = _registry.register_view
-trainer = _registry.register_trainer
-predictor = _registry.register_predictor
 
 get_view = _registry.get_view
 list_views = _registry.list_views
-get_trainer = _registry.get_trainer
-get_trainer_by_id = _registry.get_trainer_by_id
-list_trainers = _registry.list_trainers
-get_predictor = _registry.get_predictor
-get_predictor_by_id = _registry.get_predictor_by_id
-list_predictors = _registry.list_predictors
-
-resolve_task_type = resolve_task_type
-get_dataset_adapter = get_dataset_adapter
-get_dataset_model = get_dataset_model
-validate_dataset_task = validate_dataset_task
-list_dataset_types = list_dataset_types

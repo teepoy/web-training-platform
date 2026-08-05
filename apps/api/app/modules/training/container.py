@@ -14,7 +14,9 @@ from app.modules.training.adapter.engines.prefect_engine import (
     PrefectWorkPoolEngine,
 )
 from app.modules.training.adapter.repositories.repository import TrainingJobRepository
-from app.modules.training.app.services.orchestrator import TrainingOrchestrator
+from app.modules.training.app.services.submission_service import (
+    TrainingSubmissionService,
+)
 from app.modules.training.app.services.readiness import TrainingReadinessService
 from app.modules.training.domain.repository import TrainingRepository
 from app.modules.training.port.local import (
@@ -37,7 +39,7 @@ from app.shared.domain.protocols import (
 class TrainingContext:
     """Training module context — internal implementation, not exposed to other modules."""
 
-    training_orchestrator: TrainingOrchestrator
+    training_submission: TrainingSubmissionService
     training_readiness: TrainingReadinessService
     repository: TrainingRepository
     # Internal implementation details (not exposed to other modules)
@@ -123,7 +125,7 @@ def init_training(
         storage_factory=storage_factory,
         artifact_storage=shared.artifact_storage,
     )
-    orchestrator = TrainingOrchestrator(
+    submission = TrainingSubmissionService(
         engine=engine,
         notification_sink=shared.notification_sink,
         repository=repository,
@@ -134,7 +136,7 @@ def init_training(
         readiness=readiness,
     )
     return TrainingContext(
-        training_orchestrator=orchestrator,
+        training_submission=submission,
         training_readiness=readiness,
         repository=repository,
         kubeflow_client=kube_client,
@@ -162,17 +164,17 @@ class TrainingModule(Module):
 
     @provider
     @singleton
-    def provide_training_orchestrator(
+    def provide_training_submission(
         self, context: TrainingContext
-    ) -> TrainingOrchestrator:
-        return context.training_orchestrator
+    ) -> TrainingSubmissionService:
+        return context.training_submission
 
     @provider
     @singleton
     def provide_training_execution(
-        self, orchestrator: TrainingOrchestrator
+        self, submission: TrainingSubmissionService
     ) -> TrainingExecutionPort:
-        return orchestrator
+        return submission
 
     @provider
     @singleton

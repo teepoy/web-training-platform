@@ -26,11 +26,7 @@ from app.modules.sc.app.services.training_images import (
     normalize_sc_training_row,
     readable_image_bytes,
 )
-from app.modules.types import catalog
-
-SC_PATCH_IMAGE_MATERIALIZER = catalog.get_materializer_meta(
-    "sc-inspection-patch-image-v1"
-)
+from app.modules.sc.capabilities import SC_PATCH_IMAGE_V1
 
 
 class ScMaterializationCapacityError(RuntimeError):
@@ -132,21 +128,19 @@ class ScInspectionMaterializer:
                     f"{size_bytes} > {max_output_bytes} bytes"
                 )
             schema = self._schema_registry.get(
-                SC_PATCH_IMAGE_MATERIALIZER.output_view.contract,
-                SC_PATCH_IMAGE_MATERIALIZER.output_view.schema_version,
+                SC_PATCH_IMAGE_V1.contract,
+                SC_PATCH_IMAGE_V1.schema_version,
             )
             manifest = DataPlaneManifest.from_schema(
-                view_contract=SC_PATCH_IMAGE_MATERIALIZER.output_view.contract,
-                view_schema_version=(
-                    SC_PATCH_IMAGE_MATERIALIZER.output_view.schema_version
-                ),
+                view_contract=SC_PATCH_IMAGE_V1.contract,
+                view_schema_version=SC_PATCH_IMAGE_V1.schema_version,
                 dataset_id=dataset_id,
                 job_id=job_id,
                 format="parquet",
                 schema=schema,
                 schema_ref=self._schema_registry.schema_ref(
-                    SC_PATCH_IMAGE_MATERIALIZER.output_view.contract,
-                    SC_PATCH_IMAGE_MATERIALIZER.output_view.schema_version,
+                    SC_PATCH_IMAGE_V1.contract,
+                    SC_PATCH_IMAGE_V1.schema_version,
                 ),
                 image_encoding="embedded_bytes",
                 image_roles=tuple(image_types),

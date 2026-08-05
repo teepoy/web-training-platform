@@ -47,11 +47,11 @@ def get_dataset_storage_factory(request: Request) -> DatasetStorageFactoryPort:
     return resolve(request, DatasetStorageFactoryPort)
 
 
-def get_orchestrator(request: Request) -> TrainingExecutionPort:
+def get_training_submission(request: Request) -> TrainingExecutionPort:
     return resolve(request, TrainingExecutionPort)
 
 
-def get_prediction_orchestrator(request: Request) -> PredictionExecutionPort:
+def get_prediction_submission(request: Request) -> PredictionExecutionPort:
     return resolve(request, PredictionExecutionPort)
 
 
@@ -82,10 +82,12 @@ TrainingRepositoryDep = Annotated[
 DatasetStorageFactoryDep = Annotated[
     DatasetStorageFactoryPort, Depends(get_dataset_storage_factory)
 ]
-TrainingOrchestratorDep = Annotated[TrainingExecutionPort, Depends(get_orchestrator)]
-PredictionOrchestratorDep = Annotated[
+TrainingSubmissionDep = Annotated[
+    TrainingExecutionPort, Depends(get_training_submission)
+]
+PredictionSubmissionDep = Annotated[
     PredictionExecutionPort,
-    Depends(get_prediction_orchestrator),
+    Depends(get_prediction_submission),
 ]
 PredictionRepositoryDep = Annotated[
     PredictionRepository,

@@ -54,7 +54,7 @@ class TestLocalProcessEngineMetricsEmission:
         engine = LocalProcessEngine()
 
         with patch(
-            "app.modules.training.adapter.engines.local_kubeflow.submit_flow_run_and_wait",
+            "app.modules.training.flows.train_job.execute_training_runtime",
             new_callable=AsyncMock,
         ) as mock_pipeline:
             mock_pipeline.return_value = _MOCK_TRAINING_RESULT
@@ -80,7 +80,7 @@ class TestLocalProcessEngineMetricsEmission:
         engine = LocalProcessEngine()
 
         with patch(
-            "app.modules.training.adapter.engines.local_kubeflow.submit_flow_run_and_wait",
+            "app.modules.training.flows.train_job.execute_training_runtime",
             new_callable=AsyncMock,
         ) as mock_pipeline:
             mock_pipeline.return_value = _MOCK_TRAINING_RESULT
@@ -104,7 +104,7 @@ class TestLocalProcessEngineMetricsEmission:
         engine = LocalProcessEngine()
 
         with patch(
-            "app.modules.training.adapter.engines.local_kubeflow.submit_flow_run_and_wait",
+            "app.modules.training.flows.train_job.execute_training_runtime",
             new_callable=AsyncMock,
         ) as mock_pipeline:
             mock_pipeline.return_value = _MOCK_TRAINING_RESULT
@@ -129,14 +129,13 @@ class TestLocalProcessEngineMetricsEmission:
         engine = LocalProcessEngine()
 
         with patch(
-            "app.modules.training.adapter.engines.local_kubeflow.submit_flow_run_and_wait",
+            "app.modules.training.flows.train_job.execute_training_runtime",
             new_callable=AsyncMock,
         ) as mock_pipeline:
             mock_pipeline.side_effect = ValueError("no labeled sparse samples")
 
             job = _make_job()
-            external_id = asyncio.run(engine.submit(job))
-            events = asyncio.run(_collect_all_events(engine, external_id))
+            events = asyncio.run(_submit_and_collect(engine, job))
 
         epoch_events = [e for e in events if e.level == "epoch"]
         metric_events = [e for e in events if e.level == "metric"]
@@ -156,14 +155,13 @@ class TestLocalProcessEngineMetricsEmission:
         result_no_metrics = dict(_MOCK_TRAINING_RESULT, metrics={})
 
         with patch(
-            "app.modules.training.adapter.engines.local_kubeflow.submit_flow_run_and_wait",
+            "app.modules.training.flows.train_job.execute_training_runtime",
             new_callable=AsyncMock,
         ) as mock_pipeline:
             mock_pipeline.return_value = result_no_metrics
 
             job = _make_job()
-            external_id = asyncio.run(engine.submit(job))
-            events = asyncio.run(_collect_all_events(engine, external_id))
+            events = asyncio.run(_submit_and_collect(engine, job))
 
         epoch_events = [e for e in events if e.level == "epoch"]
         metric_events = [e for e in events if e.level == "metric"]
@@ -179,14 +177,13 @@ class TestLocalProcessEngineMetricsEmission:
         engine = LocalProcessEngine()
 
         with patch(
-            "app.modules.training.adapter.engines.local_kubeflow.submit_flow_run_and_wait",
+            "app.modules.training.flows.train_job.execute_training_runtime",
             new_callable=AsyncMock,
         ) as mock_pipeline:
             mock_pipeline.return_value = ["not", "a", "dict"]
 
             job = _make_job()
-            external_id = asyncio.run(engine.submit(job))
-            events = asyncio.run(_collect_all_events(engine, external_id))
+            events = asyncio.run(_submit_and_collect(engine, job))
 
         epoch_events = [e for e in events if e.level == "epoch"]
         metric_events = [e for e in events if e.level == "metric"]
@@ -200,3 +197,8 @@ async def _collect_all_events(engine, external_id: str) -> list[TrainingEvent]:
     async for event in engine.stream_events(external_id):
         events.append(event)
     return events
+
+
+async def _submit_and_collect(engine, job: TrainingJob) -> list[TrainingEvent]:
+    external_id = await engine.submit(job)
+    return await _collect_all_events(engine, external_id)

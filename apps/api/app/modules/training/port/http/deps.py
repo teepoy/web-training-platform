@@ -9,7 +9,7 @@ from app.modules.training.port.local import TrainingExecutionPort
 from app.shared.injection import resolve
 
 
-def get_training_orchestrator(request: Request) -> TrainingExecutionPort:
+def get_training_submission(request: Request) -> TrainingExecutionPort:
     return resolve(request, TrainingExecutionPort)
 
 
@@ -17,8 +17,8 @@ def get_repository(request: Request) -> TrainingRepository:
     return resolve(request, TrainingRepository)
 
 
-TrainingOrchestratorDep = Annotated[
+TrainingSubmissionDep = Annotated[
     TrainingExecutionPort,
-    Depends(get_training_orchestrator),
+    Depends(get_training_submission),
 ]
 RepositoryDep = Annotated[TrainingRepository, Depends(get_repository)]

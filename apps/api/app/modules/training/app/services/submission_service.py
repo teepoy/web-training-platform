@@ -10,7 +10,7 @@ from app.modules.datasets.port.local import (
     validate_trainer_for_dataset,
 )
 from app.modules.runtime.port.local import RuntimeRoutingPort
-from app.modules.types import catalog
+from app.modules.runtime.catalog import runtime_catalog
 from app.modules.training.app.services.readiness import TrainingReadinessService
 from app.modules.training.app.services.submission_parameters import (
     train_and_predict_workflow_parameters,
@@ -35,7 +35,7 @@ from app.shared.domain.protocols import (
 )
 
 
-class TrainingOrchestrator:
+class TrainingSubmissionService:
     @inject
     def __init__(
         self,
@@ -94,7 +94,7 @@ class TrainingOrchestrator:
             trainer_id=command.trainer_id,
             view_types=dataset.view_types,
         )
-        predictor_id = catalog.resolve_predictor_id(
+        predictor_id = runtime_catalog.resolve_predictor_id(
             command.trainer_id,
             requested_predictor_id=command.predictor_id,
         )

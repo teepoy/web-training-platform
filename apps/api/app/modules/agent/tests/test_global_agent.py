@@ -743,7 +743,7 @@ class TestGlobalToolExecution:
             mock_orch = MagicMock()
 
             result = await execute_cancel_training_job(
-                job_id="nonexistent", orchestrator=mock_orch, repository=mock_repo, org_id="org-1"
+                job_id="nonexistent", submission=mock_orch, repository=mock_repo, org_id="org-1"
             )
             assert "error" in result
 
@@ -788,8 +788,8 @@ class TestGlobalAgentRuntime:
             training_repository=MagicMock(),
             prediction_repository=MagicMock(),
             dataset_storage_factory=MagicMock(),
-            orchestrator=MagicMock(),
-            prediction_orchestrator=MagicMock(),
+            training_submission=MagicMock(),
+            prediction_submission=MagicMock(),
             scheduler_service=MagicMock(),
             model_service=MagicMock(),
             label_studio_client=MagicMock(),

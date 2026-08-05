@@ -1,109 +1,69 @@
 # Runtime Execution Contract
 
-Status: transitional
+Status: accepted
 
-The removed `apps/worker` and `apps/inference` HTTP topology is no longer the
-runtime contract. Prefect deployments are the executable boundary; production
-trainer/predictor implementations should run in out-of-process `services/*`
-runtimes and exchange versioned manifests and result contracts with the
-platform.
+Trainer and predictor capabilities are complete module-owned registrations.
+Prefect is the current submission/execution-state backend, not an independent
+executable registry or a generic algorithm orchestrator.
 
-## Dispatch
+## Execution Boundary
 
 ```text
-catalog capability
-  + module-owned runtime capability descriptor
-  -> optional environment route override
-  -> Prefect deployment
-  -> runtime consumes DataPlaneManifest
-  -> runtime writes model artifact or prediction result
-  -> API commits product job state
+RuntimeRouter registration
+  -> optional environment deployment override
+  -> submission backend (currently Prefect)
+  -> thin runtime host
+  -> registered module callable
+  -> model artifact or predictions
+  -> platform product state
 ```
 
-Flow parameters contain transport-stable identifiers and contracts:
+The HTTP request path validates and submits jobs; it does not execute registered
+callables. The thin runtime host builds `TrainingRuntimeContext`,
+`PredictionRuntimeContext`, or `TrainAndPredictRuntimeContext` and invokes the
+registration selected by operation and capability ID.
 
-- platform job ID;
-- catalog capability ID;
-- canonical input view contract and schema version;
-- input manifest or authorized dataset reference;
-- output artifact/prediction contract;
-- algorithm/code version;
-- resource profile.
+Contexts are dispatch context, not universal algorithm I/O contracts. They carry
+platform identities, request options, and the available platform context.
+Algorithm modules choose how to construct datasets, materialize/load views,
+chunk predictions, call kernels, and persist results.
 
-They must not contain API repositories, ORM rows, dependency-injection
-containers, Python callables, or `DatasetStorageAgg` instances.
+## Input And Output
 
-## Capability And Executable Separation
+There is no mandatory common train/predict input or output shape. A local
+compatibility algorithm may use module ports and `DatasetStorageAgg`; an
+out-of-process runtime uses the stable data-plane interface, Arrow/Parquet
+manifests, signed object references, and generated transport contracts.
 
-- Product metadata is aggregated by `app.modules.types.catalog`.
-- Executable binding, algorithm identity, and default deployment routes are
-  aggregated by `app.modules.runtime.catalog`.
-- Input/model contracts are derived from product catalog metadata rather than
-  copied into runtime routes.
-- `runtime_routing.*_routes` is optional and may override only deployment name,
-  resource profile, owner, and code version for an environment.
-- Every route declares whether deployment ownership is `local_compat` or
-  `external`; the API seeds only local compatibility deployments.
-- Prefect deployments are executable capabilities.
-- SC repository-local adapters are owned by `app.modules.sc.runtime` and
-  imported lazily only by Prefect flow execution.
-- Catalog listing and API startup never import `ml_library` or heavy ML packages.
-- `ml_library.models` contains private in-process values only. A future external SC
-  runtime interface belongs with `libs/protos` and should use protobuf plus
-  Arrow schema/manifest definitions rather than Python DTO sharing.
+The exact view and model contracts in a registration remain compatibility and
+provenance facts. They do not force all implementations through one
+materializer. Temporary resources are cleaned up by the registered callable
+that created them.
 
-## Data Input
+Training persists model artifacts with trainer, model-contract/version,
+predictor compatibility, algorithm/code provenance, label space, and source job
+identity. Prediction persists sample/model/predictor provenance, payload,
+confidence, counters, and explicit errors according to the owning algorithm's
+failure semantics.
 
-Runtime input is a versioned view manifest defined by
-[`data-plane-manifest-contract.md`](data-plane-manifest-contract.md). The view
-contract referenced by a trainer/predictor route must exactly match the
-`ViewContractRef` in the capability catalog.
+## Tasks And Composition
 
-Materializers produce manifests for an exact view version. Selection is by:
-
-- view;
-- purpose (`train`, `predict`, `preview`, `export`);
-- storage mode;
-- supported transport format.
-
-No materializer may silently substitute another view or schema version.
-Train and predict resolve materializers by the same view/purpose/storage-mode
-rule and own temporary materialization cleanup for the execution lifetime.
-
-## Output
-
-Training produces a model bundle plus provenance:
-
-- trainer/catalog ID and version;
-- compatible predictor IDs;
-- algorithm-specific model contract and schema version;
-- input view contract/version;
-- algorithm/code version or image digest;
-- label space and model format;
-- source job ID.
-
-Prediction produces platform prediction rows or a prediction manifest with:
-
-- model and predictor provenance;
-- sample identity;
-- prediction payload and confidence;
-- successful/skipped/failed counters;
-- explicit error table/manifest for partial failures.
-
-Train failure is terminal. Prediction may complete partially only when errors
-are represented explicitly.
+Generic runtime code must not define materialization stages, prediction chunks,
+or a fixed train-and-predict pipeline. Algorithm-specific tasks or flows live in
+the registered function or its module. A registered train-and-predict callable
+may compose that module's registered trainer and predictor explicitly.
 
 ## Authentication And State
 
 - Runtime access uses service credentials plus job-scoped authorization.
-- Long-lived user tokens are not Prefect parameters.
-- Prefect owns execution state.
+- Long-lived user tokens are not deployment parameters.
+- The execution backend owns execution state.
 - The API owns product job, model, artifact, and prediction state.
-- Runtime services report progress/results through stable transport boundaries,
-  not shared process memory.
+- External runtimes report through stable transport boundaries, not shared
+  process memory or API-internal Python objects.
 
 See also:
 
 - [Runtime registration](runtime-registration-contract.md)
+- [Data-plane manifest](data-plane-manifest-contract.md)
 - [View contracts](view-contract-foundation.md)
-- [Dataset storage modes](dataset-storage-modes.md)

@@ -5,107 +5,71 @@ runtime and data boundaries.
 
 ## Runtime Layers
 
-| Layer               | Location                                    | Responsibility                                                                                                 |
-| ------------------- | ------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| Control plane       | `apps/api`                                  | HTTP API, auth, capability metadata, compatibility validation, job state, Prefect dispatch, result persistence |
-| Orchestration       | Prefect deployments                         | Executes train, predict, train-and-predict, sensor, and other background flows                                 |
-| Runtime services    | `services/*` target boundary                | Out-of-process heavy execution consuming manifests and writing artifacts/predictions                           |
-| Optional ML library | `libs/ml`                                   | Optional Torch/Ultralytics kernels loaded only by the GPU worker                                               |
-| Data plane          | manifest, Arrow/Parquet, signed object refs | Stable dataset view handoff between control plane and runtime                                                  |
+| Layer                    | Location                                                                        | Responsibility                                                                                        |
+| ------------------------ | ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Control plane            | `apps/api`                                                                      | HTTP API, auth, capability queries, compatibility checks, job submission, product state               |
+| Execution backend        | Prefect deployments today                                                       | Submission and execution-state transport; not a capability registry or generic algorithm orchestrator |
+| Runtime modules/services | `apps/api/app/modules/*/runtime` compatibility handlers and target `services/*` | Own trainer/predictor data strategy and execution                                                     |
+| Optional ML library      | `libs/ml`                                                                       | Torch/Ultralytics kernels loaded only inside selected callables                                       |
+| Data plane               | module ports, manifests, Arrow/Parquet, signed refs                             | Dataset/view handoff appropriate to local or external execution                                       |
 
 ```text
-dataset storage
-  -> versioned view materialization
-  -> DataPlaneManifest
-  -> Prefect deployment / runtime executable
+HTTP request
+  -> RuntimeRouter registration + route
+  -> submission backend
+  -> thin runtime host
+  -> algorithm-owned dataset/materialization/batch strategy
   -> artifact or prediction writeback
-  -> platform job state
 ```
 
 ## Capability Registration
 
-Capability metadata is explicit and separate from executable registration:
+Trainer/predictor metadata and execution are registered together:
 
 ```text
-module product CapabilityBundle + module runtime capability descriptor
-  -> central product/runtime catalog validation
+module RuntimeRouter decorators
+  -> RuntimeCapabilityCatalog validation
   -> optional environment route override
-  -> Prefect deployment
-  -> lazy executable adapter
+  -> registered callable
 ```
 
-- `apps/api/app/modules/types/capabilities.py` defines typed view,
-  materializer, trainer, predictor, and bundle descriptors.
-- `apps/api/app/modules/sc/capabilities.py` owns SC product metadata.
-- `apps/api/app/modules/types/catalog.py` is the central aggregate/query surface.
-- `apps/api/app/modules/sc/runtime/descriptor.py` unifies SC executable binding,
-  algorithm identity, and default Prefect routes; `app/modules/runtime/catalog.py`
-  is their central query surface.
-- `apps/api/config/*.yaml` may override environment-specific deployment,
-  resource, owner, or code-version values; it does not repeat contracts or
-  algorithms.
-- `apps/api/app/modules/sc/runtime/` contains Torch-free worker adapters;
-  `libs/ml` contains the optional execution kernels.
+- `app/modules/types/catalog.py` owns versioned view definitions and canonical
+  row/Arrow schema references.
+- `app/modules/runtime/domain/executables.py` provides `RuntimeRouter` and the
+  aggregate catalog.
+- `app/modules/sc/runtime/` owns SC registrations, callables, and optional
+  train-and-predict composition.
+- `app/modules/runtime/catalog.py` aggregates module routers as the single
+  trainer/predictor metadata, executable, algorithm, and route source.
 
-The API catalog never imports executable modules. Filesystem scanning is not a
-registration mechanism.
+There is no second executable registry, no metadata-only trainer/predictor
+catalog, and no filesystem discovery. Heavy ML libraries are lazy imports in
+registered functions.
 
-## View And Materialization Model
+## Data Strategy Ownership
 
-A view is identified by one `ViewContractRef`:
+`storage_mode`, `dataset_type`, and versioned view contracts remain independent.
+`DatasetStorageAgg` is the API-internal storage boundary; external runtimes use
+stable data-plane interfaces and manifests.
 
-- legacy/control-plane `view_id`;
-- canonical data-plane contract;
-- schema version.
-
-Each version is independently registered and may coexist with other versions.
-Canonical Pydantic view rows live under an owning module's
-`views/<name>/v<version>/schemas.py` and bind to catalog metadata through
-`@view`.
-
-A materializer declares the exact view version it produces and its supported
-purpose, transport format, and storage mode. A trainer or predictor declares
-the exact view version it consumes. Trainer-to-predictor pairing is explicit;
-matching IDs are not used as an implicit relationship.
-
-## Dataset Storage
-
-`storage_mode`, `dataset_type`, and view contract are independent:
-
-- `storage_mode` selects physical storage such as `db_full` or
-  `file_shard_sparse`;
-- `dataset_type` owns semantic adapters and supported view IDs;
-- a materializer projects storage into a versioned data-plane view.
-
-API-internal sample access goes through `DatasetStorageAgg`, opened by
-`DatasetStorageFactory`. Out-of-process runtimes consume manifests or stable
-data-plane interfaces rather than API repositories, ORM objects, or Python
-aggregates.
-
-## Runtime Import Boundary
-
-- API startup, routers, services, composition, and registration code must not
-  import `ml_library` or Torch packages.
-- Prefect flow code imports the lightweight module-owned adapter only at
-  execution time.
-- Torch, TorchVision and Ultralytics live only in the optional `libs/ml`.
-- New production ML implementations still target out-of-process `services/*`
-  runtimes; `libs/ml` is the local worker implementation.
+The registered algorithm owns sample selection, dataset construction,
+materialization/loading, chunk/batch policy, and output semantics. The platform
+does not centrally select a materializer or impose a common trainer/predictor
+I/O model. View and model contracts provide compatibility and provenance.
 
 ## Product And Operational State
 
-- Prefect is the execution-state source.
+- The execution backend is the execution-state source.
 - The API database is the product-state source.
-- Frontend clients query task/job state through the API.
-- Prediction persistence goes through the dataset storage aggregate.
-- Label Studio is an explicit annotation/review integration, not prediction
-  truth.
-- Prometheus carries low-cardinality operational metrics; per-job details
-  belong in Prefect, task tracking, and structured logs.
+- Frontend clients query job state through the API.
+- Prediction persistence goes through the owning algorithm and dataset storage
+  boundary.
+- Label Studio is an annotation/review integration, not prediction truth.
 
 Detailed contracts:
 
 - [Runtime registration](runtime-registration-contract.md)
+- [Runtime execution](runtime-contract.md)
 - [Data-plane manifest](data-plane-manifest-contract.md)
 - [Dataset storage modes](dataset-storage-modes.md)
 - [Composition](composition-contract.md)
