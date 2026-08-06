@@ -14,6 +14,12 @@ import ScGlobalFilterModal from "@/features/sc/presentation/components/ScGlobalF
 import ScSampleTable from "@/features/sc/presentation/components/ScSampleTable.vue";
 import ScBlinkVirtualTable from "@/features/sc/presentation/components/ScBlinkVirtualTable.vue";
 import type { ScSampleTableFilter, ScSampleTableSort } from "@/features/sc/domain/sampleTable";
+import {
+  cloneScGlobalFilter,
+  emptyScGlobalFilter,
+  scGlobalFilterConditionCount,
+  type ScGlobalFilter,
+} from "@/features/sc/domain/globalFilter";
 import type {
   ScSamplingGroupPopulation,
   ScSamplingProgram,
@@ -30,6 +36,7 @@ import {
   normalizeReticleMapOptions,
   type ReticleMapOptions,
 } from "@/features/sc/application/reticleMapOptions";
+import { applyMapSelectionToGlobalFilter } from "@/features/sc/application/inspectionFilterPolicy";
 import { useInspectionQuadData } from "@/features/sc/presentation/composables/useInspectionQuadData";
 import type { ScSamplingCandidateOptions } from "@/features/sc/presentation/composables/useSqlInspectionModel";
 
@@ -88,7 +95,7 @@ const globalRangeVersions = new Map<string, number>();
 // local now because their controls and consumers all belong to this workbench.
 // Parent workflows may read a cloned GlobalFilter snapshot, but must not mirror
 // workbench-local state through props/events again.
-const globalFilter = ref<ScSampleTableFilter>({});
+const globalFilter = ref<ScGlobalFilter>(emptyScGlobalFilter());
 const globalFilterModalVisible = ref(false);
 const activeMapTab = ref<MapMode>("wafer");
 const mapZoomByMode = ref<Record<MapMode, MapViewport | null>>(emptyMapZoomByMode());
@@ -115,7 +122,7 @@ type QueuedAreaSelection =
 
 const isReclassify = computed(() => props.variant === "reclassify");
 const globalFilterModel = computed(() => globalFilter.value);
-const globalFilterCount = computed(() => Object.keys(globalFilter.value).length);
+const globalFilterCount = computed(() => scGlobalFilterConditionCount(globalFilter.value));
 const enabledLegendSources = computed<ScLegendSource[]>(() =>
   isReclassify.value
     ? ["class", "bin", "annotation", "prediction", "final_class"]
@@ -179,10 +186,16 @@ function openGlobalFilterModal(): void {
   globalFilterModalVisible.value = true;
 }
 
-function getSamplingContext(): { reviewMode: boolean; mapSelectionCount: number } {
+function getSamplingContext(): {
+  mapSelectionCount: number;
+  tableSelectionAvailable: boolean;
+} {
+  const tableSelection = model.tableSelection.value;
   return {
-    reviewMode: model.reviewMode.value,
     mapSelectionCount: model.mapSelectedDefectIds.value.length,
+    tableSelectionAvailable:
+      tableSelection.kind === "all" ||
+      (tableSelection.kind === "ids" && tableSelection.ids.length > 0),
   };
 }
 
@@ -207,17 +220,16 @@ function cloneSampleTableFilter(filter: ScSampleTableFilter): ScSampleTableFilte
   );
 }
 
-function getGlobalFilter(): ScSampleTableFilter {
-  return cloneSampleTableFilter(globalFilter.value);
+function getGlobalFilter(): ScGlobalFilter {
+  return cloneScGlobalFilter(globalFilter.value);
 }
 
 function clearGalleryRandomSamplingIfActive(): void {
   if (props.galleryRandomSamplingDefectIds?.size) emit("clear-gallery-random-sampling");
 }
 
-function handleGlobalFilterChange(filter: ScSampleTableFilter): void {
-  globalFilter.value = cloneSampleTableFilter(filter);
-  clearGalleryRandomSamplingIfActive();
+function handleGlobalFilterApply(filter: ScGlobalFilter): void {
+  globalFilter.value = cloneScGlobalFilter(filter);
 }
 
 function handleActiveMapTabChange(mode: MapMode): void {
@@ -236,19 +248,38 @@ function handleLegendGroupByChange(source: ScLegendSource | null): void {
   legendGroupBy.value = source;
 }
 
-function handleMapSelectionModeChange(mode: ScMapSelectionMode): void {
-  model.setMapSelectionMode(mode);
-  clearGalleryRandomSamplingIfActive();
+function commitMapSelectionFilter(mode: ScMapSelectionMode): void {
+  try {
+    const next = applyMapSelectionToGlobalFilter(
+      globalFilter.value,
+      model.mapSelectedDefectIds.value,
+      mode,
+    );
+    globalFilter.value = next;
+    mapSelectionQueue.clear();
+    selectedBarChartKey.value = null;
+    mapImmediateCrosshairDefectIds.value = [];
+    mapImmediateCrosshairVersion.value += 1;
+    mapSelectionResetVersion.value += 1;
+  } catch (error) {
+    reportDataError("Apply map selection to Global Filter failed", error);
+  }
 }
 
-function handleInvertMapSelectionMode(): void {
-  model.invertMapSelectionMode();
-  clearGalleryRandomSamplingIfActive();
-}
-
-function handleUndoMapSelectionMode(): void {
-  model.undoMapSelectionMode();
-  clearGalleryRandomSamplingIfActive();
+async function handleInvertMapSelectionMode(): Promise<void> {
+  try {
+    const selected = new Set(model.mapSelectedDefectIds.value);
+    const allIds = await model.queryAllMapSelection();
+    const inverted = allIds.filter((id) => !selected.has(id));
+    model.applyMapSelection(inverted);
+    selectedBarChartKey.value = null;
+    mapImmediateCrosshairDefectIds.value =
+      inverted.length <= HIGHLIGHT_MAX_DEFECTS ? [...inverted] : [];
+    mapImmediateCrosshairVersion.value += 1;
+    mapSelectionResetVersion.value += 1;
+  } catch (error) {
+    reportDataError("Invert map selection failed", error);
+  }
 }
 
 async function handleCopySelectedDefectIds(): Promise<void> {
@@ -264,12 +295,10 @@ async function handleCopySelectedDefectIds(): Promise<void> {
 
 function handleTableFilterChange(filter: ScSampleTableFilter): void {
   tableFilter.value = cloneSampleTableFilter(filter);
-  if (Object.keys(filter).length > 0) clearGalleryRandomSamplingIfActive();
 }
 
 function handleReviewModeChange(mode: "patch" | "review"): void {
   const nextReviewMode = mode === "review";
-  if (model.reviewMode.value !== nextReviewMode) clearGalleryRandomSamplingIfActive();
   model.setReviewMode(nextReviewMode);
 }
 
@@ -279,6 +308,13 @@ defineExpose({
   querySamplingCandidateCount,
   querySamplingDefectIds,
   querySamplingGroups,
+  filterDistinctValues: globalDistinctValues,
+  filterNumericRanges: globalNumericRanges,
+  filterNumericRangeLoading: globalNumericRangeLoading,
+  filterNumericRangeErrors: globalNumericRangeErrors,
+  filterResetKey: mapColorMapScopeKey,
+  searchFilterOptions: searchGlobalFilterOptions,
+  requestSamplingExtraFilterRange,
   openGlobalFilterModal,
 });
 
@@ -286,7 +322,7 @@ watch(
   () => [props.variant ?? "preview", props.datasetId ?? "", props.inspectionTime, props.waferKey],
   (scope, previousScope) => {
     if (!previousScope || scope.every((value, index) => value === previousScope[index])) return;
-    globalFilter.value = {};
+    globalFilter.value = emptyScGlobalFilter();
     globalFilterModalVisible.value = false;
     globalDistinctValues.value = {};
     globalNumericRanges.value = {};
@@ -301,10 +337,10 @@ watch(
     tableFilter.value = {};
     tableSort.value = null;
     localSelectedDefectIds.value = [];
-    model.resetMapSelectionMode();
     void model.clearMapSelection();
     model.setTableSelection({ kind: "ids", ids: [] });
     clearGalleryRandomSamplingIfActive();
+    mapSelectionResetVersion.value += 1;
   },
   { flush: "sync" },
 );
@@ -327,6 +363,7 @@ const galleryHighlightDefectIds = computed(() => {
 });
 const mapImmediateCrosshairDefectIds = ref<number[]>([]);
 const mapImmediateCrosshairVersion = ref(0);
+const mapSelectionResetVersion = ref(0);
 const mapSelectionQueue = useMapSelectionQueue();
 
 function refreshImmediateCrosshairFromMapSelection(): void {
@@ -436,22 +473,68 @@ async function searchGlobalFilterOptions(payload: {
   globalDistinctValues.value = { ...globalDistinctValues.value, [payload.field]: values };
 }
 
-async function requestGlobalFilterRange(field: string): Promise<void> {
-  const version = (globalRangeVersions.get(field) ?? 0) + 1;
-  globalRangeVersions.set(field, version);
-  globalNumericRangeLoading.value = { ...globalNumericRangeLoading.value, [field]: true };
-  globalNumericRangeErrors.value = { ...globalNumericRangeErrors.value, [field]: false };
+async function requestGlobalFilterRange(payload: {
+  field: string;
+  itemId?: string;
+}): Promise<void> {
+  const requestKey = payload.itemId ?? `draft:${payload.field}`;
+  const version = (globalRangeVersions.get(requestKey) ?? 0) + 1;
+  globalRangeVersions.set(requestKey, version);
+  globalNumericRangeLoading.value = {
+    ...globalNumericRangeLoading.value,
+    [requestKey]: true,
+  };
+  globalNumericRangeErrors.value = {
+    ...globalNumericRangeErrors.value,
+    [requestKey]: false,
+  };
   try {
-    const range = await model.loadGlobalNumericRange(field);
-    if (globalRangeVersions.get(field) !== version) return;
-    globalNumericRanges.value = { ...globalNumericRanges.value, [field]: range };
+    const range = await model.loadGlobalNumericRange(payload.field, payload.itemId);
+    if (globalRangeVersions.get(requestKey) !== version) return;
+    globalNumericRanges.value = { ...globalNumericRanges.value, [requestKey]: range };
   } catch (error) {
-    if (globalRangeVersions.get(field) !== version) return;
-    globalNumericRangeErrors.value = { ...globalNumericRangeErrors.value, [field]: true };
-    reportDataError(`Global filter range query failed for ${field}`, error);
+    if (globalRangeVersions.get(requestKey) !== version) return;
+    globalNumericRangeErrors.value = { ...globalNumericRangeErrors.value, [requestKey]: true };
+    reportDataError(`Global filter range query failed for ${payload.field}`, error);
   } finally {
-    if (globalRangeVersions.get(field) === version) {
-      globalNumericRangeLoading.value = { ...globalNumericRangeLoading.value, [field]: false };
+    if (globalRangeVersions.get(requestKey) === version) {
+      globalNumericRangeLoading.value = {
+        ...globalNumericRangeLoading.value,
+        [requestKey]: false,
+      };
+    }
+  }
+}
+
+async function requestSamplingExtraFilterRange(
+  filter: ScGlobalFilter,
+  payload: { field: string; itemId?: string },
+): Promise<void> {
+  const requestKey = payload.itemId ?? `sampling-draft:${payload.field}`;
+  const version = (globalRangeVersions.get(requestKey) ?? 0) + 1;
+  globalRangeVersions.set(requestKey, version);
+  globalNumericRangeLoading.value = {
+    ...globalNumericRangeLoading.value,
+    [requestKey]: true,
+  };
+  globalNumericRangeErrors.value = {
+    ...globalNumericRangeErrors.value,
+    [requestKey]: false,
+  };
+  try {
+    const range = await model.loadFilterNumericRange(filter, payload.field, payload.itemId);
+    if (globalRangeVersions.get(requestKey) !== version) return;
+    globalNumericRanges.value = { ...globalNumericRanges.value, [requestKey]: range };
+  } catch (error) {
+    if (globalRangeVersions.get(requestKey) !== version) return;
+    globalNumericRangeErrors.value = { ...globalNumericRangeErrors.value, [requestKey]: true };
+    reportDataError(`Extra filter range query failed for ${payload.field}`, error);
+  } finally {
+    if (globalRangeVersions.get(requestKey) === version) {
+      globalNumericRangeLoading.value = {
+        ...globalNumericRangeLoading.value,
+        [requestKey]: false,
+      };
     }
   }
 }
@@ -532,6 +615,7 @@ function handleClearMapSelection(): void {
   selectedBarChartKey.value = null;
   mapImmediateCrosshairDefectIds.value = [];
   mapImmediateCrosshairVersion.value += 1;
+  mapSelectionResetVersion.value += 1;
   mapSelectionQueue.clear();
 }
 
@@ -615,8 +699,6 @@ function useMapSelectionQueue() {
           : await model.queryBoxSelection(selection.mode, selection.region);
       if (version !== replacementVersion || selectedIds.length === 0) return;
       await model.appendMapSelection(selectedIds);
-      if (version !== replacementVersion) return;
-      clearGalleryRandomSamplingIfActive();
     }, `${selection.kind} selection failed`);
   }
 
@@ -637,8 +719,6 @@ function useMapSelectionQueue() {
       if (version !== replacementVersion) return;
       mapImmediateCrosshairVersion.value += 1;
       await model.applyMapSelection(ids);
-      if (version !== replacementVersion) return;
-      clearGalleryRandomSamplingIfActive();
     }, `${source} selection failed`);
   }
 
@@ -648,8 +728,6 @@ function useMapSelectionQueue() {
     enqueue(async () => {
       if (version !== replacementVersion) return;
       await model.clearMapSelection();
-      if (version !== replacementVersion) return;
-      clearGalleryRandomSamplingIfActive();
     }, "clear map selection failed");
   }
 
@@ -682,7 +760,8 @@ function useMapSelectionQueue() {
       :numeric-range-loading="globalNumericRangeLoading"
       :numeric-range-errors="globalNumericRangeErrors"
       :show-reclassify-columns="isReclassify"
-      @update:filter="handleGlobalFilterChange"
+      :reset-key="mapColorMapScopeKey"
+      @update:filter="handleGlobalFilterApply"
       @search-options="searchGlobalFilterOptions"
       @request-range="requestGlobalFilterRange"
     />
@@ -717,12 +796,11 @@ function useMapSelectionQueue() {
           :legend-sources="enabledLegendSources"
           :color-map-scope-key="mapColorMapScopeKey"
           :zoom="zoom"
-          :map-selection-mode="model.mapSelectionMode.value"
           :map-selection-count="model.mapSelectedDefectIds.value.length"
-          :can-undo-map-selection-mode="model.canUndoMapSelectionMode.value"
           :highlight-defect-ids="galleryHighlightDefectIds"
           :immediate-crosshair-defect-ids="mapImmediateCrosshairDefectIds"
           :immediate-crosshair-version="mapImmediateCrosshairVersion"
+          :selection-reset-version="mapSelectionResetVersion"
           :map-loading="model.activeMapLoading.value || !dataReady"
           :map-error="userFacingMapError"
           :map-progress-message="
@@ -731,9 +809,8 @@ function useMapSelectionQueue() {
           :map-progress-percent="dataReady ? model.mapProgressPercent.value : 0"
           @update:active-map-tab="handleActiveMapTabChange"
           @update:reticle-options="handleReticleOptionsChange"
-          @update:map-selection-mode="handleMapSelectionModeChange"
+          @commit-map-selection-filter="commitMapSelectionFilter"
           @invert-map-selection-mode="handleInvertMapSelectionMode"
-          @undo-map-selection-mode="handleUndoMapSelectionMode"
           @copy-selected-defect-ids="handleCopySelectedDefectIds"
           @clear-selection="handleClearMapSelection"
           @legend-select="handleLegendSelection"

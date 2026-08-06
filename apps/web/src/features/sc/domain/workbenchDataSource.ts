@@ -12,6 +12,11 @@ import type { ScSamplingProgram } from "./samplingRules";
 export type ScDataScalar = boolean | number | string | null;
 export type ScDataParameter = ScDataScalar | boolean[] | number[] | string[];
 export type ScDataFilter = [field: string, operator: string, value: unknown];
+export interface ScDataFilterGroup {
+  combinator: "and" | "or";
+  items: ScDataFilterExpression[];
+}
+export type ScDataFilterExpression = ScDataFilter | ScDataFilterGroup;
 
 export interface ScReticleProjection {
   options: ReticleMapOptions;
@@ -20,7 +25,7 @@ export interface ScReticleProjection {
 }
 
 export interface ScDataQueryContext {
-  filters?: readonly ScDataFilter[];
+  filters?: readonly ScDataFilterExpression[];
   reticle?: ScReticleProjection;
 }
 

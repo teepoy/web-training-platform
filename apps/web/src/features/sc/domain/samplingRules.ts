@@ -1,9 +1,9 @@
-export type ScSamplingRuleId = "global" | "conditional" | "quota" | "rate" | "total";
+export type ScSamplingRuleId = "extra" | "conditional" | "quota" | "total";
 
-export type ScSamplingGroupRuleKind = "quota" | "rate";
 export type ScSamplingQuotaUnit = "count" | "ratio";
 export type ScSamplingRounding = "floor" | "ceil" | "nearest";
-export type ScSamplingUnlistedPolicy = "exclude" | "keep";
+
+export const SC_SAMPLING_RANDOM_SEED = 42;
 
 export interface ScSamplingConditionalLimitRule {
   enabled: boolean;
@@ -20,12 +20,12 @@ export interface ScSamplingGroupTarget {
 
 export interface ScSamplingGroupRule {
   enabled: boolean;
-  kind: ScSamplingGroupRuleKind;
   field: string;
   unit: ScSamplingQuotaUnit;
   targets: ScSamplingGroupTarget[];
+  /** Rule applied independently to every group not listed in targets. */
+  othersAmount: number;
   rounding: ScSamplingRounding;
-  unlisted: ScSamplingUnlistedPolicy;
 }
 
 export interface ScSamplingTotalLimitRule {
@@ -34,7 +34,7 @@ export interface ScSamplingTotalLimitRule {
 }
 
 export interface ScSamplingProgram {
-  globalFilterEnabled: boolean;
+  extraFilterEnabled: boolean;
   conditional: ScSamplingConditionalLimitRule;
   group: ScSamplingGroupRule;
   total: ScSamplingTotalLimitRule;
@@ -57,7 +57,7 @@ export const SC_SAMPLING_GROUP_FIELDS = [
 
 export function createDefaultScSamplingProgram(): ScSamplingProgram {
   return {
-    globalFilterEnabled: true,
+    extraFilterEnabled: true,
     conditional: {
       enabled: false,
       field: "class_number",
@@ -66,12 +66,11 @@ export function createDefaultScSamplingProgram(): ScSamplingProgram {
     },
     group: {
       enabled: false,
-      kind: "quota",
       field: "class_number",
       unit: "count",
       targets: [],
+      othersAmount: 0,
       rounding: "nearest",
-      unlisted: "exclude",
     },
     total: {
       enabled: true,
@@ -82,7 +81,7 @@ export function createDefaultScSamplingProgram(): ScSamplingProgram {
 
 export function cloneScSamplingProgram(program: ScSamplingProgram): ScSamplingProgram {
   return {
-    globalFilterEnabled: program.globalFilterEnabled,
+    extraFilterEnabled: program.extraFilterEnabled,
     conditional: { ...program.conditional },
     group: {
       ...program.group,
@@ -103,37 +102,28 @@ export function scSamplingProgramError(program: ScSamplingProgram): string | nul
   }
 
   if (program.group.enabled) {
-    if (!program.group.field || program.group.targets.length === 0) {
-      return "Configure at least one group target.";
+    if (!program.group.field) {
+      return "Choose a field for the group quota.";
     }
+    const amounts = [
+      ...program.group.targets.map((target) => target.amount),
+      program.group.othersAmount,
+    ];
     if (
-      program.group.targets.some(
-        (target) =>
-          !Number.isFinite(target.amount) ||
-          target.amount < 0 ||
-          (program.group.kind === "quota" &&
-            program.group.unit === "count" &&
-            !Number.isInteger(target.amount)) ||
-          ((program.group.kind === "rate" || program.group.unit === "ratio") &&
-            target.amount > 100),
+      amounts.some(
+        (amount) =>
+          !Number.isFinite(amount) ||
+          amount < 0 ||
+          (program.group.unit === "count" && !Number.isInteger(amount)) ||
+          (program.group.unit === "ratio" && amount > 100),
       )
     ) {
-      return program.group.kind === "quota" && program.group.unit === "count"
+      return program.group.unit === "count"
         ? "Group counts must be non-negative integers."
-        : "Group percentages must be between 0 and 100.";
+        : "Group sample ratios must be between 0 and 100%.";
     }
-    if (program.group.targets.every((target) => target.amount === 0)) {
+    if (amounts.every((amount) => amount === 0)) {
       return "At least one group target must be greater than zero.";
-    }
-    if (program.group.kind === "quota" && program.group.unit === "ratio") {
-      if (!program.total.enabled) return "Final ratio quotas require an enabled total limit.";
-      const ratioTotal = program.group.targets.reduce((sum, target) => sum + target.amount, 0);
-      if (Math.abs(ratioTotal - 100) > 1e-9) {
-        return `Final composition ratios must total 100%; current total is ${ratioTotal}%.`;
-      }
-      if (program.group.unlisted === "keep") {
-        return "Final ratio quotas require unlisted groups to be excluded.";
-      }
     }
   }
 
@@ -146,22 +136,4 @@ export function scSamplingProgramError(program: ScSamplingProgram): string | nul
   }
 
   return null;
-}
-
-export function largestRemainderCounts(
-  targets: readonly ScSamplingGroupTarget[],
-  total: number,
-): number[] {
-  const ideals = targets.map((target) => (target.amount / 100) * total);
-  const counts = ideals.map(Math.floor);
-  let remaining = total - counts.reduce((sum, count) => sum + count, 0);
-  const ranked = ideals
-    .map((ideal, index) => ({ index, remainder: ideal - Math.floor(ideal) }))
-    .sort((left, right) => right.remainder - left.remainder || left.index - right.index);
-  for (const item of ranked) {
-    if (remaining <= 0) break;
-    counts[item.index] = (counts[item.index] ?? 0) + 1;
-    remaining -= 1;
-  }
-  return counts;
 }

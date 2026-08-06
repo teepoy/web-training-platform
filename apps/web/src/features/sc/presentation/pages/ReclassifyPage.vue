@@ -24,11 +24,19 @@ import InspectionQuad from "@/features/sc/presentation/components/InspectionQuad
 import ReviewSamplingModal from "@/features/sc/presentation/components/ReviewSamplingModal.vue";
 import ReclassifyAnnotationSidebar from "../components/ReclassifyAnnotationSidebar.vue";
 import ReclassifyTaskProgressModal from "../components/ReclassifyTaskProgressModal.vue";
-import type { ScSampleTableFilter } from "@/features/sc/domain/sampleTable";
+import {
+  cloneScGlobalFilter,
+  emptyScGlobalFilter,
+  scGlobalFilterConditions,
+  type ScFilterCondition,
+  type ScGlobalFilter,
+} from "@/features/sc/domain/globalFilter";
 import type {
   ScSamplingGroupPopulation,
   ScSamplingProgram,
 } from "@/features/sc/domain/samplingRules";
+import { SC_SAMPLING_RANDOM_SEED } from "@/features/sc/domain/samplingRules";
+import type { ScSamplingCandidateScope } from "@/features/sc/application/inspectionFilterPolicy";
 import {
   getCollectionApiV1DatasetCollectionsCollectionIdGet,
   getDatasetApiV1DatasetsDatasetIdGet,
@@ -70,38 +78,71 @@ const stackDatasetOptions = computed(() =>
 );
 const taskInsightVisible = ref(false);
 const inspectionQuad = ref<{
-  getGlobalFilter: () => ScSampleTableFilter;
-  getSamplingContext: () => { reviewMode: boolean; mapSelectionCount: number };
+  getGlobalFilter: () => ScGlobalFilter;
+  getSamplingContext: () => {
+    mapSelectionCount: number;
+    tableSelectionAvailable: boolean;
+  };
   querySamplingCandidateCount: (options: {
-    reviewOnly: boolean;
-    mapSelectionOnly: boolean;
-    globalFilterEnabled: boolean;
+    scope: ScSamplingCandidateScope;
+    extraFilterEnabled: boolean;
+    extraFilter: ScGlobalFilter;
   }) => Promise<number>;
   querySamplingDefectIds: (
     program: ScSamplingProgram,
     seed: number,
-    options: { reviewOnly: boolean; mapSelectionOnly: boolean; globalFilterEnabled: boolean },
+    options: {
+      scope: ScSamplingCandidateScope;
+      extraFilterEnabled: boolean;
+      extraFilter: ScGlobalFilter;
+    },
   ) => Promise<number[]>;
   querySamplingGroups: (
     field: string,
-    options: { reviewOnly: boolean; mapSelectionOnly: boolean; globalFilterEnabled: boolean },
+    options: {
+      scope: ScSamplingCandidateScope;
+      extraFilterEnabled: boolean;
+      extraFilter: ScGlobalFilter;
+    },
   ) => Promise<ScSamplingGroupPopulation[]>;
+  filterDistinctValues: Record<string, Array<string | number>>;
+  filterNumericRanges: Record<string, { min: number; max: number } | null>;
+  filterNumericRangeLoading: Record<string, boolean>;
+  filterNumericRangeErrors: Record<string, boolean>;
+  filterResetKey: string;
+  searchFilterOptions: (payload: { field: string; search: string }) => Promise<void>;
+  requestSamplingExtraFilterRange: (
+    filter: ScGlobalFilter,
+    payload: { field: string; itemId?: string },
+  ) => Promise<void>;
   openGlobalFilterModal: () => void;
 } | null>(null);
 const filterConfirmationVisible = ref(false);
 const filteredWorkflowCount = ref(0);
-const filteredWorkflowFilter = ref<ScSampleTableFilter | null>(null);
+const filteredWorkflowFilter = ref<ScGlobalFilter | null>(null);
 const isPreparingFilteredWorkflow = ref(false);
 const samplingAvailableCount = ref(0);
 const samplingMapSelectionCount = ref(0);
-const samplingGlobalFilter = ref<ScSampleTableFilter>({});
+const samplingTableSelectionAvailable = ref(false);
+const samplingExtraFilter = ref<ScGlobalFilter>(emptyScGlobalFilter());
 const isPreparingSampling = ref(false);
 
 const samplingOptions = computed(() => ({
-  reviewOnly: page.samplingReviewOnly.value,
-  mapSelectionOnly: page.samplingMapSelectionOnly.value,
-  globalFilterEnabled: page.samplingProgram.value.globalFilterEnabled,
+  scope: page.samplingScope.value,
+  extraFilterEnabled: page.samplingProgram.value.extraFilterEnabled,
+  extraFilter: samplingExtraFilter.value,
 }));
+const samplingFilterDistinctValues = computed(
+  () => inspectionQuad.value?.filterDistinctValues ?? {},
+);
+const samplingFilterNumericRanges = computed(() => inspectionQuad.value?.filterNumericRanges ?? {});
+const samplingFilterNumericRangeLoading = computed(
+  () => inspectionQuad.value?.filterNumericRangeLoading ?? {},
+);
+const samplingFilterNumericRangeErrors = computed(
+  () => inspectionQuad.value?.filterNumericRangeErrors ?? {},
+);
+const samplingFilterResetKey = computed(() => inspectionQuad.value?.filterResetKey);
 
 const containerStyle = computed(() => ({
   "--cv-bg": themeVars.value.bodyColor,
@@ -161,20 +202,16 @@ async function handleTrainAndPredictClick(): Promise<void> {
     return;
   }
   const globalFilter = quad.getGlobalFilter();
-  const sampledIds = [...page.galleryRandomSamplingDefectIds.value];
   const workflowFilter = page.resolveTrainSampleFilter(globalFilter);
   if (workflowFilter) {
     isPreparingFilteredWorkflow.value = true;
     try {
       filteredWorkflowFilter.value = workflowFilter;
-      filteredWorkflowCount.value =
-        sampledIds.length > 0
-          ? sampledIds.length
-          : await quad.querySamplingCandidateCount({
-              reviewOnly: false,
-              mapSelectionOnly: false,
-              globalFilterEnabled: true,
-            });
+      filteredWorkflowCount.value = await quad.querySamplingCandidateCount({
+        scope: "all",
+        extraFilterEnabled: false,
+        extraFilter: emptyScGlobalFilter(),
+      });
       filterConfirmationVisible.value = true;
     } catch (error) {
       message.error(
@@ -188,7 +225,7 @@ async function handleTrainAndPredictClick(): Promise<void> {
   await submitTrainAndPredict(null);
 }
 
-async function submitTrainAndPredict(sampleFilter: ScSampleTableFilter | null): Promise<void> {
+async function submitTrainAndPredict(sampleFilter: ScGlobalFilter | null): Promise<void> {
   filterConfirmationVisible.value = false;
   await page.trainAndPredict(sampleFilter);
   if (page.trainPredictTaskId.value) {
@@ -196,11 +233,15 @@ async function submitTrainAndPredict(sampleFilter: ScSampleTableFilter | null): 
   }
 }
 
-const globalFilterEntries = computed(() => Object.entries(filteredWorkflowFilter.value ?? {}));
+const globalFilterEntries = computed(() =>
+  filteredWorkflowFilter.value ? scGlobalFilterConditions(filteredWorkflowFilter.value) : [],
+);
 
-function formatWorkflowCondition(field: string, condition: ScSampleTableFilter[string]): string {
+function formatWorkflowCondition(field: string, condition: ScFilterCondition): string {
   if (field === "defect_id" && condition.filterType === "set") {
-    return `${condition.values.length} sampled defects`;
+    return condition.exclude
+      ? `excludes ${condition.values.length} defects`
+      : `includes ${condition.values.length} defects`;
   }
   return JSON.stringify(condition);
 }
@@ -212,8 +253,13 @@ async function openSamplingModal(): Promise<void> {
     if (!quad) throw new Error("Data is still loading. Try again in a moment.");
     const context = quad.getSamplingContext();
     samplingMapSelectionCount.value = context.mapSelectionCount;
-    samplingGlobalFilter.value = quad.getGlobalFilter();
-    if (context.mapSelectionCount === 0) page.samplingMapSelectionOnly.value = false;
+    samplingTableSelectionAvailable.value = context.tableSelectionAvailable;
+    if (
+      (page.samplingScope.value === "map" && context.mapSelectionCount === 0) ||
+      (page.samplingScope.value === "table" && !context.tableSelectionAvailable)
+    ) {
+      page.samplingScope.value = "all";
+    }
     page.showSamplingModal.value = true;
     await refreshSamplingAvailableCount();
   } catch (error) {
@@ -236,9 +282,16 @@ async function loadSamplingGroups(field: string): Promise<ScSamplingGroupPopulat
   return quad.querySamplingGroups(field, samplingOptions.value);
 }
 
-function editSamplingGlobalFilter(): void {
-  page.showSamplingModal.value = false;
-  inspectionQuad.value?.openGlobalFilterModal();
+function updateSamplingExtraFilter(filter: ScGlobalFilter): void {
+  samplingExtraFilter.value = cloneScGlobalFilter(filter);
+}
+
+function searchSamplingExtraFilterOptions(payload: { field: string; search: string }): void {
+  void inspectionQuad.value?.searchFilterOptions(payload);
+}
+
+function requestSamplingExtraFilterRange(payload: { field: string; itemId?: string }): void {
+  void inspectionQuad.value?.requestSamplingExtraFilterRange(samplingExtraFilter.value, payload);
 }
 
 async function handleSamplingScopeChange(): Promise<void> {
@@ -257,7 +310,7 @@ async function applyRandomSampling(): Promise<void> {
   try {
     const ids = await inspectionQuad.value?.querySamplingDefectIds(
       page.samplingProgram.value,
-      page.samplingSeed.value,
+      SC_SAMPLING_RANDOM_SEED,
       samplingOptions.value,
     );
     if (!ids) throw new Error("Data is still loading. Try again in a moment.");
@@ -464,19 +517,22 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
     <ReviewSamplingModal
       v-model:show="page.showSamplingModal.value"
       v-model:program="page.samplingProgram.value"
-      v-model:seed="page.samplingSeed.value"
-      v-model:review-only="page.samplingReviewOnly.value"
-      v-model:map-selection-only="page.samplingMapSelectionOnly.value"
-      v-model:assign-draft-label="page.assignDefaultDraftLabel.value"
-      v-model:draft-label="page.samplingDraftLabel.value"
+      v-model:scope="page.samplingScope.value"
       :loading="isPreparingSampling"
       :available-count="samplingAvailableCount"
       :map-selection-count="samplingMapSelectionCount"
-      :global-filter="samplingGlobalFilter"
-      :code-labels="page.codeLabels.value"
+      :table-selection-available="samplingTableSelectionAvailable"
+      :extra-filter="samplingExtraFilter"
+      :extra-filter-distinct-values="samplingFilterDistinctValues"
+      :extra-filter-numeric-ranges="samplingFilterNumericRanges"
+      :extra-filter-numeric-range-loading="samplingFilterNumericRangeLoading"
+      :extra-filter-numeric-range-errors="samplingFilterNumericRangeErrors"
+      :extra-filter-reset-key="samplingFilterResetKey"
       :load-groups="loadSamplingGroups"
+      @update:extra-filter="updateSamplingExtraFilter"
       @scope-change="handleSamplingScopeChange"
-      @edit-global-filter="editSamplingGlobalFilter"
+      @search-extra-filter-options="searchSamplingExtraFilterOptions"
+      @request-extra-filter-range="requestSamplingExtraFilterRange"
       @confirm="applyRandomSampling"
     />
     <NModal
@@ -490,12 +546,8 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
         {{ filteredWorkflowCount }} defects.
       </NText>
       <NDescriptions bordered :column="1" size="small" style="margin-top: 16px">
-        <NDescriptionsItem
-          v-for="[field, condition] in globalFilterEntries"
-          :key="field"
-          :label="field"
-        >
-          {{ formatWorkflowCondition(field, condition) }}
+        <NDescriptionsItem v-for="item in globalFilterEntries" :key="item.id" :label="item.field">
+          {{ formatWorkflowCondition(item.field, item.condition) }}
         </NDescriptionsItem>
       </NDescriptions>
       <template #footer>

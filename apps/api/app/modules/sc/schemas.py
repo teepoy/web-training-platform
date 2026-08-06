@@ -52,7 +52,8 @@ class ScSampleTableSort(BaseModel):
 
 class ScSampleTableSetFilter(BaseModel):
     filter_type: Literal["set"] = Field(alias="filterType")
-    values: list[float | str] = Field(min_length=1)
+    values: list[float | str]
+    exclude: bool = False
 
 
 class ScSampleTableRangeFilter(BaseModel):
@@ -60,6 +61,27 @@ class ScSampleTableRangeFilter(BaseModel):
     type: Literal["inRange"]
     filter: float
     filter_to: float = Field(alias="filterTo")
+
+
+class ScWorkflowSampleFilterItem(BaseModel):
+    kind: Literal["condition"]
+    field: str = Field(min_length=1)
+    condition: ScSampleTableSetFilter | ScSampleTableRangeFilter
+
+
+class ScWorkflowSampleFilterGroup(BaseModel):
+    kind: Literal["group"]
+    combinator: Literal["and", "or"]
+    items: list[ScWorkflowSampleFilterItem | ScWorkflowSampleFilterGroup] = Field(
+        min_length=1
+    )
+
+
+class ScWorkflowSampleFilter(BaseModel):
+    combinator: Literal["and", "or"]
+    items: list[ScWorkflowSampleFilterItem | ScWorkflowSampleFilterGroup] = Field(
+        min_length=1
+    )
 
 
 class ScSampleTableRowsRequest(BaseModel):

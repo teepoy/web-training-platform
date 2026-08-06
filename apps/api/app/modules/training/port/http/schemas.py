@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -46,6 +46,40 @@ class CreateTrainingJobRequest(_StrictRequest):
         )
 
 
+class SampleSetFilterCondition(_StrictRequest):
+    filter_type: Literal["set"] = Field(alias="filterType")
+    values: list[float | str]
+    exclude: bool = False
+
+
+class SampleRangeFilterCondition(_StrictRequest):
+    filter_type: Literal["number"] = Field(alias="filterType")
+    type: Literal["inRange"]
+    filter: float
+    filter_to: float = Field(alias="filterTo")
+
+
+class SampleFilterItemRequest(_StrictRequest):
+    kind: Literal["condition"]
+    field: str = Field(min_length=1)
+    condition: SampleSetFilterCondition | SampleRangeFilterCondition
+
+
+class SampleFilterGroupRequest(_StrictRequest):
+    kind: Literal["group"]
+    combinator: Literal["and", "or"]
+    items: list[SampleFilterItemRequest | SampleFilterGroupRequest] = Field(
+        min_length=1
+    )
+
+
+class SampleFilterRequest(_StrictRequest):
+    combinator: Literal["and", "or"]
+    items: list[SampleFilterItemRequest | SampleFilterGroupRequest] = Field(
+        min_length=1
+    )
+
+
 class TrainAndPredictRequest(_StrictRequest):
     dataset_id: str | None = Field(default=None, min_length=1)
     collection_id: str | None = Field(default=None, min_length=1)
@@ -54,7 +88,7 @@ class TrainAndPredictRequest(_StrictRequest):
     target: str = Field(default="image_classification", min_length=1)
     model_version: str | None = None
     sample_ids: list[str] | None = Field(default=None, min_length=1)
-    sample_filter: dict[str, Any] | None = None
+    sample_filter: SampleFilterRequest | None = None
     prompt: str | None = None
     predictor_id: str | None = Field(default=None, min_length=1)
 
@@ -69,8 +103,6 @@ class TrainAndPredictRequest(_StrictRequest):
         )
         if self.sample_ids is not None and self.sample_filter is not None:
             raise ValueError("sample_ids and sample_filter are mutually exclusive")
-        if self.sample_filter is not None and not self.sample_filter:
-            raise ValueError("sample_filter must not be empty")
         return self
 
     def to_command(self, *, org_id: str, created_by: str) -> TrainAndPredictCommand:
@@ -84,7 +116,11 @@ class TrainAndPredictRequest(_StrictRequest):
             target=self.target,
             model_version=self.model_version,
             sample_ids=tuple(self.sample_ids) if self.sample_ids is not None else None,
-            sample_filter=self.sample_filter,
+            sample_filter=(
+                self.sample_filter.model_dump(by_alias=True)
+                if self.sample_filter is not None
+                else None
+            ),
             prompt=self.prompt,
             predictor_id=self.predictor_id,
         )

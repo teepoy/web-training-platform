@@ -2,16 +2,22 @@ import { create } from "@bufbuild/protobuf";
 import { computed, onScopeDispose, ref, watch, type ComputedRef, type Ref } from "vue";
 import type { DefectList } from "@/features/sc/generated/proto/sc/v1/sample_pb";
 import { DefectListSchema } from "@/features/sc/generated/proto/sc/v1/sample_pb";
-import { buildScDataFilters } from "@/features/sc/application/workbenchDataFilter";
+import { buildScGlobalDataFilters } from "@/features/sc/application/workbenchDataFilter";
+import {
+  buildInspectionFilterPlan,
+  buildSamplingCandidateFilters,
+  type ScSamplingFilterOptions,
+} from "@/features/sc/application/inspectionFilterPolicy";
 import { isScMissingFilterValue } from "@/features/sc/domain/missingFilterValue";
 import type { ReticleMapOptions } from "@/features/sc/application/reticleMapOptions";
 import type { ScSampleTableFilter, ScSampleTableSort } from "@/features/sc/domain/sampleTable";
+import type { ScGlobalFilter } from "@/features/sc/domain/globalFilter";
 import type {
   ScSamplingGroupPopulation,
   ScSamplingProgram,
 } from "@/features/sc/domain/samplingRules";
 import type {
-  ScDataFilter,
+  ScDataFilterExpression,
   ScGalleryDataQuery,
   ScReticleProjection,
   ScTableSelectionConstraint,
@@ -19,7 +25,6 @@ import type {
 } from "@/features/sc/domain/workbenchDataSource";
 import type {
   ScLegendSource,
-  ScMapSelectionMode,
   ScSampleTableDataSource,
 } from "@/features/sc/domain/workbenchInteraction";
 import type { ScMapLassoSelection } from "@platform/sc-map-element";
@@ -28,15 +33,7 @@ interface IdSelectionState {
   ids: number[];
 }
 
-interface MapSelectionFilterState extends IdSelectionState {
-  mode: ScMapSelectionMode;
-}
-
-export interface ScSamplingCandidateOptions {
-  reviewOnly: boolean;
-  mapSelectionOnly: boolean;
-  globalFilterEnabled: boolean;
-}
+export type ScSamplingCandidateOptions = ScSamplingFilterOptions;
 
 function sortedUniqueIds(ids: readonly number[]): number[] {
   return [...new Set(ids.filter(Number.isFinite))].sort((left, right) => left - right);
@@ -61,7 +58,7 @@ function transferableBuffer(value: Uint8Array): ArrayBuffer {
 export function useSqlInspectionModel(args: {
   dataSource: Ref<ScWorkbenchDataSource | null> | ComputedRef<ScWorkbenchDataSource | null>;
   legendGroupBy: ComputedRef<ScLegendSource | null | undefined>;
-  globalFilter: ComputedRef<ScSampleTableFilter>;
+  globalFilter: ComputedRef<ScGlobalFilter>;
   tableFilter: ComputedRef<ScSampleTableFilter | undefined>;
   tableSort: ComputedRef<ScSampleTableSort | null | undefined>;
   reticle: ComputedRef<ScReticleProjection>;
@@ -75,10 +72,6 @@ export function useSqlInspectionModel(args: {
   const mapProgressPercent = ref(0);
   const legendGroups = ref<Record<string, DefectList> | null>(null);
   const mapSelection = ref<IdSelectionState>({ ids: [] });
-  const mapSelectionFilter = ref<MapSelectionFilterState | null>(null);
-  const mapSelectionFilterHistory = ref<Array<MapSelectionFilterState | null>>([]);
-  const mapSelectionMode = computed(() => mapSelectionFilter.value?.mode ?? null);
-  const canUndoMapSelectionMode = computed(() => mapSelectionFilterHistory.value.length > 0);
   const tableSelection = ref<ScTableSelectionConstraint>({ kind: "ids", ids: [] });
   const mapSelectedDefectIds = computed(() => mapSelection.value.ids);
   const reviewMode = ref(false);
@@ -89,51 +82,28 @@ export function useSqlInspectionModel(args: {
 
   const requestedMapLegendColumn = computed(() => legendColumn(args.legendGroupBy.value));
   const mapLegendColumn = ref(requestedMapLegendColumn.value);
-  const globalFilters = computed(() => buildScDataFilters(args.globalFilter.value));
-  const randomSamplingFilters = computed<ScDataFilter[]>(() => {
-    const ids = args.galleryRandomSamplingDefectIds.value;
-    return ids?.size ? [["defect_id", "in", [...ids].map(Number)]] : [];
-  });
-  const reviewFilters = computed<ScDataFilter[]>(() =>
-    reviewMode.value ? [["images", ">", 0]] : [],
+  const globalFilters = computed(() => buildScGlobalDataFilters(args.globalFilter.value));
+  const filterPlan = computed(() =>
+    buildInspectionFilterPlan({
+      globalFilter: args.globalFilter.value,
+      mapSelectionIds: mapSelection.value.ids,
+      reviewMode: reviewMode.value,
+      samplingIds: args.galleryRandomSamplingDefectIds.value,
+    }),
   );
-  const tableBaseFilters = computed<ScDataFilter[]>(() => [
-    ...globalFilters.value,
-    ...randomSamplingFilters.value,
-    ...reviewFilters.value,
-    ...(mapSelectionFilter.value
-      ? ([
-          [
-            "defect_id",
-            mapSelectionFilter.value.mode === "include" ? "in" : "not in",
-            mapSelectionFilter.value.ids,
-          ],
-        ] as ScDataFilter[])
-      : []),
-  ]);
-  const aggregateFilters = computed<ScDataFilter[]>(() => [
-    ...globalFilters.value,
-    ...randomSamplingFilters.value,
-    ...reviewFilters.value,
-  ]);
-
-  function samplingCandidateFilters(options: ScSamplingCandidateOptions): ScDataFilter[] {
-    if (options.mapSelectionOnly && mapSelection.value.ids.length === 0) {
-      throw new Error("Current map selection is empty");
-    }
-    return [
-      ...(options.globalFilterEnabled ? globalFilters.value : []),
-      ...(options.reviewOnly ? ([["images", ">", 0]] as ScDataFilter[]) : []),
-      ...(options.mapSelectionOnly
-        ? ([["defect_id", "in", mapSelection.value.ids]] as ScDataFilter[])
-        : []),
-    ];
+  function samplingCandidateFilters(options: ScSamplingCandidateOptions): ScDataFilterExpression[] {
+    return buildSamplingCandidateFilters({
+      baseFilter: args.globalFilter.value,
+      mapSelectionIds: mapSelection.value.ids,
+      tableSelection: tableSelection.value,
+      options,
+    });
   }
 
   const sampleTableDataSource = computed<ScSampleTableDataSource | undefined>(() => {
     const source = args.dataSource.value;
     if (!source) return undefined;
-    const filters = tableBaseFilters.value;
+    const filters = filterPlan.value.tableFilters;
     const reticle = args.reticle.value;
     return {
       scopeKey: `${source.scopeKey}:${JSON.stringify(filters)}:${JSON.stringify(reticle)}`,
@@ -144,7 +114,7 @@ export function useSqlInspectionModel(args: {
   });
 
   const galleryQuery = computed<Omit<ScGalleryDataQuery, "mode" | "offset" | "limit">>(() => ({
-    filters: tableBaseFilters.value,
+    filters: filterPlan.value.galleryBaseFilters,
     reticle: args.reticle.value,
     tableFilter: args.tableFilter.value,
     tableSort: args.tableSort.value,
@@ -166,7 +136,7 @@ export function useSqlInspectionModel(args: {
     const targetLegendColumn = requestedMapLegendColumn.value;
     try {
       const ipc = await source.loadMap({
-        filters: aggregateFilters.value,
+        filters: filterPlan.value.mapFilters,
         legendColumn: targetLegendColumn,
         reticle: args.reticle.value,
       });
@@ -193,7 +163,7 @@ export function useSqlInspectionModel(args: {
     }
     try {
       const groups = await source.loadAggregates({
-        filters: aggregateFilters.value,
+        filters: filterPlan.value.aggregateFilters,
         field: requestedMapLegendColumn.value,
         reticle: args.reticle.value,
       });
@@ -211,25 +181,13 @@ export function useSqlInspectionModel(args: {
   }
 
   watch(
-    [
-      args.dataSource,
-      aggregateFilters,
-      requestedMapLegendColumn,
-      args.reticle,
-      invalidationRevision,
-    ],
+    [args.dataSource, globalFilters, requestedMapLegendColumn, args.reticle, invalidationRevision],
     () => void loadMap(),
     { deep: true, immediate: true },
   );
 
   watch(
-    [
-      args.dataSource,
-      aggregateFilters,
-      requestedMapLegendColumn,
-      args.reticle,
-      invalidationRevision,
-    ],
+    [args.dataSource, globalFilters, requestedMapLegendColumn, args.reticle, invalidationRevision],
     () => void loadAggregates(),
     { deep: true, immediate: true },
   );
@@ -259,7 +217,7 @@ export function useSqlInspectionModel(args: {
     const source = args.dataSource.value;
     if (!source) return [];
     return source.resolveSelection({
-      filters: aggregateFilters.value,
+      filters: filterPlan.value.selectionFilters,
       reticle: args.reticle.value,
       constraint: {
         kind: "rectangle",
@@ -279,7 +237,7 @@ export function useSqlInspectionModel(args: {
     const source = args.dataSource.value;
     if (!source) return [];
     return source.resolveSelection({
-      filters: aggregateFilters.value,
+      filters: filterPlan.value.selectionFilters,
       reticle: args.reticle.value,
       constraint: { kind: "polygon", mode, selection },
     });
@@ -289,7 +247,7 @@ export function useSqlInspectionModel(args: {
     const source = args.dataSource.value;
     if (!source) return [];
     return source.resolveSelection({
-      filters: aggregateFilters.value,
+      filters: filterPlan.value.selectionFilters,
       reticle: args.reticle.value,
       constraint: {
         kind: "legend",
@@ -359,76 +317,51 @@ export function useSqlInspectionModel(args: {
 
   async function loadGlobalNumericRange(
     field: string,
+    omitItemId?: string,
+  ): Promise<{ min: number; max: number } | null> {
+    return loadFilterNumericRange(args.globalFilter.value, field, omitItemId);
+  }
+
+  async function loadFilterNumericRange(
+    filter: ScGlobalFilter,
+    field: string,
+    omitItemId?: string,
   ): Promise<{ min: number; max: number } | null> {
     const source = args.dataSource.value;
     if (!source) return null;
-    const filterWithoutCurrentField = { ...args.globalFilter.value };
-    delete filterWithoutCurrentField[field];
     return source.loadNumericRange({
       field,
-      filters: buildScDataFilters(filterWithoutCurrentField),
+      filters: buildScGlobalDataFilters(filter, { omitItemId }),
       reticle: args.reticle.value,
     });
   }
 
-  async function applyMapSelection(ids: number[]): Promise<void> {
-    mapSelection.value = { ids: sortedUniqueIds(ids) };
+  async function queryAllMapSelection(): Promise<number[]> {
+    const source = args.dataSource.value;
+    if (!source) return [];
+    return source.resolveSelection({
+      filters: filterPlan.value.selectionFilters,
+      reticle: args.reticle.value,
+      constraint: { kind: "all" },
+    });
   }
 
-  async function appendMapSelection(ids: number[]): Promise<number[]> {
-    const next = sortedUniqueIds([...mapSelection.value.ids, ...ids]);
+  function updateMapSelection(ids: readonly number[]): number[] {
+    const next = sortedUniqueIds(ids);
     mapSelection.value = { ids: next };
     return next;
   }
 
-  async function clearMapSelection(): Promise<void> {
-    mapSelection.value = { ids: [] };
+  function applyMapSelection(ids: number[]): void {
+    updateMapSelection(ids);
   }
 
-  function setMapSelectionMode(mode: ScMapSelectionMode): void {
-    const ids = sortedUniqueIds(mapSelection.value.ids);
-    if (ids.length === 0) return;
-    const current = mapSelectionFilter.value;
-    if (
-      current?.mode === mode &&
-      current.ids.length === ids.length &&
-      current.ids.every((id, index) => id === ids[index])
-    ) {
-      return;
-    }
-    mapSelectionFilterHistory.value = [
-      ...mapSelectionFilterHistory.value,
-      current ? { mode: current.mode, ids: [...current.ids] } : null,
-    ];
-    mapSelectionFilter.value = { mode, ids };
+  function appendMapSelection(ids: number[]): number[] {
+    return updateMapSelection([...mapSelection.value.ids, ...ids]);
   }
 
-  function invertMapSelectionMode(): void {
-    const current = mapSelectionFilter.value;
-    if (!current) {
-      setMapSelectionMode("exclude");
-      return;
-    }
-    mapSelectionFilterHistory.value = [
-      ...mapSelectionFilterHistory.value,
-      { mode: current.mode, ids: [...current.ids] },
-    ];
-    mapSelectionFilter.value = {
-      mode: current.mode === "include" ? "exclude" : "include",
-      ids: [...current.ids],
-    };
-  }
-
-  function undoMapSelectionMode(): void {
-    if (mapSelectionFilterHistory.value.length === 0) return;
-    const previous = mapSelectionFilterHistory.value.at(-1) ?? null;
-    mapSelectionFilterHistory.value = mapSelectionFilterHistory.value.slice(0, -1);
-    mapSelectionFilter.value = previous ? { mode: previous.mode, ids: [...previous.ids] } : null;
-  }
-
-  function resetMapSelectionMode(): void {
-    mapSelectionFilterHistory.value = [];
-    mapSelectionFilter.value = null;
+  function clearMapSelection(): void {
+    updateMapSelection([]);
   }
 
   function setTableSelection(selection: ScTableSelectionConstraint): void {
@@ -456,26 +389,22 @@ export function useSqlInspectionModel(args: {
     mapProgressPercent,
     retryMap: loadMap,
     mapSelectedDefectIds,
-    mapSelectionMode,
-    canUndoMapSelectionMode,
     reviewMode,
     tableSelection,
     loadGlobalDistinctValues,
     loadGlobalNumericRange,
+    loadFilterNumericRange,
     setTableSelection,
     setReviewMode,
     queryBoxSelection,
     queryLassoSelection,
     queryLegendSelection,
+    queryAllMapSelection,
     querySamplingCandidateCount,
     querySamplingDefectIds,
     querySamplingGroups,
     applyMapSelection,
     appendMapSelection,
     clearMapSelection,
-    setMapSelectionMode,
-    invertMapSelectionMode,
-    undoMapSelectionMode,
-    resetMapSelectionMode,
   };
 }

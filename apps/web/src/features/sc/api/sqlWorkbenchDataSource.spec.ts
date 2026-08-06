@@ -3,7 +3,11 @@ import { http, HttpResponse } from "msw";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { server } from "@/testing/msw/server";
 import { createDefaultScSamplingProgram } from "@/features/sc/domain/samplingRules";
-import { compileScWhere, SqlWorkbenchDataSource } from "./sqlWorkbenchDataSource";
+import {
+  compileScSamplingSelection,
+  compileScWhere,
+  SqlWorkbenchDataSource,
+} from "./sqlWorkbenchDataSource";
 
 const QUERY_URL = "/api/v1/sc/data/datasets/ds-1/query";
 
@@ -58,15 +62,46 @@ describe("SQL workbench data source", () => {
         ["prediction_label", "contains", "scratch"],
         ["annotation_label", "is null", null],
         ["final_class", "in or null", ["Scratch"]],
+        ["prediction_label", "not in or null", ["Particle"]],
+        ["annotation_label", "not in and not null", ["Clean"]],
       ]),
     ).toEqual({
-      sql: ' WHERE "rough_bin" = ANY(?) AND NOT ("defect_id" = ANY(?)) AND CONTAINS(CAST("prediction_label" AS VARCHAR), ?) AND "annotation_label" IS NULL AND ("final_class" = ANY(?) OR "final_class" IS NULL)',
-      parameters: [[1, 2], [8, 9], "scratch", ["Scratch"]],
+      sql: ' WHERE "rough_bin" = ANY(?) AND NOT ("defect_id" = ANY(?)) AND CONTAINS(CAST("prediction_label" AS VARCHAR), ?) AND "annotation_label" IS NULL AND ("final_class" = ANY(?) OR "final_class" IS NULL) AND (NOT ("prediction_label" = ANY(?)) OR "prediction_label" IS NULL) AND (NOT ("annotation_label" = ANY(?)) AND "annotation_label" IS NOT NULL)',
+      parameters: [[1, 2], [8, 9], "scratch", ["Scratch"], ["Particle"], ["Clean"]],
     });
 
     expect(() => compileScWhere([["secret_path", "==", "/etc/passwd"]])).toThrow(
       "Unsupported SC data field",
     );
+  });
+
+  it("preserves nested AND and OR groups and parameter order", () => {
+    expect(
+      compileScWhere([
+        {
+          combinator: "and",
+          items: [
+            {
+              combinator: "or",
+              items: [
+                ["class_number", "==", 2],
+                ["class_number", "==", 3],
+              ],
+            },
+            {
+              combinator: "and",
+              items: [
+                ["area", ">=", 10],
+                ["area", "<=", 20],
+              ],
+            },
+          ],
+        },
+      ]),
+    ).toEqual({
+      sql: ' WHERE (("class_number" = ? OR "class_number" = ?) AND ("area" >= ? AND "area" <= ?))',
+      parameters: [2, 3, 10, 20],
+    });
   });
 
   it("sends SQL and parameters and decodes Arrow aggregates", async () => {
@@ -238,6 +273,7 @@ describe("SQL workbench data source", () => {
         if (body.description === "sc-workbench.schema") {
           return arrowResponse(
             {
+              row_key: [] as string[],
               defect_id: Int32Array.from([]),
               future_metric: Float64Array.from([]),
               upstream_payload: [] as string[],
@@ -250,6 +286,7 @@ describe("SQL workbench data source", () => {
         }
         return arrowResponse(
           {
+            row_key: ["dataset::42"],
             defect_id: Int32Array.from([42]),
             future_metric: Float64Array.from([12.5]),
             upstream_payload: ["kept"],
@@ -262,6 +299,7 @@ describe("SQL workbench data source", () => {
     sources.push(source);
 
     await expect(source.loadColumns()).resolves.toEqual([
+      { name: "row_key", arrowType: "Null", nullable: true },
       { name: "defect_id", arrowType: "Int32", nullable: true },
       { name: "future_metric", arrowType: "Float64", nullable: true },
       { name: "upstream_payload", arrowType: "Null", nullable: true },
@@ -277,6 +315,7 @@ describe("SQL workbench data source", () => {
     });
 
     expect(page.items[0]).toMatchObject({
+      row_key: "dataset::42",
       defect_id: "42",
       future_metric: 12.5,
       upstream_payload: "kept",
@@ -298,9 +337,30 @@ describe("SQL workbench data source", () => {
       (request) => request.description === "sc-workbench.table.rows",
     );
     expect(rowsRequest?.sql).toContain('WITH "__sc_page_ids" AS (SELECT "row_key" FROM samples');
+    expect(rowsRequest?.sql).toContain('INNER JOIN "__sc_page_ids" USING ("row_key")');
     expect(rowsRequest?.sql).not.toContain("COUNT(*) OVER");
     expect(rowsRequest?.sql).toContain('ORDER BY "future_metric" DESC, "defect_id" ASC');
     expect(rowsRequest?.parameters).toEqual([10, 20, 25, 0]);
+  });
+
+  it("rejects a workbench schema without the required physical row key", async () => {
+    server.use(
+      http.post(QUERY_URL, () =>
+        arrowResponse(
+          {
+            defect_id: Int32Array.from([]),
+            sample_id: [] as string[],
+          },
+          1,
+        ),
+      ),
+    );
+    const source = new SqlWorkbenchDataSource({ kind: "dataset", datasetId: "ds-1" });
+    sources.push(source);
+
+    await expect(source.loadRows({ defectIds: [], anchor: "0", limit: 25 })).rejects.toThrow(
+      "missing the required physical row_key column",
+    );
   });
 
   it("reuses the table count until the filter or data revision changes", async () => {
@@ -312,12 +372,18 @@ describe("SQL workbench data source", () => {
         const body = (await request.json()) as { description: string };
         descriptions.push(body.description);
         if (body.description === "sc-workbench.schema") {
-          return arrowResponse({ defect_id: Int32Array.from([]) }, revision);
+          return arrowResponse(
+            { row_key: [] as string[], defect_id: Int32Array.from([]) },
+            revision,
+          );
         }
         if (body.description === "sc-workbench.table.count") {
           return arrowResponse({ __total: BigInt64Array.from([300_000n]) }, revision);
         }
-        return arrowResponse({ defect_id: Int32Array.from([1]) }, revision);
+        return arrowResponse(
+          { row_key: ["dataset::1"], defect_id: Int32Array.from([1]) },
+          revision,
+        );
       }),
     );
     const source = new SqlWorkbenchDataSource({ kind: "dataset", datasetId: "ds-1" });
@@ -343,7 +409,11 @@ describe("SQL workbench data source", () => {
   });
 
   it("aborts table count and row fetches when the caller cancels a stale page", async () => {
-    server.use(http.post(QUERY_URL, () => arrowResponse({ defect_id: Int32Array.from([]) }, 1)));
+    server.use(
+      http.post(QUERY_URL, () =>
+        arrowResponse({ row_key: [] as string[], defect_id: Int32Array.from([]) }, 1),
+      ),
+    );
     const source = new SqlWorkbenchDataSource({ kind: "dataset", datasetId: "ds-1" });
     sources.push(source);
     await source.loadColumns();
@@ -379,7 +449,25 @@ describe("SQL workbench data source", () => {
     const requests: Array<{ sql: string; parameters: unknown[] }> = [];
     server.use(
       http.post(QUERY_URL, async ({ request }) => {
-        requests.push((await request.json()) as { sql: string; parameters: unknown[] });
+        const body = (await request.json()) as {
+          description: string;
+          sql: string;
+          parameters: unknown[];
+        };
+        if (body.description === "sc-workbench.schema") {
+          return arrowResponse(
+            {
+              row_key: [] as string[],
+              defect_id: Int32Array.from([]),
+              rough_bin: Int32Array.from([]),
+              annotation_label: [] as string[],
+              prediction_label: [] as string[],
+              prediction_confidence: Float64Array.from([]),
+            },
+            1,
+          );
+        }
+        requests.push(body);
         return arrowResponse({ defect_id: Int32Array.from([3]) }, 1);
       }),
     );
@@ -405,6 +493,89 @@ describe("SQL workbench data source", () => {
     expect(requests[0]?.parameters).toEqual([[7], 20, 0]);
     expect(requests[1]?.sql).toContain('NOT ("row_key" = ANY(?))');
     expect(requests[1]?.parameters).toEqual([[7], ["sample-8", "sample-9"], 20, 0]);
+  });
+
+  it("treats gallery mode as projection and applies Review membership only from T", async () => {
+    const requests: Array<{ sql: string; parameters: unknown[] }> = [];
+    server.use(
+      http.post(QUERY_URL, async ({ request }) => {
+        const body = (await request.json()) as {
+          description: string;
+          sql: string;
+          parameters: unknown[];
+        };
+        if (body.description === "sc-workbench.schema") {
+          return arrowResponse(
+            {
+              row_key: [] as string[],
+              defect_id: Int32Array.from([]),
+              images: Int32Array.from([]),
+              review_image_ids_json: [] as string[],
+              annotation_label: [] as string[],
+              prediction_label: [] as string[],
+              prediction_confidence: Float64Array.from([]),
+            },
+            1,
+          );
+        }
+        requests.push(body);
+        return arrowResponse({ defect_id: Int32Array.from([3]) }, 1);
+      }),
+    );
+    const source = new SqlWorkbenchDataSource({ kind: "dataset", datasetId: "ds-1" });
+    sources.push(source);
+
+    await source.loadGallery({ mode: "review", offset: 0, limit: 20 });
+    await source.loadGallery({
+      mode: "review",
+      offset: 0,
+      limit: 20,
+      filters: [["images", ">", 0]],
+    });
+
+    expect(requests[0]?.sql).not.toContain('"images" > ?');
+    expect(requests[0]?.parameters).toEqual([20, 0]);
+    expect(requests[1]?.sql.match(/"images" > \?/g)).toHaveLength(1);
+    expect(requests[1]?.parameters).toEqual([0, 20, 0]);
+  });
+
+  it("compiles excluded table-column filters with missing-value semantics", async () => {
+    const requests: Array<{ sql: string; parameters: unknown[] }> = [];
+    server.use(
+      http.post(QUERY_URL, async ({ request }) => {
+        const body = (await request.json()) as {
+          description: string;
+          sql: string;
+          parameters: unknown[];
+        };
+        if (body.description === "sc-workbench.schema") {
+          return arrowResponse(
+            {
+              row_key: [] as string[],
+              defect_id: Int32Array.from([]),
+              annotation_label: [] as string[],
+              prediction_label: [] as string[],
+              prediction_confidence: Float64Array.from([]),
+            },
+            1,
+          );
+        }
+        requests.push(body);
+        return arrowResponse({ defect_id: Int32Array.from([3]) }, 1);
+      }),
+    );
+    const source = new SqlWorkbenchDataSource({ kind: "dataset", datasetId: "ds-1" });
+    sources.push(source);
+
+    await source.loadGallery({
+      mode: "patch",
+      offset: 0,
+      limit: 20,
+      tableFilter: { defect_id: { filterType: "set", values: [7, 9], exclude: true } },
+    });
+
+    expect(requests[0]?.sql).toContain('(NOT ("defect_id" = ANY(?)) OR "defect_id" IS NULL)');
+    expect(requests[0]?.parameters).toEqual([[7, 9], 20, 0]);
   });
 
   it("discards a response older than the latest observed revision", async () => {
@@ -555,15 +726,14 @@ describe("SQL workbench data source", () => {
     };
     program.group = {
       enabled: true,
-      kind: "quota",
       field: "class_number",
       unit: "count",
       targets: [
         { value: "1", amount: 2 },
         { value: "2", amount: 1 },
       ],
+      othersAmount: 0,
       rounding: "nearest",
-      unlisted: "exclude",
     };
     program.total.limit = 3;
 
@@ -580,7 +750,25 @@ describe("SQL workbench data source", () => {
     expect(requestBody?.sql).toContain('"__sc_sampling_group_ranked" AS');
     expect(requestBody?.sql).toContain('ROW_NUMBER() OVER (PARTITION BY "class_number"');
     expect(requestBody?.sql).toContain('ORDER BY HASH("defect_id", ?), "defect_id" LIMIT ?');
-    expect(requestBody?.parameters).toEqual(["4", 0, 42, 2, 42, "1", 2, "2", 1, 42, 3]);
+    expect(requestBody?.parameters).toEqual(["4", 0, 42, 2, 42, "1", 2, "2", 1, 0, 42, 3]);
+  });
+
+  it("applies sample ratios to each group population and uses Others as the CASE fallback", () => {
+    const program = createDefaultScSamplingProgram();
+    program.group = {
+      enabled: true,
+      field: "class_number",
+      unit: "ratio",
+      targets: [{ value: "1", amount: 2 }],
+      othersAmount: 5,
+      rounding: "nearest",
+    };
+
+    const compiled = compileScSamplingSelection([], program, 42);
+
+    expect(compiled.sql).toContain('WHEN "class_number" IS NOT DISTINCT FROM ? THEN ROUND');
+    expect(compiled.sql).toContain('ELSE ROUND("__group_population" * ? / 100.0) END');
+    expect(compiled.parameters).toEqual([42, "1", 2, 5, 42, 200]);
   });
 
   it("accepts only valid invalidations for its own scope", () => {

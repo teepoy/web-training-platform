@@ -49,6 +49,8 @@ aggregate, and selection queries consume that state together. Preview and
 Reclassify parents do not provide a filter prop or update event. A parent
 workflow such as Train & Predict may request a cloned filter snapshot through
 the component handle, but it must not mutate or synchronize the live filter.
+The exact ownership, transition, and consumer matrix is defined in
+[`sc-inspection-workbench-filter-contract.md`](sc-inspection-workbench-filter-contract.md).
 
 ## HTTP query contract
 
@@ -214,17 +216,17 @@ metadata for files that exist only in another Pod.
 
 ## Explicit capacity configuration
 
-| Setting | Value |
-| --- | ---: |
-| Compose Uvicorn workers | 4 |
-| DuckDB memory per worker | 1 GiB |
-| DuckDB threads per worker | 1 |
-| DuckDB spill limit per worker | 2 GiB |
-| Worker readiness RSS ceiling | 1536 MiB |
+| Setting                        |          Value |
+| ------------------------------ | -------------: |
+| Compose Uvicorn workers        |              4 |
+| DuckDB memory per worker       |          1 GiB |
+| DuckDB threads per worker      |              1 |
+| DuckDB spill limit per worker  |          2 GiB |
+| Worker readiness RSS ceiling   |       1536 MiB |
 | Shared object-cache high / low | 10 GiB / 8 GiB |
-| Object idle TTL | 3600 s |
-| Cleanup / stale-write interval | 60 s / 300 s |
-| Lease TTL / heartbeat | 60 s / 20 s |
+| Object idle TTL                |         3600 s |
+| Cleanup / stale-write interval |   60 s / 300 s |
+| Lease TTL / heartbeat          |    60 s / 20 s |
 | SQL timeout / maximum response | 30 s / 256 MiB |
 
 Development defaults `LOG_LEVEL` to `INFO`; it may be raised to `DEBUG`. Every

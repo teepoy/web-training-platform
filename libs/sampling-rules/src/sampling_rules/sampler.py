@@ -11,10 +11,9 @@ from sampling_rules.models import (
     ConditionOperator,
     ConditionSet,
     ConditionalLimitRule,
-    GlobalFilterRule,
+    ExtraFilterRule,
     GroupKey,
     GroupQuotaRule,
-    GroupSamplingRateRule,
     MatchMode,
     RuleStage,
     SamplingPlan,
@@ -23,9 +22,10 @@ from sampling_rules.models import (
     Scalar,
     TotalLimitRule,
 )
-from sampling_rules.planner import plan_group_quota, plan_group_rates
+from sampling_rules.planner import plan_group_quota
 
 RowT = TypeVar("RowT", bound=Mapping[str, object])
+DEFAULT_SAMPLING_SEED = 42
 
 
 def _read_path(row: Mapping[str, object], path: str) -> Scalar:
@@ -90,7 +90,12 @@ def _matches_condition(row: Mapping[str, object], condition: Condition) -> bool:
 def _matches(row: Mapping[str, object], where: ConditionSet) -> bool:
     if not where.conditions:
         raise InvalidSamplingRuleError("condition sets cannot be empty")
-    matches = (_matches_condition(row, condition) for condition in where.conditions)
+    matches = (
+        _matches(row, condition)
+        if isinstance(condition, ConditionSet)
+        else _matches_condition(row, condition)
+        for condition in where.conditions
+    )
     return all(matches) if where.match is MatchMode.ALL else any(matches)
 
 
@@ -98,12 +103,11 @@ def _group_for(row: Mapping[str, object], group_by: tuple[str, ...]) -> GroupKey
     return cast(GroupKey, tuple(_read_path(row, path) for path in group_by))
 
 
-def _validate_program(program: SamplingProgram) -> TotalLimitRule | None:
+def _validate_program(program: SamplingProgram) -> None:
     rank = {
-        GlobalFilterRule: 0,
+        ExtraFilterRule: 0,
         ConditionalLimitRule: 1,
         GroupQuotaRule: 2,
-        GroupSamplingRateRule: 2,
         TotalLimitRule: 3,
     }
     previous = -1
@@ -113,11 +117,11 @@ def _validate_program(program: SamplingProgram) -> TotalLimitRule | None:
         current = rank[type(rule)]
         if current < previous:
             raise InvalidSamplingRuleError(
-                "rules must follow global_filter -> conditional_limit -> "
+                "rules must follow extra_filter -> conditional_limit -> "
                 "group_selection -> total_limit order"
             )
         previous = current
-        if isinstance(rule, GroupQuotaRule | GroupSamplingRateRule):
+        if isinstance(rule, GroupQuotaRule):
             group_rule_count += 1
         if isinstance(rule, TotalLimitRule):
             if total_limit is not None:
@@ -131,7 +135,6 @@ def _validate_program(program: SamplingProgram) -> TotalLimitRule | None:
         )
     if total_limit is not None and total_limit.limit < 0:
         raise InvalidSamplingRuleError("total limits cannot be negative")
-    return total_limit
 
 
 def _random_cap(rows: Sequence[RowT], limit: int, rng: random.Random) -> list[RowT]:
@@ -146,11 +149,11 @@ def execute_sampling(
     rows: Sequence[RowT],
     *,
     program: SamplingProgram,
-    seed: int,
+    seed: int = DEFAULT_SAMPLING_SEED,
 ) -> SamplingResult[RowT]:
     """Apply composable rules, then use seeded random draws for every reduction."""
 
-    total_limit = _validate_program(program)
+    _validate_program(program)
     rng = random.Random(seed)
     current = list(rows)
     stages: list[RuleStage] = []
@@ -158,9 +161,9 @@ def execute_sampling(
     for rule in program.rules:
         before = len(current)
         quotas = ()
-        if isinstance(rule, GlobalFilterRule):
+        if isinstance(rule, ExtraFilterRule):
             current = [row for row in current if _matches(row, rule.where)]
-            rule_type = "global_filter"
+            rule_type = "extra_filter"
         elif isinstance(rule, ConditionalLimitRule):
             if rule.limit < 0:
                 raise InvalidSamplingRuleError("conditional limits cannot be negative")
@@ -171,23 +174,15 @@ def execute_sampling(
             current = unmatched + _random_cap(matched, rule.limit, rng)
             rng.shuffle(current)
             rule_type = "conditional_limit"
-        elif isinstance(rule, GroupQuotaRule | GroupSamplingRateRule):
+        elif isinstance(rule, GroupQuotaRule):
             grouped: dict[GroupKey, list[RowT]] = defaultdict(list)
             for row in current:
                 grouped[_group_for(row, rule.group_by)].append(row)
             populations = {
                 group: len(group_rows) for group, group_rows in grouped.items()
             }
-            if isinstance(rule, GroupQuotaRule):
-                quotas = plan_group_quota(
-                    populations,
-                    rule,
-                    total_limit=total_limit,
-                )
-                rule_type = "group_quota"
-            else:
-                quotas = plan_group_rates(populations, rule)
-                rule_type = "group_sampling_rate"
+            quotas = plan_group_quota(populations, rule)
+            rule_type = "group_quota"
             current = []
             for quota in quotas:
                 current.extend(rng.sample(grouped[quota.group], quota.quota))
@@ -218,6 +213,6 @@ def sample(
     rows: Sequence[RowT],
     *,
     program: SamplingProgram,
-    seed: int,
+    seed: int = DEFAULT_SAMPLING_SEED,
 ) -> list[RowT]:
     return list(execute_sampling(rows, program=program, seed=seed).rows)

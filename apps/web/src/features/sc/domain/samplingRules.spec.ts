@@ -1,48 +1,31 @@
 import { describe, expect, it } from "vitest";
-import {
-  createDefaultScSamplingProgram,
-  largestRemainderCounts,
-  scSamplingProgramError,
-} from "./samplingRules";
+import { createDefaultScSamplingProgram, scSamplingProgramError } from "./samplingRules";
 
 describe("SC sampling rules", () => {
   it("keeps the existing bounded random sampling behavior as the default", () => {
     const program = createDefaultScSamplingProgram();
 
-    expect(program.globalFilterEnabled).toBe(true);
+    expect(program.extraFilterEnabled).toBe(true);
     expect(program.conditional.enabled).toBe(false);
     expect(program.group.enabled).toBe(false);
     expect(program.total).toEqual({ enabled: true, limit: 200 });
     expect(scSamplingProgramError(program)).toBeNull();
   });
 
-  it("resolves final ratios with a deterministic largest-remainder allocation", () => {
-    expect(
-      largestRemainderCounts(
-        [
-          { value: "a", amount: 33.3 },
-          { value: "b", amount: 33.3 },
-          { value: "c", amount: 33.4 },
-        ],
-        10,
-      ),
-    ).toEqual([3, 3, 4]);
-  });
-
-  it("requires final ratios to total 100 and to have a later total limit", () => {
+  it("treats ratios as independent per-group sample percentages", () => {
     const program = createDefaultScSamplingProgram();
     program.group.enabled = true;
     program.group.unit = "ratio";
     program.group.targets = [
-      { value: "a", amount: 60 },
-      { value: "b", amount: 30 },
+      { value: "a", amount: 2 },
+      { value: "b", amount: 7.5 },
     ];
+    program.group.othersAmount = 3;
 
-    expect(scSamplingProgramError(program)).toContain("must total 100%");
+    expect(scSamplingProgramError(program)).toBeNull();
 
-    program.group.targets[1]!.amount = 40;
-    program.total.enabled = false;
-    expect(scSamplingProgramError(program)).toContain("require an enabled total limit");
+    program.group.othersAmount = 101;
+    expect(scSamplingProgramError(program)).toContain("between 0 and 100%");
   });
 
   it("does not allow an unbounded program", () => {

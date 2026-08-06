@@ -4,7 +4,6 @@ import {
   NAlert,
   NButton,
   NCard,
-  NCheckbox,
   NInputNumber,
   NModal,
   NRadioButton,
@@ -16,11 +15,12 @@ import {
   NTabs,
   NText,
   useMessage,
+  useThemeVars,
 } from "naive-ui";
-import type { ScSampleTableFilter } from "@/features/sc/domain/sampleTable";
+import type { ScGlobalFilter } from "@/features/sc/domain/globalFilter";
+import type { ScSamplingCandidateScope } from "@/features/sc/application/inspectionFilterPolicy";
 import {
   cloneScSamplingProgram,
-  largestRemainderCounts,
   SC_SAMPLING_GROUP_FIELDS,
   scSamplingProgramError,
   type ScSamplingGroupPopulation,
@@ -28,6 +28,7 @@ import {
   type ScSamplingRuleId,
 } from "@/features/sc/domain/samplingRules";
 import { scMissingFilterOption } from "@/features/sc/domain/missingFilterValue";
+import ScGlobalFilterBar from "./ScGlobalFilterBar.vue";
 
 interface RuleCatalogItem {
   id: ScSamplingRuleId;
@@ -36,41 +37,48 @@ interface RuleCatalogItem {
   description: string;
 }
 
-const props = defineProps<{
-  show: boolean;
-  loading: boolean;
-  availableCount: number;
-  mapSelectionCount: number;
-  globalFilter: ScSampleTableFilter;
-  program: ScSamplingProgram;
-  seed: number;
-  reviewOnly: boolean;
-  mapSelectionOnly: boolean;
-  assignDraftLabel: boolean;
-  draftLabel: string | null;
-  codeLabels: Array<{ code: string; name: string }>;
-  loadGroups: (field: string) => Promise<ScSamplingGroupPopulation[]>;
-}>();
+const props = withDefaults(
+  defineProps<{
+    show: boolean;
+    loading: boolean;
+    availableCount: number;
+    mapSelectionCount: number;
+    tableSelectionAvailable: boolean;
+    extraFilter: ScGlobalFilter;
+    extraFilterDistinctValues?: Record<string, Array<string | number>>;
+    extraFilterNumericRanges?: Record<string, { min: number; max: number } | null>;
+    extraFilterNumericRangeLoading?: Record<string, boolean>;
+    extraFilterNumericRangeErrors?: Record<string, boolean>;
+    extraFilterResetKey?: string | number;
+    program: ScSamplingProgram;
+    scope: ScSamplingCandidateScope;
+    loadGroups: (field: string) => Promise<ScSamplingGroupPopulation[]>;
+  }>(),
+  {
+    extraFilterDistinctValues: () => ({}),
+    extraFilterNumericRanges: () => ({}),
+    extraFilterNumericRangeLoading: () => ({}),
+    extraFilterNumericRangeErrors: () => ({}),
+  },
+);
 
 const emit = defineEmits<{
   (e: "update:show", show: boolean): void;
   (e: "update:program", program: ScSamplingProgram): void;
-  (e: "update:seed", seed: number): void;
-  (e: "update:review-only", value: boolean): void;
-  (e: "update:map-selection-only", value: boolean): void;
-  (e: "update:assign-draft-label", value: boolean): void;
-  (e: "update:draft-label", value: string | null): void;
+  (e: "update:scope", value: ScSamplingCandidateScope): void;
+  (e: "update:extra-filter", filter: ScGlobalFilter): void;
   (e: "scope-change"): void;
-  (e: "edit-global-filter"): void;
+  (e: "search-extra-filter-options", payload: { field: string; search: string }): void;
+  (e: "request-extra-filter-range", payload: { field: string; itemId?: string }): void;
   (e: "confirm"): void;
 }>();
 
 const catalog: RuleCatalogItem[] = [
   {
-    id: "global",
+    id: "extra",
     order: "01",
-    title: "Global filter",
-    description: "Use the workbench's combined global filter as the first eligibility stage.",
+    title: "Extra filter",
+    description: "Optionally narrow the selected candidate scope before applying limits.",
   },
   {
     id: "conditional",
@@ -80,15 +88,9 @@ const catalog: RuleCatalogItem[] = [
   },
   {
     id: "quota",
-    order: "03A",
+    order: "03",
     title: "Group quota",
-    description: "Choose explicit counts or final composition ratios for each group.",
-  },
-  {
-    id: "rate",
-    order: "03B",
-    title: "Group sampling rate",
-    description: "Sample a percentage of each group's own eligible population.",
+    description: "Choose a count or sample ratio for each group and for all other values.",
   },
   {
     id: "total",
@@ -99,8 +101,9 @@ const catalog: RuleCatalogItem[] = [
 ];
 
 const message = useMessage();
+const themeVars = useThemeVars();
 const draft = ref(cloneScSamplingProgram(props.program));
-const activeTab = ref<"rules" | "global">("rules");
+const activeTab = ref<"rules" | "extra">("rules");
 const manageRulesVisible = ref(false);
 const ruleConfigVisible = ref(false);
 const editingRule = ref<ScSamplingRuleId | null>(null);
@@ -113,49 +116,56 @@ const groupPopulationsLoading = ref(false);
 let conditionalLoadVersion = 0;
 let groupLoadVersion = 0;
 
+const modalThemeStyle = computed(() => ({
+  "--cv-bg": themeVars.value.bodyColor,
+  "--cv-card-bg": themeVars.value.cardColor,
+  "--cv-text": themeVars.value.textColor1,
+  "--cv-text-secondary": themeVars.value.textColor3,
+  "--cv-border": themeVars.value.borderColor,
+  "--cv-divider": themeVars.value.dividerColor,
+  "--cv-hover": themeVars.value.hoverColor,
+  "--cv-primary": themeVars.value.primaryColor,
+}));
+const reviewModalStyle = computed(() => ({
+  ...modalThemeStyle.value,
+  width: "min(960px, calc(100vw - 32px))",
+  maxHeight: "calc(100vh - 32px)",
+  overflow: "auto",
+}));
+const manageModalStyle = computed(() => ({
+  ...modalThemeStyle.value,
+  width: "min(820px, calc(100vw - 32px))",
+  maxHeight: "calc(100vh - 32px)",
+  overflow: "auto",
+}));
+const ruleModalStyle = computed(() => ({
+  ...modalThemeStyle.value,
+  width: "min(760px, calc(100vw - 32px))",
+  maxHeight: "calc(100vh - 32px)",
+  overflow: "auto",
+}));
+
 const showModel = computed({
   get: () => props.show,
   set: (show: boolean) => emit("update:show", show),
 });
-const seedModel = computed({
-  get: () => props.seed,
-  set: (seed: number) => emit("update:seed", seed),
+const scopeModel = computed({
+  get: () => props.scope,
+  set: (value: ScSamplingCandidateScope) => emit("update:scope", value),
 });
-const reviewOnlyModel = computed({
-  get: () => props.reviewOnly,
-  set: (value: boolean) => emit("update:review-only", value),
-});
-const mapSelectionOnlyModel = computed({
-  get: () => props.mapSelectionOnly,
-  set: (value: boolean) => emit("update:map-selection-only", value),
-});
-const assignDraftLabelModel = computed({
-  get: () => props.assignDraftLabel,
-  set: (value: boolean) => emit("update:assign-draft-label", value),
-});
-const draftLabelModel = computed({
-  get: () => props.draftLabel,
-  set: (value: string | null) => emit("update:draft-label", value),
-});
-
 function ruleIsEnabled(id: ScSamplingRuleId): boolean {
-  if (id === "global") return draft.value.globalFilterEnabled;
+  if (id === "extra") return draft.value.extraFilterEnabled;
   if (id === "conditional") return draft.value.conditional.enabled;
   if (id === "total") return draft.value.total.enabled;
-  return draft.value.group.enabled && draft.value.group.kind === id;
+  return draft.value.group.enabled;
 }
 
 const disabledRules = computed(() => catalog.filter((item) => !ruleIsEnabled(item.id)));
 const enabledRules = computed(() => catalog.filter((item) => ruleIsEnabled(item.id)));
-const configuredRules = computed(() => enabledRules.value.filter((item) => item.id !== "global"));
-const activeRuleCount = computed(() => enabledRules.value.length);
-const globalFilterEntries = computed(() => Object.entries(props.globalFilter ?? {}));
+const configuredRules = computed(() => enabledRules.value.filter((item) => item.id !== "extra"));
 const configurationError = computed(() => scSamplingProgramError(draft.value));
 const editingRuleItem = computed(
   () => catalog.find((item) => item.id === editingRule.value) ?? null,
-);
-const groupRatioTotal = computed(() =>
-  draft.value.group.targets.reduce((sum, target) => sum + target.amount, 0),
 );
 
 const finalEstimate = computed(() => {
@@ -169,25 +179,14 @@ const finalEstimate = computed(() => {
     }
   }
   if (draft.value.group.enabled && groupPopulations.value.length > 0) {
-    const ratioCounts =
-      draft.value.group.kind === "quota" && draft.value.group.unit === "ratio"
-        ? largestRemainderCounts(draft.value.group.targets, draft.value.total.limit)
-        : [];
     eligible = groupPopulations.value.reduce((sum, population) => {
-      const index = draft.value.group.targets.findIndex(
-        (target) => target.value === population.value,
-      );
-      if (index < 0) {
-        return sum + (draft.value.group.unlisted === "keep" ? population.count : 0);
-      }
-      const target = draft.value.group.targets[index];
-      if (!target) return sum;
+      const amount =
+        draft.value.group.targets.find((target) => target.value === population.value)?.amount ??
+        draft.value.group.othersAmount;
       const planned =
-        draft.value.group.kind === "rate"
-          ? roundedCount(population.count * (target.amount / 100), draft.value.group.rounding)
-          : draft.value.group.unit === "ratio"
-            ? (ratioCounts[index] ?? 0)
-            : target.amount;
+        draft.value.group.unit === "ratio"
+          ? roundedCount(population.count * (amount / 100), draft.value.group.rounding)
+          : amount;
       return sum + Math.min(population.count, planned);
     }, 0);
   }
@@ -205,16 +204,8 @@ function displayGroupValue(field: string, value: string): string {
   return missing?.value === value ? missing.label : value;
 }
 
-function formatGlobalCondition(condition: ScSampleTableFilter[string]): string {
-  if (condition.filterType === "set") {
-    return condition.values.map(String).join(", ");
-  }
-  return `${condition.filter} – ${condition.filterTo}`;
-}
-
 function defaultTargetAmount(population: ScSamplingGroupPopulation, count: number): number {
-  if (draft.value.group.kind === "rate") return 10;
-  if (draft.value.group.unit === "ratio") return Math.floor(100 / Math.max(count, 1));
+  if (draft.value.group.unit === "ratio") return 10;
   return Math.min(population.count, Math.max(Math.floor(draft.value.total.limit / count), 1));
 }
 
@@ -226,20 +217,7 @@ function reconcileTargets(populations: ScSamplingGroupPopulation[], reset = fals
     value: population.value,
     amount: existing.get(population.value) ?? defaultTargetAmount(population, populations.length),
   }));
-  if (draft.value.group.kind === "quota" && draft.value.group.unit === "ratio") {
-    const counts = largestRemainderCounts(
-      populations.map((population) => ({
-        value: population.value,
-        amount: 100 / Math.max(populations.length, 1),
-      })),
-      100,
-    );
-    if (reset || groupRatioTotal.value !== 100) {
-      draft.value.group.targets.forEach((target, index) => {
-        target.amount = counts[index] ?? 0;
-      });
-    }
-  }
+  if (reset) draft.value.group.othersAmount = draft.value.group.unit === "ratio" ? 10 : 0;
 }
 
 async function loadConditionalGroups(): Promise<void> {
@@ -281,8 +259,8 @@ async function loadGroupPopulations(reset = false): Promise<void> {
 }
 
 function setRuleEnabled(id: ScSamplingRuleId, enabled: boolean): void {
-  if (id === "global") {
-    draft.value.globalFilterEnabled = enabled;
+  if (id === "extra") {
+    draft.value.extraFilterEnabled = enabled;
     emit("update:program", cloneScSamplingProgram(draft.value));
     emit("scope-change");
   } else if (id === "conditional") {
@@ -291,9 +269,8 @@ function setRuleEnabled(id: ScSamplingRuleId, enabled: boolean): void {
     draft.value.total.enabled = enabled;
   } else if (enabled) {
     draft.value.group.enabled = true;
-    draft.value.group.kind = id;
     void loadGroupPopulations(true);
-  } else if (draft.value.group.enabled && draft.value.group.kind === id) {
+  } else if (draft.value.group.enabled && id === "quota") {
     draft.value.group.enabled = false;
   }
   selectedDisabledRule.value = null;
@@ -306,8 +283,8 @@ function moveSelectedRule(enabled: boolean): void {
 }
 
 function openRuleConfiguration(id: ScSamplingRuleId): void {
-  if (id === "global") {
-    activeTab.value = "global";
+  if (id === "extra") {
+    activeTab.value = "extra";
     return;
   }
   editingRule.value = id;
@@ -320,10 +297,12 @@ function handleScopeChange(): void {
   void loadGroupPopulations();
 }
 
+function updateExtraFilter(filter: ScGlobalFilter): void {
+  emit("update:extra-filter", filter);
+  handleScopeChange();
+}
+
 function handleGroupModeChange(): void {
-  if (draft.value.group.kind === "quota" && draft.value.group.unit === "ratio") {
-    draft.value.group.unlisted = "exclude";
-  }
   void loadGroupPopulations(true);
 }
 
@@ -367,47 +346,34 @@ watch(
     preset="card"
     title="Review Sampling"
     :bordered="false"
-    :style="{ width: 'min(960px, calc(100vw - 32px))' }"
+    :style="reviewModalStyle"
     class="review-sampling-modal"
     data-testid="review-sampling-modal"
   >
-    <div class="sampling-summary">
-      <div>
-        <span>BASE ELIGIBLE</span>
-        <strong>{{ availableCount.toLocaleString() }}</strong>
-      </div>
-      <span class="summary-arrow">→</span>
-      <div class="summary-final">
-        <span>ESTIMATED FINAL</span>
-        <strong>{{ finalEstimate.toLocaleString() }}</strong>
-      </div>
-      <NTag round type="success">{{ activeRuleCount }} rules enabled</NTag>
-    </div>
-
     <NTabs v-model:value="activeTab" type="line" animated>
       <NTabPane name="rules" tab="Enabled rules">
         <NCard size="small" :bordered="false" class="scope-card">
           <div class="scope-heading">
             <div>
               <strong>Candidate scope</strong>
-              <small>Applied before enabled sampling rules.</small>
+              <small>Choose one source before enabled sampling rules.</small>
             </div>
             <NText depth="3">{{ availableCount.toLocaleString() }} available</NText>
           </div>
-          <div class="scope-options">
-            <NCheckbox v-model:checked="reviewOnlyModel" @update:checked="handleScopeChange">
-              Review candidates only (has images)
-            </NCheckbox>
-            <NCheckbox
-              v-model:checked="mapSelectionOnlyModel"
-              :disabled="mapSelectionCount === 0"
-              @update:checked="handleScopeChange"
-            >
-              Current map selection only<span v-if="mapSelectionCount > 0">
-                ({{ mapSelectionCount }})</span
-              >
-            </NCheckbox>
-          </div>
+          <NRadioGroup
+            v-model:value="scopeModel"
+            size="small"
+            class="scope-options"
+            @update:value="handleScopeChange"
+          >
+            <NRadioButton value="all">All</NRadioButton>
+            <NRadioButton value="map" :disabled="mapSelectionCount === 0">
+              Map Selection<span v-if="mapSelectionCount > 0"> ({{ mapSelectionCount }})</span>
+            </NRadioButton>
+            <NRadioButton value="table" :disabled="!tableSelectionAvailable">
+              Table Selection
+            </NRadioButton>
+          </NRadioGroup>
         </NCard>
 
         <div class="rules-heading">
@@ -422,13 +388,25 @@ watch(
 
         <div class="enabled-rule-list">
           <article v-for="item in configuredRules" :key="item.id" class="enabled-rule-item">
-            <button type="button" class="rule-copy" @click="openRuleConfiguration(item.id)">
+            <button
+              v-if="item.id !== 'total'"
+              type="button"
+              class="rule-copy"
+              @click="openRuleConfiguration(item.id)"
+            >
               <span>{{ item.order }}</span>
               <div>
                 <strong>{{ item.title }}</strong>
                 <small>{{ item.description }}</small>
               </div>
             </button>
+            <div v-else class="rule-copy rule-copy-static">
+              <span>{{ item.order }}</span>
+              <div>
+                <strong>{{ item.title }}</strong>
+                <small>{{ item.description }}</small>
+              </div>
+            </div>
             <div class="inline-control">
               <template v-if="item.id === 'conditional'">
                 <label>Matched max</label>
@@ -452,80 +430,54 @@ watch(
               <template v-else>
                 <label>Configuration</label>
                 <NTag size="small" type="success">
-                  {{ draft.group.targets.length }} groups ·
-                  {{ draft.group.kind === "rate" ? "rate" : draft.group.unit }}
+                  {{ draft.group.targets.length }} groups + Others ·
+                  {{ draft.group.unit === "ratio" ? "sample ratio" : "count" }}
                 </NTag>
               </template>
             </div>
-            <NButton size="small" secondary @click="openRuleConfiguration(item.id)"> Edit </NButton>
+            <NButton
+              v-if="item.id !== 'total'"
+              size="small"
+              secondary
+              @click="openRuleConfiguration(item.id)"
+            >
+              Edit
+            </NButton>
           </article>
           <div v-if="configuredRules.length === 0" class="empty-rules">
             No limiting rule enabled. Use Manage sampling rules to add one.
           </div>
         </div>
-
-        <div class="sampling-options-grid">
-          <NCard size="small" :bordered="false">
-            <label class="field-label">Random seed</label>
-            <NInputNumber
-              v-model:value="seedModel"
-              :min="0"
-              :max="Number.MAX_SAFE_INTEGER"
-              :precision="0"
-            />
-            <NText depth="3">The same scope, rules, and seed produce the same cohort.</NText>
-          </NCard>
-          <NCard size="small" :bordered="false">
-            <NCheckbox v-model:checked="assignDraftLabelModel">
-              Assign draft label to sampled defects
-            </NCheckbox>
-            <NSelect
-              v-model:value="draftLabelModel"
-              :disabled="!assignDraftLabelModel"
-              :options="
-                codeLabels.map((item) => ({
-                  label: `${item.code} · ${item.name}`,
-                  value: item.code,
-                }))
-              "
-              placeholder="Select draft label"
-            />
-          </NCard>
-        </div>
       </NTabPane>
 
-      <NTabPane name="global" tab="Global filter">
+      <NTabPane name="extra" tab="Extra filter">
         <NCard :bordered="false" class="global-filter-card">
           <div class="global-filter-heading">
             <div>
-              <strong>Workbench Global Filter</strong>
+              <strong>Extra filter</strong>
               <small>
-                This is the shared complex filter used by the map, table, gallery, sampling, and
-                Train &amp; Predict.
+                Apply an additional filter after choosing All, Map Selection, or Table Selection.
               </small>
             </div>
-            <NTag :type="draft.globalFilterEnabled ? 'success' : 'default'" round>
-              {{ draft.globalFilterEnabled ? "Enabled" : "Disabled for sampling" }}
+            <NTag :type="draft.extraFilterEnabled ? 'success' : 'default'" round>
+              {{ draft.extraFilterEnabled ? "Enabled" : "Disabled" }}
             </NTag>
           </div>
-          <div v-if="globalFilterEntries.length > 0" class="global-condition-list">
-            <div v-for="[field, condition] in globalFilterEntries" :key="field">
-              <strong>{{ field }}</strong>
-              <span>{{ formatGlobalCondition(condition) }}</span>
-            </div>
-          </div>
-          <NAlert v-else type="info" :show-icon="false">
-            No Global Filter conditions are active. Open the full editor to combine fields and
-            ranges.
-          </NAlert>
-          <div class="global-filter-actions">
-            <NButton secondary @click="emit('edit-global-filter')">Edit Global Filter</NButton>
-            <NButton
-              v-if="!draft.globalFilterEnabled"
-              type="primary"
-              secondary
-              @click="setRuleEnabled('global', true)"
-            >
+          <ScGlobalFilterBar
+            class="extra-filter-editor"
+            :filter="extraFilter"
+            :distinct-values="extraFilterDistinctValues"
+            :numeric-ranges="extraFilterNumericRanges"
+            :numeric-range-loading="extraFilterNumericRangeLoading"
+            :numeric-range-errors="extraFilterNumericRangeErrors"
+            show-reclassify-columns
+            :reset-key="extraFilterResetKey"
+            @update:filter="updateExtraFilter"
+            @search-options="emit('search-extra-filter-options', $event)"
+            @request-range="emit('request-extra-filter-range', $event)"
+          />
+          <div v-if="!draft.extraFilterEnabled" class="global-filter-actions">
+            <NButton type="primary" secondary @click="setRuleEnabled('extra', true)">
               Enable for sampling
             </NButton>
           </div>
@@ -551,11 +503,7 @@ watch(
           <NButton
             type="primary"
             :loading="loading"
-            :disabled="
-              availableCount === 0 ||
-              !!configurationError ||
-              (assignDraftLabelModel && !draftLabelModel)
-            "
+            :disabled="availableCount === 0 || !!configurationError"
             @click="handleConfirm"
           >
             Apply sampling
@@ -570,7 +518,7 @@ watch(
     preset="card"
     title="Manage sampling rules"
     :bordered="false"
-    :style="{ width: 'min(820px, calc(100vw - 32px))' }"
+    :style="manageModalStyle"
     data-testid="manage-sampling-rules-modal"
   >
     <NText depth="3">Move rules between lists to enable or disable pipeline stages.</NText>
@@ -644,7 +592,7 @@ watch(
       </section>
     </div>
     <NAlert type="info" :show-icon="false">
-      Group quota (03A) and group sampling rate (03B) are mutually exclusive.
+      Others applies the configured rule to every group value not listed explicitly.
     </NAlert>
     <template #footer>
       <div class="modal-footer">
@@ -659,7 +607,7 @@ watch(
     preset="card"
     :title="editingRuleItem ? `Configure ${editingRuleItem.title}` : 'Configure rule'"
     :bordered="false"
-    :style="{ width: 'min(760px, calc(100vw - 32px))' }"
+    :style="ruleModalStyle"
   >
     <div v-if="editingRule === 'conditional'" class="rule-config-panel">
       <NText depth="3">Rows outside this condition remain eligible.</NText>
@@ -693,48 +641,31 @@ watch(
       </div>
     </div>
 
-    <div v-else-if="editingRule === 'quota' || editingRule === 'rate'" class="rule-config-panel">
+    <div v-else-if="editingRule === 'quota'" class="rule-config-panel">
       <div class="group-config-toolbar">
         <NSelect
           v-model:value="draft.group.field"
           :options="SC_SAMPLING_GROUP_FIELDS"
           aria-label="Group field"
         />
-        <NRadioGroup
-          v-if="draft.group.kind === 'quota'"
-          v-model:value="draft.group.unit"
-          @update:value="handleGroupModeChange"
-        >
+        <NRadioGroup v-model:value="draft.group.unit" @update:value="handleGroupModeChange">
           <NRadioButton value="count">Count</NRadioButton>
-          <NRadioButton value="ratio">Final ratio</NRadioButton>
+          <NRadioButton value="ratio">Sample ratio</NRadioButton>
         </NRadioGroup>
         <NSelect
-          v-else
+          v-if="draft.group.unit === 'ratio'"
           v-model:value="draft.group.rounding"
           :options="[
             { label: 'Nearest', value: 'nearest' },
             { label: 'Floor', value: 'floor' },
             { label: 'Ceil', value: 'ceil' },
           ]"
-          aria-label="Rate rounding"
-        />
-        <NSelect
-          v-model:value="draft.group.unlisted"
-          :disabled="draft.group.kind === 'quota' && draft.group.unit === 'ratio'"
-          :options="[
-            { label: 'Exclude unlisted', value: 'exclude' },
-            { label: 'Keep unlisted', value: 'keep' },
-          ]"
-          aria-label="Unlisted group policy"
+          aria-label="Sample ratio rounding"
         />
       </div>
 
-      <NAlert
-        v-if="draft.group.kind === 'quota' && draft.group.unit === 'ratio' && !draft.total.enabled"
-        type="error"
-        :show-icon="false"
-      >
-        Final ratios require Total limit to be enabled.
+      <NAlert v-if="draft.group.unit === 'ratio'" type="info" :show-icon="false">
+        Sample ratio is applied to each group's own eligible population: 2% of 1,000 selects 20.
       </NAlert>
 
       <NSpin :show="groupPopulationsLoading">
@@ -752,13 +683,24 @@ watch(
             <NInputNumber
               v-model:value="draft.group.targets[index]!.amount"
               :min="0"
-              :max="draft.group.kind === 'rate' || draft.group.unit === 'ratio' ? 100 : undefined"
-              :precision="draft.group.kind === 'rate' || draft.group.unit === 'ratio' ? 2 : 0"
+              :max="draft.group.unit === 'ratio' ? 100 : undefined"
+              :precision="draft.group.unit === 'ratio' ? 2 : 0"
               :aria-label="`${population.value} sampling target`"
             >
-              <template v-if="draft.group.kind === 'rate' || draft.group.unit === 'ratio'" #suffix
-                >%</template
-              >
+              <template v-if="draft.group.unit === 'ratio'" #suffix>%</template>
+            </NInputNumber>
+          </div>
+          <div class="group-table-row group-table-others">
+            <strong>Others</strong>
+            <span>All other values</span>
+            <NInputNumber
+              v-model:value="draft.group.othersAmount"
+              :min="0"
+              :max="draft.group.unit === 'ratio' ? 100 : undefined"
+              :precision="draft.group.unit === 'ratio' ? 2 : 0"
+              aria-label="Others sampling target"
+            >
+              <template v-if="draft.group.unit === 'ratio'" #suffix>%</template>
             </NInputNumber>
           </div>
           <div v-if="groupPopulations.length === 0" class="empty-rules">
@@ -766,15 +708,6 @@ watch(
           </div>
         </div>
       </NSpin>
-      <NText v-if="draft.group.kind === 'quota' && draft.group.unit === 'ratio'" depth="3">
-        Current final ratio total: {{ groupRatioTotal }}%
-      </NText>
-    </div>
-
-    <div v-else-if="editingRule === 'total'" class="rule-config-panel">
-      <label class="field-label">Maximum final samples</label>
-      <NInputNumber v-model:value="draft.total.limit" :min="1" :precision="0" />
-      <NText depth="3">This is an upper bound; the pipeline does not fill rule shortfalls.</NText>
     </div>
 
     <template #footer>
@@ -787,7 +720,6 @@ watch(
 </template>
 
 <style scoped>
-.sampling-summary,
 .scope-heading,
 .rules-heading,
 .global-filter-heading,
@@ -799,44 +731,16 @@ watch(
   gap: 14px;
 }
 
-.sampling-summary {
-  padding: 12px 16px;
-  margin-bottom: 10px;
-  background: color-mix(in srgb, var(--cv-primary, #4c80f0) 8%, var(--cv-card-bg, #fff));
-  border: 1px solid color-mix(in srgb, var(--cv-primary, #4c80f0) 18%, transparent);
-  border-radius: 12px;
-}
-
-.sampling-summary > div {
-  display: flex;
-  flex-direction: column;
-}
-
-.sampling-summary span,
 .scope-heading small,
 .rules-heading small,
 .global-filter-heading small,
 .rule-copy small,
-.rule-list-item small,
-.field-label {
+.rule-list-item small {
   color: var(--cv-text-secondary, #737373);
   font-size: 11px;
 }
 
-.sampling-summary strong {
-  font-size: 21px;
-}
-
-.summary-arrow {
-  color: var(--cv-text-disabled, #aaa);
-}
-
-.summary-final {
-  margin-right: auto;
-}
-
 .scope-card,
-.sampling-options-grid :deep(.n-card),
 .global-filter-card {
   background: color-mix(in srgb, var(--cv-card-bg, #fff) 94%, var(--cv-primary, #4c80f0));
 }
@@ -918,8 +822,11 @@ watch(
   line-height: 1.35;
 }
 
-.inline-control label,
-.field-label {
+.rule-copy-static {
+  cursor: default;
+}
+
+.inline-control label {
   display: block;
   margin-bottom: 5px;
   font-weight: 600;
@@ -930,19 +837,6 @@ watch(
   color: var(--cv-text-secondary, #777);
   font-size: 12px;
   text-align: center;
-}
-
-.sampling-options-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  margin-top: 12px;
-}
-
-.sampling-options-grid :deep(.n-input-number),
-.sampling-options-grid :deep(.n-select) {
-  width: 100%;
-  margin: 6px 0;
 }
 
 .global-filter-card {
@@ -960,23 +854,15 @@ watch(
   line-height: 1.5;
 }
 
-.global-condition-list > div {
-  display: grid;
-  grid-template-columns: minmax(130px, 0.4fr) 1fr;
-  gap: 12px;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--cv-divider, #ededed);
-}
-
-.global-condition-list > div:last-child {
-  border-bottom: 0;
-}
-
 .global-filter-actions {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
   margin-top: 16px;
+}
+
+.extra-filter-editor {
+  min-height: 220px;
 }
 
 .form-error {
@@ -1070,7 +956,6 @@ watch(
 
 @media (max-width: 700px) {
   .enabled-rule-item,
-  .sampling-options-grid,
   .condition-grid,
   .group-config-toolbar,
   .dual-list {
@@ -1079,10 +964,6 @@ watch(
 
   .transfer-controls {
     flex-direction: row;
-  }
-
-  .sampling-summary {
-    flex-wrap: wrap;
   }
 }
 </style>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { NButton, NCheckbox, NInput, NSpace, NText } from "naive-ui";
 
 const props = defineProps<{
@@ -30,6 +30,33 @@ const visibleOptions = computed(() =>
     ? props.options.filter((option) => option.label.toLowerCase().includes(searchText.value))
     : props.options,
 );
+const visibleKeys = computed(() => visibleOptions.value.map((option) => String(option.value)));
+const selectedVisibleCount = computed(
+  () => visibleKeys.value.filter((key) => draftKeys.value.has(key)).length,
+);
+const allVisibleSelected = computed(
+  () => visibleKeys.value.length > 0 && selectedVisibleCount.value === visibleKeys.value.length,
+);
+const someVisibleSelected = computed(
+  () => selectedVisibleCount.value > 0 && !allVisibleSelected.value,
+);
+const knownValuesByKey = ref(new Map<string, string | number>());
+
+watch(
+  [() => props.options, () => props.appliedValues],
+  ([options, appliedValues]) => {
+    const next = new Map(knownValuesByKey.value);
+    for (const option of options) next.set(String(option.value), option.value);
+    for (const value of appliedValues) next.set(String(value), value);
+    knownValuesByKey.value = next;
+  },
+  { deep: true, immediate: true },
+);
+
+function updateSearch(value: string): void {
+  emit("update:search", value);
+  emit("search-options", value);
+}
 
 function updateDraft(option: string | number, checked: boolean): void {
   const next = new Set(draftKeys.value);
@@ -39,8 +66,17 @@ function updateDraft(option: string | number, checked: boolean): void {
   emit("update:draftValues", Array.from(next));
 }
 
+function updateAllVisible(checked: boolean): void {
+  const next = new Set(draftKeys.value);
+  for (const key of visibleKeys.value) {
+    if (checked) next.add(key);
+    else next.delete(key);
+  }
+  emit("update:draftValues", Array.from(next));
+}
+
 function resetDraft(): void {
-  emit("update:search", "");
+  updateSearch("");
   emit("update:draftValues", props.appliedValues.map(String));
 }
 
@@ -49,12 +85,10 @@ function clearDraft(): void {
 }
 
 function applyDraft(): void {
-  const valuesByKey = new Map<string, string | number>();
-  for (const option of props.options) valuesByKey.set(String(option.value), option.value);
   emit(
     "apply",
     props.draftValues
-      .map((key) => valuesByKey.get(key))
+      .map((key) => knownValuesByKey.value.get(key))
       .filter(
         (value): value is string | number => typeof value === "string" || typeof value === "number",
       ),
@@ -71,9 +105,18 @@ function applyDraft(): void {
         placeholder="Search"
         size="small"
         clearable
-        @update:value="emit('update:search', $event)"
+        @update:value="updateSearch"
       />
     </div>
+    <NCheckbox
+      v-if="visibleOptions.length > 0"
+      class="sst-set-filter-select-all"
+      :checked="allVisibleSelected"
+      :indeterminate="someVisibleSelected"
+      @update:checked="updateAllVisible"
+    >
+      Select all ({{ visibleOptions.length }})
+    </NCheckbox>
     <div class="sst-set-filter-options">
       <template v-if="visibleOptions.length > 0">
         <NCheckbox
@@ -126,6 +169,12 @@ function applyDraft(): void {
   max-width: 100%;
   overflow-y: auto;
   overflow-x: hidden;
+}
+
+.sst-set-filter-select-all {
+  padding-bottom: 6px;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+  font-weight: 600;
 }
 
 .sst-filter-search-row {

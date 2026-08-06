@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   clampRegionToBounds,
+  createMapRenderViewport,
   defineScMapElement,
+  fitMapRegionToViewport,
   normalizeWheelDelta,
   overscanMapRegion,
   SC_MAP_PROJECTION_OVERSCAN_RATIO,
@@ -45,6 +47,23 @@ describe("sc-map viewport interactions", () => {
       y: 180,
       w: 70,
       h: 140,
+    });
+  });
+
+  it("expands the drawable axis and renders overscan into a larger canvas", () => {
+    expect(fitMapRegionToViewport({ x: 0, y: 0, w: 20, h: 60 }, 200, 100)).toEqual({
+      x: -50,
+      y: 0,
+      w: 120,
+      h: 60,
+    });
+    expect(createMapRenderViewport({ x: 0, y: 0, w: 20, h: 60 }, 200, 100)).toEqual({
+      visibleRegion: { x: -50, y: 0, w: 120, h: 60 },
+      renderRegion: { x: -74, y: -12, w: 168, h: 84 },
+      renderWidth: 280,
+      renderHeight: 140,
+      offsetX: 40,
+      offsetY: 20,
     });
   });
 

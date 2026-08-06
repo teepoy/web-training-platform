@@ -1,12 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ScSampleTableFilter } from "@/features/sc/domain/sampleTable";
+import type { ScGlobalFilter } from "@/features/sc/domain/globalFilter";
 import type { ScSampleTableDataSource } from "@/features/sc/domain/workbenchInteraction";
 import { mountWithProviders } from "@/testing";
 import InspectionQuad from "./InspectionQuad.vue";
 
 const harness = vi.hoisted(() => ({
   options: null as {
-    globalFilter: { value: ScSampleTableFilter };
+    globalFilter: { value: ScGlobalFilter };
     legendGroupBy: { value: string | null | undefined };
     tableFilter: { value: ScSampleTableFilter | undefined };
     tableSort: { value: unknown };
@@ -27,8 +28,6 @@ const model = vi.hoisted(() => ({
   galleryLoading: { value: false },
   galleryQuery: { value: {} },
   mapSelectedDefectIds: { value: [] as number[] },
-  mapSelectionMode: { value: null as "include" | "exclude" | null },
-  canUndoMapSelectionMode: { value: false },
   reviewMode: { value: false },
   tableSelection: { value: { kind: "ids", ids: [] } },
   loadGlobalDistinctValues: vi.fn(async () => []),
@@ -38,15 +37,12 @@ const model = vi.hoisted(() => ({
   queryBoxSelection: vi.fn(async () => []),
   queryLassoSelection: vi.fn(async () => []),
   queryLegendSelection: vi.fn(async () => []),
+  queryAllMapSelection: vi.fn(async () => []),
   querySamplingCandidateCount: vi.fn(async () => 0),
   querySamplingDefectIds: vi.fn(async () => []),
   applyMapSelection: vi.fn(async () => undefined),
   appendMapSelection: vi.fn(async () => []),
   clearMapSelection: vi.fn(async () => undefined),
-  setMapSelectionMode: vi.fn(),
-  invertMapSelectionMode: vi.fn(),
-  undoMapSelectionMode: vi.fn(),
-  resetMapSelectionMode: vi.fn(),
 }));
 
 vi.mock("vue-echarts", () => ({
@@ -60,12 +56,11 @@ vi.mock("./ScMapPanelBinned.vue", () => ({
       "zoom",
       "reticleOptions",
       "legendGroupBy",
-      "mapSelectionMode",
       "mapSelectionCount",
-      "canUndoMapSelectionMode",
       "waferGeometry",
       "highlightDefectIds",
       "immediateCrosshairDefectIds",
+      "selectionResetVersion",
       "mapError",
     ],
     emits: [
@@ -74,10 +69,10 @@ vi.mock("./ScMapPanelBinned.vue", () => ({
       "zoom-in",
       "legend-group-change",
       "legend-select",
-      "update:mapSelectionMode",
+      "commit-map-selection-filter",
       "invert-map-selection-mode",
-      "undo-map-selection-mode",
       "copy-selected-defect-ids",
+      "box-select",
       "retry",
     ],
     template: "<div />",
@@ -86,7 +81,7 @@ vi.mock("./ScMapPanelBinned.vue", () => ({
 vi.mock("./ScGlobalFilterModal.vue", () => ({
   default: {
     name: "ScGlobalFilterModal",
-    props: ["show", "filter", "distinctValues", "numericRanges", "numericRangeLoading"],
+    props: ["show", "filter", "distinctValues", "numericRanges", "numericRangeLoading", "resetKey"],
     emits: ["update:show", "update:filter", "search-options", "request-range"],
     template: "<div />",
   },
@@ -193,23 +188,31 @@ describe("InspectionQuad state ownership", () => {
     });
     const filterModal = wrapper.findComponent({ name: "ScGlobalFilterModal" });
 
-    filterModal.vm.$emit("request-range", "area");
+    filterModal.vm.$emit("request-range", { field: "area", itemId: "area-item" });
 
     await vi.waitFor(() => {
       expect(filterModal.props("numericRanges")).toEqual({
-        area: { min: 1.25, max: 98.5 },
+        "area-item": { min: 1.25, max: 98.5 },
       });
     });
-    expect(model.loadGlobalNumericRange).toHaveBeenCalledWith("area");
-    expect(filterModal.props("numericRangeLoading")).toEqual({ area: false });
+    expect(model.loadGlobalNumericRange).toHaveBeenCalledWith("area", "area-item");
+    expect(filterModal.props("numericRangeLoading")).toEqual({ "area-item": false });
   });
 
   it("owns filter updates and exposes only a cloned workflow snapshot", async () => {
     const { wrapper } = await mountWithProviders(InspectionQuad, {
       props: requiredProps,
     });
-    const filter: ScSampleTableFilter = {
-      rough_bin: { filterType: "set", values: [1, 2] },
+    const filter: ScGlobalFilter = {
+      combinator: "and",
+      items: [
+        {
+          id: "rough-bin",
+          field: "rough_bin",
+          condition: { filterType: "set", values: [1, 2] },
+          source: { kind: "manual" },
+        },
+      ],
     };
 
     const filterModal = wrapper.findComponent({ name: "ScGlobalFilterModal" });
@@ -222,13 +225,50 @@ describe("InspectionQuad state ownership", () => {
 
     expect(harness.options?.globalFilter.value).toEqual(filter);
     const exposed = wrapper.vm as unknown as {
-      getGlobalFilter: () => ScSampleTableFilter;
+      getGlobalFilter: () => ScGlobalFilter;
     };
     const snapshot = exposed.getGlobalFilter();
     expect(snapshot).toEqual(filter);
-    if (snapshot.rough_bin?.filterType === "set") snapshot.rough_bin.values.push(99);
+    const condition = snapshot.items[0]?.condition;
+    if (condition?.filterType === "set") condition.values.push(99);
     expect(exposed.getGlobalFilter()).toEqual(filter);
     expect(wrapper.emitted("update:global-filter")).toBeUndefined();
+  });
+
+  it("counts complete conditions inside nested Global Filter groups", async () => {
+    const { wrapper } = await mountWithProviders(InspectionQuad, {
+      props: requiredProps,
+    });
+
+    wrapper.findComponent({ name: "ScGlobalFilterModal" }).vm.$emit("update:filter", {
+      combinator: "and",
+      items: [
+        {
+          kind: "group",
+          id: "class-options",
+          combinator: "or",
+          items: [
+            {
+              id: "class-two",
+              field: "class_number",
+              condition: { filterType: "set", values: [2] },
+              source: { kind: "manual" },
+            },
+            {
+              id: "class-three",
+              field: "class_number",
+              condition: { filterType: "set", values: [3] },
+              source: { kind: "manual" },
+            },
+          ],
+        },
+      ],
+    });
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.get('[data-testid="sc-global-filter-trigger"]').text()).toBe(
+      "Global Filter (2)",
+    );
   });
 
   it("retries only the failed map query from the map error action", async () => {
@@ -258,13 +298,21 @@ describe("InspectionQuad state ownership", () => {
       props: requiredProps,
     });
     wrapper.findComponent({ name: "ScGlobalFilterModal" }).vm.$emit("update:filter", {
-      class_number: { filterType: "set", values: [7] },
+      combinator: "and",
+      items: [
+        {
+          id: "class-filter",
+          field: "class_number",
+          condition: { filterType: "set", values: [7] },
+          source: { kind: "manual" },
+        },
+      ],
     });
     await wrapper.vm.$nextTick();
 
     await wrapper.setProps({ inspectionTime: "2026-07-27T04:00:00+08:00" });
 
-    expect(harness.options?.globalFilter.value).toEqual({});
+    expect(harness.options?.globalFilter.value).toEqual({ combinator: "and", items: [] });
   });
 
   it("keeps map, reticle, legend, table filter and sort state inside the quad", async () => {
@@ -360,7 +408,7 @@ describe("InspectionQuad state ownership", () => {
     ]);
   });
 
-  it("keeps map selection local while invalidating active random sampling", async () => {
+  it("keeps map selection and active sampling as composable local filters", async () => {
     const { wrapper } = await mountWithProviders(InspectionQuad, {
       props: {
         ...requiredProps,
@@ -373,10 +421,11 @@ describe("InspectionQuad state ownership", () => {
     await vi.waitFor(() => {
       expect(model.applyMapSelection).toHaveBeenCalledWith([]);
     });
-    expect(wrapper.emitted("clear-gallery-random-sampling")).toHaveLength(1);
+    expect(wrapper.emitted("clear-gallery-random-sampling")).toBeUndefined();
   });
 
-  it("switches map selection between included and excluded", async () => {
+  it("appends repeated map exclusions as independent Global Filter items", async () => {
+    model.mapSelectedDefectIds.value = [103, 274];
     const { wrapper } = await mountWithProviders(InspectionQuad, {
       props: {
         ...requiredProps,
@@ -384,16 +433,71 @@ describe("InspectionQuad state ownership", () => {
       },
     });
 
-    wrapper
-      .findComponent({ name: "ScMapPanelBinned" })
-      .vm.$emit("update:mapSelectionMode", "exclude");
-    wrapper.findComponent({ name: "ScMapPanelBinned" }).vm.$emit("invert-map-selection-mode");
-    wrapper.findComponent({ name: "ScMapPanelBinned" }).vm.$emit("undo-map-selection-mode");
+    const map = wrapper.findComponent({ name: "ScMapPanelBinned" });
+    const initialSelectionResetVersion = map.props("selectionResetVersion");
+    map.vm.$emit("commit-map-selection-filter", "exclude");
+    await wrapper.vm.$nextTick();
 
-    expect(model.setMapSelectionMode).toHaveBeenCalledWith("exclude");
-    expect(model.invertMapSelectionMode).toHaveBeenCalledOnce();
-    expect(model.undoMapSelectionMode).toHaveBeenCalledOnce();
-    expect(wrapper.emitted("clear-gallery-random-sampling")).toHaveLength(3);
+    const firstFilter = harness.options?.globalFilter.value;
+    expect(firstFilter?.items).toHaveLength(1);
+    expect(firstFilter?.items[0]).toMatchObject({
+      field: "defect_id",
+      condition: { filterType: "set", values: [103, 274], exclude: true },
+      source: { kind: "map-selection", action: "exclude-selected" },
+    });
+    expect(model.clearMapSelection).toHaveBeenCalledOnce();
+    expect(map.props("selectionResetVersion")).toBe(initialSelectionResetVersion + 1);
+    expect(wrapper.emitted("clear-gallery-random-sampling")).toBeUndefined();
+
+    model.mapSelectedDefectIds.value = [274, 936];
+    map.vm.$emit("commit-map-selection-filter", "exclude");
+    await wrapper.vm.$nextTick();
+
+    const secondFilter = harness.options?.globalFilter.value;
+    expect(secondFilter?.items).toHaveLength(2);
+    expect(secondFilter?.items.map((item) => item.condition)).toEqual([
+      { filterType: "set", values: [103, 274], exclude: true },
+      { filterType: "set", values: [274, 936], exclude: true },
+    ]);
+    expect(secondFilter?.items[0]?.id).not.toBe(secondFilter?.items[1]?.id);
+  });
+
+  it("does not restore a slow area selection after committing the current selection", async () => {
+    let resolveBoxSelection!: (ids: number[]) => void;
+    model.queryBoxSelection.mockImplementationOnce(
+      () => new Promise<number[]>((resolve) => (resolveBoxSelection = resolve)),
+    );
+    model.mapSelectedDefectIds.value = [103];
+    const { wrapper } = await mountWithProviders(InspectionQuad, {
+      props: requiredProps,
+    });
+    const map = wrapper.findComponent({ name: "ScMapPanelBinned" });
+
+    map.vm.$emit("box-select", { x: 0, y: 0, w: 10, h: 10 });
+    await vi.waitFor(() => expect(model.queryBoxSelection).toHaveBeenCalledOnce());
+
+    map.vm.$emit("commit-map-selection-filter", "exclude");
+    await vi.waitFor(() => expect(model.clearMapSelection).toHaveBeenCalledOnce());
+
+    resolveBoxSelection([274]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(model.appendMapSelection).not.toHaveBeenCalled();
+    expect(harness.options?.globalFilter.value.items[0]).toMatchObject({
+      field: "defect_id",
+      condition: { filterType: "set", values: [103], exclude: true },
+    });
+  });
+
+  it("inverts the transient selection within the current Global Filter scope", async () => {
+    model.mapSelectedDefectIds.value = [3, 7];
+    model.queryAllMapSelection.mockResolvedValue([1, 3, 7, 9]);
+    const { wrapper } = await mountWithProviders(InspectionQuad, { props: requiredProps });
+
+    wrapper.findComponent({ name: "ScMapPanelBinned" }).vm.$emit("invert-map-selection-mode");
+
+    await vi.waitFor(() => expect(model.applyMapSelection).toHaveBeenCalledWith([1, 9]));
+    expect(model.clearMapSelection).not.toHaveBeenCalled();
   });
 
   it("copies selected map defect IDs as newline-delimited text", async () => {
@@ -412,7 +516,7 @@ describe("InspectionQuad state ownership", () => {
     await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith("103\n274"));
   });
 
-  it("clears an active sampling cohort when Review mode changes", async () => {
+  it("composes Review mode with an active sampling cohort", async () => {
     const { wrapper } = await mountWithProviders(InspectionQuad, {
       props: {
         ...requiredProps,
@@ -423,6 +527,6 @@ describe("InspectionQuad state ownership", () => {
     wrapper.findComponent({ name: "ScBlinkVirtualTable" }).vm.$emit("mode-change", "review");
 
     expect(model.setReviewMode).toHaveBeenCalledWith(true);
-    expect(wrapper.emitted("clear-gallery-random-sampling")).toHaveLength(1);
+    expect(wrapper.emitted("clear-gallery-random-sampling")).toBeUndefined();
   });
 });

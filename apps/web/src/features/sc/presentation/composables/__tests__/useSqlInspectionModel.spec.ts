@@ -4,6 +4,7 @@ import type {
   ScInvalidation,
   ScWorkbenchDataSource,
 } from "@/features/sc/domain/workbenchDataSource";
+import { emptyScGlobalFilter, type ScGlobalFilter } from "@/features/sc/domain/globalFilter";
 import { createDefaultScSamplingProgram } from "@/features/sc/domain/samplingRules";
 import type { ScLegendSource } from "@/features/sc/domain/workbenchInteraction";
 import { useSqlInspectionModel } from "../useSqlInspectionModel";
@@ -45,7 +46,11 @@ describe("useSqlInspectionModel", () => {
 
   function mount(
     source: ScWorkbenchDataSource,
-    options: { legendGroupBy?: Ref<ScLegendSource | null | undefined> } = {},
+    options: {
+      globalFilter?: ScGlobalFilter;
+      samplingIds?: Ref<Set<string> | undefined>;
+      legendGroupBy?: Ref<ScLegendSource | null | undefined>;
+    } = {},
   ) {
     const scope = effectScope();
     scopes.push(scope);
@@ -53,7 +58,7 @@ describe("useSqlInspectionModel", () => {
       useSqlInspectionModel({
         dataSource: ref(source),
         legendGroupBy: computed(() => options.legendGroupBy?.value ?? "class"),
-        globalFilter: computed(() => ({})),
+        globalFilter: computed(() => options.globalFilter ?? emptyScGlobalFilter()),
         tableFilter: computed(() => ({})),
         tableSort: computed(() => null),
         reticle: computed(() => ({
@@ -61,7 +66,7 @@ describe("useSqlInspectionModel", () => {
           dieSizeX: 10,
           dieSizeY: 20,
         })),
-        galleryRandomSamplingDefectIds: computed(() => undefined),
+        galleryRandomSamplingDefectIds: computed(() => options.samplingIds?.value),
       }),
     );
   }
@@ -109,37 +114,129 @@ describe("useSqlInspectionModel", () => {
     });
   });
 
-  it("can exclude the selected map defects from the table and gallery", async () => {
+  it("filters table and gallery immediately from the transient map selection", async () => {
     const { source } = createDataSource();
     const model = mount(source);
     if (!model) throw new Error("model was not created");
 
     await model.applyMapSelection([9, 3, 9]);
-    expect(model.galleryQuery.value.filters).toEqual([]);
-    model.setMapSelectionMode("exclude");
-
-    expect(model.mapSelectionMode.value).toBe("exclude");
-    expect(model.canUndoMapSelectionMode.value).toBe(true);
-    expect(model.galleryQuery.value.filters).toEqual([["defect_id", "not in", [3, 9]]]);
+    expect(model.galleryQuery.value.filters).toEqual([["defect_id", "in", [3, 9]]]);
     expect(model.sampleTableDataSource.value?.scopeKey).toContain(
-      JSON.stringify([["defect_id", "not in", [3, 9]]]),
+      JSON.stringify([["defect_id", "in", [3, 9]]]),
     );
 
-    await model.applyMapSelection([7]);
-    expect(model.galleryQuery.value.filters).toEqual([["defect_id", "not in", [3, 9]]]);
+    await model.appendMapSelection([7]);
+    expect(model.galleryQuery.value.filters).toEqual([["defect_id", "in", [3, 7, 9]]]);
 
-    model.invertMapSelectionMode();
-    expect(model.mapSelectionMode.value).toBe("include");
-    expect(model.galleryQuery.value.filters).toEqual([["defect_id", "in", [3, 9]]]);
-    model.undoMapSelectionMode();
-    expect(model.mapSelectionMode.value).toBe("exclude");
-    model.undoMapSelectionMode();
-    expect(model.mapSelectionMode.value).toBeNull();
+    await model.clearMapSelection();
     expect(model.galleryQuery.value.filters).toEqual([]);
-    expect(model.canUndoMapSelectionMode.value).toBe(false);
+  });
 
-    model.setMapSelectionMode("include");
-    expect(model.galleryQuery.value.filters).toEqual([["defect_id", "in", [7]]]);
+  it("combines map selection with the workbench Global Filter", async () => {
+    const { source } = createDataSource();
+    const model = mount(source, {
+      globalFilter: {
+        combinator: "and",
+        items: [
+          {
+            id: "rough-bin",
+            field: "rough_bin",
+            condition: { filterType: "set", values: [4] },
+            source: { kind: "manual" },
+          },
+        ],
+      },
+    });
+    if (!model) throw new Error("model was not created");
+
+    await model.applyMapSelection([9, 3]);
+
+    expect(model.galleryQuery.value.filters).toEqual([
+      { combinator: "and", items: [["rough_bin", "in", [4]]] },
+      ["defect_id", "in", [3, 9]],
+    ]);
+  });
+
+  it("applies a committed map exclusion through every Global Filter consumer", async () => {
+    const { source } = createDataSource();
+    const model = mount(source, {
+      globalFilter: {
+        combinator: "and",
+        items: [
+          {
+            id: "exclude-map",
+            field: "defect_id",
+            condition: { filterType: "set", values: [3, 9], exclude: true },
+            source: { kind: "map-selection", action: "exclude-selected" },
+          },
+        ],
+      },
+    });
+    if (!model) throw new Error("model was not created");
+    const globalFilters = [
+      {
+        combinator: "and",
+        items: [["defect_id", "not in or null", [3, 9]]],
+      },
+    ];
+
+    await vi.waitFor(() => {
+      expect(source.loadMap).toHaveBeenCalledWith(
+        expect.objectContaining({ filters: globalFilters }),
+      );
+      expect(source.loadAggregates).toHaveBeenCalledWith(
+        expect.objectContaining({ filters: globalFilters }),
+      );
+    });
+    expect(model.galleryQuery.value.filters).toEqual(globalFilters);
+    expect(model.sampleTableDataSource.value?.scopeKey).toContain(JSON.stringify(globalFilters));
+  });
+
+  it("excludes only the edited Global Filter item from numeric range lookup", async () => {
+    const { source } = createDataSource();
+    const model = mount(source, {
+      globalFilter: {
+        combinator: "and",
+        items: [
+          {
+            id: "area-lower",
+            field: "area",
+            condition: { filterType: "number", type: "inRange", filter: 1, filterTo: 10 },
+            source: { kind: "manual" },
+          },
+          {
+            id: "area-upper",
+            field: "area",
+            condition: { filterType: "number", type: "inRange", filter: 3, filterTo: 8 },
+            source: { kind: "manual" },
+          },
+        ],
+      },
+    });
+    if (!model) throw new Error("model was not created");
+    vi.mocked(source.loadNumericRange).mockClear();
+
+    await model.loadGlobalNumericRange("area", "area-lower");
+
+    expect(source.loadNumericRange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        field: "area",
+        filters: [
+          {
+            combinator: "and",
+            items: [
+              {
+                combinator: "and",
+                items: [
+                  ["area", ">=", 3],
+                  ["area", "<=", 8],
+                ],
+              },
+            ],
+          },
+        ],
+      }),
+    );
   });
 
   it("reloads map queries when an SSE revision invalidates the scope", async () => {
@@ -174,7 +271,7 @@ describe("useSqlInspectionModel", () => {
     expect([...new Uint8Array(model.mapArrowData.value?.[0] ?? new ArrayBuffer())]).toEqual([2]);
   });
 
-  it("reloads map and aggregates with the Review candidate filter", async () => {
+  it("keeps Review filtering scoped to table and gallery", async () => {
     const { source } = createDataSource();
     const model = mount(source);
     if (!model) throw new Error("model was not created");
@@ -185,16 +282,34 @@ describe("useSqlInspectionModel", () => {
 
     model.setReviewMode(true);
 
-    await vi.waitFor(() => {
-      expect(source.loadAggregates).toHaveBeenCalledTimes(2);
-      expect(source.loadMap).toHaveBeenCalledTimes(2);
-    });
-    expect(source.loadMap).toHaveBeenLastCalledWith(
-      expect.objectContaining({ filters: [["images", ">", 0]] }),
+    expect(model.galleryQuery.value.filters).toEqual([["images", ">", 0]]);
+    expect(model.sampleTableDataSource.value?.scopeKey).toContain(
+      JSON.stringify([["images", ">", 0]]),
     );
+    await Promise.resolve();
+    expect(source.loadAggregates).toHaveBeenCalledTimes(1);
+    expect(source.loadMap).toHaveBeenCalledTimes(1);
   });
 
-  it("uses Review, map selection, and seed for deterministic sampling", async () => {
+  it("keeps random sampling scoped to table and gallery", async () => {
+    const { source } = createDataSource();
+    const samplingIds = ref<Set<string> | undefined>(undefined);
+    const model = mount(source, { samplingIds });
+    if (!model) throw new Error("model was not created");
+    await vi.waitFor(() => {
+      expect(source.loadMap).toHaveBeenCalledTimes(1);
+      expect(source.loadAggregates).toHaveBeenCalledTimes(1);
+    });
+
+    samplingIds.value = new Set(["11", "7"]);
+
+    expect(model.galleryQuery.value.filters).toEqual([["defect_id", "in", [7, 11]]]);
+    await Promise.resolve();
+    expect(source.loadMap).toHaveBeenCalledTimes(1);
+    expect(source.loadAggregates).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses one candidate scope and the seed for deterministic sampling", async () => {
     const { source } = createDataSource();
     const model = mount(source);
     if (!model) throw new Error("model was not created");
@@ -204,23 +319,20 @@ describe("useSqlInspectionModel", () => {
     const program = createDefaultScSamplingProgram();
     program.total.limit = 25;
     await model.querySamplingDefectIds(program, 1234, {
-      reviewOnly: true,
-      mapSelectionOnly: true,
-      globalFilterEnabled: true,
+      scope: "map",
+      extraFilterEnabled: true,
+      extraFilter: { combinator: "and", items: [] },
     });
 
     expect(source.resolveSelection).toHaveBeenCalledWith(
       expect.objectContaining({
-        filters: [
-          ["images", ">", 0],
-          ["defect_id", "in", [3, 7]],
-        ],
+        filters: [["defect_id", "in", [3, 7]]],
         constraint: { kind: "sampling-program", program, seed: 1234 },
       }),
     );
   });
 
-  it("can exclude the workbench Global Filter from a sampling program", async () => {
+  it("keeps the workbench filter when the sampling Extra filter is disabled", async () => {
     const { source } = createDataSource();
     const scope = effectScope();
     scopes.push(scope);
@@ -229,7 +341,15 @@ describe("useSqlInspectionModel", () => {
         dataSource: ref(source),
         legendGroupBy: computed(() => "class" as const),
         globalFilter: computed(() => ({
-          rough_bin: { filterType: "set" as const, values: [4] },
+          combinator: "and" as const,
+          items: [
+            {
+              id: "rough-bin",
+              field: "rough_bin",
+              condition: { filterType: "set" as const, values: [4] },
+              source: { kind: "manual" as const },
+            },
+          ],
         })),
         tableFilter: computed(() => ({})),
         tableSort: computed(() => null),
@@ -245,11 +365,15 @@ describe("useSqlInspectionModel", () => {
     vi.mocked(source.loadAggregates).mockClear();
 
     await model.querySamplingCandidateCount({
-      reviewOnly: false,
-      mapSelectionOnly: false,
-      globalFilterEnabled: false,
+      scope: "all",
+      extraFilterEnabled: false,
+      extraFilter: { combinator: "and", items: [] },
     });
 
-    expect(source.loadAggregates).toHaveBeenCalledWith(expect.objectContaining({ filters: [] }));
+    expect(source.loadAggregates).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filters: [{ combinator: "and", items: [["rough_bin", "in", [4]]] }],
+      }),
+    );
   });
 });

@@ -6,6 +6,7 @@ import {
 } from "./map-arrow-client";
 import ScMapRenderWorker from "./sc-map-render.worker?worker&inline";
 import { encodeLegendColorMap } from "./legend-key-codec";
+import { fitMapRegionToViewport, type ScMapRenderViewport } from "./map-projection";
 
 export const SC_MAP_TAG_NAME = "sc-map";
 export type ScMapMode = "wafer" | "die" | "reticle";
@@ -234,6 +235,7 @@ export class ScMapElement extends HTMLElement {
         imageMarkers: number;
         firstPoint: number[] | null;
         viewport: unknown;
+        renderViewport: ScMapRenderViewport;
         bitmap: ImageBitmap;
       }>,
     ) => {
@@ -249,6 +251,10 @@ export class ScMapElement extends HTMLElement {
         this.#pointsCanvas.width = event.data.bitmap.width;
         this.#pointsCanvas.height = event.data.bitmap.height;
       }
+      this.#pointsCanvas.style.left = `${-event.data.renderViewport.offsetX}px`;
+      this.#pointsCanvas.style.top = `${-event.data.renderViewport.offsetY}px`;
+      this.#pointsCanvas.style.width = `${event.data.renderViewport.renderWidth}px`;
+      this.#pointsCanvas.style.height = `${event.data.renderViewport.renderHeight}px`;
       this.#pointsContext?.transferFromImageBitmap(event.data.bitmap);
       if (event.data.dataRevision === this.#lastLoggedDataRevision) return;
       this.#lastLoggedDataRevision = event.data.dataRevision;
@@ -401,16 +407,29 @@ export class ScMapElement extends HTMLElement {
     const bounds = region
       ? { minX: region.x, maxX: region.x + region.w, minY: region.y, maxY: region.y + region.h }
       : (this.#dataBounds ?? this.#modeBounds());
+    const fitted = fitMapRegionToViewport(
+      {
+        x: bounds.minX,
+        y: bounds.minY,
+        w: bounds.maxX - bounds.minX || 1,
+        h: bounds.maxY - bounds.minY || 1,
+      },
+      width,
+      height,
+    );
     return {
-      scale: Math.min(
-        width / (bounds.maxX - bounds.minX || 1),
-        height / (bounds.maxY - bounds.minY || 1),
-      ),
+      scale: Math.min(width / fitted.w, height / fitted.h),
       centerX: width / 2,
       centerY: height / 2,
-      offsetX: -(bounds.minX + bounds.maxX) / 2,
-      offsetY: -(bounds.minY + bounds.maxY) / 2,
+      offsetX: -(fitted.x + fitted.w / 2),
+      offsetY: -(fitted.y + fitted.h / 2),
     };
+  }
+
+  #visibleRegion(): ScMapRegion {
+    const width = Math.max(1, this.clientWidth);
+    const height = Math.max(1, this.clientHeight);
+    return fitMapRegionToViewport(this.#effectiveZoom() ?? this.#fullRegion(), width, height);
   }
 
   #effectiveZoom(): ScMapRegion | null {
@@ -471,11 +490,11 @@ export class ScMapElement extends HTMLElement {
     clipPath: Path2D | null,
   ): void {
     const geometry = this.#geometry;
-    const zoom = this.#effectiveZoom();
-    const minX = zoom ? zoom.x : geometry.centerX - geometry.waferRadiusNm;
-    const maxX = zoom ? zoom.x + zoom.w : geometry.centerX + geometry.waferRadiusNm;
-    const minY = zoom ? zoom.y : geometry.centerY - geometry.waferRadiusNm;
-    const maxY = zoom ? zoom.y + zoom.h : geometry.centerY + geometry.waferRadiusNm;
+    const visible = this.#visibleRegion();
+    const minX = visible.x;
+    const maxX = visible.x + visible.w;
+    const minY = visible.y;
+    const maxY = visible.y + visible.h;
     const dieWidth = Math.max(1, geometry.dieSizeX);
     const dieHeight = Math.max(1, geometry.dieSizeY);
     const ixStart = Math.floor((minX - geometry.originX) / dieWidth) - 1;
@@ -578,33 +597,39 @@ export class ScMapElement extends HTMLElement {
     }
     context.fillStyle = "#e8e8e8";
     context.fillRect(0, 0, width, height);
-    const zoom = this.#effectiveZoom();
-    const bounds = zoom
-      ? {
-          minX: zoom.x,
-          maxX: zoom.x + zoom.w,
-          minY: zoom.y,
-          maxY: zoom.y + zoom.h,
-        }
-      : this.#modeBounds();
-    const cellX = this.#mode === "reticle" ? geometry.dieSizeX : geometry.dieSizeX;
-    const cellY = this.#mode === "reticle" ? geometry.dieSizeY : geometry.dieSizeY;
-    if (cellX * transform.scale >= 2 || cellY * transform.scale >= 2) {
-      context.beginPath();
-      context.strokeStyle = "#9ca3af";
-      context.lineWidth = 1;
-      for (let x = Math.floor(bounds.minX / cellX) * cellX; x <= bounds.maxX; x += cellX) {
-        const [screenX] = this.#toScreen(transform, x, 0);
-        context.moveTo(Math.round(screenX) + 0.5, 0);
-        context.lineTo(Math.round(screenX) + 0.5, height);
+    const xCount = this.#mode === "reticle" ? geometry.reticleXDieCount : 1;
+    const yCount = this.#mode === "reticle" ? geometry.reticleYDieCount : 1;
+    const dieWidth = Math.max(1, geometry.dieSizeX);
+    const dieHeight = Math.max(1, geometry.dieSizeY);
+    const [outerLeft, outerBottom] = this.#toScreen(transform, 0, 0);
+    const [outerRight, outerTop] = this.#toScreen(transform, xCount * dieWidth, yCount * dieHeight);
+    const clipLeft = Math.min(outerLeft, outerRight);
+    const clipTop = Math.min(outerTop, outerBottom);
+    const clipWidth = Math.abs(outerRight - outerLeft);
+    const clipHeight = Math.abs(outerBottom - outerTop);
+    context.save();
+    context.beginPath();
+    context.rect(clipLeft, clipTop, clipWidth, clipHeight);
+    context.clip();
+    for (let ix = 0; ix < xCount; ix += 1) {
+      for (let iy = 0; iy < yCount; iy += 1) {
+        const [left, bottom] = this.#toScreen(transform, ix * dieWidth, iy * dieHeight);
+        const [right, top] = this.#toScreen(transform, (ix + 1) * dieWidth, (iy + 1) * dieHeight);
+        const x = Math.min(left, right);
+        const y = Math.min(top, bottom);
+        const w = Math.abs(right - left);
+        const h = Math.abs(bottom - top);
+        context.fillStyle = "#ffffff";
+        context.fillRect(x, y, w, h);
+        context.strokeStyle = "#9ca3af";
+        context.lineWidth = 1;
+        context.strokeRect(Math.round(x) + 0.5, Math.round(y) + 0.5, w, h);
       }
-      for (let y = Math.floor(bounds.minY / cellY) * cellY; y <= bounds.maxY; y += cellY) {
-        const [, screenY] = this.#toScreen(transform, 0, y);
-        context.moveTo(0, Math.round(screenY) + 0.5);
-        context.lineTo(width, Math.round(screenY) + 0.5);
-      }
-      context.stroke();
     }
+    context.restore();
+    context.strokeStyle = "#333333";
+    context.lineWidth = 2;
+    context.strokeRect(clipLeft, clipTop, clipWidth, clipHeight);
   }
 
   #drawOverlay(): void {
@@ -767,20 +792,21 @@ export class ScMapElement extends HTMLElement {
   }
 
   #projectionRequest(): MapProjectionSpec {
-    const bounds = this.#zoom
-      ? {
-          minX: this.#zoom.x,
-          maxX: this.#zoom.x + this.#zoom.w,
-          minY: this.#zoom.y,
-          maxY: this.#zoom.y + this.#zoom.h,
-        }
-      : this.#modeBounds();
     const width = Math.max(1, this.clientWidth);
     const height = Math.max(1, this.clientHeight);
+    const zoom = this.#zoom ? fitMapRegionToViewport(this.#zoom, width, height) : null;
+    const bounds = zoom
+      ? {
+          minX: zoom.x,
+          maxX: zoom.x + zoom.w,
+          minY: zoom.y,
+          maxY: zoom.y + zoom.h,
+        }
+      : this.#modeBounds();
     return {
       mode: this.#mode,
       binSize: Math.max((bounds.maxX - bounds.minX) / width, (bounds.maxY - bounds.minY) / height),
-      zoom: this.#zoom ? { ...this.#zoom } : null,
+      zoom,
       hiddenLegendKeys: [...this.#hiddenLegendKeys],
     };
   }

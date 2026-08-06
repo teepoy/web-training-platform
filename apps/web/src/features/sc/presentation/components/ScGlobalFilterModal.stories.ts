@@ -1,7 +1,11 @@
 import type { Meta, StoryObj } from "@storybook/vue3";
 import { computed, ref } from "vue";
 import { NButton, NCard, NCode, NSpace, NTag, NText } from "naive-ui";
-import type { ScSampleTableFilter } from "@/features/sc/domain/sampleTable";
+import {
+  cloneScGlobalFilter,
+  emptyScGlobalFilter,
+  type ScGlobalFilter,
+} from "@/features/sc/domain/globalFilter";
 import ScGlobalFilterModal from "./ScGlobalFilterModal.vue";
 
 const optionSource: Record<string, Array<string | number>> = {
@@ -17,30 +21,40 @@ const optionSource: Record<string, Array<string | number>> = {
   final_class: ["Clean", "Particle", "Scratch", "Unknown"],
 };
 
-const activeFilter: ScSampleTableFilter = {
-  class_number: {
-    filterType: "set",
-    values: [2, 3],
-  },
-  area: {
-    filterType: "number",
-    type: "inRange",
-    filter: 120,
-    filterTo: 640,
-  },
+const activeFilter: ScGlobalFilter = {
+  combinator: "and",
+  items: [
+    {
+      id: "class-filter",
+      field: "class_number",
+      condition: { filterType: "set", values: [2, 3] },
+      source: { kind: "manual" },
+    },
+    {
+      id: "area-filter",
+      field: "area",
+      condition: { filterType: "number", type: "inRange", filter: 120, filterTo: 640 },
+      source: { kind: "manual" },
+    },
+  ],
 };
 
-const reclassifyFilter: ScSampleTableFilter = {
-  annotation_label: {
-    filterType: "set",
-    values: ["Unknown"],
-  },
-  prediction_confidence: {
-    filterType: "number",
-    type: "inRange",
-    filter: 0.6,
-    filterTo: 1,
-  },
+const reclassifyFilter: ScGlobalFilter = {
+  combinator: "and",
+  items: [
+    {
+      id: "annotation-filter",
+      field: "annotation_label",
+      condition: { filterType: "set", values: ["Unknown"] },
+      source: { kind: "manual" },
+    },
+    {
+      id: "confidence-filter",
+      field: "prediction_confidence",
+      condition: { filterType: "number", type: "inRange", filter: 0.6, filterTo: 1 },
+      source: { kind: "manual" },
+    },
+  ],
 };
 
 const meta = {
@@ -51,7 +65,7 @@ const meta = {
   },
   args: {
     show: true,
-    filter: {},
+    filter: emptyScGlobalFilter(),
     distinctValues: optionSource,
     showReclassifyColumns: false,
   },
@@ -67,11 +81,11 @@ const meta = {
     },
     setup() {
       const show = ref(args.show);
-      const filter = ref<ScSampleTableFilter>({ ...args.filter });
+      const filter = ref<ScGlobalFilter>(cloneScGlobalFilter(args.filter));
       const distinctValues = ref<Record<string, Array<string | number>>>({
         ...args.distinctValues,
       });
-      const activeCount = computed(() => Object.keys(filter.value).length);
+      const activeCount = computed(() => filter.value.items.length);
 
       function searchOptions(payload: { field: string; search: string }): void {
         const search = payload.search.trim().toLocaleLowerCase();
@@ -98,7 +112,7 @@ const meta = {
         <NCard title="Global Filter design sandbox" style="width: min(720px, calc(100vw - 64px));">
           <NSpace vertical :size="16">
             <NText depth="3">
-              Open the modal, configure fields, then close it to inspect the emitted filter state.
+              Apply filters to update the emitted filter state.
             </NText>
             <NSpace align="center">
               <NButton type="primary" @click="show = true">Open Global Filter</NButton>

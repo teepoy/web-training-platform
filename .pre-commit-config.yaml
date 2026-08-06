@@ -44,4 +44,5 @@ repos:
         entry: pnpm exec prettier --check
         language: system
         files: ^apps/web/.*\.(vue|ts|tsx|js|jsx|css|scss|json|yaml|yml|md)$
+        exclude: ^apps/web/src/generated/orval/
         pass_filenames: true

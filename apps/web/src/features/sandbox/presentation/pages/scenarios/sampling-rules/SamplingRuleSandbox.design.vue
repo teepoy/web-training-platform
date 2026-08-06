@@ -8,7 +8,7 @@
       <button>Run preview</button>
     </header>
     <section class="pipeline">
-      Global filter → Conditional limit → Group rule → Total limit → Random draw
+      Extra filter → Conditional limit → Group quota → Total limit → Random draw
     </section>
     <section class="workspace">
       <aside class="catalog">Five rule types</aside>

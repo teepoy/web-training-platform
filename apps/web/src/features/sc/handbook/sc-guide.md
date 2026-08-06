@@ -26,8 +26,14 @@ Defect points are color-coded by a configurable **legend grouping** (e.g., by ro
 - **Filter and sort** defects in the data table below the maps.
 - Click defects to select them and view associated review images.
 - Use **Global Filter** beside the page title to constrain the map, table, gallery, sampling, and
-  Train & Predict together. Missing Annotation, Prediction, and Final Class values appear as
-  Unlabeled, No Prediction, and Unclassified.
+  Train & Predict together. The QueryBuilder supports nested **AND**/**OR** groups through
+  **+ Condition** and **+ Group**. The same property may appear more than once, and sibling nodes
+  can be reordered or deleted independently. Property, condition, and value are edited inline and
+  remain visible on every completed condition. These edits are staged inside the modal; click
+  **Apply filters** to update the workbench, or cancel/close to discard them. Set filters provide
+  **Select all** for the currently visible options.
+  Missing Annotation, Prediction, and Final Class values appear as Unlabeled, No Prediction, and
+  Unclassified.
 
 ### Importing an Inspection
 
@@ -80,12 +86,20 @@ Key actions:
 The same wafer/die/reticle map triad as the preview page, integrated with annotation:
 
 - **Box selection** — draw a rectangle on the map to append defects to the active map selection.
-- **Selection behavior** — right-click the map and choose **Exclude all others** to show only the currently selected defects or **Exclude selected** to hide them. Each action stores the current ID set as a filter snapshot, so later map selections do not silently change an applied filter. **Invert selection** reverses the active snapshot, and **Undo selection filter** restores the complete previous snapshot. The menu can also copy selected defect IDs and switch selection tools.
+- **Selection behavior** — a box, lasso, legend, or distribution selection immediately narrows the
+  table and gallery without changing the map. Right-click the map and choose **Exclude all others**
+  or **Exclude selected** to commit the selected IDs into the Global Filter. The transient selection
+  is then cleared and the map reloads, so additional regions can be selected and excluded
+  continuously. Each commit remains visible as a separate, removable `defect_id` condition. **Invert
+  selection** replaces the transient selection with its complement inside the current Global Filter
+  scope; it does not commit a filter. The menu can also copy selected defect IDs and switch selection
+  tools.
 - **Legend coloring** — by bin, class number, annotation status, or prediction label.
 - **Custom colors** — label colors accept text labels as well as numeric classes and persist per
   dataset and legend source.
 - **Zoom** — click to zoom into a region.
-- **Map filters** — active filters are shown in the tab bar with a **Clear** option.
+- **Committed map filters** — active map commits are ordinary conditions in the Global Filter
+  expression; deleting that condition cancels only that commit.
 
 ### Labels
 
@@ -103,9 +117,10 @@ Click **Sampling** to open the sampling modal:
 - Set a seed to reproduce the same draw from an unchanged candidate set.
 - Optionally choose and assign a draft label. Existing drafts outside the sample are preserved.
 
-The active cohort is shown in the Sampling button and limits the map, table, gallery, group
-distribution, and Train & Predict. Changing the Global Filter, Review mode, or map selection clears
-the cohort so stale sampling results cannot remain active silently.
+The active cohort is shown in the Sampling button and narrows only the table and gallery. It
+composes with Review mode, transient map selection, and table filters; it does not alter the map,
+group distribution, Global Filter, or Train & Predict inputs. Clear or replace the cohort explicitly
+from the Sampling control.
 
 ### Train & Predict
 

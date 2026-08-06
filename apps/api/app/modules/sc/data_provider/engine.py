@@ -315,9 +315,15 @@ class DuckDbQueryExecutor:
         return 0
 
     def _register_scope(self, materialized: MaterializedScScope) -> None:
+        samples_dataset = ds.dataset(materialized.samples_base.path, format="parquet")
+        if "row_key" not in samples_dataset.schema.names:
+            raise RuntimeError(
+                "SC samples cache is missing the required physical row_key column; "
+                "rebuild the data-provider cache with the current materializer"
+            )
         self._connection.register(
             "_samples_base",
-            ds.dataset(materialized.samples_base.path, format="parquet"),
+            samples_dataset,
         )
         self._connection.register(
             "_review_images",

@@ -3,11 +3,11 @@ import { mountWithProviders } from "@/testing";
 import ScGlobalFilterModal from "./ScGlobalFilterModal.vue";
 
 describe("ScGlobalFilterModal", () => {
-  it("shows the shared field editor and forwards filter changes", async () => {
+  it("keeps QueryBuilder changes local until the user applies them", async () => {
     const { wrapper } = await mountWithProviders(ScGlobalFilterModal, {
       props: {
         show: true,
-        filter: {},
+        filter: { combinator: "and", items: [] },
         distinctValues: {},
         showReclassifyColumns: true,
       },
@@ -15,7 +15,7 @@ describe("ScGlobalFilterModal", () => {
         stubs: {
           NModal: {
             name: "NModal",
-            props: ["show", "title"],
+            props: ["show", "title", "closable"],
             emits: ["update:show"],
             template: '<section><slot name="header" /><slot /><slot name="footer" /></section>',
           },
@@ -37,12 +37,136 @@ describe("ScGlobalFilterModal", () => {
 
     const editor = wrapper.findComponent({ name: "ScGlobalFilterBar" });
     expect(editor.props("showReclassifyColumns")).toBe(true);
-    editor.vm.$emit("update:filter", {
-      area: { filterType: "number", type: "inRange", filter: 10, filterTo: 20 },
-    });
+    const filter = {
+      combinator: "and",
+      items: [
+        {
+          id: "area-filter",
+          field: "area",
+          condition: { filterType: "number", type: "inRange", filter: 10, filterTo: 20 },
+          source: { kind: "manual" },
+        },
+      ],
+    };
+    editor.vm.$emit("update:filter", filter);
+    await wrapper.vm.$nextTick();
 
-    expect(wrapper.emitted("update:filter")).toEqual([
-      [{ area: { filterType: "number", type: "inRange", filter: 10, filterTo: 20 } }],
-    ]);
+    expect(wrapper.emitted("update:filter")).toBeUndefined();
+    expect(editor.props("filter")).toEqual(filter);
+    document.querySelector<HTMLButtonElement>('[data-testid="sc-global-filter-apply"]')!.click();
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.emitted("update:filter")).toEqual([[filter]]);
+    expect(wrapper.emitted("update:show")).toEqual([[false]]);
+    wrapper.unmount();
+  });
+
+  it("discards an unapplied draft when cancelled and reopened", async () => {
+    const appliedFilter = {
+      combinator: "and" as const,
+      items: [
+        {
+          id: "class-filter",
+          field: "class_number",
+          condition: { filterType: "set" as const, values: [2] },
+          source: { kind: "manual" as const },
+        },
+      ],
+    };
+    const draftFilter = {
+      combinator: "or" as const,
+      items: [
+        ...appliedFilter.items,
+        {
+          id: "rough-bin-filter",
+          field: "rough_bin",
+          condition: { filterType: "set" as const, values: [3] },
+          source: { kind: "manual" as const },
+        },
+      ],
+    };
+    const { wrapper } = await mountWithProviders(ScGlobalFilterModal, {
+      props: {
+        show: true,
+        filter: appliedFilter,
+        distinctValues: {},
+      },
+      global: {
+        stubs: {
+          NModal: {
+            name: "NModal",
+            props: ["show", "closable"],
+            emits: ["update:show"],
+            template: '<section><slot name="header" /><slot /><slot name="footer" /></section>',
+          },
+          ScGlobalFilterBar: {
+            name: "ScGlobalFilterBar",
+            props: ["filter"],
+            emits: ["update:filter", "search-options", "request-range"],
+            template: "<div />",
+          },
+        },
+      },
+    });
+    const editor = wrapper.findComponent({ name: "ScGlobalFilterBar" });
+
+    editor.vm.$emit("update:filter", draftFilter);
+    await wrapper.vm.$nextTick();
+    document.querySelector<HTMLButtonElement>('[data-testid="sc-global-filter-cancel"]')!.click();
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.emitted("update:filter")).toBeUndefined();
+    await wrapper.setProps({ show: false });
+    await wrapper.setProps({ show: true });
+    expect(editor.props("filter")).toEqual(appliedFilter);
+    wrapper.unmount();
+  });
+
+  it("discards the draft when the modal closes through X, mask, or Escape", async () => {
+    const appliedFilter = { combinator: "and" as const, items: [] };
+    const draftFilter = {
+      combinator: "and" as const,
+      items: [
+        {
+          id: "rough-bin-filter",
+          field: "rough_bin",
+          condition: { filterType: "set" as const, values: [2] },
+          source: { kind: "manual" as const },
+        },
+      ],
+    };
+    const { wrapper } = await mountWithProviders(ScGlobalFilterModal, {
+      props: {
+        show: true,
+        filter: appliedFilter,
+        distinctValues: {},
+      },
+      global: {
+        stubs: {
+          NModal: {
+            name: "NModal",
+            props: ["show", "closable"],
+            emits: ["update:show"],
+            template: '<section><slot name="header" /><slot /><slot name="footer" /></section>',
+          },
+          ScGlobalFilterBar: {
+            name: "ScGlobalFilterBar",
+            props: ["filter"],
+            emits: ["update:filter", "search-options", "request-range"],
+            template: "<div />",
+          },
+        },
+      },
+    });
+    const editor = wrapper.findComponent({ name: "ScGlobalFilterBar" });
+
+    editor.vm.$emit("update:filter", draftFilter);
+    await wrapper.vm.$nextTick();
+    await wrapper.setProps({ show: false });
+
+    expect(wrapper.emitted("update:filter")).toBeUndefined();
+    await wrapper.setProps({ show: true });
+    expect(editor.props("filter")).toEqual(appliedFilter);
+    wrapper.unmount();
   });
 });

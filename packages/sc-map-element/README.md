@@ -38,8 +38,12 @@ without changing that mode. Ordinary trackpad `wheel` input uses `deltaX` and
 per animation frame, visual viewport changes are previewed immediately, and one
 final `zoom-in` event plus Arrow reprojection is committed 120 ms after input
 stops. Zoom sensitivity is defined by `SC_MAP_WHEEL_ZOOM_SENSITIVITY`.
-Zoomed Arrow projections retain 20% overscan on every edge so a nearby pan can
-render image data immediately while the next projection is being prepared.
+Zoomed Arrow projections retain 20% overscan on every edge. The render worker
+draws the same overscanned region into a canvas that is 20% larger on each side,
+so a nearby pan reveals already-rendered pixels while the next projection is
+being prepared. View regions expand on the horizontal or vertical axis to match
+the host aspect ratio; die and reticle backgrounds remain clipped to their
+rectangular map bounds.
 
 `<sc-map>` owns both workers. Its Arrow worker retains and iterates the Arrow
 vectors directly for mode selection, zoom filtering, pixel-grid binning, and

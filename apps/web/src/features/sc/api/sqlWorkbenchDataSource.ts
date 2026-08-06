@@ -6,6 +6,7 @@ import type {
   ScArrowQueryResult,
   ScDataColumn,
   ScDataFilter,
+  ScDataFilterExpression,
   ScDataParameter,
   ScDataQueryContext,
   ScGalleryDataQuery,
@@ -25,16 +26,11 @@ import type {
   ScSampleTableRowsQuery,
 } from "@/features/sc/domain/workbenchInteraction";
 import type { ScSampleTableFilter, ScSampleTableSort } from "@/features/sc/domain/sampleTable";
-import {
-  largestRemainderCounts,
-  scSamplingProgramError,
-  type ScSamplingGroupTarget,
-  type ScSamplingProgram,
-} from "@/features/sc/domain/samplingRules";
+import { buildScDataFilters } from "@/features/sc/application/workbenchDataFilter";
+import { scSamplingProgramError, type ScSamplingProgram } from "@/features/sc/domain/samplingRules";
 import {
   isScMissingFilterValue,
   scMissingFilterOption,
-  splitScSetFilterValues,
 } from "@/features/sc/domain/missingFilterValue";
 
 export type ScSqlWorkbenchScope =
@@ -149,63 +145,82 @@ function filterColumn(
   return quotedColumn(field, allowedColumns);
 }
 
+function scFilterFields(filters: readonly ScDataFilterExpression[]): string[] {
+  return filters.flatMap((filter) =>
+    Array.isArray(filter) ? [filter[0]] : scFilterFields(filter.items),
+  );
+}
+
 export function compileScWhere(
-  filters: readonly ScDataFilter[],
+  filters: readonly ScDataFilterExpression[],
   reticle?: ScReticleProjection,
   allowedColumns: ReadonlySet<string> = DEFAULT_ALLOWED_COLUMNS,
 ): CompiledWhere {
-  const predicates: string[] = [];
   const parameters: ScDataParameter[] = [];
-  for (const [field, operator, value] of filters) {
-    const column = filterColumn(field, reticle, allowedColumns);
-    if (operator === "is null") {
-      predicates.push(`${column} IS NULL`);
-      continue;
-    }
-    if (operator === "in") {
-      if (!Array.isArray(value)) throw new Error(`IN filter for ${field} requires an array`);
-      if (value.length === 0) {
-        predicates.push("FALSE");
-        continue;
-      }
-      predicates.push(`${column} = ANY(?)`);
-      parameters.push(value as boolean[] | number[] | string[]);
-      continue;
-    }
-    if (operator === "in or null") {
-      if (!Array.isArray(value))
-        throw new Error(`IN OR NULL filter for ${field} requires an array`);
-      if (value.length === 0) {
-        predicates.push(`${column} IS NULL`);
-      } else {
-        predicates.push(`(${column} = ANY(?) OR ${column} IS NULL)`);
-        parameters.push(value as boolean[] | number[] | string[]);
-      }
-      continue;
-    }
-    if (operator === "not in") {
-      if (!Array.isArray(value)) throw new Error(`NOT IN filter for ${field} requires an array`);
-      if (value.length === 0) continue;
-      predicates.push(`NOT (${column} = ANY(?))`);
-      parameters.push(value as boolean[] | number[] | string[]);
-      continue;
-    }
-    if (operator === "contains") {
-      predicates.push(`CONTAINS(CAST(${column} AS VARCHAR), ?)`);
-      parameters.push(String(value));
-      continue;
-    }
-    if (!["==", "!=", ">", ">=", "<", "<="].includes(operator)) {
-      throw new Error(`Unsupported SC filter operator: ${operator}`);
-    }
-    const sqlOperator = operator === "==" ? "=" : operator === "!=" ? "<>" : operator;
-    predicates.push(`${column} ${sqlOperator} ?`);
-    parameters.push(value as ScDataParameter);
-  }
+  const predicates = filters
+    .map((filter) => compileScFilterExpression(filter, parameters, reticle, allowedColumns))
+    .filter((predicate): predicate is string => predicate !== null);
   return {
     sql: predicates.length > 0 ? ` WHERE ${predicates.join(" AND ")}` : "",
     parameters,
   };
+}
+
+function compileScFilterExpression(
+  filter: ScDataFilterExpression,
+  parameters: ScDataParameter[],
+  reticle: ScReticleProjection | undefined,
+  allowedColumns: ReadonlySet<string>,
+): string | null {
+  if (!Array.isArray(filter)) {
+    const predicates = filter.items
+      .map((item) => compileScFilterExpression(item, parameters, reticle, allowedColumns))
+      .filter((predicate): predicate is string => predicate !== null);
+    if (predicates.length === 0) return null;
+    return `(${predicates.join(` ${filter.combinator.toUpperCase()} `)})`;
+  }
+  const [field, operator, value] = filter;
+  const column = filterColumn(field, reticle, allowedColumns);
+  if (operator === "is null") {
+    return `${column} IS NULL`;
+  }
+  if (operator === "in") {
+    if (!Array.isArray(value)) throw new Error(`IN filter for ${field} requires an array`);
+    if (value.length === 0) return "FALSE";
+    parameters.push(value as boolean[] | number[] | string[]);
+    return `${column} = ANY(?)`;
+  }
+  if (operator === "in or null") {
+    if (!Array.isArray(value)) throw new Error(`IN OR NULL filter for ${field} requires an array`);
+    if (value.length === 0) return `${column} IS NULL`;
+    parameters.push(value as boolean[] | number[] | string[]);
+    return `(${column} = ANY(?) OR ${column} IS NULL)`;
+  }
+  if (operator === "not in") {
+    if (!Array.isArray(value)) throw new Error(`NOT IN filter for ${field} requires an array`);
+    if (value.length === 0) return null;
+    parameters.push(value as boolean[] | number[] | string[]);
+    return `NOT (${column} = ANY(?))`;
+  }
+  if (operator === "not in or null" || operator === "not in and not null") {
+    if (!Array.isArray(value)) throw new Error(`NOT IN filter for ${field} requires an array`);
+    const nullPredicate =
+      operator === "not in or null" ? `${column} IS NULL` : `${column} IS NOT NULL`;
+    if (value.length === 0) return nullPredicate;
+    const join = operator === "not in or null" ? "OR" : "AND";
+    parameters.push(value as boolean[] | number[] | string[]);
+    return `(NOT (${column} = ANY(?)) ${join} ${nullPredicate})`;
+  }
+  if (operator === "contains") {
+    parameters.push(String(value));
+    return `CONTAINS(CAST(${column} AS VARCHAR), ?)`;
+  }
+  if (!["==", "!=", ">", ">=", "<", "<="].includes(operator)) {
+    throw new Error(`Unsupported SC filter operator: ${operator}`);
+  }
+  const sqlOperator = operator === "==" ? "=" : operator === "!=" ? "<>" : operator;
+  parameters.push(value as ScDataParameter);
+  return `${column} ${sqlOperator} ?`;
 }
 
 interface CompiledSamplingSelection {
@@ -225,15 +240,11 @@ function samplingValuePredicate(
   return { sql: `${column} IS NOT DISTINCT FROM ?`, parameters: [value] };
 }
 
-function samplingTargetExpression(
-  program: ScSamplingProgram,
-  target: ScSamplingGroupTarget,
-  ratioCount: number | undefined,
-): CompiledWhere {
-  if (program.group.kind === "quota") {
+function samplingTargetExpression(program: ScSamplingProgram, amount: number): CompiledWhere {
+  if (program.group.unit === "count") {
     return {
       sql: "?",
-      parameters: [program.group.unit === "ratio" ? (ratioCount ?? 0) : target.amount],
+      parameters: [amount],
     };
   }
   const rounding =
@@ -244,12 +255,12 @@ function samplingTargetExpression(
         : "ROUND";
   return {
     sql: `${rounding}("__group_population" * ? / 100.0)`,
-    parameters: [target.amount],
+    parameters: [amount],
   };
 }
 
 export function compileScSamplingSelection(
-  filters: readonly ScDataFilter[],
+  filters: readonly ScDataFilterExpression[],
   program: ScSamplingProgram,
   seed: number,
   reticle?: ScReticleProjection,
@@ -319,21 +330,18 @@ export function compileScSamplingSelection(
     );
     parameters.push(seed);
 
-    const ratioCounts =
-      program.group.kind === "quota" && program.group.unit === "ratio"
-        ? largestRemainderCounts(program.group.targets, program.total.limit)
-        : [];
-    const branches = program.group.targets.map((target, index) => {
+    const branches = program.group.targets.map((target) => {
       const predicate = samplingValuePredicate(program.group.field, target.value, allowedColumns);
-      const targetExpression = samplingTargetExpression(program, target, ratioCounts[index]);
+      const targetExpression = samplingTargetExpression(program, target.amount);
       parameters.push(...predicate.parameters, ...targetExpression.parameters);
       return `WHEN ${predicate.sql} THEN ${targetExpression.sql}`;
     });
-    const unlistedTarget = program.group.unlisted === "keep" ? '"__group_population"' : "0";
+    const othersExpression = samplingTargetExpression(program, program.group.othersAmount);
+    parameters.push(...othersExpression.parameters);
     ctes.push(
       `"__sc_sampling_grouped" AS (` +
         `SELECT * FROM "__sc_sampling_group_ranked" ` +
-        `WHERE "__group_rank" <= CASE ${branches.join(" ")} ELSE ${unlistedTarget} END)`,
+        `WHERE "__group_rank" <= CASE ${branches.join(" ")} ELSE ${othersExpression.sql} END)`,
     );
     source = '"__sc_sampling_grouped"';
   }
@@ -354,18 +362,11 @@ function filtersFromTableFilter(
   omitField?: string,
   allowedColumns: ReadonlySet<string> = DEFAULT_ALLOWED_COLUMNS,
 ): ScDataFilter[] {
-  const result: ScDataFilter[] = [];
-  for (const [field, condition] of Object.entries(filter ?? {})) {
+  for (const field of Object.keys(filter ?? {})) {
     if (field === omitField) continue;
     quotedColumn(field, allowedColumns);
-    if (condition.filterType === "set" && condition.values.length > 0) {
-      const setFilter = splitScSetFilterValues(field, condition.values);
-      result.push([field, setFilter.includeMissing ? "in or null" : "in", setFilter.values]);
-    } else if (condition.filterType === "number" && condition.type === "inRange") {
-      result.push([field, ">=", condition.filter], [field, "<=", condition.filterTo]);
-    }
   }
-  return result;
+  return buildScDataFilters(filter, { omitField });
 }
 
 function orderBy(
@@ -385,6 +386,12 @@ function stableTableOrderBy(
   return sort?.direction && sort.field !== "defect_id"
     ? `${ordered}, ${quotedColumn("defect_id", allowedColumns)} ASC`
     : ordered;
+}
+
+function rowIdentityColumn(columns: readonly ScDataColumn[]): "row_key" {
+  const names = new Set(columns.map((column) => column.name));
+  if (names.has("row_key")) return "row_key";
+  throw new Error("SC workbench rows are missing the required physical row_key column");
 }
 
 function rowRecord(table: Table, index: number): Record<string, unknown> {
@@ -500,7 +507,7 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
     ];
     const allowedColumns = await this.allowedColumnsFor([
       ...columns,
-      ...(query.filters ?? []).map(([field]) => field),
+      ...scFilterFields(query.filters ?? []),
     ]);
     const compiled = compileScWhere(query.filters ?? [], query.reticle, allowedColumns);
     return (
@@ -519,11 +526,12 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
   ): Promise<ScSampleTableRowsPage> {
     const sourceColumns = await this.loadColumns();
     const allowedColumns = this.allowedColumns(sourceColumns);
+    const identityColumn = rowIdentityColumn(sourceColumns);
     const filters = [
       ...(query.filters ?? []),
       ...filtersFromTableFilter(query.filter, undefined, allowedColumns),
       ...(query.defectIds.length > 0
-        ? ([["row_key", "in", query.defectIds]] as ScDataFilter[])
+        ? ([[identityColumn, "in", query.defectIds]] as ScDataFilter[])
         : []),
     ];
     const compiled = compileScWhere(filters, query.reticle, allowedColumns);
@@ -552,9 +560,9 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
     const rowsRequest = this.query(
       "sc-workbench.table.rows",
       `WITH "__sc_page_ids" AS (` +
-        `SELECT "row_key" FROM samples${compiled.sql}${stableOrder} LIMIT ? OFFSET ?` +
+        `SELECT ${quotedColumn(identityColumn, allowedColumns)} FROM samples${compiled.sql}${stableOrder} LIMIT ? OFFSET ?` +
         `) SELECT ${columns.join(", ")} FROM samples ` +
-        `INNER JOIN "__sc_page_ids" USING ("row_key")${stableOrder}`,
+        `INNER JOIN "__sc_page_ids" USING (${quotedColumn(identityColumn, allowedColumns)})${stableOrder}`,
       [...compiled.parameters, query.limit, offset],
       query.signal,
     );
@@ -570,7 +578,10 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
   }
 
   async loadGallery(query: ScGalleryDataQuery): Promise<ScGalleryPage> {
-    const galleryColumns =
+    const sourceColumns = await this.loadColumns();
+    const sourceColumnNames = new Set(sourceColumns.map((column) => column.name));
+    const identityColumn = rowIdentityColumn(sourceColumns);
+    const requestedGalleryColumns =
       query.mode === "review"
         ? [
             "row_key",
@@ -589,22 +600,28 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
             "prediction_label",
             "prediction_confidence",
           ];
-    const allowedColumns = await this.allowedColumnsFor([
+    const galleryColumns = requestedGalleryColumns.filter((field) => sourceColumnNames.has(field));
+    if (!galleryColumns.includes("defect_id")) {
+      throw new Error("SC gallery rows are missing the required defect_id column");
+    }
+    const allowedColumns = this.allowedColumns(sourceColumns);
+    for (const field of [
       ...galleryColumns,
       ...Object.keys(query.tableFilter ?? {}),
-      ...(query.filters ?? []).map(([field]) => field),
+      ...scFilterFields(query.filters ?? []),
       ...(query.tableSort?.field ? [query.tableSort.field] : []),
-    ]);
+    ]) {
+      quotedColumn(field, allowedColumns);
+    }
     const filters = [
       ...(query.filters ?? []),
       ...filtersFromTableFilter(query.tableFilter, undefined, allowedColumns),
       ...(query.tableSelection?.kind === "ids" && query.tableSelection.ids.length > 0
-        ? ([["row_key", "in", [...query.tableSelection.ids]]] as ScDataFilter[])
+        ? ([[identityColumn, "in", [...query.tableSelection.ids]]] as ScDataFilter[])
         : []),
       ...(query.tableSelection?.kind === "all" && query.tableSelection.excludedIds.length > 0
-        ? ([["row_key", "not in", [...query.tableSelection.excludedIds]]] as ScDataFilter[])
+        ? ([[identityColumn, "not in", [...query.tableSelection.excludedIds]]] as ScDataFilter[])
         : []),
-      ...(query.mode === "review" ? ([["images", ">", 0]] as ScDataFilter[]) : []),
     ];
     const compiled = compileScWhere(filters, query.reticle, allowedColumns);
     const result = await this.query(
@@ -628,7 +645,7 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
   async loadAggregates(query: ScAggregateDataQuery): Promise<Record<string, number>> {
     const allowedColumns = await this.allowedColumnsFor([
       query.field,
-      ...(query.filters ?? []).map(([field]) => field),
+      ...scFilterFields(query.filters ?? []),
     ]);
     const compiled = compileScWhere(query.filters ?? [], query.reticle, allowedColumns);
     const column = filterColumn(query.field, query.reticle, allowedColumns);
@@ -651,7 +668,7 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
   async loadNumericRange(query: ScNumericRangeQuery): Promise<ScNumericRange | null> {
     const allowedColumns = await this.allowedColumnsFor([
       query.field,
-      ...(query.filters ?? []).map(([field]) => field),
+      ...scFilterFields(query.filters ?? []),
     ]);
     const compiled = compileScWhere(query.filters ?? [], query.reticle, allowedColumns);
     const column = filterColumn(query.field, query.reticle, allowedColumns);
@@ -675,7 +692,7 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
     const allowedColumns = await this.allowedColumnsFor([
       query.field,
       ...Object.keys(query.filter ?? {}),
-      ...(query.filters ?? []).map(([field]) => field),
+      ...scFilterFields(query.filters ?? []),
     ]);
     const missingOption = scMissingFilterOption(query.field);
     const searchMatchesMissing =
@@ -709,7 +726,7 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
     const filters = [...(query.filters ?? [])];
     const constraint = query.constraint;
     const allowedColumns = await this.allowedColumnsFor([
-      ...(query.filters ?? []).map(([field]) => field),
+      ...scFilterFields(query.filters ?? []),
       ...(constraint.kind === "legend" ? [constraint.field] : []),
       ...(constraint.kind === "sampling-program"
         ? [

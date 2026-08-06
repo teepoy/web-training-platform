@@ -7,10 +7,9 @@ from sampling_rules import (
     ConditionalLimitRule,
     ConditionOperator,
     ConditionSet,
-    GlobalFilterRule,
+    DEFAULT_SAMPLING_SEED,
+    ExtraFilterRule,
     GroupQuotaRule,
-    GroupRate,
-    GroupSamplingRateRule,
     GroupTarget,
     InsufficientPopulationError,
     InvalidSamplingRuleError,
@@ -20,7 +19,6 @@ from sampling_rules import (
     SamplingProgram,
     ShortfallPolicy,
     TotalLimitRule,
-    UnlistedGroupPolicy,
     execute_sampling,
     sample,
 )
@@ -78,10 +76,10 @@ def test_conditional_limit_only_caps_matching_rows() -> None:
     assert sum(row["metadata"]["label"] == "b" for row in selected) == 4
 
 
-def test_global_filter_removes_ineligible_rows_before_sampling() -> None:
+def test_extra_filter_removes_ineligible_rows_before_sampling() -> None:
     program = SamplingProgram(
         rules=(
-            GlobalFilterRule(
+            ExtraFilterRule(
                 where=where(
                     "metadata.score",
                     ConditionOperator.GTE,
@@ -108,8 +106,9 @@ def test_group_count_quota_selects_explicit_totals() -> None:
                     GroupTarget(group=("a",), amount=2),
                     GroupTarget(group=("b",), amount=3),
                 ),
+                others_amount=0,
+                rounding=Rounding.NEAREST,
                 shortfall=ShortfallPolicy.ERROR,
-                unlisted=UnlistedGroupPolicy.EXCLUDE,
             ),
         )
     )
@@ -124,79 +123,19 @@ def test_group_count_quota_selects_explicit_totals() -> None:
     }
 
 
-def test_group_ratio_quota_controls_final_composition() -> None:
+def test_group_ratio_quota_uses_each_groups_own_population() -> None:
     program = SamplingProgram(
         rules=(
             GroupQuotaRule(
                 group_by=("metadata.label",),
                 unit=QuotaUnit.RATIO,
                 targets=(
-                    GroupTarget(group=("a",), amount=0.6),
-                    GroupTarget(group=("b",), amount=0.4),
+                    GroupTarget(group=("a",), amount=25),
+                    GroupTarget(group=("b",), amount=75),
                 ),
-                shortfall=ShortfallPolicy.ERROR,
-                unlisted=UnlistedGroupPolicy.EXCLUDE,
-            ),
-            TotalLimitRule(limit=10),
-        )
-    )
-
-    selected = sample(make_rows(), program=program, seed=17)
-
-    assert len(selected) == 10
-    assert sum(row["metadata"]["label"] == "a" for row in selected) == 6
-    assert sum(row["metadata"]["label"] == "b" for row in selected) == 4
-
-
-def test_group_ratio_quota_requires_total_limit() -> None:
-    program = SamplingProgram(
-        rules=(
-            GroupQuotaRule(
-                group_by=("metadata.label",),
-                unit=QuotaUnit.RATIO,
-                targets=(
-                    GroupTarget(group=("a",), amount=0.5),
-                    GroupTarget(group=("b",), amount=0.5),
-                ),
-                shortfall=ShortfallPolicy.ERROR,
-                unlisted=UnlistedGroupPolicy.EXCLUDE,
-            ),
-        )
-    )
-
-    with pytest.raises(InvalidSamplingRuleError, match="total limit"):
-        sample(make_rows(), program=program, seed=17)
-
-
-def test_group_ratio_quota_rejects_unlisted_keep_policy() -> None:
-    program = SamplingProgram(
-        rules=(
-            GroupQuotaRule(
-                group_by=("metadata.label",),
-                unit=QuotaUnit.RATIO,
-                targets=(GroupTarget(group=("a",), amount=1.0),),
-                shortfall=ShortfallPolicy.ERROR,
-                unlisted=UnlistedGroupPolicy.KEEP,
-            ),
-            TotalLimitRule(limit=4),
-        )
-    )
-
-    with pytest.raises(InvalidSamplingRuleError, match="complete final composition"):
-        sample(make_rows(), program=program, seed=17)
-
-
-def test_group_sampling_rate_uses_each_groups_own_population() -> None:
-    program = SamplingProgram(
-        rules=(
-            GroupSamplingRateRule(
-                group_by=("metadata.label",),
-                rates=(
-                    GroupRate(group=("a",), ratio=0.25),
-                    GroupRate(group=("b",), ratio=0.75),
-                ),
+                others_amount=0,
                 rounding=Rounding.NEAREST,
-                unlisted=UnlistedGroupPolicy.EXCLUDE,
+                shortfall=ShortfallPolicy.ERROR,
             ),
         )
     )
@@ -207,6 +146,120 @@ def test_group_sampling_rate_uses_each_groups_own_population() -> None:
     assert sum(row["metadata"]["label"] == "b" for row in selected) == 3
 
 
+def test_group_ratio_quota_uses_others_for_unlisted_groups() -> None:
+    program = SamplingProgram(
+        rules=(
+            GroupQuotaRule(
+                group_by=("metadata.label",),
+                unit=QuotaUnit.RATIO,
+                targets=(GroupTarget(group=("a",), amount=25),),
+                others_amount=50,
+                rounding=Rounding.NEAREST,
+                shortfall=ShortfallPolicy.ERROR,
+            ),
+        )
+    )
+
+    selected = sample(make_rows(), program=program, seed=17)
+
+    assert sum(row["metadata"]["label"] == "a" for row in selected) == 2
+    assert sum(row["metadata"]["label"] == "b" for row in selected) == 2
+
+
+def test_group_ratio_quota_rejects_percentages_over_100() -> None:
+    program = SamplingProgram(
+        rules=(
+            GroupQuotaRule(
+                group_by=("metadata.label",),
+                unit=QuotaUnit.RATIO,
+                targets=(GroupTarget(group=("a",), amount=101),),
+                others_amount=0,
+                rounding=Rounding.NEAREST,
+                shortfall=ShortfallPolicy.ERROR,
+            ),
+        )
+    )
+
+    with pytest.raises(InvalidSamplingRuleError, match="between zero and 100"):
+        sample(make_rows(), program=program, seed=17)
+
+
+def test_group_ratio_two_percent_means_two_percent_of_group_population() -> None:
+    rows = [{"id": index, "metadata": {"label": "a"}} for index in range(1_000)]
+    program = SamplingProgram(
+        rules=(
+            GroupQuotaRule(
+                group_by=("metadata.label",),
+                unit=QuotaUnit.RATIO,
+                targets=(GroupTarget(group=("a",), amount=2),),
+                others_amount=0,
+                rounding=Rounding.NEAREST,
+                shortfall=ShortfallPolicy.ERROR,
+            ),
+        )
+    )
+
+    assert len(sample(rows, program=program)) == 20
+
+
+def test_others_can_define_the_rule_for_every_group() -> None:
+    program = SamplingProgram(
+        rules=(
+            GroupQuotaRule(
+                group_by=("metadata.label",),
+                unit=QuotaUnit.RATIO,
+                targets=(),
+                others_amount=50,
+                rounding=Rounding.NEAREST,
+                shortfall=ShortfallPolicy.ERROR,
+            ),
+        )
+    )
+
+    selected = sample(make_rows(), program=program)
+
+    assert sum(row["metadata"]["label"] == "a" for row in selected) == 4
+    assert sum(row["metadata"]["label"] == "b" for row in selected) == 2
+
+
+def test_extra_filter_supports_nested_and_or_groups() -> None:
+    program = SamplingProgram(
+        rules=(
+            ExtraFilterRule(
+                where=ConditionSet(
+                    match=MatchMode.ALL,
+                    conditions=(
+                        Condition(
+                            field="metadata.reviewed",
+                            operator=ConditionOperator.EQ,
+                            value=True,
+                        ),
+                        ConditionSet(
+                            match=MatchMode.ANY,
+                            conditions=(
+                                Condition(
+                                    field="metadata.label",
+                                    operator=ConditionOperator.EQ,
+                                    value="a",
+                                ),
+                                Condition(
+                                    field="metadata.score",
+                                    operator=ConditionOperator.GTE,
+                                    value=1.0,
+                                ),
+                            ),
+                        ),
+                    ),
+                )
+            ),
+        )
+    )
+
+    selected = sample(make_rows(), program=program)
+
+    assert [row["id"] for row in selected] == [0, 2, 4, 6, 10]
+
+
 def test_group_shortfall_policy_is_explicit() -> None:
     strict_program = SamplingProgram(
         rules=(
@@ -214,8 +267,9 @@ def test_group_shortfall_policy_is_explicit() -> None:
                 group_by=("metadata.label",),
                 unit=QuotaUnit.COUNT,
                 targets=(GroupTarget(group=("b",), amount=5),),
+                others_amount=0,
+                rounding=Rounding.NEAREST,
                 shortfall=ShortfallPolicy.ERROR,
-                unlisted=UnlistedGroupPolicy.EXCLUDE,
             ),
         )
     )
@@ -225,8 +279,9 @@ def test_group_shortfall_policy_is_explicit() -> None:
                 group_by=("metadata.label",),
                 unit=QuotaUnit.COUNT,
                 targets=(GroupTarget(group=("b",), amount=5),),
+                others_amount=0,
+                rounding=Rounding.NEAREST,
                 shortfall=ShortfallPolicy.TAKE_AVAILABLE,
-                unlisted=UnlistedGroupPolicy.EXCLUDE,
             ),
         )
     )
@@ -240,7 +295,7 @@ def test_rule_order_is_fixed_and_reported() -> None:
     program = SamplingProgram(
         rules=(
             TotalLimitRule(limit=5),
-            GlobalFilterRule(
+            ExtraFilterRule(
                 where=where(
                     "metadata.reviewed",
                     ConditionOperator.EQ,
@@ -257,7 +312,7 @@ def test_rule_order_is_fixed_and_reported() -> None:
 def test_seeded_program_is_reproducible() -> None:
     program = SamplingProgram(
         rules=(
-            GlobalFilterRule(
+            ExtraFilterRule(
                 where=where(
                     "metadata.score",
                     ConditionOperator.GTE,
@@ -280,3 +335,14 @@ def test_seeded_program_is_reproducible() -> None:
     second = sample(make_rows(), program=program, seed=23)
 
     assert first == second
+
+
+def test_default_seed_is_fixed_at_42() -> None:
+    program = SamplingProgram(rules=(TotalLimitRule(limit=5),))
+
+    assert DEFAULT_SAMPLING_SEED == 42
+    assert sample(make_rows(), program=program) == sample(
+        make_rows(),
+        program=program,
+        seed=42,
+    )

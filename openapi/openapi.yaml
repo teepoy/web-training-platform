@@ -7624,6 +7624,124 @@ components:
       required:
         - dataset_id
       title: Sample
+    SampleFilterGroupRequest:
+      properties:
+        kind:
+          type: string
+          const: group
+          title: Kind
+        combinator:
+          type: string
+          enum:
+            - and
+            - or
+          title: Combinator
+        items:
+          items:
+            anyOf:
+              - $ref: "#/components/schemas/SampleFilterItemRequest"
+              - $ref: "#/components/schemas/SampleFilterGroupRequest"
+          type: array
+          minItems: 1
+          title: Items
+      additionalProperties: false
+      type: object
+      required:
+        - kind
+        - combinator
+        - items
+      title: SampleFilterGroupRequest
+    SampleFilterItemRequest:
+      properties:
+        kind:
+          type: string
+          const: condition
+          title: Kind
+        field:
+          type: string
+          minLength: 1
+          title: Field
+        condition:
+          anyOf:
+            - $ref: "#/components/schemas/SampleSetFilterCondition"
+            - $ref: "#/components/schemas/SampleRangeFilterCondition"
+          title: Condition
+      additionalProperties: false
+      type: object
+      required:
+        - kind
+        - field
+        - condition
+      title: SampleFilterItemRequest
+    SampleFilterRequest:
+      properties:
+        combinator:
+          type: string
+          enum:
+            - and
+            - or
+          title: Combinator
+        items:
+          items:
+            anyOf:
+              - $ref: "#/components/schemas/SampleFilterItemRequest"
+              - $ref: "#/components/schemas/SampleFilterGroupRequest"
+          type: array
+          minItems: 1
+          title: Items
+      additionalProperties: false
+      type: object
+      required:
+        - combinator
+        - items
+      title: SampleFilterRequest
+    SampleRangeFilterCondition:
+      properties:
+        filterType:
+          type: string
+          const: number
+          title: Filtertype
+        type:
+          type: string
+          const: inRange
+          title: Type
+        filter:
+          type: number
+          title: Filter
+        filterTo:
+          type: number
+          title: Filterto
+      additionalProperties: false
+      type: object
+      required:
+        - filterType
+        - type
+        - filter
+        - filterTo
+      title: SampleRangeFilterCondition
+    SampleSetFilterCondition:
+      properties:
+        filterType:
+          type: string
+          const: set
+          title: Filtertype
+        values:
+          items:
+            anyOf:
+              - type: number
+              - type: string
+          type: array
+          title: Values
+        exclude:
+          type: boolean
+          title: Exclude
+          default: false
+      additionalProperties: false
+      type: object
+      required:
+        - filterType
+        - values
+      title: SampleSetFilterCondition
     SampleWithLabels:
       properties:
         id:
@@ -8249,8 +8367,11 @@ components:
               - type: number
               - type: string
           type: array
-          minItems: 1
           title: Values
+        exclude:
+          type: boolean
+          title: Exclude
+          default: false
       type: object
       required:
         - filterType
@@ -9277,10 +9398,8 @@ components:
           title: Sample Ids
         sample_filter:
           anyOf:
-            - additionalProperties: true
-              type: object
+            - $ref: "#/components/schemas/SampleFilterRequest"
             - type: "null"
-          title: Sample Filter
         prompt:
           anyOf:
             - type: string

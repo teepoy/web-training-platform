@@ -94,6 +94,94 @@ async def test_executes_parameterized_query_as_arrow_stream(tmp_path: Path) -> N
 
 
 @pytest.mark.asyncio
+async def test_executes_review_sampling_with_extra_filter_ratio_and_others(
+    tmp_path: Path,
+) -> None:
+    class_numbers = [1] * 1_000 + [2] * 10 + [3] * 8
+    defect_ids = list(range(1, len(class_numbers) + 1))
+    samples = _cached_table(
+        tmp_path / "sampling-samples.parquet",
+        pa.table(
+            {
+                "row_key": [str(defect_id) for defect_id in defect_ids],
+                "defect_id": defect_ids,
+                "rough_bin": [10] * len(defect_ids),
+                "class_number": class_numbers,
+                "annotation_label": [None] * len(defect_ids),
+                "prediction_label": [None] * len(defect_ids),
+                "prediction_confidence": [None] * len(defect_ids),
+                "final_class": [None] * len(defect_ids),
+            }
+        ),
+        object_id="sampling-samples",
+    )
+    materialized = replace(_materialized(tmp_path), samples_base=samples)
+    sql = (
+        'WITH "__sc_sampling_base" AS ('
+        'SELECT "defect_id", "class_number" FROM samples '
+        'WHERE "rough_bin" = ? AND ("defect_id" > ? AND '
+        '("class_number" = ? OR "class_number" = ?))), '
+        '"__sc_sampling_group_ranked" AS ('
+        'SELECT *, ROW_NUMBER() OVER (PARTITION BY "class_number" '
+        'ORDER BY HASH("defect_id", ?), "defect_id") AS "__group_rank", '
+        'COUNT(*) OVER (PARTITION BY "class_number") AS "__group_population" '
+        'FROM "__sc_sampling_base"), '
+        '"__sc_sampling_grouped" AS ('
+        'SELECT * FROM "__sc_sampling_group_ranked" '
+        'WHERE "__group_rank" <= CASE '
+        'WHEN "class_number" IS NOT DISTINCT FROM ? '
+        'THEN ROUND("__group_population" * ? / 100.0) '
+        'ELSE ROUND("__group_population" * ? / 100.0) END) '
+        'SELECT "defect_id", "class_number" FROM "__sc_sampling_grouped" '
+        'ORDER BY HASH("defect_id", ?), "defect_id"'
+    )
+    config = load_config(skip_runtime_validation=True).sc.data_provider.model_copy(
+        update={"cache_dir": str(tmp_path)}
+    )
+    executor = DuckDbQueryExecutor(config=config)
+    try:
+        prepared = await executor.prepare_stream(
+            sql=validate_sc_sql(sql),
+            parameters=[10, 0, 1, 2, 42, 1, 2.0, 50.0, 42],
+            materialized=materialized,
+        )
+        payload = b"".join([chunk async for chunk in prepared.body])
+    finally:
+        await executor.close()
+
+    result = pa.ipc.open_stream(payload).read_all().to_pydict()
+    assert result["class_number"].count(1) == 20
+    assert result["class_number"].count(2) == 5
+    assert 3 not in result["class_number"]
+
+
+@pytest.mark.asyncio
+async def test_rejects_a_samples_cache_without_physical_row_key(
+    tmp_path: Path,
+) -> None:
+    materialized = _materialized(tmp_path)
+    samples = _cached_table(
+        tmp_path / "samples-without-row-key.parquet",
+        pa.table({"defect_id": [1], "rough_bin": [10]}),
+        object_id="samples-without-row-key",
+    )
+    materialized = replace(materialized, samples_base=samples)
+    config = load_config(skip_runtime_validation=True).sc.data_provider.model_copy(
+        update={"cache_dir": str(tmp_path)}
+    )
+    executor = DuckDbQueryExecutor(config=config)
+    try:
+        with pytest.raises(RuntimeError, match="required physical row_key"):
+            await executor.prepare_stream(
+                sql=validate_sc_sql("SELECT defect_id FROM samples"),
+                parameters=[],
+                materialized=materialized,
+            )
+    finally:
+        await executor.close()
+
+
+@pytest.mark.asyncio
 async def test_joins_annotation_and_prediction_overlays_independently(
     tmp_path: Path,
 ) -> None:
@@ -354,8 +442,6 @@ async def test_recycles_connection_after_stream_when_rss_exceeds_threshold(
     payload = b"".join([chunk async for chunk in prepared.body])
     try:
         assert executor._connection is not original_connection
-        assert pa.ipc.open_stream(payload).read_all().to_pydict() == {
-            "row_count": [3]
-        }
+        assert pa.ipc.open_stream(payload).read_all().to_pydict() == {"row_count": [3]}
     finally:
         await executor.close()

@@ -1,5 +1,6 @@
 import { onScopeDispose, watch, type ComputedRef } from "vue";
 import type { ScSampleTableFilter, ScSampleTableSort } from "@/features/sc/domain/sampleTable";
+import type { ScGlobalFilter } from "@/features/sc/domain/globalFilter";
 import type { ScLegendSource } from "@/features/sc/domain/workbenchInteraction";
 import type { ScReticleProjection } from "@/features/sc/domain/workbenchDataSource";
 import { useSqlInspectionModel } from "./useSqlInspectionModel";
@@ -11,7 +12,7 @@ interface InspectionQuadDataOptions {
   inspectionTime: ComputedRef<string>;
   waferKey: ComputedRef<number>;
   legendGroupBy: ComputedRef<ScLegendSource | null | undefined>;
-  globalFilter: ComputedRef<ScSampleTableFilter>;
+  globalFilter: ComputedRef<ScGlobalFilter>;
   tableFilter: ComputedRef<ScSampleTableFilter | undefined>;
   tableSort: ComputedRef<ScSampleTableSort | null | undefined>;
   reticle: ComputedRef<ScReticleProjection>;

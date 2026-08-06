@@ -111,6 +111,7 @@ export async function mockScDataset(
 function mockScColumns(total: number): Record<string, Array<number | string | null>> {
   const defectIds = Array.from({ length: total }, (_, index) => index + 1);
   return {
+    row_key: defectIds.map((id) => `row-${id}`),
     sample_id: defectIds.map((id) => `s-${id}`),
     defect_id: defectIds,
     rough_bin: defectIds.map((id) => id % 5),
@@ -186,6 +187,7 @@ export async function mockScDataProvider(
       const pageSize = Math.min(limit, Math.max(0, total - offset));
       const names = sql.includes('"rough_bin"')
         ? [
+            "row_key",
             "defect_id",
             "rough_bin",
             "class_number",
@@ -214,6 +216,7 @@ export async function mockScDataProvider(
           ]
         : sql.includes('"sample_id"')
           ? [
+              "row_key",
               "sample_id",
               "defect_id",
               "review_image_ids_json",
@@ -221,7 +224,13 @@ export async function mockScDataProvider(
               "prediction_label",
               "prediction_confidence",
             ]
-          : ["defect_id", "annotation_label", "prediction_label", "prediction_confidence"];
+          : [
+              "row_key",
+              "defect_id",
+              "annotation_label",
+              "prediction_label",
+              "prediction_confidence",
+            ];
       columns = Object.fromEntries(
         Object.entries(selectedColumns(rows, names)).map(([name, values]) => [
           name,
@@ -233,6 +242,8 @@ export async function mockScDataProvider(
       columns = { defect_id: rows.defect_id ?? [] };
     } else {
       columns = selectedColumns(rows, [
+        "row_key",
+        "defect_id",
         "wafer_x",
         "wafer_y",
         "die_x",

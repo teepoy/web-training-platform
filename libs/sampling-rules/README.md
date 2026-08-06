@@ -3,7 +3,7 @@
 `sampling-rules` adds a composable rule pipeline in front of random sampling:
 
 ```text
-global filter
+extra filter
   -> conditional limits
   -> one group quota/rate rule
   -> total limit
@@ -14,16 +14,18 @@ The library deliberately does not own persistence, dataset storage, or API model
 accepts ordinary mappings, produces an inspectable sampling plan, and performs a
 seeded draw.
 
-The five rule forms are:
+The four rule forms are:
 
-- `GlobalFilterRule`: removes rows that are not globally eligible.
+- `ExtraFilterRule`: implements the optional recursive Extra filter and removes ineligible rows.
 - `ConditionalLimitRule`: caps only the rows matching a condition.
 - `GroupQuotaRule` with `COUNT`: picks explicit totals per group.
-- `GroupQuotaRule` with `RATIO`: controls the composition of a later total limit.
-- `GroupSamplingRateRule`: samples a percentage of each group's own population.
+- `GroupQuotaRule` with `RATIO`: samples a percentage of each group's own population.
 - `TotalLimitRule`: caps the final result without filling missing rows.
 
-Group shortfalls and unlisted groups always require explicit policies.
+`GroupQuotaRule.others_amount` applies the same count or ratio to every unlisted group.
+For example, a sample ratio of `2` means 2% and selects 20 rows from a group of
+1,000; it is not a percentage of the final total limit. Group
+shortfalls still require an explicit policy.
 
 ## Example
 
@@ -32,7 +34,7 @@ from sampling_rules import (
     Condition,
     ConditionOperator,
     ConditionSet,
-    GlobalFilterRule,
+    ExtraFilterRule,
     MatchMode,
     SamplingProgram,
     TotalLimitRule,
@@ -47,7 +49,7 @@ rows = [
 
 program = SamplingProgram(
     rules=(
-        GlobalFilterRule(
+        ExtraFilterRule(
             where=ConditionSet(
                 conditions=(
                     Condition(
@@ -63,10 +65,11 @@ program = SamplingProgram(
     )
 )
 
-result = sample(rows, program=program, seed=7)
+result = sample(rows, program=program)
 ```
 
-Use `execute_sampling(...)` when a UI or service also needs the per-rule audit plan.
+The default seed is fixed at `42`, matching SC Review Sampling. Use
+`execute_sampling(...)` when a UI or service also needs the per-rule audit plan.
 
 ## SC Review Sampling integration
 
@@ -74,7 +77,7 @@ The production SC Reclassify view exposes the same ordered rule forms through
 `ReviewSamplingModal.vue`. Because SC inspection datasets can contain hundreds of
 thousands of rows, the web data source compiles enabled conditional, group, and
 total stages into one scoped DuckDB query and returns only the sampled defect IDs.
-The existing workbench Global Filter remains the shared first stage, and the
+The optional sampling Extra filter remains the shared first stage, and the
 selected cohort stays frontend workbench state rather than a server-side column.
 
 The Python package remains useful for bounded in-memory callers and rule semantics;

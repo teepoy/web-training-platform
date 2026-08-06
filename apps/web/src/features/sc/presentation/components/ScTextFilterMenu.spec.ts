@@ -18,7 +18,7 @@ describe("ScTextFilterMenu", () => {
       .find((button) => button.text() === "Apply")
       ?.trigger("click");
 
-    expect(wrapper.emitted("apply")).toEqual([[[42, 87]]]);
+    expect(wrapper.emitted("apply")).toEqual([[[42, 87], false]]);
     expect(wrapper.emitted("close")).toHaveLength(1);
   });
 
@@ -57,5 +57,18 @@ describe("ScTextFilterMenu", () => {
     expect(applied).toHaveLength(20_000);
     expect(applied?.[0]).toBe(1);
     expect(applied?.[19_999]).toBe(20_000);
+  });
+
+  it("preserves exclude mode when editing an applied Global Filter", async () => {
+    const { wrapper } = await mountWithProviders(ScTextFilterMenu, {
+      props: { appliedValues: [42, 87], exclude: true },
+    });
+
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text() === "Apply")
+      ?.trigger("click");
+
+    expect(wrapper.emitted("apply")).toEqual([[[42, 87], true]]);
   });
 });

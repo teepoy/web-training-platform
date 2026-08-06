@@ -41,11 +41,6 @@ class ShortfallPolicy(StrEnum):
     TAKE_AVAILABLE = "take_available"
 
 
-class UnlistedGroupPolicy(StrEnum):
-    EXCLUDE = "exclude"
-    KEEP = "keep"
-
-
 @dataclass(frozen=True, slots=True)
 class Condition:
     field: str
@@ -55,12 +50,12 @@ class Condition:
 
 @dataclass(frozen=True, slots=True)
 class ConditionSet:
-    conditions: tuple[Condition, ...]
+    conditions: tuple[Condition | ConditionSet, ...]
     match: MatchMode
 
 
 @dataclass(frozen=True, slots=True)
-class GlobalFilterRule:
+class ExtraFilterRule:
     where: ConditionSet
 
 
@@ -81,22 +76,9 @@ class GroupQuotaRule:
     group_by: tuple[str, ...]
     unit: QuotaUnit
     targets: tuple[GroupTarget, ...]
-    shortfall: ShortfallPolicy
-    unlisted: UnlistedGroupPolicy
-
-
-@dataclass(frozen=True, slots=True)
-class GroupRate:
-    group: GroupKey
-    ratio: float
-
-
-@dataclass(frozen=True, slots=True)
-class GroupSamplingRateRule:
-    group_by: tuple[str, ...]
-    rates: tuple[GroupRate, ...]
+    others_amount: int | float
     rounding: Rounding
-    unlisted: UnlistedGroupPolicy
+    shortfall: ShortfallPolicy
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,11 +87,7 @@ class TotalLimitRule:
 
 
 SamplingRule: TypeAlias = (
-    GlobalFilterRule
-    | ConditionalLimitRule
-    | GroupQuotaRule
-    | GroupSamplingRateRule
-    | TotalLimitRule
+    ExtraFilterRule | ConditionalLimitRule | GroupQuotaRule | TotalLimitRule
 )
 
 

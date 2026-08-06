@@ -21,4 +21,10 @@ export type {
 export type { ScMapBounds, ScMapData, ScMapRegion, ScMapViewport } from "./types";
 export { encodeLegendColorMap, encodeLegendKey, normalizeLegendKey } from "./legend-key-codec";
 export { copyMapArrowChunksForTransfer } from "./map-arrow-client";
-export { overscanMapRegion, SC_MAP_PROJECTION_OVERSCAN_RATIO } from "./map-projection";
+export {
+  createMapRenderViewport,
+  fitMapRegionToViewport,
+  overscanMapRegion,
+  SC_MAP_PROJECTION_OVERSCAN_RATIO,
+  type ScMapRenderViewport,
+} from "./map-projection";

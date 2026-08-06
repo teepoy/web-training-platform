@@ -19,14 +19,10 @@ describe("ReviewSamplingModal", () => {
             loading: false,
             availableCount: 100,
             mapSelectionCount: 0,
-            globalFilter: {},
+            tableSelectionAvailable: false,
+            extraFilter: { combinator: "and", items: [] },
             program: createDefaultScSamplingProgram(),
-            seed: 42,
-            reviewOnly: true,
-            mapSelectionOnly: false,
-            assignDraftLabel: false,
-            draftLabel: null,
-            codeLabels: [],
+            scope: "all",
             loadGroups,
           }),
       },
@@ -46,6 +42,15 @@ describe("ReviewSamplingModal", () => {
 
     await vi.waitFor(() => expect(loadGroups).toHaveBeenCalled());
     await vi.waitFor(() => expect(document.body.textContent).toContain("Manage sampling rules"));
+    const allScope = document.body.querySelector('input[value="all"]') as HTMLInputElement | null;
+    expect(allScope?.checked).toBe(true);
+    const tabs = Array.from(document.body.querySelectorAll<HTMLElement>(".n-tabs-tab"));
+    tabs.find((tab) => tab.textContent?.includes("Extra filter"))?.click();
+    await nextTick();
+    expect(document.body.querySelector('[data-testid="query-add-condition"]')).not.toBeNull();
+    expect(document.body.querySelector('[data-testid="query-add-group"]')).not.toBeNull();
+    tabs.find((tab) => tab.textContent?.includes("Enabled rules"))?.click();
+    await nextTick();
     const manageButton = Array.from(document.body.querySelectorAll("button")).find((button) =>
       button.textContent?.includes("Manage sampling rules"),
     );
@@ -72,5 +77,17 @@ describe("ReviewSamplingModal", () => {
     const latest = updates.at(-1)?.[0] as ReturnType<typeof createDefaultScSamplingProgram>;
     expect(latest.conditional.enabled).toBe(true);
     expect(document.body.textContent).toContain("Matched max");
+    expect(document.body.textContent).not.toContain("Random seed");
+    expect(document.body.textContent).not.toContain("Assign draft label");
+
+    const totalRule = Array.from(document.body.querySelectorAll("article")).find((article) =>
+      article.textContent?.includes("Total limit"),
+    );
+    expect(totalRule?.querySelector("button.rule-copy")).toBeNull();
+    expect(
+      Array.from(totalRule?.querySelectorAll("button") ?? []).some(
+        (button) => button.textContent?.trim() === "Edit",
+      ),
+    ).toBe(false);
   });
 });

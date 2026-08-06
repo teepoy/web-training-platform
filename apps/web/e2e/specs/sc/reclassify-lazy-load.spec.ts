@@ -15,6 +15,7 @@ test.describe("SC Reclassify warmup and sidebar @mock", () => {
   test("renders current data shell without legacy warmup requests @mock", async ({
     authedPage,
   }) => {
+    await authedPage.addInitScript(() => localStorage.setItem("ui_dark_mode", "true"));
     await mockScDataset(authedPage, DATASET_ID, {
       name: "Test SC Dataset",
       label_space: ["Scratch", "Clean"],
@@ -73,8 +74,19 @@ test.describe("SC Reclassify warmup and sidebar @mock", () => {
 
     await globalFilterButton.click();
     await expect(authedPage.getByText("Global Filters", { exact: true })).toBeVisible();
-    await expect(authedPage.getByRole("button", { name: "Defect ID", exact: true })).toBeVisible();
-    await expect(authedPage.getByRole("button", { name: "Confidence", exact: true })).toBeVisible();
+    await authedPage.getByTestId("query-combinator-or").click();
+    await authedPage.getByTestId("query-add-condition").click();
+    await authedPage.locator(".sc-filter-rule__property-select .n-base-selection").click();
+    const propertyOptions = authedPage.locator(".n-base-select-option");
+    const defectIdOption = propertyOptions.filter({ hasText: /^Defect ID$/ });
+    await expect(defectIdOption).toBeVisible();
+    await defectIdOption.click();
+    await expect(authedPage.locator(".sc-filter-rule__editor")).toBeVisible();
+    await expect(authedPage.getByRole("button", { name: "Configure" })).toHaveCount(0);
+    const itemBackground = await authedPage
+      .locator(".query-builder__rule")
+      .evaluate((element) => getComputedStyle(element).backgroundColor);
+    expect(itemBackground).not.toBe("rgb(255, 255, 255)");
 
     expect(requestEvents).toEqual([]);
     expect(viewSampleRequests).toEqual([]);

@@ -23,8 +23,14 @@ import type {
   PredictionJobResponse,
   TrainingJob,
 } from "@/generated/orval/models";
-import type { ScSampleTableFilter } from "../domain/sampleTable";
+import {
+  cloneScGlobalFilter,
+  scGlobalFilterHasConditions,
+  toScWorkflowSampleFilter,
+  type ScGlobalFilter,
+} from "../domain/globalFilter";
 import { createDefaultScSamplingProgram, type ScSamplingProgram } from "../domain/samplingRules";
+import type { ScSamplingCandidateScope } from "./inspectionFilterPolicy";
 import type { ScSelectionAction } from "../domain/workbenchInteraction";
 import { useScReclassifyStore } from "./reclassifyStore";
 import type { ScDatasetInfo, ScAnnotationItem } from "../domain/models";
@@ -87,15 +93,11 @@ export interface ReclassifyPageState {
 
   showSamplingModal: Ref<boolean>;
   samplingProgram: Ref<ScSamplingProgram>;
-  samplingSeed: Ref<number>;
-  samplingReviewOnly: Ref<boolean>;
-  samplingMapSelectionOnly: Ref<boolean>;
-  assignDefaultDraftLabel: Ref<boolean>;
-  samplingDraftLabel: Ref<string | null>;
+  samplingScope: Ref<ScSamplingCandidateScope>;
   applySampling: (defectIds: string[]) => void;
   galleryRandomSamplingDefectIds: Ref<Set<string>>;
   clearGalleryRandomSamplingDefectIds: () => void;
-  resolveTrainSampleFilter: (globalFilter: ScSampleTableFilter) => ScSampleTableFilter | null;
+  resolveTrainSampleFilter: (globalFilter: ScGlobalFilter) => ScGlobalFilter | null;
 
   selectedTrainerId: Ref<string | null>;
   trainerOptions: ComputedRef<{ label: string; value: string }[]>;
@@ -108,7 +110,7 @@ export interface ReclassifyPageState {
   trainPredictPredictionPercent: ComputedRef<number | null>;
   trainPredictPredictionProgressLabel: ComputedRef<string>;
   trainPredictPredictionProcessing: ComputedRef<boolean>;
-  trainAndPredict: (sampleFilter?: ScSampleTableFilter | null) => Promise<void>;
+  trainAndPredict: (sampleFilter?: ScGlobalFilter | null) => Promise<void>;
 }
 
 export function useReclassifyPage(): ReclassifyPageState {
@@ -558,17 +560,7 @@ export function useReclassifyPage(): ReclassifyPageState {
 
   const showSamplingModal = ref(false);
   const samplingProgram = ref(createDefaultScSamplingProgram());
-  const samplingSeed = ref(42);
-  const samplingReviewOnly = ref(true);
-  const samplingMapSelectionOnly = ref(false);
-  const assignDefaultDraftLabel = ref(false);
-  const samplingDraftLabel = ref<string | null>(effectiveLabels.value[0] ?? null);
-
-  watch(effectiveLabels, (labels) => {
-    if (!samplingDraftLabel.value || !labels.includes(samplingDraftLabel.value)) {
-      samplingDraftLabel.value = labels[0] ?? null;
-    }
-  });
+  const samplingScope = ref<ScSamplingCandidateScope>("all");
 
   watch(datasetId, (id) => {
     galleryRandomSamplingDefectIds.value = new Set(
@@ -588,25 +580,12 @@ export function useReclassifyPage(): ReclassifyPageState {
     galleryRandomSamplingDefectIds.value = new Set(sampled);
     reclassifyStore.setSamplingDefectIds(datasetId.value, sampled);
 
-    if (assignDefaultDraftLabel.value && samplingDraftLabel.value) {
-      const next: Record<string, string> = { ...annotationDraft.value };
-      for (const id of sampled) {
-        next[id] = samplingDraftLabel.value;
-      }
-      annotationDraft.value = next;
-    }
-
     showSamplingModal.value = false;
   }
 
-  function resolveTrainSampleFilter(globalFilter: ScSampleTableFilter): ScSampleTableFilter | null {
+  function resolveTrainSampleFilter(globalFilter: ScGlobalFilter): ScGlobalFilter | null {
     if (collectionId.value) return null;
-    const filter: ScSampleTableFilter = { ...globalFilter };
-    const sampledIds = [...galleryRandomSamplingDefectIds.value];
-    if (sampledIds.length > 0) {
-      filter.row_key = { filterType: "set", values: sampledIds };
-    }
-    return Object.keys(filter).length > 0 ? filter : null;
+    return scGlobalFilterHasConditions(globalFilter) ? cloneScGlobalFilter(globalFilter) : null;
   }
 
   // ── Train & Predict ─────────────────────────────────────────────────
@@ -785,7 +764,7 @@ export function useReclassifyPage(): ReclassifyPageState {
     mounted.value = false;
   });
 
-  async function trainAndPredict(sampleFilter: ScSampleTableFilter | null = null): Promise<void> {
+  async function trainAndPredict(sampleFilter: ScGlobalFilter | null = null): Promise<void> {
     const trainerId = selectedTrainerId.value;
     if (!trainerId) {
       message.warning("Please select a trainer first");
@@ -816,7 +795,7 @@ export function useReclassifyPage(): ReclassifyPageState {
           : { dataset_id: datasetId.value }),
         trainer_id: trainerId,
         target: "image_classification",
-        sample_filter: sampleFilter,
+        sample_filter: sampleFilter ? toScWorkflowSampleFilter(sampleFilter) : null,
       });
       const trainJobId = typeof workflow.train_job.id === "string" ? workflow.train_job.id : "";
       if (!trainJobId) {
@@ -877,11 +856,7 @@ export function useReclassifyPage(): ReclassifyPageState {
 
     showSamplingModal,
     samplingProgram,
-    samplingSeed,
-    samplingReviewOnly,
-    samplingMapSelectionOnly,
-    assignDefaultDraftLabel,
-    samplingDraftLabel,
+    samplingScope,
     applySampling,
     galleryRandomSamplingDefectIds,
     clearGalleryRandomSamplingDefectIds,

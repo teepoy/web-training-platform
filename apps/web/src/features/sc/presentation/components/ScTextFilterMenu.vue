@@ -1,14 +1,15 @@
 <script setup lang="ts">
 import { ref, watchEffect } from "vue";
-import { NButton, NInput, NSpace, NText } from "naive-ui";
+import { NButton, NInput, NRadioButton, NRadioGroup, NSpace, NText } from "naive-ui";
 import { parseDefectIds } from "./defectIdImport";
 
 const props = defineProps<{
   appliedValues: Array<string | number>;
+  exclude?: boolean;
 }>();
 
 const emit = defineEmits<{
-  (e: "apply", value: Array<string | number>): void;
+  (e: "apply", value: Array<string | number>, exclude: boolean): void;
   (e: "close"): void;
 }>();
 
@@ -16,9 +17,11 @@ const text = ref("");
 const fileInput = ref<HTMLInputElement | null>(null);
 const importStatus = ref("");
 const validationError = ref("");
+const mode = ref<"include" | "exclude">("include");
 
 watchEffect(() => {
   text.value = props.appliedValues.map(String).join(", ");
+  mode.value = props.exclude ? "exclude" : "include";
 });
 
 function apply(): void {
@@ -28,7 +31,7 @@ function apply(): void {
     return;
   }
   validationError.value = "";
-  emit("apply", parsed.values);
+  emit("apply", parsed.values, mode.value === "exclude");
   emit("close");
 }
 
@@ -36,7 +39,7 @@ function clear(): void {
   text.value = "";
   importStatus.value = "";
   validationError.value = "";
-  emit("apply", []);
+  emit("apply", [], false);
   emit("close");
 }
 
@@ -98,6 +101,10 @@ async function importFile(event: Event): Promise<void> {
       :autosize="{ minRows: 2, maxRows: 5 }"
       @update:value="text = $event"
     />
+    <NRadioGroup v-model:value="mode" size="small">
+      <NRadioButton value="include">Include only</NRadioButton>
+      <NRadioButton value="exclude">Exclude</NRadioButton>
+    </NRadioGroup>
     <NText v-if="importStatus" type="success" class="sst-defect-filter-status">
       {{ importStatus }}
     </NText>

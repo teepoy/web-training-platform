@@ -59,7 +59,10 @@ _WORKBENCH_OWNED_SOURCE_COLUMNS = (
     "prediction_confidence",
     "final_class",
 )
-_SAMPLES_BASE_FORMAT_VERSION = "v3-stable-row-key"
+# Bump whenever the physical workbench identity contract changes.  v4 forces
+# caches written before row_key became mandatory to be rebuilt instead of
+# leaking a missing-column Binder error into the browser.
+_SAMPLES_BASE_FORMAT_VERSION = "v4-physical-row-key"
 
 
 @dataclass(frozen=True)

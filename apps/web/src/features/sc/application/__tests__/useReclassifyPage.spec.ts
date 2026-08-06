@@ -247,16 +247,14 @@ describe("useReclassifyPage - addLabel", () => {
 });
 
 describe("useReclassifyPage - review sampling", () => {
-  it("keeps existing drafts and assigns the explicitly selected sampling label", async () => {
+  it("keeps annotation drafts unchanged when applying a sampling cohort", async () => {
     const { state } = await mountPage("ds-sampling", DEFAULT_DATASET);
     state.annotationDraft.value = { existing: "7" };
-    state.assignDefaultDraftLabel.value = true;
-    state.samplingDraftLabel.value = "12";
 
     state.applySampling(["103", "274", "103"]);
 
     expect([...state.galleryRandomSamplingDefectIds.value]).toEqual(["103", "274"]);
-    expect(state.annotationDraft.value).toEqual({ existing: "7", "103": "12", "274": "12" });
+    expect(state.annotationDraft.value).toEqual({ existing: "7" });
   });
 
   it("clears the active cohort explicitly", async () => {
@@ -268,17 +266,32 @@ describe("useReclassifyPage - review sampling", () => {
     expect(state.galleryRandomSamplingDefectIds.value.size).toBe(0);
   });
 
-  it("combines the active cohort with Global Filter for Train & Predict", async () => {
+  it("keeps the active cohort out of the Train & Predict Global Filter", async () => {
     const { state } = await mountPage("ds-sampled-train", DEFAULT_DATASET);
     state.applySampling(["3", "9"]);
 
     expect(
       state.resolveTrainSampleFilter({
-        final_class: { filterType: "set", values: ["Scratch"] },
+        combinator: "and",
+        items: [
+          {
+            id: "final-class",
+            field: "final_class",
+            condition: { filterType: "set", values: ["Scratch"] },
+            source: { kind: "manual" },
+          },
+        ],
       }),
     ).toEqual({
-      final_class: { filterType: "set", values: ["Scratch"] },
-      row_key: { filterType: "set", values: ["3", "9"] },
+      combinator: "and",
+      items: [
+        {
+          id: "final-class",
+          field: "final_class",
+          condition: { filterType: "set", values: ["Scratch"] },
+          source: { kind: "manual" },
+        },
+      ],
     });
   });
 });
@@ -343,12 +356,27 @@ describe("useReclassifyPage - train defaults", () => {
     await waitForCondition(() => state.activeClassCount.value === 2);
 
     await state.trainAndPredict({
-      final_class: { filterType: "set", values: ["Scratch"] },
+      combinator: "and",
+      items: [
+        {
+          id: "final-class",
+          field: "final_class",
+          condition: { filterType: "set", values: ["Scratch"] },
+          source: { kind: "manual" },
+        },
+      ],
     });
 
     expect(trainRequests).toHaveLength(1);
     expect(trainRequests[0]?.sample_filter).toEqual({
-      final_class: { filterType: "set", values: ["Scratch"] },
+      combinator: "and",
+      items: [
+        {
+          kind: "condition",
+          field: "final_class",
+          condition: { filterType: "set", values: ["Scratch"] },
+        },
+      ],
     });
     expect(trainRequests[0]?.sample_ids).toBeUndefined();
   });

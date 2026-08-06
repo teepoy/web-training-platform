@@ -76,14 +76,13 @@ const props = withDefaults(
     colorMapScopeKey?: string;
 
     zoom?: { x: number; y: number; w: number; h: number } | null;
-    mapSelectionMode?: ScMapSelectionMode | null;
     mapSelectionCount?: number;
-    canUndoMapSelectionMode?: boolean;
 
     /** IDs resolved against the Arrow snapshot already retained by <sc-map>. */
     highlightDefectIds?: number[];
     immediateCrosshairDefectIds?: number[];
     immediateCrosshairVersion?: number;
+    selectionResetVersion?: number;
   }>(),
   {
     showImageMarkers: true,
@@ -105,9 +104,8 @@ const emit = defineEmits<{
   (e: "legend-hidden-change", payload: { source: LegendSource; hiddenKeys: string[] }): void;
   (e: "box-select", region: { x: number; y: number; w: number; h: number }): void;
   (e: "lasso-select", selection: ScMapLassoSelection): void;
-  (e: "update:mapSelectionMode", mode: ScMapSelectionMode): void;
+  (e: "commit-map-selection-filter", mode: ScMapSelectionMode): void;
   (e: "invert-map-selection-mode"): void;
-  (e: "undo-map-selection-mode"): void;
   (e: "copy-selected-defect-ids"): void;
   (e: "update:showImageMarkers", value: boolean): void;
   (e: "update:defectSize", value: number): void;
@@ -314,7 +312,7 @@ const activeMapToolIcon = computed(() => {
   return ScanOutline;
 });
 
-const mapToolOptions = computed<DropdownOption[]>(() => [
+const mapSelectionToolOptions = computed<DropdownOption[]>(() => [
   {
     label: "Box selection (append)",
     key: "select" satisfies MapToolAction,
@@ -325,6 +323,8 @@ const mapToolOptions = computed<DropdownOption[]>(() => [
     key: "lasso" satisfies MapToolAction,
     icon: mapToolIcon(BrushOutline),
   },
+]);
+const mapNavigationToolOptions = computed<DropdownOption[]>(() => [
   {
     label: "Drag to zoom",
     key: "zoomin" satisfies MapToolAction,
@@ -336,16 +336,20 @@ const mapToolOptions = computed<DropdownOption[]>(() => [
     icon: mapToolIcon(MoveOutline),
   },
 ]);
+const mapToolOptions = computed<DropdownOption[]>(() => [
+  ...mapSelectionToolOptions.value,
+  ...mapNavigationToolOptions.value,
+]);
 const mapSelectionContextOptions = computed<DropdownOption[]>(() => [
   {
     label: "Exclude all others",
     key: "include",
-    disabled: props.mapSelectionMode === "include" || !props.mapSelectionCount,
+    disabled: !props.mapSelectionCount,
   },
   {
     label: "Exclude selected",
     key: "exclude",
-    disabled: props.mapSelectionMode === "exclude" || !props.mapSelectionCount,
+    disabled: !props.mapSelectionCount,
   },
   {
     label: "Invert selection",
@@ -357,16 +361,15 @@ const mapSelectionContextOptions = computed<DropdownOption[]>(() => [
     key: "copy-selected-defect-ids",
     disabled: !props.mapSelectionCount,
   },
-  { type: "divider", key: "selection-actions-divider" },
-  {
-    label: "Undo selection filter",
-    key: "undo-selection-filter",
-    disabled: !props.canUndoMapSelectionMode,
-  },
   {
     label: "Selection tool",
     key: "selection-tool",
-    children: mapToolOptions.value,
+    children: mapSelectionToolOptions.value,
+  },
+  {
+    label: "Navigation tool",
+    key: "navigation-tool",
+    children: mapNavigationToolOptions.value,
   },
 ]);
 const mapSelectionContextVisible = ref(false);
@@ -391,15 +394,11 @@ function handleMapSelectionContextSelect(key: string | number): void {
   const action = String(key);
   mapSelectionContextVisible.value = false;
   if (action === "include" || action === "exclude") {
-    emit("update:mapSelectionMode", action);
+    emit("commit-map-selection-filter", action);
     return;
   }
   if (action === "invert-selection") {
     emit("invert-map-selection-mode");
-    return;
-  }
-  if (action === "undo-selection-filter") {
-    emit("undo-map-selection-mode");
     return;
   }
   if (action === "copy-selected-defect-ids") {
@@ -601,6 +600,14 @@ watch(
   () => props.immediateCrosshairVersion,
   () => {
     localImmediateCrosshairPoints.value = { wafer: [], die: [], reticle: [] };
+  },
+);
+
+watch(
+  () => props.selectionResetVersion,
+  () => {
+    clearLocalImmediateCrosshair();
+    selectedClassNumber.value = null;
   },
 );
 
