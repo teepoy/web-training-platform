@@ -47,6 +47,12 @@ export interface ScMapProgress {
   stage: string;
 }
 
+export interface ScMapErrorDetail {
+  context: string;
+  message: string;
+  stack?: string;
+}
+
 export const SC_MAP_WHEEL_ZOOM_SENSITIVITY = 0.0015;
 export const SC_MAP_WHEEL_ZOOM_COMMIT_DELAY_MS = 120;
 
@@ -209,6 +215,15 @@ export class ScMapElement extends HTMLElement {
       throw new Error("<sc-map> requires ImageBitmapRenderingContext support");
     }
     this.#worker = new ScMapRenderWorker();
+    this.#worker.onerror = (event) => {
+      const location = event.filename ? ` (${event.filename}:${event.lineno}:${event.colno})` : "";
+      this.#reportError(
+        "Rendering map canvas",
+        event.error instanceof Error
+          ? event.error
+          : new Error(`${event.message || "Map render worker crashed"}${location}`),
+      );
+    };
     this.#worker.onmessage = (
       event: MessageEvent<{
         type: "render-stats";
@@ -656,6 +671,22 @@ export class ScMapElement extends HTMLElement {
     );
   }
 
+  #reportError(context: string, cause: unknown): void {
+    const error = cause instanceof Error ? cause : new Error(String(cause));
+    console.error(`[sc-map] ${context}`, error);
+    this.dispatchEvent(
+      new CustomEvent<ScMapErrorDetail>("map-error", {
+        detail: {
+          context,
+          message: error.message,
+          ...(error.stack ? { stack: error.stack } : {}),
+        },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
   #scheduleDatasetLoad(): void {
     if (this.#datasetLoadScheduled) return;
     this.#datasetLoadScheduled = true;
@@ -697,13 +728,7 @@ export class ScMapElement extends HTMLElement {
       this.#drawOverlay();
     } catch (error) {
       if (dataset !== this.#arrowDataset || revision !== this.#highlightResolutionRevision) return;
-      this.dispatchEvent(
-        new CustomEvent("map-error", {
-          detail: error instanceof Error ? error.message : String(error),
-          bubbles: true,
-          composed: true,
-        }),
-      );
+      this.#reportError("Resolving map highlights", error);
     }
   }
 
@@ -737,13 +762,7 @@ export class ScMapElement extends HTMLElement {
       this.#scheduleProjection();
     } catch (error) {
       if (revision !== this.#datasetRevision) return;
-      this.dispatchEvent(
-        new CustomEvent("map-error", {
-          detail: error instanceof Error ? error.message : String(error),
-          bubbles: true,
-          composed: true,
-        }),
-      );
+      this.#reportError("Loading Arrow map dataset", error);
     }
   }
 
@@ -803,13 +822,7 @@ export class ScMapElement extends HTMLElement {
       }
     } catch (error) {
       if (this.#arrowDataset) {
-        this.dispatchEvent(
-          new CustomEvent("map-error", {
-            detail: error instanceof Error ? error.message : String(error),
-            bubbles: true,
-            composed: true,
-          }),
-        );
+        this.#reportError("Projecting Arrow map rows", error);
       }
     } finally {
       this.#projectionRunning = false;

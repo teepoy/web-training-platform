@@ -2,6 +2,7 @@
 import { computed, h, nextTick, ref, watch, type Component } from "vue";
 import {
   defineScMapElement,
+  type ScMapErrorDetail,
   type ScMapGeometry,
   type ScMapLassoSelection,
 } from "@platform/sc-map-element";
@@ -568,7 +569,9 @@ function onNativeMapReady(): void {
 function onNativeMapError(event: Event): void {
   nativeMapLoading.value = false;
   keepMapVisibleWhileRendering.value = false;
-  nativeMapError.value = String((event as CustomEvent<unknown>).detail);
+  const detail = (event as CustomEvent<ScMapErrorDetail | string>).detail;
+  nativeMapError.value =
+    typeof detail === "string" ? detail : `${detail.context}: ${detail.message}`;
 }
 
 watch(

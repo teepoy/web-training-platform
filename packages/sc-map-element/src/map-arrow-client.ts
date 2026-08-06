@@ -34,6 +34,21 @@ export interface MapArrowDataset {
   dispose(): void;
 }
 
+export function copyMapArrowChunksForTransfer(
+  arrow: ArrayBuffer | readonly ArrayBuffer[],
+): ArrayBuffer[] {
+  const sourceChunks = Array.isArray(arrow) ? arrow : [arrow];
+  return sourceChunks.map((chunk, index) => {
+    try {
+      return chunk.slice(0);
+    } catch (cause) {
+      const error = new Error(`Failed to copy Arrow buffer at index ${index} before transfer`);
+      (error as Error & { cause?: unknown }).cause = cause;
+      throw error;
+    }
+  });
+}
+
 interface PendingCall {
   resolve: (value: MapProjectionResult | Float32Array | Float64Array | null) => void;
   reject: (error: Error) => void;
@@ -62,6 +77,7 @@ export async function createMapArrowDataset(
       highlights?: Float64Array;
       rowCount?: number;
       error?: string;
+      stack?: string;
     }>,
   ) => {
     const call = pending.get(event.data.id);
@@ -72,7 +88,9 @@ export async function createMapArrowDataset(
     }
     pending.delete(event.data.id);
     if (event.data.type === "error") {
-      call.reject(new Error(event.data.error ?? "Arrow worker failed"));
+      const error = new Error(event.data.error ?? "Arrow worker failed");
+      if (event.data.stack) error.stack = event.data.stack;
+      call.reject(error);
       return;
     }
     if (event.data.type === "loaded") {
@@ -99,7 +117,11 @@ export async function createMapArrowDataset(
     );
   };
   worker.onerror = (event) => {
-    const error = new Error(event.message);
+    const location = event.filename ? ` (${event.filename}:${event.lineno}:${event.colno})` : "";
+    const error =
+      event.error instanceof Error
+        ? event.error
+        : new Error(`${event.message || "Arrow map worker crashed"}${location}`);
     for (const call of pending.values()) call.reject(error);
     pending.clear();
     worker.terminate();
@@ -114,11 +136,21 @@ export async function createMapArrowDataset(
     const id = ++requestId;
     return new Promise((resolve, reject) => {
       pending.set(id, { resolve, reject, onProgress: progress });
-      worker.postMessage({ ...message, id }, transfer);
+      try {
+        worker.postMessage({ ...message, id }, transfer);
+      } catch (cause) {
+        pending.delete(id);
+        const type = String(message.type ?? "unknown");
+        const error = new Error(`Arrow map worker request "${type}" failed before dispatch`);
+        (error as Error & { cause?: unknown }).cause = cause;
+        reject(error);
+      }
     });
   }
 
-  const chunks = Array.isArray(arrow) ? [...arrow] : [arrow];
+  // Arrow buffers are borrowed from application state. Transfer disposable
+  // copies so restarting the worker never reuses a detached source buffer.
+  const chunks = copyMapArrowChunksForTransfer(arrow);
   await request({ type: "load", chunks, legendCol }, chunks, onProgress);
   onProgress?.(1, "raw Arrow snapshot ready");
 

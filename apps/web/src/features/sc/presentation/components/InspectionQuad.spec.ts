@@ -19,7 +19,7 @@ const model = vi.hoisted(() => ({
   mapLegendColumn: { value: "class_number" },
   legendGroups: { value: null },
   activeMapLoading: { value: false },
-  mapError: { value: null },
+  mapError: { value: null as string | null },
   mapProgressMessage: { value: "" },
   mapProgressPercent: { value: 0 },
   retryMap: vi.fn(async () => undefined),
@@ -66,6 +66,7 @@ vi.mock("./ScMapPanelBinned.vue", () => ({
       "waferGeometry",
       "highlightDefectIds",
       "immediateCrosshairDefectIds",
+      "mapError",
     ],
     emits: [
       "update:activeMapTab",
@@ -153,6 +154,7 @@ describe("InspectionQuad state ownership", () => {
     model.sampleTableDataSource.value = undefined;
     model.mapSelectedDefectIds.value = [];
     model.reviewMode.value = false;
+    model.mapError.value = null;
     model.loadGlobalDistinctValues.mockReset().mockResolvedValue([]);
     model.loadGlobalNumericRange.mockReset().mockResolvedValue(null);
   });
@@ -238,6 +240,17 @@ describe("InspectionQuad state ownership", () => {
     await wrapper.vm.$nextTick();
 
     expect(model.retryMap).toHaveBeenCalledOnce();
+  });
+
+  it("passes the original map query error to the error surface", async () => {
+    model.mapError.value = 'DuckDB Binder Error: Referenced column "row_key" not found';
+    const { wrapper } = await mountWithProviders(InspectionQuad, {
+      props: requiredProps,
+    });
+
+    expect(wrapper.findComponent({ name: "ScMapPanelBinned" }).props("mapError")).toBe(
+      model.mapError.value,
+    );
   });
 
   it("clears local filter state when the inspection scope changes", async () => {

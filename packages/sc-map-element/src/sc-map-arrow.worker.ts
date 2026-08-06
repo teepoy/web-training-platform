@@ -216,6 +216,7 @@ self.onmessage = (event: MessageEvent<WorkerMessage>) => {
       id: event.data.id,
       type: "error",
       error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
     });
   }
 };

@@ -1,10 +1,11 @@
-import { computed, effectScope, ref } from "vue";
+import { computed, effectScope, ref, type Ref } from "vue";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   ScInvalidation,
   ScWorkbenchDataSource,
 } from "@/features/sc/domain/workbenchDataSource";
 import { createDefaultScSamplingProgram } from "@/features/sc/domain/samplingRules";
+import type { ScLegendSource } from "@/features/sc/domain/workbenchInteraction";
 import { useSqlInspectionModel } from "../useSqlInspectionModel";
 
 function createDataSource() {
@@ -42,13 +43,16 @@ describe("useSqlInspectionModel", () => {
     scopes.length = 0;
   });
 
-  function mount(source: ScWorkbenchDataSource) {
+  function mount(
+    source: ScWorkbenchDataSource,
+    options: { legendGroupBy?: Ref<ScLegendSource | null | undefined> } = {},
+  ) {
     const scope = effectScope();
     scopes.push(scope);
     return scope.run(() =>
       useSqlInspectionModel({
         dataSource: ref(source),
-        legendGroupBy: computed(() => "class" as const),
+        legendGroupBy: computed(() => options.legendGroupBy?.value ?? "class"),
         globalFilter: computed(() => ({})),
         tableFilter: computed(() => ({})),
         tableSort: computed(() => null),
@@ -146,6 +150,28 @@ describe("useSqlInspectionModel", () => {
     invalidate({ scope: "dataset:ds-1", revision: 2, changedKinds: ["prediction"] });
 
     await vi.waitFor(() => expect(source.loadMap).toHaveBeenCalledTimes(2));
+  });
+
+  it("publishes a legend column only with the Arrow snapshot loaded for it", async () => {
+    const { source } = createDataSource();
+    const legendGroupBy = ref<ScLegendSource>("class");
+    let resolveRoughBin!: (value: Uint8Array) => void;
+    vi.mocked(source.loadMap)
+      .mockResolvedValueOnce(new Uint8Array([1]))
+      .mockImplementationOnce(() => new Promise((resolve) => (resolveRoughBin = resolve)));
+    const model = mount(source, { legendGroupBy });
+    if (!model) throw new Error("model was not created");
+    await vi.waitFor(() => expect(source.loadMap).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(model.mapArrowData.value).not.toBeNull());
+    expect(model.mapLegendColumn.value).toBe("class_number");
+
+    legendGroupBy.value = "bin";
+    await vi.waitFor(() => expect(source.loadMap).toHaveBeenCalledTimes(2));
+    expect(model.mapLegendColumn.value).toBe("class_number");
+
+    resolveRoughBin(new Uint8Array([2]));
+    await vi.waitFor(() => expect(model.mapLegendColumn.value).toBe("rough_bin"));
+    expect([...new Uint8Array(model.mapArrowData.value?.[0] ?? new ArrayBuffer())]).toEqual([2]);
   });
 
   it("reloads map and aggregates with the Review candidate filter", async () => {

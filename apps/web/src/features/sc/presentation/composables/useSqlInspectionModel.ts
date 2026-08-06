@@ -87,7 +87,8 @@ export function useSqlInspectionModel(args: {
   let aggregateLoadSequence = 0;
   let unsubscribe: (() => void) | null = null;
 
-  const mapLegendColumn = computed(() => legendColumn(args.legendGroupBy.value));
+  const requestedMapLegendColumn = computed(() => legendColumn(args.legendGroupBy.value));
+  const mapLegendColumn = ref(requestedMapLegendColumn.value);
   const globalFilters = computed(() => buildScDataFilters(args.globalFilter.value));
   const randomSamplingFilters = computed<ScDataFilter[]>(() => {
     const ids = args.galleryRandomSamplingDefectIds.value;
@@ -162,13 +163,15 @@ export function useSqlInspectionModel(args: {
     mapError.value = null;
     mapProgressMessage.value = "Querying filtered map data";
     mapProgressPercent.value = 20;
+    const targetLegendColumn = requestedMapLegendColumn.value;
     try {
       const ipc = await source.loadMap({
         filters: aggregateFilters.value,
-        legendColumn: mapLegendColumn.value,
+        legendColumn: targetLegendColumn,
         reticle: args.reticle.value,
       });
       if (sequence !== mapLoadSequence || source !== args.dataSource.value) return;
+      mapLegendColumn.value = targetLegendColumn;
       mapArrowData.value = [transferableBuffer(ipc)];
       mapProgressMessage.value = "Map data ready";
       mapProgressPercent.value = 100;
@@ -191,7 +194,7 @@ export function useSqlInspectionModel(args: {
     try {
       const groups = await source.loadAggregates({
         filters: aggregateFilters.value,
-        field: mapLegendColumn.value,
+        field: requestedMapLegendColumn.value,
         reticle: args.reticle.value,
       });
       if (sequence !== aggregateLoadSequence || source !== args.dataSource.value) return;
@@ -208,13 +211,25 @@ export function useSqlInspectionModel(args: {
   }
 
   watch(
-    [args.dataSource, aggregateFilters, mapLegendColumn, args.reticle, invalidationRevision],
+    [
+      args.dataSource,
+      aggregateFilters,
+      requestedMapLegendColumn,
+      args.reticle,
+      invalidationRevision,
+    ],
     () => void loadMap(),
     { deep: true, immediate: true },
   );
 
   watch(
-    [args.dataSource, aggregateFilters, mapLegendColumn, args.reticle, invalidationRevision],
+    [
+      args.dataSource,
+      aggregateFilters,
+      requestedMapLegendColumn,
+      args.reticle,
+      invalidationRevision,
+    ],
     () => void loadAggregates(),
     { deep: true, immediate: true },
   );
@@ -278,8 +293,8 @@ export function useSqlInspectionModel(args: {
       reticle: args.reticle.value,
       constraint: {
         kind: "legend",
-        field: mapLegendColumn.value,
-        value: isScMissingFilterValue(mapLegendColumn.value, key) ? null : key,
+        field: requestedMapLegendColumn.value,
+        value: isScMissingFilterValue(requestedMapLegendColumn.value, key) ? null : key,
       },
     });
   }
@@ -289,7 +304,7 @@ export function useSqlInspectionModel(args: {
     if (!source) throw new Error("SC data source is not ready");
     const groups = await source.loadAggregates({
       filters: samplingCandidateFilters(options),
-      field: mapLegendColumn.value,
+      field: requestedMapLegendColumn.value,
       reticle: args.reticle.value,
     });
     return Object.values(groups).reduce((sum, count) => sum + count, 0);

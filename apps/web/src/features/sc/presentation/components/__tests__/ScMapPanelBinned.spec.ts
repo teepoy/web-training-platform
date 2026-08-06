@@ -32,6 +32,24 @@ describe("ScMapPanelBinned unified map", () => {
     expect(wrapper.emitted("box-select")?.at(-1)?.[0]).toEqual(zoom);
   });
 
+  it("keeps native map error context visible", async () => {
+    const { wrapper } = await mountWithProviders(ScMapPanelBinned);
+    wrapper.find('[data-testid="sc-unified-map"]').element.dispatchEvent(
+      new CustomEvent("map-error", {
+        detail: {
+          context: "Loading Arrow map dataset",
+          message: "ArrayBuffer at index 0 is already detached",
+          stack: "Error: detached\n  at request (map-arrow-client.ts:1:1)",
+        },
+      }),
+    );
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.text()).toContain(
+      "Loading Arrow map dataset: ArrayBuffer at index 0 is already detached",
+    );
+  });
+
   it("forwards lasso selection and always clears selection on the native clear event", async () => {
     const { wrapper } = await mountWithProviders(ScMapPanelBinned);
     const map = wrapper.find('[data-testid="sc-unified-map"]');

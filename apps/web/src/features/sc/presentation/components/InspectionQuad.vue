@@ -315,10 +315,7 @@ const selectedDefectIdsModel = computed(() =>
     : props.selectedDefectIds.map(String),
 );
 const blinkHighlightIds = computed(() => new Set(selectedDefectIdsModel.value));
-const userFacingMapError = computed(() => {
-  if (model.mapError.value) return "Map data could not be loaded. Try again.";
-  return null;
-});
+const userFacingMapError = computed(() => model.mapError.value);
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
