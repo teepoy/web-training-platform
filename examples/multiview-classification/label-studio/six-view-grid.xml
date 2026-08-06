@@ -1,0 +1,26 @@
+<View>
+  <Header value="Inspect all six camera views, then assign one class to the complete sample"/>
+
+  <View style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; align-items: start;">
+    <View><Header value="Front" size="5"/><Image name="front" value="$front" zoomControl="true"/></View>
+    <View><Header value="Rear" size="5"/><Image name="rear" value="$rear" zoomControl="true"/></View>
+    <View><Header value="Top" size="5"/><Image name="top" value="$top" zoomControl="true"/></View>
+    <View><Header value="Bottom" size="5"/><Image name="bottom" value="$bottom" zoomControl="true"/></View>
+    <View><Header value="Left" size="5"/><Image name="left" value="$left" zoomControl="true"/></View>
+    <View><Header value="Right" size="5"/><Image name="right" value="$right" zoomControl="true"/></View>
+  </View>
+
+  <Choices
+    name="classification"
+    toName="front"
+    choice="single"
+    required="true"
+    showInline="true"
+  >
+    <Choice value="ok" hotkey="1"/>
+    <Choice value="misaligned" hotkey="2"/>
+    <Choice value="damaged" hotkey="3"/>
+  </Choices>
+
+  <Text name="sample_id_display" value="$sample_id"/>
+</View>

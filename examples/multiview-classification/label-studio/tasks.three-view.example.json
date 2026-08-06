@@ -1,0 +1,18 @@
+[
+  {
+    "data": {
+      "sample_id": "part-0001",
+      "front": "https://placehold.co/900x600/png?text=part-0001+front",
+      "left": "https://placehold.co/900x600/png?text=part-0001+left",
+      "right": "https://placehold.co/900x600/png?text=part-0001+right"
+    }
+  },
+  {
+    "data": {
+      "sample_id": "part-0002",
+      "front": "https://placehold.co/900x600/png?text=part-0002+front",
+      "left": "https://placehold.co/900x600/png?text=part-0002+left",
+      "right": "https://placehold.co/900x600/png?text=part-0002+right"
+    }
+  }
+]

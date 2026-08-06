@@ -1,0 +1,13 @@
+[
+  {
+    "data": {
+      "sample_id": "assembly-0001",
+      "front": "https://placehold.co/900x600/png?text=front",
+      "rear": "https://placehold.co/900x600/png?text=rear",
+      "top": "https://placehold.co/900x600/png?text=top",
+      "bottom": "https://placehold.co/900x600/png?text=bottom",
+      "left": "https://placehold.co/900x600/png?text=left",
+      "right": "https://placehold.co/900x600/png?text=right"
+    }
+  }
+]

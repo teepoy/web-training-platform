@@ -1,0 +1,52 @@
+[
+  {
+    "id": 101,
+    "data": {
+      "sample_id": "part-0001",
+      "images": [
+        "https://placehold.co/900x600/png?text=part-0001+front",
+        "https://placehold.co/900x600/png?text=part-0001+left",
+        "https://placehold.co/900x600/png?text=part-0001+right"
+      ]
+    },
+    "annotations": [
+      {
+        "id": 501,
+        "was_cancelled": false,
+        "result": [
+          {
+            "from_name": "classification",
+            "to_name": "images",
+            "type": "choices",
+            "value": {"choices": ["ok"]}
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": 102,
+    "data": {
+      "sample_id": "part-0002",
+      "images": [
+        "https://placehold.co/900x600/png?text=part-0002+front",
+        "https://placehold.co/900x600/png?text=part-0002+left",
+        "https://placehold.co/900x600/png?text=part-0002+right"
+      ]
+    },
+    "annotations": [
+      {
+        "id": 502,
+        "was_cancelled": false,
+        "result": [
+          {
+            "from_name": "classification",
+            "to_name": "images",
+            "type": "choices",
+            "value": {"choices": ["damaged"]}
+          }
+        ]
+      }
+    ]
+  }
+]

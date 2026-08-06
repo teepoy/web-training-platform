@@ -1,0 +1,33 @@
+<View>
+  <Header value="Inspect front, left, and right views, then assign one class"/>
+
+  <View style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; align-items: start;">
+    <View>
+      <Header value="Front" size="5"/>
+      <Image name="front" value="$front" zoomControl="true" rotateControl="true"/>
+    </View>
+    <View>
+      <Header value="Left" size="5"/>
+      <Image name="left" value="$left" zoomControl="true" rotateControl="true"/>
+    </View>
+    <View>
+      <Header value="Right" size="5"/>
+      <Image name="right" value="$right" zoomControl="true" rotateControl="true"/>
+    </View>
+  </View>
+
+  <!-- Label Studio requires a target object; `front` anchors one group-level choice. -->
+  <Choices
+    name="classification"
+    toName="front"
+    choice="single"
+    required="true"
+    showInline="true"
+  >
+    <Choice value="ok" hotkey="1"/>
+    <Choice value="misaligned" hotkey="2"/>
+    <Choice value="damaged" hotkey="3"/>
+  </Choices>
+
+  <Text name="sample_id_display" value="$sample_id"/>
+</View>

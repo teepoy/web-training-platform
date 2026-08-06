@@ -1,0 +1,35 @@
+<View>
+  <Header value="Inspect every view, then assign one class to the complete sample"/>
+
+  <!--
+    Task data:
+    {
+      "sample_id": "part-0001",
+      "images": ["https://.../front.png", "https://.../left.png"]
+    }
+  -->
+  <Image
+    name="images"
+    valueList="$images"
+    zoomControl="true"
+    rotateControl="true"
+    brightnessControl="true"
+    contrastControl="true"
+  />
+
+  <!-- perItem is intentionally false: one choice covers the whole image list. -->
+  <Choices
+    name="classification"
+    toName="images"
+    choice="single"
+    required="true"
+    showInline="true"
+    perItem="false"
+  >
+    <Choice value="ok" hotkey="1"/>
+    <Choice value="misaligned" hotkey="2"/>
+    <Choice value="damaged" hotkey="3"/>
+  </Choices>
+
+  <Text name="sample_id_display" value="$sample_id"/>
+</View>

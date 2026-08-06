@@ -1,0 +1,20 @@
+[
+  {
+    "sample_id": "part-0001",
+    "label": "ok",
+    "images": [
+      {"view": "front", "filepath": "/absolute/media/part-0001/front.png"},
+      {"view": "left", "filepath": "/absolute/media/part-0001/left.png"},
+      {"view": "right", "filepath": "/absolute/media/part-0001/right.png"}
+    ]
+  },
+  {
+    "sample_id": "part-0002",
+    "label": null,
+    "images": [
+      {"view": "front", "filepath": "/absolute/media/part-0002/front.png"},
+      {"view": "left", "filepath": "/absolute/media/part-0002/left.png"},
+      {"view": "right", "filepath": "/absolute/media/part-0002/right.png"}
+    ]
+  }
+]
