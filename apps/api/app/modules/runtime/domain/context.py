@@ -18,7 +18,6 @@ class TrainingRuntimeContext:
     created_by: str
     sample_ids: list[str] | None = None
     sample_filter: dict[str, Any] | None = None
-    missing_image_policy: str | None = None
     org_id: str = ""
     collection_id: str | None = None
     collection_revision_id: str | None = None
@@ -72,7 +71,6 @@ class TrainAndPredictRuntimeContext:
     sample_ids: list[str] | None = None
     sample_filter: dict[str, Any] | None = None
     prompt: str | None = None
-    missing_image_policy: str | None = None
     collection_id: str | None = None
     collection_revision_id: str | None = None
 

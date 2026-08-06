@@ -29,7 +29,6 @@ class TrainingReadinessPort(Protocol):
         dataset: Dataset,
         sample_ids: list[str] | None,
         sample_filter: dict[str, Any] | None,
-        missing_image_policy: str | None,
     ) -> TrainingReadinessReport: ...
 
 

@@ -22,7 +22,7 @@
 
 ### Runtime Service 边界
 
-训练、预测、嵌入等带 Torch/CUDA/大型图像依赖的执行逻辑属于 runtime worker/service，不在 HTTP route 请求路径执行。API control plane 负责创建任务、校验权限和参数、按 runtime route 提交执行、持久化业务状态和提供前端查询表面。当前 SC compatibility worker 的轻量注册函数可以位于 `apps/api/app/modules/sc`；重 ML 依赖仍只在被选中的注册函数内延迟 import，不得进入 HTTP server image 的必需依赖。
+训练、预测、嵌入等带 Torch/CUDA/大型图像依赖的执行逻辑属于 runtime worker/service，不在 HTTP route 请求路径执行。API control plane 负责创建任务、校验权限和参数、按 operation 对应的直接 deployment 提交执行、持久化业务状态和提供前端查询表面。当前 SC compatibility worker 的轻量注册函数可以位于 `apps/api/app/modules/sc`；重 ML 依赖仍只在被选中的注册函数内延迟 import，不得进入 HTTP server image 的必需依赖。
 
 - `libs/ml` 是可选的同进程 ML kernel/data-loading library，不是 transport
   contract。API-local compatibility runtime 只能在选中的 executable callable 内
@@ -183,11 +183,15 @@ Label Studio 是人工标注界面和临时同步界面，不是平台 predictio
   只绑定 catalog ID，不允许在 row class 再复制 name、annotation flag 或 contract。
   Data-plane schema registry 从 definition 构建，不维护第二份 view-to-schema map。
 - Trainer/predictor 通过 module-owned `RuntimeRouter` decorator 注册。每个
-  注册项在同一处声明 metadata、executable callable、`algo_id`/版本和
-  operation routes；中心 `RuntimeCapabilityCatalog` 只聚合这些 router 并校验
-  ID 唯一性、view/model contract、trainer/predictor 配对与 route 完整性。
+  注册项在同一处声明 metadata、executable callable 和 `algo_id`/版本；中心
+  `RuntimeCapabilityCatalog` 只聚合这些 router 并校验 ID 唯一性、view/model
+  contract 与 trainer/predictor 配对。
   不再保留 metadata-only trainer/predictor catalog、第二份 executable registry、
   `trainer = register_trainer` / `predictor = register_predictor` 全局别名或目录扫描。
+- Paired algorithm class 通过 runtime-checkable `Trainable`、`Predictable` 和
+  `TrainAndPredictable` Protocol 声明能力。注册 decorator 在 import 时解析并缓存
+  callable；操作支持情况由类实际实现的方法决定，不再通过 route 中的 operation
+  字段重复声明。Runtime Protocol 负责成员存在性检查，完整签名由 pyright 校验。
 - 被注册的算法函数拥有自己的 dataset construction、view projection、
   materialization/loading、prediction chunk/batch、输出持久化和错误语义。
   平台不设置中心 materializer registry，不按 view + purpose + storage mode 为
@@ -205,22 +209,34 @@ Label Studio 是人工标注界面和临时同步界面，不是平台 predictio
   compatibility execution 的共同来源。注册模块可以被 API 进程导入，
   但不得在 import 时加载 Torch/CUDA/模型权重；重依赖位于 `libs/ml`
   或 external runtime，并在被选中的 callable 内延迟 import。
-- Runtime route 表达 operation 的 deployment 寻址、resource profile、owner、
-  missing-image policy 和结果 contract，用于 submission、deployment seed 和环境
-  override；它不表达算法内部步骤或 chunk 拓扑。已有的 view/model
-  contract 从注册 metadata 派生，不在 route 中重复声明。
-  环境配置只能覆盖 deployment name、resource profile、owner 和 code version。
-- Runtime route 必须显式声明 `owner=local_compat|external`。API 只 seed/update
-  `local_compat` deployment；`external` deployment 由 runtime service 拥有，API
-  只能解析和调用，禁止覆盖其 entrypoint/work pool。
-- Training/prediction job dispatch 根据 catalog id、数据 contract、资源 profile 和
-  module-owned registration 创建 Prefect flow run；环境配置只提供部署差异覆盖。
-  Prefect wrapper 只校验 route envelope、构建 runtime context 并调用已注册 callable。
+- Prefect deployment 是执行基础设施，不是 capability metadata。Repository-owned
+  `PrefectDeploymentSpec` 直接声明 deployment name、flow entrypoint 和 work pool；
+  seed、startup validation 与 submission 必须消费同一规格表，禁止从 algorithm
+  registration 反向推导 deployment 或根据 resource profile 拼接 work pool 名称。
+  Deployment 表示一个 flow 的可提交部署实例，work pool 表示承接执行的资源队列。
+- 当前 training、train-and-predict 和 prediction deployment 均由 repository 拥有并
+  绑定 `default-gpu`；sensor/drain deployment 绑定 `default-cpu`。当前没有 external
+  owner 分支。未来调用外部 runtime 时，优先由一个明确部署的 adapter task/service
+  client 包装，不提前把 owner 或外部 entrypoint 写入 capability registration。
+- Registered callable 返回 typed async event stream。闭合 `RuntimeEvent` 联合包含
+  artifact、metric、progress、recoverable issue 和唯一 terminal completion；Prefect
+  flow 以穷尽 match 消费事件并组装 transport-safe result。算法仍拥有自身 dataset、
+  output persistence 与错误语义；可恢复问题 yield issue，预期致命错误抛
+  `RuntimeExecutionError`，未知异常直接冒泡。禁止恢复字符串 `output_contract`
+  校验或通用 `Ok`/`Err` result chain。
+- Missing-image 行为由具体 registered callable 实现，不是 registration 或 runtime
+  context 字段。当前 SC trainer 固定跳过不可用图片，并在过滤后不足两个有效类别时
+  明确失败；SC predictor 按样本记录失败并继续批处理。
+- Training/prediction job dispatch 根据 catalog id 完成数据和模型 contract 校验，再
+  向对应的直接 Prefect deployment 提交仅包含 job/source/model/capability identity 与
+  请求选项的参数。Prefect wrapper 构建 runtime context、调用类型化 catalog 方法并
+  消费事件，不重复传递或校验 catalog id、view/model contract、algorithm version、
+  deployment owner 或 resource profile。
   如某算法需要 `@task`/`@flow`，它们必须在被注册函数内显式定义/调用
   或与该函数同 module 声明。禁止恢复通用 `predict-chunk`、通用
   materialize task 或中心 train-and-predict 步骤编排。
-  第一版 resource profile 只有 `cpu` / `gpu`。不要保留 `container.gpu_worker`
-  这类过期执行入口，也不要在通用 API route/service 中硬连某个具体 ML 实现作为扩展机制。
+  不要保留 `container.gpu_worker` 这类过期执行入口，也不要在通用 API
+  route/service 中硬连某个具体 ML 实现作为扩展机制。
 - **Mapper** 使用全局 `MapperRegistry`（`app.core.mapper_registry.mapper`）注册类型间转换函数。`@mapper.register(from_types, to_types)` 接受 type 或 ClassVar 字符串，注册笛卡尔积 key。调用方通过 `mapper.get_mapper(src, dst)` 获取转换函数，不再调用 model 类上的 `from_sample` / `to_sample` / `get_adapter` / `as_*` 方法。每个 module 的 mapper 统一放在 `<module>/domain/mapper.py`，由 `app/registrations.py` 触发注册副作用。Mapper 函数必须包含完整转换逻辑，不允许在 model 类上保留内联转换方法；model 类只保留字段定义和 ClassVar 标识。
 
 前端：

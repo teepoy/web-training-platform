@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 from app.modules.prediction.domain.submission import PredictionJobCommand
-from app.modules.runtime.domain.routing import RuntimeDeploymentRoute
 
 
 def prediction_workflow_parameters(
     command: PredictionJobCommand,
     *,
     job_id: str,
-    route: RuntimeDeploymentRoute,
+    predictor_id: str,
 ) -> dict[str, object]:
     """Map a prediction submission intent to the Prefect transport payload."""
 
@@ -26,6 +25,5 @@ def prediction_workflow_parameters(
             list(command.sample_ids) if command.sample_ids is not None else None
         ),
         "prompt": command.prompt,
-        "predictor_id": route.catalog_id,
-        **route.to_parameters(),
+        "predictor_id": predictor_id,
     }

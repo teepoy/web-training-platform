@@ -11,8 +11,11 @@ from app.modules.runtime.domain.context import (
     TrainAndPredictRuntimeContext,
     TrainingRuntimeContext,
 )
-from app.modules.runtime.domain.executables import RuntimeOperation
-from app.modules.sc.runtime.router import SC_RUNTIME_ROUTER
+from app.modules.runtime.domain.events import (
+    OperationCompleted,
+    RuntimeEventStream,
+    collect_runtime_events,
+)
 from app.modules.training.domain.repository import TrainingRepository
 from app.shared.api.schemas import (
     JobStatus,
@@ -58,9 +61,9 @@ async def _latest_model_artifact_id(
         return row.id
 
 
-async def _run_sc_train_and_predict(
+async def run_sc_train_and_predict(
     ctx: TrainAndPredictRuntimeContext,
-) -> dict[str, Any]:
+) -> RuntimeEventStream:
     from app.modules.runtime.catalog import runtime_catalog
 
     if ctx.app_context.injector is None:
@@ -75,22 +78,22 @@ async def _run_sc_train_and_predict(
         payload={"status": JobStatus.RUNNING.value},
     )
     try:
-        training = await runtime_catalog.invoke(
-            RuntimeOperation.TRAIN,
-            ctx.trainer_id,
-            TrainingRuntimeContext(
-                app_context=ctx.app_context,
-                job_id=ctx.job_id,
-                dataset_id=ctx.dataset_id,
-                trainer_id=ctx.trainer_id,
-                created_by=ctx.created_by,
-                sample_ids=ctx.sample_ids,
-                sample_filter=ctx.sample_filter,
-                missing_image_policy=ctx.missing_image_policy,
-                org_id=ctx.org_id,
-                collection_id=ctx.collection_id,
-                collection_revision_id=ctx.collection_revision_id,
-            ),
+        training = await collect_runtime_events(
+            runtime_catalog.stream_train(
+                ctx.trainer_id,
+                TrainingRuntimeContext(
+                    app_context=ctx.app_context,
+                    job_id=ctx.job_id,
+                    dataset_id=ctx.dataset_id,
+                    trainer_id=ctx.trainer_id,
+                    created_by=ctx.created_by,
+                    sample_ids=ctx.sample_ids,
+                    sample_filter=ctx.sample_filter,
+                    org_id=ctx.org_id,
+                    collection_id=ctx.collection_id,
+                    collection_revision_id=ctx.collection_revision_id,
+                ),
+            )
         )
         model_id = await _latest_model_artifact_id(ctx)
         await training_repository.update_job_status(ctx.job_id, JobStatus.COMPLETED)
@@ -144,25 +147,26 @@ async def _run_sc_train_and_predict(
         )
     )
     try:
-        prediction = await runtime_catalog.invoke(
-            RuntimeOperation.PREDICT,
-            ctx.predictor_id,
-            PredictionRuntimeContext(
-                app_context=ctx.app_context,
-                job_id=prediction_job.id,
-                dataset_id=ctx.dataset_id,
-                model_id=model_id,
-                org_id=ctx.org_id,
-                predictor_id=ctx.predictor_id,
-                created_by=ctx.created_by,
-                target=ctx.target,
-                model_version=ctx.model_version,
-                sample_ids=ctx.sample_ids,
-                sample_filter=ctx.sample_filter,
-                prompt=ctx.prompt,
-                collection_id=ctx.collection_id,
-                collection_revision_id=ctx.collection_revision_id,
-            ),
+        prediction = await collect_runtime_events(
+            runtime_catalog.stream_predict(
+                ctx.predictor_id,
+                PredictionRuntimeContext(
+                    app_context=ctx.app_context,
+                    job_id=prediction_job.id,
+                    dataset_id=ctx.dataset_id,
+                    model_id=model_id,
+                    org_id=ctx.org_id,
+                    predictor_id=ctx.predictor_id,
+                    created_by=ctx.created_by,
+                    target=ctx.target,
+                    model_version=ctx.model_version,
+                    sample_ids=ctx.sample_ids,
+                    sample_filter=ctx.sample_filter,
+                    prompt=ctx.prompt,
+                    collection_id=ctx.collection_id,
+                    collection_revision_id=ctx.collection_revision_id,
+                ),
+            )
         )
     except Exception as exc:
         failure = {
@@ -198,27 +202,15 @@ async def _run_sc_train_and_predict(
         message="SC prediction completed",
         payload={"prediction_job_id": prediction_job.id},
     )
-    return {
-        "job_id": ctx.job_id,
-        "prediction_job_id": prediction_job.id,
-        "model_id": model_id,
-        "training": training,
-        "prediction": prediction,
-    }
+    yield OperationCompleted(
+        {
+            "job_id": ctx.job_id,
+            "prediction_job_id": prediction_job.id,
+            "model_id": model_id,
+            "training": training,
+            "prediction": prediction,
+        }
+    )
 
 
-@SC_RUNTIME_ROUTER.train_and_predict(trainer_id="resnet50-sc-v1")
-async def resnet_sc_train_and_predict(
-    ctx: TrainAndPredictRuntimeContext,
-) -> dict[str, Any]:
-    return await _run_sc_train_and_predict(ctx)
-
-
-@SC_RUNTIME_ROUTER.train_and_predict(trainer_id="yolo-sc-v1")
-async def yolo_sc_train_and_predict(
-    ctx: TrainAndPredictRuntimeContext,
-) -> dict[str, Any]:
-    return await _run_sc_train_and_predict(ctx)
-
-
-__all__ = ["resnet_sc_train_and_predict", "yolo_sc_train_and_predict"]
+__all__ = ["run_sc_train_and_predict"]

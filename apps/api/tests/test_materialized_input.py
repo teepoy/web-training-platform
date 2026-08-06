@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import sys
 from types import SimpleNamespace
+from typing import Any, cast
 
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
+from app.modules.runtime.domain.context import TrainingRuntimeContext
+from app.modules.runtime.domain.events import RuntimeExecutionError
 from app.modules.sc.runtime.materialized_input import sc_parquet_paths_from_manifest
 from app.shared.domain.data_plane import DataPlaneManifest, DataPlaneShard
 
@@ -115,13 +118,49 @@ def test_sc_runtime_consumers_explicitly_collect_manifest_parquet(
     monkeypatch.setattr(trainers, "image_bytes_are_readable", lambda value: bool(value))
 
     prediction = list(predictors._prediction_samples(manifest))[0]
-    training = trainers._training_samples(
-        manifest,
-        missing_image_policy="fail",
-    )[0]
+    training = trainers._training_samples(manifest)[0][0]
 
     assert collected_paths == [(parquet_path,), (parquet_path,)]
     assert prediction.sample_id == training.sample_id == "sample-1"
     assert prediction.reference_image == training.reference_image == b"template"
     assert prediction.defective_image == training.defective_image == b"defective"
     assert training.label == "defect"
+
+
+@pytest.mark.asyncio
+async def test_sc_training_fails_after_filtering_to_fewer_than_two_labels(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.modules.sc.runtime import trainers
+
+    samples = [SimpleNamespace(label="Scratch")]
+    monkeypatch.setattr(trainers, "_training_samples", lambda _manifest: (samples, 2))
+    kernel_called = False
+
+    def kernel(_samples: list[Any], _labels: list[str]) -> None:
+        nonlocal kernel_called
+        kernel_called = True
+
+    runtime_ctx = TrainingRuntimeContext(
+        app_context=cast(Any, SimpleNamespace()),
+        job_id="job-1",
+        dataset_id="dataset-1",
+        trainer_id="resnet50-sc-v1",
+        created_by="user-1",
+    )
+
+    with pytest.raises(RuntimeExecutionError) as exc_info:
+        await trainers._train_kernel(
+            runtime_ctx=runtime_ctx,
+            label_space=["Scratch", "Particle"],
+            artifact_storage=SimpleNamespace(),
+            materialization_manifest=cast(Any, SimpleNamespace()),
+            kernel=kernel,
+        )
+
+    assert exc_info.value.code == "sc_training_insufficient_labels_after_image_filter"
+    assert exc_info.value.details == {
+        "active_labels": ["Scratch"],
+        "skipped_samples": 2,
+    }
+    assert kernel_called is False

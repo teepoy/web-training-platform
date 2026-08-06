@@ -90,7 +90,6 @@ async def test_readiness_accepts_two_labels_with_real_inline_images() -> None:
         dataset=_dataset(),
         sample_ids=None,
         sample_filter=None,
-        missing_image_policy="skip",
     )
 
     assert report.ready
@@ -152,7 +151,6 @@ async def test_readiness_scans_multiple_bounded_batches() -> None:
         dataset=_dataset(),
         sample_ids=None,
         sample_filter=None,
-        missing_image_policy="skip",
     )
 
     assert report.ready
@@ -178,7 +176,6 @@ async def test_readiness_applies_skip_before_active_label_validation() -> None:
         dataset=_dataset(),
         sample_ids=None,
         sample_filter=None,
-        missing_image_policy="skip",
     )
 
     assert report.ready
@@ -202,7 +199,6 @@ async def test_readiness_accepts_v3_scalar_rows_for_runtime_resolution() -> None
         dataset=_dataset(),
         sample_ids=None,
         sample_filter=None,
-        missing_image_policy="skip",
     )
 
     assert report.ready
@@ -230,7 +226,6 @@ async def test_readiness_rejects_scalar_row_without_upstream_identity() -> None:
         dataset=_dataset(),
         sample_ids=None,
         sample_filter=None,
-        missing_image_policy="skip",
     )
 
     assert not report.ready

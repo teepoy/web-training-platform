@@ -14,7 +14,9 @@ from app.modules.datasets.port.local import (
     validate_predictor_for_dataset,
     validate_trainer_for_dataset,
 )
-from app.modules.runtime.port.local import RuntimeRoutingPort
+from app.modules.runtime.app.services.deployment_seed import (
+    TRAIN_AND_PREDICT_RUNTIME_DEPLOYMENT,
+)
 from app.modules.runtime.catalog import runtime_catalog
 from app.modules.training.app.services.readiness import TrainingReadinessService
 from app.modules.training.app.services.submission_parameters import (
@@ -51,7 +53,6 @@ class TrainingSubmissionService:
         artifact_service: ArtifactService,
         dataset_reader: DatasetReader,
         prefect_client: PrefectClient,
-        runtime_router: RuntimeRoutingPort,
         readiness: TrainingReadinessService,
         collection_revisions: DatasetCollectionRevisionReaderPort,
     ) -> None:
@@ -61,7 +62,6 @@ class TrainingSubmissionService:
         self.artifact_service = artifact_service
         self._dataset_reader = dataset_reader
         self._prefect_client = prefect_client
-        self._runtime_router = runtime_router
         self._readiness = readiness
         self._collection_revisions = collection_revisions
 
@@ -71,7 +71,11 @@ class TrainingSubmissionService:
             trainer_id=command.trainer_id,
         )
         readiness_report = (
-            await self._readiness.assess_classes(dataset=dataset)
+            await self._readiness.assess_classes(
+                dataset=dataset,
+                sample_ids=None,
+                sample_filter=None,
+            )
             if dataset is not None
             else self._revision_readiness(command, revision)
         )
@@ -119,35 +123,35 @@ class TrainingSubmissionService:
         ):
             raise ValueError("sample_filter is only supported for image_sc datasets")
 
-        try:
-            route = self._runtime_router.train_and_predict_route(command.trainer_id)
-        except RuntimeError as exc:
-            raise TrainingRuntimeUnavailableError(str(exc)) from exc
+        if not runtime_catalog.supports_train_and_predict(command.trainer_id):
+            raise TrainingRuntimeUnavailableError(
+                f"Trainer {command.trainer_id!r} does not support train-and-predict"
+            )
         readiness_report = (
-            await self._readiness.assess(
+            await self._readiness.assess_classes(
                 dataset=dataset,
                 sample_ids=(
                     list(command.sample_ids) if command.sample_ids is not None else None
                 ),
                 sample_filter=command.sample_filter,
-                missing_image_policy=route.missing_image_policy,
             )
             if dataset is not None
             else self._revision_readiness(
                 command,
                 revision,
-                missing_image_policy=str(route.missing_image_policy or ""),
             )
         )
         if not readiness_report.ready:
             raise TrainingReadinessError(readiness_report)
 
         deployment_id = await self._prefect_client.resolve_deployment_id(
-            route.deployment
+            TRAIN_AND_PREDICT_RUNTIME_DEPLOYMENT.deployment_name
         )
         if deployment_id is None:
             raise TrainingRuntimeUnavailableError(
-                f"Deployment '{route.deployment}' is not registered"
+                "Deployment "
+                f"'{TRAIN_AND_PREDICT_RUNTIME_DEPLOYMENT.deployment_name}' "
+                "is not registered"
             )
 
         try:
@@ -171,7 +175,6 @@ class TrainingSubmissionService:
                 parameters=train_and_predict_workflow_parameters(
                     command,
                     job_id=job.id,
-                    route=route,
                 ),
                 idempotency_key=f"train-and-predict:{job.id}",
             )
@@ -250,8 +253,6 @@ class TrainingSubmissionService:
     def _revision_readiness(
         command: TrainingJobCommand,
         revision: DatasetCollectionRevision | None,
-        *,
-        missing_image_policy: str = "",
     ) -> TrainingReadinessReport:
         assert revision is not None
         active_labels = sorted(
@@ -265,7 +266,6 @@ class TrainingSubmissionService:
         annotated = sum(revision.label_counts.values())
         return TrainingReadinessReport(
             dataset_id=command.data_source.identity,
-            missing_image_policy=missing_image_policy,
             annotated_samples=annotated,
             readable_samples=annotated,
             runtime_resolvable_samples=0,

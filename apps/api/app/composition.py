@@ -21,7 +21,6 @@ from app.shared.infrastructure.storage.memory import InMemoryArtifactStorage
 from app.shared.infrastructure.storage.minio import MinioArtifactStorage
 from app.modules.models.container import ModelsContext, ModelsModule
 from app.modules.prediction.container import PredictionContext, PredictionModule
-from app.modules.runtime.container import RuntimeContext, RuntimeModule
 from app.modules.sc.container import ScContext, ScModule
 from app.modules.storage.container import StorageContext, StorageModule
 from app.modules.training.container import TrainingContext, TrainingModule
@@ -172,7 +171,6 @@ def build_app_context(cfg: AppConfig) -> AppContext:
             DatasetsModule(),
             DatasetCollectionsModule(),
             ModelsModule(),
-            RuntimeModule(),
             PredictionModule(),
             TrainingModule(),
             JobsModule(),
@@ -188,7 +186,6 @@ def build_app_context(cfg: AppConfig) -> AppContext:
     ctx.datasets = injector.get(DatasetsContext)
     ctx.dataset_collections = injector.get(DatasetCollectionsContext)
     ctx.models = injector.get(ModelsContext)
-    ctx.runtime = injector.get(RuntimeContext)
     ctx.prediction = injector.get(PredictionContext)
     ctx.training = injector.get(TrainingContext)
     ctx.jobs = injector.get(JobsContext)

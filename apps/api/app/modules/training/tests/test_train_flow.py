@@ -25,29 +25,10 @@ async def test_train_flow_invokes_registered_runtime_host() -> None:
             dataset_id="dataset-1",
             trainer_id="resnet50-sc-v1",
             created_by="user-1",
-            catalog_id="resnet50-sc-v1",
-            input_contract="sc.patch_image.v1",
-            output_contract="sc.resnet50.model.v1",
-            resource_profile="gpu",
-            owner="local_compat",
-            algo_id="resnet50-sc",
-            algo_version="1",
-            missing_image_policy="fail",
         )
 
     assert result == {"status": "completed"}
     execute.assert_awaited_once()
-
-
-@pytest.mark.asyncio
-async def test_train_flow_rejects_mismatched_catalog_id() -> None:
-    with pytest.raises(ValueError, match="catalog_id matching trainer_id"):
-        await train_job_flow.fn(
-            job_id="job-1",
-            dataset_id="dataset-1",
-            trainer_id="resnet50-sc-v1",
-            catalog_id="yolo-sc-v1",
-        )
 
 
 @pytest.mark.asyncio
@@ -70,14 +51,6 @@ async def test_train_flow_passes_collection_revision_source_to_runtime() -> None
             collection_revision_id="revision-1",
             org_id="org-1",
             trainer_id="resnet50-sc-v1",
-            catalog_id="resnet50-sc-v1",
-            input_contract="sc.patch_image.v1",
-            output_contract="sc.resnet50.model.v1",
-            resource_profile="gpu",
-            owner="local_compat",
-            algo_id="resnet50-sc",
-            algo_version="1",
-            missing_image_policy="fail",
         )
 
     assert execute.await_args is not None

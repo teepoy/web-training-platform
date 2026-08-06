@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from app.modules.runtime.catalog import runtime_catalog
-from app.modules.runtime.domain.executables import RuntimeOperation
 
 
 def test_runtime_catalog_is_the_single_trainer_predictor_source() -> None:
@@ -15,7 +14,7 @@ def test_runtime_catalog_is_the_single_trainer_predictor_source() -> None:
     }
 
 
-def test_registered_capabilities_include_metadata_callables_and_routes() -> None:
+def test_registered_capabilities_include_metadata_callables_and_operations() -> None:
     for trainer_id in runtime_catalog.list_trainer_ids():
         trainer = runtime_catalog.get_trainer(trainer_id)
         predictor = runtime_catalog.get_predictor(trainer.metadata.predictor_id)
@@ -24,6 +23,4 @@ def test_registered_capabilities_include_metadata_callables_and_routes() -> None
         assert callable(predictor.callable)
         assert predictor.metadata.input_view == trainer.metadata.input_view
         assert predictor.metadata.input_model == trainer.metadata.output_model
-        assert runtime_catalog.route(RuntimeOperation.TRAIN, trainer_id)
-        assert runtime_catalog.route(RuntimeOperation.TRAIN_AND_PREDICT, trainer_id)
-        assert runtime_catalog.route(RuntimeOperation.PREDICT, predictor.id)
+        assert runtime_catalog.supports_train_and_predict(trainer_id)

@@ -22,7 +22,7 @@ from datetime import UTC, datetime
 
 from app.shared.api.schemas import ArtifactRef, TrainingEvent, TrainingJob
 from app.shared.api.schemas import JobStatus
-from app.modules.runtime.port.local import RuntimeRoutingPort
+from app.modules.runtime.app.services.deployment_seed import TRAIN_RUNTIME_DEPLOYMENT
 from app.shared.domain.protocols import PrefectClient
 
 # ---------------------------------------------------------------------------
@@ -50,31 +50,13 @@ class PrefectWorkPoolEngine:
     ----------
     prefect_client:
         Configured :class:`PrefectClient` instance.
-    work_pool_name:
-        Name of the Prefect work pool (kept for compatibility, not used).
-    work_pool_type:
-        Work pool type (kept for compatibility, not used).
-    flow_name:
-        Name of the Prefect flow (kept for compatibility, not used).
-    concurrency_limit:
-        Maximum concurrent flow runs (kept for compatibility, not used).
     """
 
     def __init__(
         self,
         prefect_client: PrefectClient,
-        work_pool_name: str,
-        work_pool_type: str,
-        flow_name: str,
-        runtime_router: RuntimeRoutingPort,
-        concurrency_limit: int = 1,
     ) -> None:
         self._client = prefect_client
-        self._pool_name = work_pool_name
-        self._pool_type = work_pool_type
-        self._flow_name = flow_name
-        self._runtime_router = runtime_router
-        self._concurrency_limit = concurrency_limit
         self._deployment_ids: dict[str, str] = {}
 
     # ------------------------------------------------------------------
@@ -99,10 +81,6 @@ class PrefectWorkPoolEngine:
             self._deployment_ids[deployment_name] = deployment_id
         return self._deployment_ids[deployment_name]
 
-    def _resolve_deployment_name(self, job: TrainingJob) -> str:
-        route = self._runtime_router.training_route(job.trainer_id)
-        return route.deployment
-
     # ------------------------------------------------------------------
     # TrainingExecutionEngine Protocol implementation
     # ------------------------------------------------------------------
@@ -124,8 +102,7 @@ class PrefectWorkPoolEngine:
             job.collection_id is None or job.collection_revision_id is None
         ):
             raise ValueError(f"Source data for training job '{job.id}' is unavailable")
-        deployment_name = self._resolve_deployment_name(job)
-        route = self._runtime_router.training_route(job.trainer_id)
+        deployment_name = TRAIN_RUNTIME_DEPLOYMENT.deployment_name
         deployment_id = await self._ensure_deployment(deployment_name)
 
         run = await self._client.create_flow_run_from_deployment(
@@ -138,7 +115,6 @@ class PrefectWorkPoolEngine:
                 "org_id": job.org_id or "",
                 "trainer_id": job.trainer_id,
                 "created_by": job.created_by,
-                **route.to_parameters(),
             },
             idempotency_key=job.id,
         )

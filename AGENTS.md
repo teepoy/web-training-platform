@@ -99,11 +99,11 @@ TypeScript/Vue:
 Backend:
 
 - Views use `@view` and are imported by the API registration barrel.
-- Trainer/predictor metadata, callable binding, algorithm identity, and operation routes belong to one module-owned `RuntimeRouter` registration; Prefect is the current submission/execution-state backend.
+- Trainer/predictor metadata, callable binding, and algorithm identity belong to one module-owned `RuntimeRouter`; operations derive from runtime-checkable callable Protocols, while Prefect deployment/work-pool specs remain infrastructure-owned.
 - Dataset type integration must go through the dataset registry and per-type adapters, not shared hardcoded switch statements.
 - Dataset view sample APIs should resolve dataset type -> dataset class -> view adapter dynamically, not add one hardcoded route per view.
 - Dataset storage/operator code owns `db_full`, sparse shard, Parquet, manifest, and locator persistence details; domain import modules should produce generic dataset samples/import streams.
-- Prediction/training jobs should dispatch by `RuntimeCapabilityCatalog` -> registered operation route, not `container.gpu_worker` or hardcoded direct ML implementation calls inside API routes/services.
+- Prediction/training jobs should dispatch by `RuntimeCapabilityCatalog` -> operation-specific callable, then submit through the infrastructure-owned Prefect deployment spec; do not use `container.gpu_worker` or hardcode ML implementations inside API routes/services.
 - Generic runtime hosts only build context and invoke a registered callable. Dataset construction, materialization/loading, prediction chunk policy, and algorithm-specific tasks belong to the registered module; do not impose common train/predict I/O DTOs.
 - Data-plane manifests and runtime routing should follow `docs/architecture/data-plane-manifest-contract.md` and `docs/architecture/runtime-registration-contract.md`.
 - Backend extension routers live under `apps/api/app/routers/<name>/router.py` and are listed in the extension router registry.

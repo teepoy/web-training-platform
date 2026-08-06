@@ -36,7 +36,6 @@ if TYPE_CHECKING:
     from app.modules.datasets.container import DatasetsContext
     from app.modules.models.container import ModelsContext
     from app.modules.prediction.container import PredictionContext
-    from app.modules.runtime.container import RuntimeContext
     from app.modules.sc.container import ScContext
     from app.modules.jobs.container import JobsContext
     from app.core.settings.container import SettingsContext
@@ -90,7 +89,6 @@ class AppContext:
     settings: SettingsContext | None = None
     agent: AgentContext | None = None
     auth: AuthContext | None = None
-    runtime: RuntimeContext | None = None
     sc: ScContext | None = None
     injector: Injector | None = None
 

@@ -1,16 +1,15 @@
 from __future__ import annotations
 
-import inspect
-from collections.abc import Awaitable, Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, replace
-from enum import StrEnum
-from typing import Any, Literal, TypeVar, cast
+from typing import Any, Protocol, TypeVar, cast, runtime_checkable
 
-from app.modules.runtime.domain.routing import (
-    MissingImagePolicy,
-    RuntimeDeploymentOwner,
-    RuntimeResourceProfile,
+from app.modules.runtime.domain.context import (
+    PredictionRuntimeContext,
+    TrainAndPredictRuntimeContext,
+    TrainingRuntimeContext,
 )
+from app.modules.runtime.domain.events import RuntimeEventStream
 from app.modules.types.capabilities import (
     ModelContractRef,
     PredictorMetadata,
@@ -19,36 +18,48 @@ from app.modules.types.capabilities import (
 )
 
 
-class RuntimeOperation(StrEnum):
-    TRAIN = "training_routes"
-    TRAIN_AND_PREDICT = "train_and_predict_routes"
-    PREDICT = "prediction_routes"
+TrainCallable = Callable[[TrainingRuntimeContext], RuntimeEventStream]
+PredictCallable = Callable[[PredictionRuntimeContext], RuntimeEventStream]
+TrainAndPredictCallable = Callable[[TrainAndPredictRuntimeContext], RuntimeEventStream]
+
+TTrainCallable = TypeVar("TTrainCallable", bound=TrainCallable)
+TPredictCallable = TypeVar("TPredictCallable", bound=PredictCallable)
+TTrainAndPredictCallable = TypeVar(
+    "TTrainAndPredictCallable",
+    bound=TrainAndPredictCallable,
+)
+TAlgorithmClass = TypeVar("TAlgorithmClass", bound=type[Any])
 
 
-@dataclass(frozen=True, slots=True)
-class RuntimeRouteDefinition:
-    operation: RuntimeOperation
-    deployment: str
-    resource_profile: RuntimeResourceProfile
-    owner: RuntimeDeploymentOwner
-    missing_image_policy: MissingImagePolicy
-    output_contract: str | Literal["trainer_model"]
+@runtime_checkable
+class Trainable(Protocol):
+    @staticmethod
+    def train(ctx: TrainingRuntimeContext) -> RuntimeEventStream: ...
 
 
-RuntimeCallable = Callable[[Any], object]
-TCallable = TypeVar("TCallable", bound=RuntimeCallable)
+@runtime_checkable
+class Predictable(Protocol):
+    @staticmethod
+    def predict(ctx: PredictionRuntimeContext) -> RuntimeEventStream: ...
+
+
+@runtime_checkable
+class TrainAndPredictable(Protocol):
+    @staticmethod
+    def train_and_predict(
+        ctx: TrainAndPredictRuntimeContext,
+    ) -> RuntimeEventStream: ...
 
 
 @dataclass(frozen=True, slots=True)
 class RegisteredTrainer:
-    """One source for trainer metadata, executable binding, and routes."""
+    """One source for trainer metadata, executable binding, and identity."""
 
     metadata: TrainerMetadata
-    callable: RuntimeCallable
+    callable: TrainCallable
     algo_id: str
     algo_version: str
-    routes: tuple[RuntimeRouteDefinition, ...]
-    train_and_predict_callable: RuntimeCallable | None = None
+    train_and_predict_callable: TrainAndPredictCallable | None = None
 
     @property
     def id(self) -> str:
@@ -57,13 +68,12 @@ class RegisteredTrainer:
 
 @dataclass(frozen=True, slots=True)
 class RegisteredPredictor:
-    """One source for predictor metadata, executable binding, and routes."""
+    """One source for predictor metadata, executable binding, and identity."""
 
     metadata: PredictorMetadata
-    callable: RuntimeCallable
+    callable: PredictCallable
     algo_id: str
     algo_version: str
-    routes: tuple[RuntimeRouteDefinition, ...]
 
     @property
     def id(self) -> str:
@@ -87,23 +97,10 @@ class RuntimeRouter:
         predictor_ids: tuple[str, ...],
         algo_id: str,
         algo_version: str,
-        routes: tuple[RuntimeRouteDefinition, ...],
-    ) -> Callable[[TCallable], TCallable]:
-        def decorator(func: TCallable) -> TCallable:
+    ) -> Callable[[TTrainCallable], TTrainCallable]:
+        def decorator(func: TTrainCallable) -> TTrainCallable:
             if id in self._trainers:
                 raise RuntimeError(f"Duplicate trainer registration: {id}")
-            operations = {route.operation for route in routes}
-            if RuntimeOperation.TRAIN not in operations:
-                raise RuntimeError(f"Trainer {id!r} must declare a training route")
-            unexpected = operations - {
-                RuntimeOperation.TRAIN,
-                RuntimeOperation.TRAIN_AND_PREDICT,
-            }
-            if unexpected:
-                raise RuntimeError(
-                    f"Trainer {id!r} declares invalid routes: "
-                    f"{sorted(item.value for item in unexpected)}"
-                )
             self._trainers[id] = RegisteredTrainer(
                 metadata=TrainerMetadata(
                     id=id,
@@ -115,7 +112,6 @@ class RuntimeRouter:
                 callable=func,
                 algo_id=algo_id,
                 algo_version=algo_version,
-                routes=routes,
             )
             return func
 
@@ -130,16 +126,10 @@ class RuntimeRouter:
         input_model: ModelContractRef,
         algo_id: str,
         algo_version: str,
-        routes: tuple[RuntimeRouteDefinition, ...],
-    ) -> Callable[[TCallable], TCallable]:
-        def decorator(func: TCallable) -> TCallable:
+    ) -> Callable[[TPredictCallable], TPredictCallable]:
+        def decorator(func: TPredictCallable) -> TPredictCallable:
             if id in self._predictors:
                 raise RuntimeError(f"Duplicate predictor registration: {id}")
-            operations = {route.operation for route in routes}
-            if operations != {RuntimeOperation.PREDICT}:
-                raise RuntimeError(
-                    f"Predictor {id!r} must declare only a prediction route"
-                )
             self._predictors[id] = RegisteredPredictor(
                 metadata=PredictorMetadata(
                     id=id,
@@ -150,19 +140,73 @@ class RuntimeRouter:
                 callable=func,
                 algo_id=algo_id,
                 algo_version=algo_version,
-                routes=routes,
             )
             return func
 
         return decorator
 
-    def train_and_predict(self, *, trainer_id: str) -> Callable[[TCallable], TCallable]:
-        def decorator(func: TCallable) -> TCallable:
+    def algorithm(
+        self,
+        *,
+        id: str,
+        trainer_name: str,
+        predictor_name: str,
+        input_view: ViewContractRef,
+        model: ModelContractRef,
+        algo_id: str,
+        algo_version: str,
+    ) -> Callable[[TAlgorithmClass], TAlgorithmClass]:
+        """Register a paired algorithm and derive operations from its Protocols."""
+
+        def decorator(algorithm_cls: TAlgorithmClass) -> TAlgorithmClass:
+            if not isinstance(algorithm_cls, Trainable):
+                raise RuntimeError(f"Runtime algorithm {id!r} must implement Trainable")
+            if not isinstance(algorithm_cls, Predictable):
+                raise RuntimeError(
+                    f"Runtime algorithm {id!r} must implement Predictable"
+                )
+            if id in self._trainers or id in self._predictors:
+                raise RuntimeError(f"Duplicate runtime algorithm registration: {id}")
+
+            self.trainer(
+                id=id,
+                name=trainer_name,
+                input_view=input_view,
+                output_model=model,
+                predictor_ids=(id,),
+                algo_id=algo_id,
+                algo_version=algo_version,
+            )(cast(TrainCallable, algorithm_cls.train))
+            self.predictor(
+                id=id,
+                name=predictor_name,
+                input_view=input_view,
+                input_model=model,
+                algo_id=algo_id,
+                algo_version=algo_version,
+            )(cast(PredictCallable, algorithm_cls.predict))
+            if isinstance(algorithm_cls, TrainAndPredictable):
+                self.train_and_predict(trainer_id=id)(
+                    cast(
+                        TrainAndPredictCallable,
+                        algorithm_cls.train_and_predict,
+                    )
+                )
+            return algorithm_cls
+
+        return decorator
+
+    def train_and_predict(
+        self,
+        *,
+        trainer_id: str,
+    ) -> Callable[[TTrainAndPredictCallable], TTrainAndPredictCallable]:
+        def decorator(func: TTrainAndPredictCallable) -> TTrainAndPredictCallable:
             try:
                 registration = self._trainers[trainer_id]
             except KeyError as exc:
                 raise RuntimeError(
-                    f"Train-and-predict registration references unknown trainer "
+                    "Train-and-predict registration references unknown trainer "
                     f"{trainer_id!r}"
                 ) from exc
             if registration.train_and_predict_callable is not None:
@@ -195,7 +239,6 @@ class RuntimeCapabilityCatalog:
     ) -> None:
         self._trainers: dict[str, RegisteredTrainer] = {}
         self._predictors: dict[str, RegisteredPredictor] = {}
-        self._routes: dict[tuple[RuntimeOperation, str], RuntimeRouteDefinition] = {}
         for router in routers:
             for trainer in router.trainers():
                 self._add_trainer(trainer)
@@ -207,26 +250,11 @@ class RuntimeCapabilityCatalog:
         if trainer.id in self._trainers:
             raise RuntimeError(f"Duplicate trainer registration: {trainer.id}")
         self._trainers[trainer.id] = trainer
-        self._add_routes(trainer.id, trainer.routes)
 
     def _add_predictor(self, predictor: RegisteredPredictor) -> None:
         if predictor.id in self._predictors:
             raise RuntimeError(f"Duplicate predictor registration: {predictor.id}")
         self._predictors[predictor.id] = predictor
-        self._add_routes(predictor.id, predictor.routes)
-
-    def _add_routes(
-        self,
-        catalog_id: str,
-        routes: tuple[RuntimeRouteDefinition, ...],
-    ) -> None:
-        for route in routes:
-            key = (route.operation, catalog_id)
-            if key in self._routes:
-                raise RuntimeError(
-                    f"Duplicate runtime route: {route.operation.value}.{catalog_id}"
-                )
-            self._routes[key] = route
 
     def _validate(self, known_views: Mapping[str, ViewContractRef]) -> None:
         for trainer in self._trainers.values():
@@ -235,12 +263,6 @@ class RuntimeCapabilityCatalog:
                 raise RuntimeError(
                     f"Trainer {trainer.id!r} must declare at least one predictor"
                 )
-            if self.route_or_none(RuntimeOperation.TRAIN_AND_PREDICT, trainer.id):
-                if trainer.train_and_predict_callable is None:
-                    raise RuntimeError(
-                        f"Trainer {trainer.id!r} declares train-and-predict routing "
-                        "without an executable"
-                    )
         for predictor in self._predictors.values():
             self._require_view(predictor.metadata.input_view, known_views, predictor.id)
         for trainer in self._trainers.values():
@@ -334,74 +356,42 @@ class RuntimeCapabilityCatalog:
             )
         return predictor
 
-    def route(
+    def supports_train_and_predict(self, trainer_id: str) -> bool:
+        return self.get_trainer(trainer_id).train_and_predict_callable is not None
+
+    def stream_train(
         self,
-        operation: RuntimeOperation,
-        catalog_id: str,
-    ) -> RuntimeRouteDefinition:
-        try:
-            return self._routes[(operation, catalog_id)]
-        except KeyError as exc:
+        trainer_id: str,
+        context: TrainingRuntimeContext,
+    ) -> RuntimeEventStream:
+        return self.get_trainer(trainer_id).callable(context)
+
+    def stream_predict(
+        self,
+        predictor_id: str,
+        context: PredictionRuntimeContext,
+    ) -> RuntimeEventStream:
+        return self.get_predictor(predictor_id).callable(context)
+
+    def stream_train_and_predict(
+        self,
+        trainer_id: str,
+        context: TrainAndPredictRuntimeContext,
+    ) -> RuntimeEventStream:
+        callable_ = self.get_trainer(trainer_id).train_and_predict_callable
+        if callable_ is None:
             raise KeyError(
-                f"No runtime route for {operation.value}.{catalog_id}"
-            ) from exc
-
-    def route_or_none(
-        self,
-        operation: RuntimeOperation,
-        catalog_id: str,
-    ) -> RuntimeRouteDefinition | None:
-        return self._routes.get((operation, catalog_id))
-
-    def registration_for(
-        self,
-        operation: RuntimeOperation,
-        catalog_id: str,
-    ) -> RegisteredTrainer | RegisteredPredictor:
-        if operation is RuntimeOperation.PREDICT:
-            return self.get_predictor(catalog_id)
-        return self.get_trainer(catalog_id)
-
-    def callable_for(
-        self,
-        operation: RuntimeOperation,
-        catalog_id: str,
-    ) -> RuntimeCallable:
-        registration = self.registration_for(operation, catalog_id)
-        if operation is RuntimeOperation.TRAIN_AND_PREDICT:
-            workflow = cast(RegisteredTrainer, registration).train_and_predict_callable
-            if workflow is None:
-                raise KeyError(
-                    f"Trainer {catalog_id!r} has no train-and-predict executable"
-                )
-            return workflow
-        return registration.callable
-
-    async def invoke(
-        self,
-        operation: RuntimeOperation,
-        catalog_id: str,
-        context: object,
-    ) -> object:
-        result = self.callable_for(operation, catalog_id)(context)
-        if inspect.isawaitable(result):
-            return await cast(Awaitable[object], result)
-        return result
-
-    def list_routes(
-        self,
-    ) -> tuple[tuple[str, RuntimeRouteDefinition], ...]:
-        return tuple(
-            (catalog_id, route)
-            for (operation, catalog_id), route in self._routes.items()
-        )
+                f"Trainer {trainer_id!r} has no train-and-predict executable"
+            )
+        return callable_(context)
 
 
 __all__ = [
+    "Predictable",
     "RegisteredPredictor",
     "RegisteredTrainer",
     "RuntimeCapabilityCatalog",
-    "RuntimeOperation",
-    "RuntimeRouteDefinition",
     "RuntimeRouter",
+    "TrainAndPredictable",
+    "Trainable",
 ]

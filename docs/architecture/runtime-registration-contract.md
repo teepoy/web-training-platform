@@ -1,147 +1,204 @@
 # Runtime Registration Contract
 
 Status: accepted
-Date: 2026-08-05
+Date: 2026-08-07
 
-This contract defines one registration model for trainer and predictor metadata,
-execution, algorithm identity, and deployment routing. `CORE_DESIGNS.md` is
-authoritative.
+This contract separates capability registration, execution infrastructure, and
+runtime results. `CORE_DESIGNS.md` is authoritative.
 
-## One Module-Owned Registration
+## One Module-Owned Capability Registration
 
-Each algorithm-owning module exposes a `RuntimeRouter`, analogous to an HTTP
-router. Decorators register complete capabilities:
+Each algorithm-owning module exposes a `RuntimeRouter`. A paired trainer and
+predictor are declared once:
 
 ```python
 SC_RUNTIME_ROUTER = RuntimeRouter()
 
-@SC_RUNTIME_ROUTER.trainer(
+
+@SC_RUNTIME_ROUTER.algorithm(
     id="resnet50-sc-v1",
-    name="ResNet-50 SC Defect Classifier",
+    trainer_name="ResNet-50 SC Defect Classifier",
+    predictor_name="ResNet-50 SC Defect Prediction",
     input_view=SC_PATCH_IMAGE_V1,
-    output_model=SC_RESNET_MODEL_V1,
-    predictor_ids=("resnet50-sc-v1",),
+    model=SC_RESNET_MODEL_V1,
     algo_id="resnet50-sc",
     algo_version="1",
-    routes=(TRAIN_ROUTE, TRAIN_AND_PREDICT_ROUTE),
 )
-async def train(ctx: TrainingRuntimeContext) -> object:
-    ...
+class ResNetScAlgorithm:
+    train = staticmethod(resnet_sc_train)
+    predict = staticmethod(resnet_sc_predictor)
+    train_and_predict = staticmethod(run_sc_train_and_predict)
 ```
 
-A trainer registration contains:
+Registration arguments are code-owned capability metadata, not ML
+hyperparameters or deployment configuration:
 
-- product ID and display metadata;
-- exact input `ViewContractRef`;
-- output `ModelContractRef` and explicit predictor IDs;
-- algorithm ID/version;
-- executable callable;
-- operation routes, and optionally a registered train-and-predict callable.
+| Parameter        | Purpose                                                               |
+| ---------------- | --------------------------------------------------------------------- |
+| `id`             | Stable product catalog ID selected by API submissions.                |
+| `trainer_name`   | Trainer display name.                                                 |
+| `predictor_name` | Predictor display name.                                               |
+| `input_view`     | Exact versioned dataset view contract consumed by the algorithm.      |
+| `model`          | Trainer output and predictor input model contract.                    |
+| `algo_id`        | Stable executable algorithm-family identity used in logs and audit.   |
+| `algo_version`   | Version of algorithm behavior, separate from model artifact versions. |
 
-A predictor registration contains the corresponding input view/model contracts,
-algorithm identity, executable callable, and prediction route.
+The decorator must not accept operation, deployment, work-pool, owner,
+missing-image policy, output contract, or code-version arguments.
 
-`RuntimeCapabilityCatalog` aggregates module routers and is the single query
-surface. It validates duplicate IDs, known views, trainer/predictor pairings,
-model contracts, and required routes. Do not create a metadata-only
-trainer/predictor catalog, a second executable registry, global
-`register_trainer`/`register_predictor` aliases, YAML capability presets, or
-filesystem discovery.
+The lower-level `trainer()`, `predictor()`, and `train_and_predict()` decorators
+remain available for non-one-to-one pairing. They declare the same metadata and
+callable identity without deployment routes.
 
-View definitions remain metadata-only in the type catalog because they also
-bind canonical row and Arrow schemas. The split applies to view schema
-registration, not to trainer/predictor capabilities.
+## Protocol-Derived Operations
 
-## What Routes Mean
+Runtime operation support is derived from three runtime-checkable Protocols:
 
-`RuntimeRouteDefinition` describes how the platform submits one registered
-operation:
+```python
+@runtime_checkable
+class Trainable(Protocol):
+    @staticmethod
+    def train(ctx: TrainingRuntimeContext) -> RuntimeEventStream: ...
 
-- operation (`train`, `predict`, or `train-and-predict`);
-- deployment name;
-- resource profile;
-- deployment owner (`local_compat` or `external`);
-- explicit missing-image policy;
-- output contract selection.
 
-Routes serve submission, deployment seeding, observability, and environment
-deployment overrides. They do not describe the algorithm's internal steps,
-materialization pipeline, batching, chunking, or task graph.
+@runtime_checkable
+class Predictable(Protocol):
+    @staticmethod
+    def predict(ctx: PredictionRuntimeContext) -> RuntimeEventStream: ...
 
-Environment configuration may override only deployment name, resource profile,
-owner, and code version. View/model contracts, algorithm identity, and failure
-policy remain code-owned. The API seeds `local_compat` deployments only;
-external runtime packages own `external` deployments.
+
+@runtime_checkable
+class TrainAndPredictable(Protocol):
+    @staticmethod
+    def train_and_predict(
+        ctx: TrainAndPredictRuntimeContext,
+    ) -> RuntimeEventStream: ...
+```
+
+`RuntimeRouter.algorithm()` requires `Trainable` and `Predictable`. Implementing
+`TrainAndPredictable` makes the combined operation available. The decorator
+performs this discovery once during import and caches the bound callables.
+Runtime Protocol checks verify member presence; pyright verifies signatures.
+
+`RuntimeCapabilityCatalog` aggregates module routers and remains the single
+query surface. It validates duplicate IDs, registered views, trainer/predictor
+pairing, and exact model contracts. It exposes operation-specific methods:
+
+- `stream_train(trainer_id, context)`;
+- `stream_predict(predictor_id, context)`;
+- `stream_train_and_predict(trainer_id, context)`;
+- `supports_train_and_predict(trainer_id)`.
+
+There is no generic `invoke(operation, ...)`, operation enum, route map,
+metadata-only duplicate catalog, YAML capability preset, or directory scan.
+
+## Deployment And Work Pools
+
+Prefect deployment is execution infrastructure and is declared independently
+from algorithm registration. One repository-owned `PrefectDeploymentSpec`
+contains the deployment name, flow name, entrypoint, work pool, and path.
+Deployment seed, startup validation, and submission consume the same objects.
+
+| Deployment                     | Flow                         | Work pool     |
+| ------------------------------ | ---------------------------- | ------------- |
+| `train-job-deployment`         | `training-train-job`         | `default-gpu` |
+| `train-and-predict-deployment` | `training-train-and-predict` | `default-gpu` |
+| `predict-job-batch-deployment` | `prediction-predict-job`     | `default-gpu` |
+| sensor/drain deployments       | their declared CPU flows     | `default-cpu` |
+
+A deployment identifies a configured flow submission target. A work pool is
+the execution resource queue to which that deployment is bound. CPU/GPU is
+therefore expressed by the selected work pool, not by a capability
+`resource_profile` field and not by string concatenation during seed.
+
+All current deployments are repository-owned. There is no `owner` field or
+external deployment branch. A future external runtime should be integrated by
+an explicit adapter task or service client when it exists.
+
+## Typed Runtime Events
+
+Every registered callable is an async generator returning a closed event union.
+The project supports Python 3.11, so the alias uses `TypeAlias`:
+
+```python
+RuntimeEvent: TypeAlias = (
+    ArtifactProduced
+    | MetricsReported
+    | ProgressReported
+    | RuntimeIssueReported
+    | OperationCompleted
+)
+```
+
+Event responsibilities:
+
+| Event                  | Meaning                                                         |
+| ---------------------- | --------------------------------------------------------------- |
+| `ArtifactProduced`     | Reports an artifact already persisted by the owning algorithm.  |
+| `MetricsReported`      | Reports metrics for the flow result and product events.         |
+| `ProgressReported`     | Reports bounded progress without defining algorithm topology.   |
+| `RuntimeIssueReported` | Reports a recoverable or per-item problem; execution continues. |
+| `OperationCompleted`   | The one terminal event carrying the operation summary.          |
+
+The generic flow host exhaustively matches the union with `assert_never`,
+rejects events after completion, requires exactly one terminal event, and
+assembles a transport-safe Prefect result. This event type is the output
+boundary; no string `output_contract` is declared or revalidated.
+
+Algorithms still own dataset construction, materialization, batch/chunk policy,
+artifact/prediction persistence, and progress cadence. Events report what the
+algorithm did; they are not generic persistence commands.
+
+Recoverable failures are emitted as `RuntimeIssueReported`. A function author
+terminates an expected fatal operation by raising `RuntimeExecutionError` with
+a stable code and details. Unknown exceptions propagate unchanged and fail the
+Prefect run. A generic Rust-style `Ok`/`Err` chain is not used because Python
+cannot enforce `must_use`; the closed event union plus exceptions provides the
+exhaustive boundary without nested result wrapping.
 
 ## Dispatch
 
-```text
-request
-  -> resolve one RuntimeRouter registration
-  -> validate auth, dataset/view/model compatibility, and route availability
-  -> persist platform job
-  -> submit route to the configured execution backend
-  -> runtime host builds a narrow context
-  -> invoke the registered callable
+```mermaid
+flowchart LR
+    A["API request"] --> B["Capability catalog validation"]
+    B --> C["Direct Prefect deployment spec"]
+    C --> D["Prefect flow"]
+    D --> E["Build runtime context"]
+    E --> F["Protocol-bound callable"]
+    F --> G["Typed RuntimeEvent stream"]
+    G --> H["Flow event consumer"]
+    H --> I["Prefect terminal result"]
 ```
 
-The current backend uses Prefect deployments, but Prefect is a submission and
-execution-state mechanism rather than a second capability registry. A
-repository-local Prefect wrapper only validates the route envelope, builds a
-runtime context, and invokes the selected registration.
+Flow parameters contain only transport-safe job/source/model/capability IDs and
+request options. They do not repeat catalog ID, view/model contract,
+algorithm/code version, owner, resource profile, missing-image policy, or output
+contract. The flow entrypoint determines the operation and the selected
+trainer/predictor ID resolves the callable.
 
-Flow parameters remain transport-safe identifiers and values. Never pass
-repositories, ORM rows, injector containers, platform service instances, or
-Python callables as deployment parameters.
+## SC Failure Semantics
 
-## Algorithm-Owned Data And Execution Strategy
+Missing-image behavior belongs to the SC implementations:
 
-The registered callable owns all algorithm-specific execution decisions:
+- submission readiness validates annotation labels only and leaves actual image
+  resolution to runtime;
+- current ResNet and YOLO trainers skip materialization failures and unreadable
+  image pairs;
+- after filtering, training fails with `RuntimeExecutionError` unless at least
+  two effective labels remain;
+- predictors write per-sample failures and continue the batch, then report an
+  aggregate runtime issue when failures occurred.
 
-- dataset construction and sample selection;
-- storage/domain port selection;
-- view projection and materialization/loading;
-- image validation and failure semantics;
-- prediction batch/chunk/concurrency policy;
-- output persistence and progress cadence;
-- any internal task or flow topology.
-
-The platform does not provide a global materializer registry or resolve a
-materializer by `(view, purpose, storage_mode)`. A module may inject and use its
-own materializer or data-plane client. No universal train/predict input or output
-DTO is required. Runtime contexts carry only relevant platform identity,
-request options, and access to the available platform context; the registered
-module chooses the concrete ports it needs.
-
-If Prefect `@task` or an algorithm-specific `@flow` is useful, declare and invoke
-it explicitly inside the registered callable or in the same algorithm module.
-Do not add generic `predict-chunk`, generic materialization tasks, or a central
-train-and-predict step graph.
+Readiness reports retain usable, unusable, and skipped counts but do not expose
+or receive a registration-level policy.
 
 ## Import And Process Boundaries
 
-Registration modules must be import-safe. They may contain lightweight Python
-callables but must not import Torch, CUDA libraries, model weights, or other
-heavy optional dependencies at module import time. Local compatibility handlers
-load `ml_library` inside the selected callable. `libs/ml` must not import API
-internals.
+Registration modules must remain import-safe. They may import lightweight
+callables and metadata but must not import Torch/CUDA, load model weights, or
+perform I/O during import. Optional `libs/ml` kernels remain lazy imports inside
+the selected callable.
 
-Production executables may move to `services/*`. An external runtime consumes
-generated OpenAPI/protobuf/Arrow/manifest contracts and must not import API
-services, repositories, ORM models, FastAPI dependencies, `AppContext`, or the
-API injector.
-
-## Required Validation
-
-CI must verify:
-
-- each registration ID is unique;
-- every referenced view exists;
-- every trainer has at least one paired predictor;
-- paired trainer/predictor view and model contracts match exactly;
-- every trainer has a training route;
-- every predictor has only a prediction route;
-- a declared train-and-predict route has a registered callable;
-- environment overrides contain no static capability fields;
-- generic runtime hosts contain no materializer selection or chunk strategy;
-- importing registration modules does not import heavy ML libraries.
+Production execution may later move to `services/*`. External services consume
+transport contracts and data-plane manifests; they do not import API services,
+repositories, ORM models, injector containers, or Python runtime event classes.

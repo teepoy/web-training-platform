@@ -5,14 +5,19 @@ import logging
 import uuid
 from collections.abc import Callable
 from contextlib import AsyncExitStack
+from dataclasses import dataclass
 from typing import Any, cast
 
 from prefect import get_run_logger
 
 from app.modules.runtime.domain.context import TrainingRuntimeContext
-from app.modules.runtime.domain.executables import (
-    RuntimeOperation,
-    RuntimeRouteDefinition,
+from app.modules.runtime.domain.events import (
+    ArtifactProduced,
+    MetricsReported,
+    OperationCompleted,
+    RuntimeEventStream,
+    RuntimeExecutionError,
+    RuntimeIssueReported,
 )
 from app.modules.sc.app.services.sample_filter import (
     parse_and_apply_workflow_sample_filter,
@@ -21,16 +26,12 @@ from app.modules.sc.app.services.training_images import image_bytes_are_readable
 from app.modules.sc.app.services.training_selection import (
     limit_sc_training_rows_per_class,
 )
-from app.modules.sc.capabilities import (
-    SC_PATCH_IMAGE_V1,
-    SC_RESNET_MODEL_V1,
-    SC_YOLO_MODEL_V1,
-)
+from app.modules.sc.capabilities import SC_PATCH_IMAGE_V1
 from app.modules.sc.materialization.port.local import ScInspectionMaterializerPort
 from app.modules.sc.runtime.data_source import open_sc_runtime_source
 from app.modules.sc.runtime.materialized_input import parquet_paths_from_manifest
-from app.modules.sc.runtime.router import SC_RUNTIME_ROUTER
 from app.shared.db.models.artifacts import ArtifactORM
+from app.shared.api.schemas import ArtifactRef
 from app.shared.domain.data_plane import DataPlaneManifest
 
 logger = logging.getLogger(__name__)
@@ -43,36 +44,14 @@ def _runtime_logger() -> Any:
         return logger
 
 
-def _training_routes() -> tuple[RuntimeRouteDefinition, ...]:
-    return (
-        RuntimeRouteDefinition(
-            operation=RuntimeOperation.TRAIN,
-            deployment="train-job-deployment",
-            resource_profile="gpu",
-            owner="local_compat",
-            missing_image_policy="fail",
-            output_contract="trainer_model",
-        ),
-        RuntimeRouteDefinition(
-            operation=RuntimeOperation.TRAIN_AND_PREDICT,
-            deployment="train-and-predict-deployment",
-            resource_profile="gpu",
-            owner="local_compat",
-            missing_image_policy="skip",
-            output_contract="sample.predictions.v1",
-        ),
-    )
-
-
 def _training_samples(
     manifest: DataPlaneManifest,
-    *,
-    missing_image_policy: str,
-) -> list[Any]:
+) -> tuple[list[Any], int]:
     from ml_library import TrainingSample
     from ml_library.data_loading import collect_parquet_dataset
 
     samples: list[Any] = []
+    skipped = 0
     dataset = collect_parquet_dataset(parquet_paths_from_manifest(manifest))
     for row in dataset:
         label_value = row.get("label")
@@ -87,13 +66,8 @@ def _training_samples(
         if not image_bytes_are_readable(reference):
             missing_roles.append("patch_template")
         if missing_roles:
-            if missing_image_policy == "skip":
-                continue
-            raise ValueError(
-                "SC training image validation failed for "
-                f"sample_id={row.get('sample_id', '')!r}: "
-                f"missing or unreadable roles={missing_roles}"
-            )
+            skipped += 1
+            continue
         samples.append(
             TrainingSample(
                 sample_id=str(row.get("sample_id", "")),
@@ -102,7 +76,7 @@ def _training_samples(
                 label=label,
             )
         )
-    return samples
+    return samples, skipped
 
 
 async def _train_kernel(
@@ -112,13 +86,17 @@ async def _train_kernel(
     artifact_storage: Any,
     materialization_manifest: DataPlaneManifest,
     kernel: Callable[..., Any],
-    missing_image_policy: str,
 ) -> dict[str, Any]:
-    samples = _training_samples(
-        materialization_manifest,
-        missing_image_policy=missing_image_policy,
-    )
-    output = kernel(samples, label_space)
+    samples, skipped = _training_samples(materialization_manifest)
+    sample_labels = {str(sample.label) for sample in samples}
+    active_labels = [label for label in label_space if label in sample_labels]
+    if len(active_labels) < 2:
+        raise RuntimeExecutionError(
+            "sc_training_insufficient_labels_after_image_filter",
+            "SC training requires at least two labels after skipping unreadable images",
+            details={"active_labels": active_labels, "skipped_samples": skipped},
+        )
+    output = kernel(samples, active_labels)
     checkpoint_object = f"models/{runtime_ctx.job_id}/checkpoint.pt"
     metrics_object = f"models/{runtime_ctx.job_id}/metrics.json"
     model_uri = await artifact_storage.put_bytes(
@@ -136,7 +114,16 @@ async def _train_kernel(
         "metrics": dict(output.metrics),
         "artifact_uris": [model_uri, metrics_uri],
         "metadata": dict(output.metadata),
+        "skipped_unreadable_samples": skipped,
     }
+
+
+@dataclass(frozen=True, slots=True)
+class _ScTrainingOutput:
+    summary: dict[str, object]
+    artifacts: tuple[ArtifactRef, ...]
+    metrics: dict[str, object]
+    issues: tuple[RuntimeIssueReported, ...]
 
 
 def _trained_model_metadata(
@@ -168,16 +155,13 @@ async def _run_sc_training(
     runtime_ctx: TrainingRuntimeContext,
     *,
     kernel: Callable[..., Any],
-) -> dict[str, Any]:
+) -> _ScTrainingOutput:
     import app.registrations  # noqa: F401
     import polars as pl
 
     app_context = runtime_ctx.app_context
     if app_context.injector is None:
         raise RuntimeError("AppContext injector was not initialized")
-    if runtime_ctx.missing_image_policy not in {"fail", "skip"}:
-        raise ValueError("SC training requires missing_image_policy='fail' or 'skip'")
-
     async with open_sc_runtime_source(
         runtime_ctx,
         with_labels=True,
@@ -224,24 +208,18 @@ async def _run_sc_training(
                 ),
             )
             exit_stack.callback(materialization.cleanup)
-            if materialization.errors and runtime_ctx.missing_image_policy != "skip":
-                raise ValueError(
-                    f"SC training materialization failed for "
-                    f"{len(materialization.errors)} image(s); first error: "
-                    f"{materialization.errors[0]}"
-                )
             train_result = await _train_kernel(
                 runtime_ctx=runtime_ctx,
                 label_space=list(source.label_space),
                 artifact_storage=app_context.shared.artifact_storage,
                 materialization_manifest=materialization.manifest,
                 kernel=kernel,
-                missing_image_policy=runtime_ctx.missing_image_policy,
             )
         label_space = list(source.label_space)
 
     artifacts: list[dict[str, Any]] = [
         {
+            "id": str(uuid.uuid4()),
             "uri": train_result["model_uri"],
             "kind": "model",
             "metadata": _trained_model_metadata(
@@ -252,7 +230,12 @@ async def _run_sc_training(
         }
     ]
     artifacts.extend(
-        {"uri": uri, "kind": "metrics", "metadata": {}}
+        {
+            "id": str(uuid.uuid4()),
+            "uri": uri,
+            "kind": "metrics",
+            "metadata": {},
+        }
         for uri in cast(list[str], train_result["artifact_uris"])
         if uri and uri != train_result["model_uri"]
     )
@@ -262,7 +245,7 @@ async def _run_sc_training(
                 continue
             session.add(
                 ArtifactORM(
-                    id=str(uuid.uuid4()),
+                    id=str(artifact["id"]),
                     job_id=runtime_ctx.job_id,
                     uri=str(artifact["uri"]),
                     kind=str(artifact["kind"]),
@@ -270,44 +253,53 @@ async def _run_sc_training(
                 )
             )
         await session.commit()
-    return {
-        "job_id": runtime_ctx.job_id,
-        "status": "completed",
-        "artifacts": [item for item in artifacts if item["uri"]],
-        "metrics": train_result["metrics"],
-    }
+    produced_artifacts = tuple(
+        ArtifactRef.model_validate(item) for item in artifacts if item["uri"]
+    )
+    issues: list[RuntimeIssueReported] = []
+    materialization_error_count = len(materialization.errors)
+    skipped_unreadable_samples = int(train_result["skipped_unreadable_samples"])
+    if materialization_error_count or skipped_unreadable_samples:
+        issues.append(
+            RuntimeIssueReported(
+                code="sc_training_images_skipped",
+                message="SC training skipped unusable image samples",
+                details={
+                    "materialization_errors": materialization_error_count,
+                    "unreadable_samples": skipped_unreadable_samples,
+                },
+            )
+        )
+    return _ScTrainingOutput(
+        summary={"job_id": runtime_ctx.job_id, "status": "completed"},
+        artifacts=produced_artifacts,
+        metrics=cast(dict[str, object], train_result["metrics"]),
+        issues=tuple(issues),
+    )
 
 
-@SC_RUNTIME_ROUTER.trainer(
-    id="resnet50-sc-v1",
-    name="ResNet-50 SC Defect Classifier",
-    input_view=SC_PATCH_IMAGE_V1,
-    output_model=SC_RESNET_MODEL_V1,
-    predictor_ids=("resnet50-sc-v1",),
-    algo_id="resnet50-sc",
-    algo_version="1",
-    routes=_training_routes(),
-)
-async def resnet_sc_train(ctx: TrainingRuntimeContext) -> dict[str, Any]:
+async def resnet_sc_train(ctx: TrainingRuntimeContext) -> RuntimeEventStream:
     from ml_library import train_resnet
 
-    return await _run_sc_training(ctx, kernel=train_resnet)
+    output = await _run_sc_training(ctx, kernel=train_resnet)
+    for issue in output.issues:
+        yield issue
+    for artifact in output.artifacts:
+        yield ArtifactProduced(artifact)
+    yield MetricsReported(output.metrics)
+    yield OperationCompleted(output.summary)
 
 
-@SC_RUNTIME_ROUTER.trainer(
-    id="yolo-sc-v1",
-    name="YOLO SC Detection Trainer",
-    input_view=SC_PATCH_IMAGE_V1,
-    output_model=SC_YOLO_MODEL_V1,
-    predictor_ids=("yolo-sc-v1",),
-    algo_id="yolo-sc",
-    algo_version="1",
-    routes=_training_routes(),
-)
-async def yolo_sc_train(ctx: TrainingRuntimeContext) -> dict[str, Any]:
+async def yolo_sc_train(ctx: TrainingRuntimeContext) -> RuntimeEventStream:
     from ml_library import train_yolo
 
-    return await _run_sc_training(ctx, kernel=train_yolo)
+    output = await _run_sc_training(ctx, kernel=train_yolo)
+    for issue in output.issues:
+        yield issue
+    for artifact in output.artifacts:
+        yield ArtifactProduced(artifact)
+    yield MetricsReported(output.metrics)
+    yield OperationCompleted(output.summary)
 
 
 __all__ = ["resnet_sc_train", "yolo_sc_train"]

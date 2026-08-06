@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from app.modules.runtime.domain.routing import RuntimeDeploymentRoute
 from app.modules.runtime.catalog import runtime_catalog
 from app.modules.training.domain.submission import TrainAndPredictCommand
 
@@ -9,7 +8,6 @@ def train_and_predict_workflow_parameters(
     command: TrainAndPredictCommand,
     *,
     job_id: str,
-    route: RuntimeDeploymentRoute,
 ) -> dict[str, object]:
     """Map a train-and-predict intent to the Prefect transport payload."""
 
@@ -32,5 +30,4 @@ def train_and_predict_workflow_parameters(
             command.trainer_id,
             requested_predictor_id=command.predictor_id,
         ),
-        **route.to_parameters(),
     }

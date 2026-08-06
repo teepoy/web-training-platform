@@ -29,7 +29,6 @@ from app.modules.training.port.local import (
 )
 from app.modules.datasets.port.dataset_reader import DatasetReader
 from app.modules.storage.port.local import DatasetStorageFactoryPort
-from app.modules.runtime.port.local import RuntimeRoutingPort
 from app.shared.application.artifacts import ArtifactService
 from app.shared.context import SharedInfra
 from app.shared.domain.protocols import (
@@ -70,7 +69,6 @@ def _build_training_engine(
     cfg: Any,
     artifact_storage: Any,
     prefect_client: Any,
-    runtime_router: RuntimeRoutingPort,
     kubeflow_client: KubeflowClient | None,
 ) -> Any:
     """Build the execution engine from config.
@@ -88,20 +86,12 @@ def _build_training_engine(
             storage=artifact_storage,
         )
     if engine == "prefect":
-        return PrefectWorkPoolEngine(
-            prefect_client=prefect_client,
-            work_pool_name=str(cfg.prefect.work_pool_name),
-            work_pool_type=str(cfg.prefect.work_pool_type),
-            flow_name=str(cfg.prefect.flow_name),
-            runtime_router=runtime_router,
-            concurrency_limit=int(cfg.prefect.concurrency_limit),
-        )
+        return PrefectWorkPoolEngine(prefect_client=prefect_client)
     raise RuntimeError(f"Unsupported execution.engine: {engine}")
 
 
 def init_training(
     shared: SharedInfra,
-    runtime_router: RuntimeRoutingPort,
     dataset_reader: DatasetReader,
     storage_factory: DatasetStorageFactoryPort,
     collection_revisions: DatasetCollectionRevisionReaderPort,
@@ -115,7 +105,6 @@ def init_training(
         cfg=shared.config,
         artifact_storage=shared.artifact_storage,
         prefect_client=shared.prefect_client,
-        runtime_router=runtime_router,
         kubeflow_client=kube_client,
     )
     repository = TrainingJobRepository(
@@ -136,7 +125,6 @@ def init_training(
         artifact_service=artifact_service,
         dataset_reader=dataset_reader,
         prefect_client=shared.prefect_client,
-        runtime_router=runtime_router,
         readiness=readiness,
         collection_revisions=collection_revisions,
     )
@@ -156,14 +144,12 @@ class TrainingModule(Module):
     def provide_training_context(
         self,
         shared: SharedInfra,
-        runtime_router: RuntimeRoutingPort,
         dataset_reader: DatasetReader,
         storage_factory: DatasetStorageFactoryPort,
         collection_revisions: DatasetCollectionRevisionReaderPort,
     ) -> TrainingContext:
         return init_training(
             shared,
-            runtime_router=runtime_router,
             dataset_reader=dataset_reader,
             storage_factory=storage_factory,
             collection_revisions=collection_revisions,

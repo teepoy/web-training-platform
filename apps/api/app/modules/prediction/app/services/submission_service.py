@@ -24,7 +24,9 @@ from app.modules.prediction.domain.repository import PredictionRepository
 from app.modules.prediction.app.services.submission_parameters import (
     prediction_workflow_parameters,
 )
-from app.modules.runtime.port.local import RuntimeRoutingPort
+from app.modules.runtime.app.services.deployment_seed import (
+    PREDICTION_RUNTIME_DEPLOYMENT,
+)
 from app.modules.runtime.catalog import runtime_catalog
 from app.shared.api.schemas import JobStatus, PredictionEvent, PredictionJob
 from app.shared.api.schemas import Dataset
@@ -37,14 +39,12 @@ class PredictionSubmissionService:
         self,
         prefect_client: PrefectClient,
         repository: PredictionRepository,
-        runtime_router: RuntimeRoutingPort,
         dataset_reader: DatasetReader,
         model_catalog: ModelCatalogPort,
         collection_revisions: DatasetCollectionRevisionReaderPort | None = None,
     ) -> None:
         self._prefect_client = prefect_client
         self._repository = repository
-        self._runtime_router = runtime_router
         self._dataset_reader = dataset_reader
         self._model_catalog = model_catalog
         self._collection_revisions = collection_revisions
@@ -119,16 +119,13 @@ class PredictionSubmissionService:
                 f"Model '{command.model_id}' cannot use predictor "
                 f"'{predictor_id}': {exc}"
             ) from exc
-        try:
-            route = self._runtime_router.prediction_route(predictor_id)
-        except RuntimeError as exc:
-            raise PredictionRuntimeUnavailableError(str(exc)) from exc
         deployment_id = await self._prefect_client.resolve_deployment_id(
-            route.deployment
+            PREDICTION_RUNTIME_DEPLOYMENT.deployment_name
         )
         if deployment_id is None:
             raise PredictionRuntimeUnavailableError(
-                f"Deployment '{route.deployment}' is not registered"
+                f"Deployment '{PREDICTION_RUNTIME_DEPLOYMENT.deployment_name}' "
+                "is not registered"
             )
 
         try:
@@ -168,7 +165,7 @@ class PredictionSubmissionService:
                 parameters=prediction_workflow_parameters(
                     command,
                     job_id=job.id,
-                    route=route,
+                    predictor_id=predictor_id,
                 ),
                 idempotency_key=job.id,
             )

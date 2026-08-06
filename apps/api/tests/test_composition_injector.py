@@ -41,7 +41,6 @@ from app.modules.prediction.app.services.prediction_review import (
 from app.modules.prediction.app.services.prediction_runtime import (
     PredictionRuntimeService,
 )
-from app.modules.runtime.port.local import RuntimeRoutingPort
 from app.modules.jobs.schedules.port.local import ScheduleManagementPort
 from app.modules.models.port.http import deps as model_deps
 from app.modules.models.app.services.model_service import ModelService
@@ -84,7 +83,6 @@ async def test_app_context_injector_binds_existing_instances() -> None:
         assert ctx.prediction is not None
         assert ctx.models is not None
         assert ctx.jobs.schedules is not None
-        assert ctx.runtime is not None
         assert ctx.storage is not None
         assert ctx.sc is not None
 
@@ -148,7 +146,6 @@ async def test_app_context_injector_binds_existing_instances() -> None:
             injector.get(ScheduleManagementPort)
             is ctx.jobs.schedules.scheduler_service
         )
-        assert injector.get(RuntimeRoutingPort) is ctx.runtime.routing_service
         assert (
             injector.get(DataPlaneSchemaRegistryPort)
             is ctx.storage.schema_registry

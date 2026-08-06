@@ -12,7 +12,6 @@ from app.modules.prediction.domain.submission import (
     PredictionJobCommand,
     PredictionRuntimeUnavailableError,
 )
-from app.modules.runtime.domain.routing import RuntimeDeploymentRoute
 
 
 def _command() -> PredictionJobCommand:
@@ -53,19 +52,9 @@ def _submission(*, deployment_id: str | None = "deployment-1"):
     prefect_client.create_flow_run_from_deployment = AsyncMock(
         return_value={"id": "flow-run-1"}
     )
-    runtime_router = Mock()
-    runtime_router.prediction_route.return_value = RuntimeDeploymentRoute(
-        catalog_id="resnet50-sc-v1",
-        deployment="prediction-predict-job",
-        input_contract="sc.patch_image.v1",
-        output_contract="prediction.table.v1",
-        resource_profile="gpu",
-        owner="local_compat",
-    )
     submission = PredictionSubmissionService(
         prefect_client=prefect_client,
         repository=repository,
-        runtime_router=runtime_router,
         dataset_reader=dataset_reader,
         model_catalog=model_catalog,
     )
@@ -83,7 +72,7 @@ async def test_submission_validates_runtime_before_persisting_job() -> None:
 
 
 @pytest.mark.asyncio
-async def test_submission_builds_runtime_parameters_from_command_and_route() -> None:
+async def test_submission_builds_minimal_runtime_parameters() -> None:
     submission, repository, prefect_client = _submission()
     submission._poll_run = AsyncMock()
 
@@ -97,4 +86,6 @@ async def test_submission_builds_runtime_parameters_from_command_and_route() -> 
     assert parameters["job_id"] == job.id
     assert parameters["sample_ids"] == ["sample-1"]
     assert parameters["prompt"] == "classify"
-    assert parameters["catalog_id"] == "resnet50-sc-v1"
+    assert parameters["predictor_id"] == "resnet50-sc-v1"
+    assert "output_contract" not in parameters
+    assert "resource_profile" not in parameters

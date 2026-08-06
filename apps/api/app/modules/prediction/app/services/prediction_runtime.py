@@ -18,7 +18,9 @@ from app.modules.prediction.domain.submission import PredictionJobCommand
 from app.modules.prediction.app.services.submission_parameters import (
     prediction_workflow_parameters,
 )
-from app.modules.runtime.port.local import RuntimeRoutingPort
+from app.modules.runtime.app.services.deployment_seed import (
+    PREDICTION_RUNTIME_DEPLOYMENT,
+)
 from app.modules.runtime.catalog import runtime_catalog
 from app.shared.application.compatibility import validate_model_prediction
 
@@ -31,11 +33,9 @@ class PredictionRuntimeService:
         self,
         dataset_reader: DatasetReader,
         model_catalog: ModelCatalogPort,
-        runtime_router: RuntimeRoutingPort,
     ) -> None:
         self._dataset_reader = dataset_reader
         self._model_catalog = model_catalog
-        self._runtime_router = runtime_router
 
     async def run_prediction(
         self,
@@ -150,7 +150,6 @@ class PredictionRuntimeService:
             predictor_id=predictor_id,
             view_types=dataset.view_types,
         )
-        route = self._runtime_router.prediction_route(predictor_id)
         version_tag = model_version or f"model-{model_id[:8]}"
         command = PredictionJobCommand(
             dataset_id=dataset_id,
@@ -165,11 +164,11 @@ class PredictionRuntimeService:
         )
         try:
             flow_result = await submit_flow_run_and_wait(
-                deployment_name=route.deployment,
+                deployment_name=PREDICTION_RUNTIME_DEPLOYMENT.deployment_name,
                 parameters=prediction_workflow_parameters(
                     command,
                     job_id=str(uuid4()),
-                    route=route,
+                    predictor_id=predictor_id,
                 ),
                 timeout_seconds=300.0,
             )

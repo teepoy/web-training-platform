@@ -7,20 +7,18 @@ from typing import cast
 import pytest
 
 from app.modules.runtime.catalog import runtime_catalog
-from app.modules.runtime.domain.executables import RuntimeOperation
 from app.modules.sc.runtime import predictors, trainers
 from app.shared.domain.data_plane import DataPlaneManifest
 
 
-def test_yolo_registration_contains_metadata_callable_and_routes() -> None:
+def test_yolo_registration_contains_metadata_and_protocol_callables() -> None:
     trainer = runtime_catalog.get_trainer("yolo-sc-v1")
     predictor = runtime_catalog.get_predictor("yolo-sc-v1")
     assert trainer.metadata.name == "YOLO SC Detection Trainer"
     assert trainer.callable is trainers.yolo_sc_train
     assert predictor.metadata.name == "YOLO SC Detection Prediction"
     assert predictor.callable is predictors.yolo_sc_predictor
-    assert runtime_catalog.route(RuntimeOperation.TRAIN, trainer.id)
-    assert runtime_catalog.route(RuntimeOperation.PREDICT, predictor.id)
+    assert runtime_catalog.supports_train_and_predict(trainer.id)
 
 
 def test_yolo_predict_rows_uses_model_label_space(

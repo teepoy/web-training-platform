@@ -62,7 +62,6 @@ class LocalProcessEngine:
                 dataset_id=job.dataset_id,
                 trainer_id=job.trainer_id,
                 created_by=job.created_by,
-                missing_image_policy="fail",
                 org_id=job.org_id or "",
                 collection_id=job.collection_id,
                 collection_revision_id=job.collection_revision_id,

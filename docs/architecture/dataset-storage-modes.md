@@ -196,7 +196,13 @@ Roles must be declared in `images[].role` or `metadata.shard_images[].role`.
 The runtime does not infer roles from `image_uris` position, `image_type`, or review
 images; missing role metadata is a dataset validation failure.
 
-Rows without both roles are not silently treated as labeled training data. `POST /training-jobs/train-and-predict` runs readiness validation before it creates the training job or submits Prefect work. The report counts annotated, immediately readable, runtime-resolvable, unusable, and skipped samples; it then requires at least two active labels after applying `missing_image_policy`.
+Submission readiness validates the selected annotations and requires at least two
+declared labels, but it does not resolve image bytes. Image availability belongs to
+the SC runtime: both current trainers skip rows without two readable image roles and
+raise `RuntimeExecutionError` if fewer than two effective labels remain after that
+filter. The optional detailed readiness report may still expose readable,
+runtime-resolvable, unusable, and skipped counts; there is no configurable
+`missing_image_policy`.
 
 For SC Train & Predict, the workflow applies the user-visible training policy after
 the workflow filter: labeled rows are ordered by stable sample identity and at most

@@ -17,10 +17,10 @@
 There are no API-side direct worker-client calls outside `**/flows/**` and
 `**/workers/**`.
 
-| HTTP route                 | Application boundary                          | Runtime behavior                                                                          |
-| -------------------------- | --------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `POST /predictions/run`    | `PredictionExecutionPort.submit_job(command)` | Resolves catalog compatibility and runtime routing, persists a job, then submits Prefect. |
-| `POST /predictions/single` | `PredictionRuntimePort.predict_single(...)`   | Resolves the same runtime route and waits synchronously for the routed Prefect flow.      |
+| HTTP route                 | Application boundary                          | Runtime behavior                                                                                 |
+| -------------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `POST /predictions/run`    | `PredictionExecutionPort.submit_job(command)` | Resolves catalog compatibility, persists a job, then submits the direct prediction deployment.   |
+| `POST /predictions/single` | `PredictionRuntimePort.predict_single(...)`   | Resolves the predictor and waits synchronously for the same direct Prefect deployment to finish. |
 
 ### Classification of raw `rg` matches
 
@@ -43,8 +43,8 @@ results fall into these categories:
 **Classification: ASYNC JOB**
 
 The route converts its strict HTTP DTO into `PredictionJobCommand` and delegates to
-`PredictionExecutionPort`. Dataset/model lookup, predictor compatibility, runtime route
-resolution, deployment availability, job persistence, and Prefect submission are owned by
+`PredictionExecutionPort`. Dataset/model lookup, predictor compatibility, deployment
+availability, job persistence, and Prefect submission are owned by
 `PredictionSubmissionService` in that order. Configuration failures do not leave queued orphan jobs.
 
 ### `POST /predictions/single`
@@ -52,10 +52,10 @@ resolution, deployment availability, job persistence, and Prefect submission are
 **Classification: MIGRATE-TO-JOB**
 
 This route calls `PredictionRuntimePort.predict_single()` and waits for a Prefect flow to
-complete. It no longer invokes a worker client or hardcodes a deployment:
-`PredictionRuntimeService` resolves the predictor from the model catalog and uses
-`RuntimeRoutingPort`; the application-layer submission mapper converts
-`PredictionJobCommand` into Prefect parameters.
+complete. It no longer invokes a worker client or resolves deployment through capability
+metadata: `PredictionRuntimeService` resolves the predictor from the model catalog and uses
+the infrastructure-owned `PREDICTION_RUNTIME_DEPLOYMENT`; the application-layer submission
+mapper converts `PredictionJobCommand` into the minimal Prefect parameters.
 
 Depending on model size and batch complexity, this can take seconds to tens of seconds. This
 is the only route that is genuinely sync-and-latency-sensitive in production.

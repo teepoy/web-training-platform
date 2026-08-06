@@ -66,8 +66,13 @@ def test_cancel_training_job_submission_failure() -> None:
         assert resp.status_code == 502
 
 
-def test_train_and_predict_rejects_unreadable_dataset_before_job_creation() -> None:
-    """Readiness failures are returned before Prefect or GPU work is submitted."""
+def test_train_and_predict_defers_image_validation_to_runtime() -> None:
+    """Submission validates labels; the runtime owns actual image filtering."""
+    prefect_client = Mock()
+    prefect_client.resolve_deployment_id = AsyncMock(return_value="deployment-1")
+    prefect_client.create_flow_run_from_deployment = AsyncMock(
+        return_value={"id": "flow-run-1"}
+    )
 
     with TestClient(app) as c:
         dataset_response = c.post(
@@ -100,28 +105,24 @@ def test_train_and_predict_rejects_unreadable_dataset_before_job_creation() -> N
             )
             assert annotation_response.status_code == 200
 
-        response = c.post(
-            "/api/v1/training-jobs/train-and-predict",
-            json={
-                "dataset_id": dataset_id,
-                "trainer_id": "resnet50-sc-v1",
-            },
-        )
+        submission = app.state.app_context.training.training_submission
+        with patch.object(submission, "_prefect_client", prefect_client):
+            response = c.post(
+                "/api/v1/training-jobs/train-and-predict",
+                json={
+                    "dataset_id": dataset_id,
+                    "trainer_id": "resnet50-sc-v1",
+                },
+            )
 
-        assert response.status_code == 422
-        detail = response.json()["detail"]
-        assert detail["code"] == "dataset_training_readiness_failed"
-        assert detail["annotated_samples"] == 2
-        assert detail["readable_samples"] == 0
-        assert detail["skipped_samples"] == 2
-        assert detail["active_labels"] == []
+        assert response.status_code == 200
 
         jobs = c.get(
             "/api/v1/training-jobs",
             params={"dataset_id": dataset_id},
         )
         assert jobs.status_code == 200
-        assert jobs.json() == {"items": [], "total": 0}
+        assert jobs.json()["total"] == 1
 
 
 def test_train_and_predict_submits_readable_seed_images() -> None:
@@ -199,4 +200,5 @@ def test_train_and_predict_submits_readable_seed_images() -> None:
         ]
     )
     assert parameters["dataset_id"] == dataset_id
-    assert parameters["missing_image_policy"] == "skip"
+    assert "missing_image_policy" not in parameters
+    assert "output_contract" not in parameters

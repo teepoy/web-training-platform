@@ -56,7 +56,6 @@ class TrainingReadinessService:
             )
         return TrainingReadinessReport(
             dataset_id=dataset.id,
-            missing_image_policy="",
             annotated_samples=annotated_samples,
             readable_samples=annotated_samples,
             runtime_resolvable_samples=0,
@@ -72,9 +71,7 @@ class TrainingReadinessService:
         dataset: Dataset,
         sample_ids: list[str] | None,
         sample_filter: dict[str, Any] | None,
-        missing_image_policy: str | None,
     ) -> TrainingReadinessReport:
-        policy = str(missing_image_policy or "")
         if dataset.dataset_type != "image_sc":
             return await self.assess_classes(
                 dataset=dataset,
@@ -126,16 +123,8 @@ class TrainingReadinessService:
                     unusable_samples += 1
 
         reasons: list[str] = []
-        if policy not in {"fail", "skip"}:
-            reasons.append(
-                "runtime route must declare missing_image_policy as 'fail' or 'skip'"
-            )
         if not annotated_samples:
             reasons.append("dataset has no annotated samples in the selected scope")
-        if policy == "fail" and unusable_samples:
-            reasons.append(
-                f"{unusable_samples} annotated samples have missing or unreadable image roles"
-            )
         active_labels = sorted(
             label for label, count in label_counts.items() if count > 0
         )
@@ -147,12 +136,11 @@ class TrainingReadinessService:
 
         return TrainingReadinessReport(
             dataset_id=dataset.id,
-            missing_image_policy=policy,
             annotated_samples=annotated_samples,
             readable_samples=readable_samples,
             runtime_resolvable_samples=runtime_resolvable_samples,
             unusable_samples=unusable_samples,
-            skipped_samples=unusable_samples if policy == "skip" else 0,
+            skipped_samples=unusable_samples,
             label_counts=label_counts,
             failure_reasons=tuple(reasons),
         )

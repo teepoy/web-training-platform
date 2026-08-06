@@ -9,17 +9,20 @@ from app.modules.prediction.flows.predict_job import (
     predict_job_flow,
 )
 from app.modules.runtime.domain.context import PredictionRuntimeContext
-from app.modules.runtime.domain.executables import RuntimeOperation
+from app.modules.runtime.domain.events import OperationCompleted
 
 
 @pytest.mark.asyncio
 async def test_prediction_runtime_host_only_invokes_registered_predictor() -> None:
     context = object()
+
+    async def events():
+        yield OperationCompleted({"processed": 2})
+
     with patch(
-        "app.modules.prediction.flows.predict_job.runtime_catalog.invoke",
-        new_callable=AsyncMock,
-        return_value={"processed": 2},
-    ) as invoke:
+        "app.modules.prediction.flows.predict_job.runtime_catalog.stream_predict",
+        new=Mock(return_value=events()),
+    ) as stream:
         result = await execute_prediction_runtime(
             job_id="job-1",
             dataset_id="dataset-1",
@@ -32,9 +35,8 @@ async def test_prediction_runtime_host_only_invokes_registered_predictor() -> No
         )
 
     assert result == {"processed": 2}
-    assert invoke.await_args is not None
-    operation, predictor_id, runtime_context = invoke.await_args.args
-    assert operation is RuntimeOperation.PREDICT
+    assert stream.call_args is not None
+    predictor_id, runtime_context = stream.call_args.args
     assert predictor_id == "resnet50-sc-v1"
     assert isinstance(runtime_context, PredictionRuntimeContext)
 
@@ -58,9 +60,6 @@ async def test_prediction_flow_invokes_runtime_host() -> None:
             model_id="model-1",
             org_id="org-1",
             predictor_id="resnet50-sc-v1",
-            catalog_id="resnet50-sc-v1",
-            input_contract="sc.patch_image.v1",
-            owner="local_compat",
         )
 
     assert result == {"processed": 1}
@@ -88,9 +87,6 @@ async def test_prediction_flow_passes_collection_revision_source_to_runtime() ->
             model_id="model-1",
             org_id="org-1",
             predictor_id="resnet50-sc-v1",
-            catalog_id="resnet50-sc-v1",
-            input_contract="sc.patch_image.v1",
-            owner="local_compat",
         )
 
     assert execute.await_args is not None

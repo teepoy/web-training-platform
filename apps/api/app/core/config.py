@@ -128,25 +128,6 @@ class PrefectConfig(ConfigSection):
     concurrency_limit: int = 1
 
 
-class RuntimeDeploymentOverride(ConfigSection):
-    """Environment-only override for a module-owned runtime route."""
-
-    deployment: str | None = None
-    resource_profile: Literal["cpu", "gpu"] | None = None
-    owner: Literal["local_compat", "external"] | None = None
-    code_version: str | None = None
-
-
-class RuntimeRoutingConfig(ConfigSection):
-    training_routes: dict[str, RuntimeDeploymentOverride] = Field(default_factory=dict)
-    train_and_predict_routes: dict[str, RuntimeDeploymentOverride] = Field(
-        default_factory=dict
-    )
-    prediction_routes: dict[str, RuntimeDeploymentOverride] = Field(
-        default_factory=dict
-    )
-
-
 class PredictionConfig(ConfigSection):
     compaction_memory_limit: str = "512MiB"
     compaction_temp_limit: str = "4GiB"
@@ -276,7 +257,6 @@ class AppConfig(ConfigSection):
     notification: NotificationConfig = Field(default_factory=NotificationConfig)
     oauth: OAuthConfig = Field(default_factory=OAuthConfig)
     prefect: PrefectConfig = Field(default_factory=PrefectConfig)
-    runtime_routing: RuntimeRoutingConfig = Field(default_factory=RuntimeRoutingConfig)
     llm: LlmConfig = Field(default_factory=LlmConfig)
     label_studio: LabelStudioConfig = Field(default_factory=LabelStudioConfig)
     data: DataConfig = Field(default_factory=DataConfig)

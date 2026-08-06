@@ -13,6 +13,7 @@ from sqlalchemy import text
 from app.core.config import AppConfig
 from app.modules.runtime.app.services.deployment_seed import (
     platform_prefect_deployment_specs,
+    prefect_work_pool_names,
     required_prefect_deployment_names,
 )
 from app.shared.context import SharedInfra, build_shared_infra
@@ -24,7 +25,6 @@ from app.shared.infrastructure.storage.minio import (
 
 _API_ROOT = Path(__file__).resolve().parents[2]
 _PLATFORM_PREPARE_LOCK_ID = 1_480_861_786
-_WORK_POOLS = ("default-cpu", "default-gpu")
 
 
 async def prepare_platform(config: AppConfig) -> None:
@@ -50,7 +50,7 @@ async def prepare_platform(config: AppConfig) -> None:
                 )
                 await validate_database_revision(shared)
                 await asyncio.to_thread(_prepare_minio, config, shared)
-                await prepare_prefect(config, shared)
+                await prepare_prefect(shared)
                 await validate_platform_dependencies(config, shared)
             finally:
                 await lock_connection.execute(
@@ -70,7 +70,7 @@ async def validate_platform_dependencies(
     """Validate deployable dependencies without mutating external state."""
     await validate_database_revision(shared)
     await asyncio.to_thread(_validate_minio, config, shared)
-    await validate_prefect(config, shared)
+    await validate_prefect(shared)
     await validate_label_studio(config)
     await validate_redis(config)
 
@@ -90,11 +90,11 @@ async def validate_database_revision(shared: SharedInfra) -> None:
         )
 
 
-async def prepare_prefect(config: AppConfig, shared: SharedInfra) -> None:
+async def prepare_prefect(shared: SharedInfra) -> None:
     client = shared.prefect_client
-    for pool_name in _WORK_POOLS:
+    for pool_name in sorted(prefect_work_pool_names()):
         await client.ensure_work_pool(pool_name, "process")
-    for spec in platform_prefect_deployment_specs(config):
+    for spec in platform_prefect_deployment_specs():
         await client.ensure_deployment(
             deployment_name=spec["deployment_name"],
             flow_name=spec["flow_name"],
@@ -102,12 +102,12 @@ async def prepare_prefect(config: AppConfig, shared: SharedInfra) -> None:
             entrypoint=spec["entrypoint"],
             path=spec["path"],
         )
-    await validate_prefect(config, shared)
+    await validate_prefect(shared)
 
 
-async def validate_prefect(config: AppConfig, shared: SharedInfra) -> None:
+async def validate_prefect(shared: SharedInfra) -> None:
     client = shared.prefect_client
-    for pool_name in _WORK_POOLS:
+    for pool_name in sorted(prefect_work_pool_names()):
         pool = await client.get_work_pool(pool_name)
         pool_type = str(pool.get("type", "")).lower()
         if pool_type != "process":
@@ -117,10 +117,9 @@ async def validate_prefect(config: AppConfig, shared: SharedInfra) -> None:
             )
 
     owned_specs = {
-        spec["deployment_name"]: spec
-        for spec in platform_prefect_deployment_specs(config)
+        spec["deployment_name"]: spec for spec in platform_prefect_deployment_specs()
     }
-    required_names = required_prefect_deployment_names(config)
+    required_names = required_prefect_deployment_names()
     for deployment_name in sorted(required_names):
         deployment_id = await client.resolve_deployment_id(deployment_name)
         if deployment_id is None:

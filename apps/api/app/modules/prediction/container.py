@@ -13,7 +13,6 @@ from app.modules.models.port.local import ModelCatalogPort
 from app.modules.prediction.adapter.repositories.repository import (
     PredictionRepository as SqlPredictionRepository,
 )
-from app.modules.runtime.port.local import RuntimeRoutingPort
 from app.modules.storage.port.local import DatasetStorageFactoryPort
 from app.shared.context import SharedInfra
 from app.modules.prediction.app.services.submission_service import (
@@ -54,7 +53,6 @@ def init_prediction(
     dataset_reader: DatasetReader,
     model_catalog: ModelCatalogPort,
     dataset_storage_factory: DatasetStorageFactoryPort,
-    runtime_router: RuntimeRoutingPort,
     collection_revisions: DatasetCollectionRevisionReaderPort,
 ) -> PredictionContext:
     prediction_repository = SqlPredictionRepository(
@@ -63,7 +61,6 @@ def init_prediction(
     runtime_service = PredictionRuntimeService(
         dataset_reader=dataset_reader,
         model_catalog=model_catalog,
-        runtime_router=runtime_router,
     )
     query_service = PredictionQueryService(
         repository=prediction_repository,
@@ -80,7 +77,6 @@ def init_prediction(
     submission = PredictionSubmissionService(
         prefect_client=shared.prefect_client,
         repository=prediction_repository,
-        runtime_router=runtime_router,
         dataset_reader=dataset_reader,
         model_catalog=model_catalog,
         collection_revisions=collection_revisions,
@@ -107,7 +103,6 @@ class PredictionModule(Module):
         dataset_reader: DatasetReader,
         model_catalog: ModelCatalogPort,
         dataset_storage_factory: DatasetStorageFactoryPort,
-        runtime_router: RuntimeRoutingPort,
         collection_revisions: DatasetCollectionRevisionReaderPort,
     ) -> PredictionContext:
         return init_prediction(
@@ -116,7 +111,6 @@ class PredictionModule(Module):
             dataset_reader=dataset_reader,
             model_catalog=model_catalog,
             dataset_storage_factory=dataset_storage_factory,
-            runtime_router=runtime_router,
             collection_revisions=collection_revisions,
         )
 

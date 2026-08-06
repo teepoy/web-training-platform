@@ -7,12 +7,11 @@ import pytest
 from app.modules.prediction.app.services.prediction_runtime import (
     PredictionRuntimeService,
 )
-from app.modules.runtime.domain.routing import RuntimeDeploymentRoute
 from app.shared.api.schemas import Dataset, Model, TaskSpec
 
 
 @pytest.mark.asyncio
-async def test_single_prediction_uses_runtime_route_and_command_parameters() -> None:
+async def test_single_prediction_uses_direct_deployment_and_command_parameters() -> None:
     dataset_reader = Mock()
     dataset_reader.get_dataset = AsyncMock(
         return_value=Dataset(
@@ -44,19 +43,9 @@ async def test_single_prediction_uses_runtime_route_and_command_parameters() -> 
             },
         )
     )
-    runtime_router = Mock()
-    runtime_router.prediction_route.return_value = RuntimeDeploymentRoute(
-        catalog_id="resnet50-sc-v1",
-        deployment="routed-prediction",
-        input_contract="sc.patch_image.v1",
-        output_contract="prediction.table.v1",
-        resource_profile="gpu",
-        owner="local_compat",
-    )
     service = PredictionRuntimeService(
         dataset_reader=dataset_reader,
         model_catalog=model_catalog,
-        runtime_router=runtime_router,
     )
 
     with patch(
@@ -85,7 +74,8 @@ async def test_single_prediction_uses_runtime_route_and_command_parameters() -> 
     submit.assert_awaited_once()
     await_args = submit.await_args
     assert await_args is not None
-    assert await_args.kwargs["deployment_name"] == "routed-prediction"
+    assert await_args.kwargs["deployment_name"] == "predict-job-batch-deployment"
     parameters = await_args.kwargs["parameters"]
     assert parameters["sample_ids"] == ["sample-1"]
-    assert parameters["catalog_id"] == "resnet50-sc-v1"
+    assert parameters["predictor_id"] == "resnet50-sc-v1"
+    assert "catalog_id" not in parameters

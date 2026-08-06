@@ -6,9 +6,9 @@ import logging
 import time
 from collections.abc import Generator, Iterator, Sequence
 from contextlib import AsyncExitStack
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any, Callable, cast
-from dataclasses import replace
 
 from prefect import get_run_logger
 from sqlalchemy import or_, select
@@ -18,17 +18,13 @@ from app.modules.datasets.domain.sample_row import (
 )
 from app.modules.prediction.domain.repository import PredictionRepository
 from app.modules.runtime.domain.context import PredictionRuntimeContext
-from app.modules.runtime.domain.executables import (
-    RuntimeOperation,
-    RuntimeRouteDefinition,
+from app.modules.runtime.domain.events import (
+    OperationCompleted,
+    RuntimeEventStream,
+    RuntimeIssueReported,
 )
 from app.modules.sc.app.services.sample_filter import (
     parse_and_apply_workflow_sample_filter,
-)
-from app.modules.sc.capabilities import (
-    SC_PATCH_IMAGE_V1,
-    SC_RESNET_MODEL_V1,
-    SC_YOLO_MODEL_V1,
 )
 from app.modules.sc.materialization.port.local import ScInspectionMaterializerPort
 from app.modules.sc.runtime.data_source import (
@@ -37,7 +33,6 @@ from app.modules.sc.runtime.data_source import (
     open_sc_runtime_source,
 )
 from app.modules.sc.runtime.materialized_input import parquet_paths_from_manifest
-from app.modules.sc.runtime.router import SC_RUNTIME_ROUTER
 from app.modules.storage.port.local import DatasetStorageFactoryPort
 from app.shared.api.schemas import (
     JobStatus,
@@ -56,19 +51,6 @@ def _runtime_logger() -> Any:
         return get_run_logger()
     except Exception:
         return logger
-
-
-def _prediction_route() -> tuple[RuntimeRouteDefinition, ...]:
-    return (
-        RuntimeRouteDefinition(
-            operation=RuntimeOperation.PREDICT,
-            deployment="predict-job-batch-deployment",
-            resource_profile="gpu",
-            owner="local_compat",
-            missing_image_policy="skip",
-            output_contract="sample.predictions.v1",
-        ),
-    )
 
 
 async def _load_model(ctx: PredictionRuntimeContext) -> Model:
@@ -477,42 +459,40 @@ async def _run_sc_prediction(
     return summary
 
 
-@SC_RUNTIME_ROUTER.predictor(
-    id="resnet50-sc-v1",
-    name="ResNet-50 SC Defect Prediction",
-    input_view=SC_PATCH_IMAGE_V1,
-    input_model=SC_RESNET_MODEL_V1,
-    algo_id="resnet50-sc",
-    algo_version="1",
-    routes=_prediction_route(),
-)
-async def resnet_sc_predictor(ctx: PredictionRuntimeContext) -> dict[str, Any]:
+async def resnet_sc_predictor(ctx: PredictionRuntimeContext) -> RuntimeEventStream:
     from ml_library import predict_resnet
 
-    return await _run_sc_prediction(
+    summary = await _run_sc_prediction(
         ctx,
         kernel=predict_resnet,
         require_model_labels=False,
     )
+    failed = int(summary.get("failed", 0))
+    if failed:
+        yield RuntimeIssueReported(
+            code="sc_prediction_samples_failed",
+            message="SC prediction completed with failed samples",
+            details={"failed": failed, "processed": int(summary.get("processed", 0))},
+        )
+    yield OperationCompleted(summary)
 
 
-@SC_RUNTIME_ROUTER.predictor(
-    id="yolo-sc-v1",
-    name="YOLO SC Detection Prediction",
-    input_view=SC_PATCH_IMAGE_V1,
-    input_model=SC_YOLO_MODEL_V1,
-    algo_id="yolo-sc",
-    algo_version="1",
-    routes=_prediction_route(),
-)
-async def yolo_sc_predictor(ctx: PredictionRuntimeContext) -> dict[str, Any]:
+async def yolo_sc_predictor(ctx: PredictionRuntimeContext) -> RuntimeEventStream:
     from ml_library import predict_yolo
 
-    return await _run_sc_prediction(
+    summary = await _run_sc_prediction(
         ctx,
         kernel=predict_yolo,
         require_model_labels=True,
     )
+    failed = int(summary.get("failed", 0))
+    if failed:
+        yield RuntimeIssueReported(
+            code="sc_prediction_samples_failed",
+            message="SC prediction completed with failed samples",
+            details={"failed": failed, "processed": int(summary.get("processed", 0))},
+        )
+    yield OperationCompleted(summary)
 
 
 __all__ = ["resnet_sc_predictor", "yolo_sc_predictor"]
