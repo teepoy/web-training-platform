@@ -14,6 +14,10 @@ import ScGlobalFilterModal from "@/features/sc/presentation/components/ScGlobalF
 import ScSampleTable from "@/features/sc/presentation/components/ScSampleTable.vue";
 import ScBlinkVirtualTable from "@/features/sc/presentation/components/ScBlinkVirtualTable.vue";
 import type { ScSampleTableFilter, ScSampleTableSort } from "@/features/sc/domain/sampleTable";
+import type {
+  ScSamplingGroupPopulation,
+  ScSamplingProgram,
+} from "@/features/sc/domain/samplingRules";
 import type { ScTableSelectionConstraint } from "@/features/sc/domain/workbenchDataSource";
 import type {
   ScLegendSource,
@@ -157,11 +161,22 @@ async function querySamplingCandidateCount(options: ScSamplingCandidateOptions):
 }
 
 async function querySamplingDefectIds(
-  count: number,
+  program: ScSamplingProgram,
   seed: number,
   options: ScSamplingCandidateOptions,
 ): Promise<number[]> {
-  return model.querySamplingDefectIds(count, seed, options);
+  return model.querySamplingDefectIds(program, seed, options);
+}
+
+async function querySamplingGroups(
+  field: string,
+  options: ScSamplingCandidateOptions,
+): Promise<ScSamplingGroupPopulation[]> {
+  return model.querySamplingGroups(field, options);
+}
+
+function openGlobalFilterModal(): void {
+  globalFilterModalVisible.value = true;
 }
 
 function getSamplingContext(): { reviewMode: boolean; mapSelectionCount: number } {
@@ -263,6 +278,8 @@ defineExpose({
   getSamplingContext,
   querySamplingCandidateCount,
   querySamplingDefectIds,
+  querySamplingGroups,
+  openGlobalFilterModal,
 });
 
 watch(

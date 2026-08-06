@@ -2,6 +2,7 @@ import { tableFromArrays, tableToIPC } from "apache-arrow";
 import { http, HttpResponse } from "msw";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { server } from "@/testing/msw/server";
+import { createDefaultScSamplingProgram } from "@/features/sc/domain/samplingRules";
 import { compileScWhere, SqlWorkbenchDataSource } from "./sqlWorkbenchDataSource";
 
 const QUERY_URL = "/api/v1/sc/data/datasets/ds-1/query";
@@ -533,6 +534,53 @@ describe("SQL workbench data source", () => {
       sql: 'SELECT "defect_id" FROM samples WHERE "images" > ? ORDER BY HASH("defect_id", ?) LIMIT ?',
       parameters: [0, 42, 2],
     });
+  });
+
+  it("compiles the complete sampling rule pipeline into one scoped SQL query", async () => {
+    let requestBody: { description: string; sql: string; parameters: unknown[] } | null = null;
+    server.use(
+      http.post(QUERY_URL, async ({ request }) => {
+        requestBody = (await request.json()) as typeof requestBody;
+        return arrowResponse({ defect_id: Int32Array.from([8, 2, 5]) }, 1);
+      }),
+    );
+    const source = new SqlWorkbenchDataSource({ kind: "dataset", datasetId: "ds-1" });
+    sources.push(source);
+    const program = createDefaultScSamplingProgram();
+    program.conditional = {
+      enabled: true,
+      field: "rough_bin",
+      value: "4",
+      limit: 2,
+    };
+    program.group = {
+      enabled: true,
+      kind: "quota",
+      field: "class_number",
+      unit: "count",
+      targets: [
+        { value: "1", amount: 2 },
+        { value: "2", amount: 1 },
+      ],
+      rounding: "nearest",
+      unlisted: "exclude",
+    };
+    program.total.limit = 3;
+
+    await expect(
+      source.resolveSelection({
+        filters: [["images", ">", 0]],
+        constraint: { kind: "sampling-program", program, seed: 42 },
+      }),
+    ).resolves.toEqual([8, 2, 5]);
+
+    expect(requestBody?.description).toBe("sc-workbench.selection.sampling-program");
+    expect(requestBody?.sql).toContain('WITH "__sc_sampling_base" AS');
+    expect(requestBody?.sql).toContain('"__sc_sampling_conditional_ranked" AS');
+    expect(requestBody?.sql).toContain('"__sc_sampling_group_ranked" AS');
+    expect(requestBody?.sql).toContain('ROW_NUMBER() OVER (PARTITION BY "class_number"');
+    expect(requestBody?.sql).toContain('ORDER BY HASH("defect_id", ?), "defect_id" LIMIT ?');
+    expect(requestBody?.parameters).toEqual(["4", 0, 42, 2, 42, "1", 2, "2", 1, 42, 3]);
   });
 
   it("accepts only valid invalidations for its own scope", () => {

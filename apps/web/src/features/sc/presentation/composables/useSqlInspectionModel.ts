@@ -7,6 +7,10 @@ import { isScMissingFilterValue } from "@/features/sc/domain/missingFilterValue"
 import type { ReticleMapOptions } from "@/features/sc/application/reticleMapOptions";
 import type { ScSampleTableFilter, ScSampleTableSort } from "@/features/sc/domain/sampleTable";
 import type {
+  ScSamplingGroupPopulation,
+  ScSamplingProgram,
+} from "@/features/sc/domain/samplingRules";
+import type {
   ScDataFilter,
   ScGalleryDataQuery,
   ScReticleProjection,
@@ -31,6 +35,7 @@ interface MapSelectionFilterState extends IdSelectionState {
 export interface ScSamplingCandidateOptions {
   reviewOnly: boolean;
   mapSelectionOnly: boolean;
+  globalFilterEnabled: boolean;
 }
 
 function sortedUniqueIds(ids: readonly number[]): number[] {
@@ -116,7 +121,7 @@ export function useSqlInspectionModel(args: {
       throw new Error("Current map selection is empty");
     }
     return [
-      ...globalFilters.value,
+      ...(options.globalFilterEnabled ? globalFilters.value : []),
       ...(options.reviewOnly ? ([["images", ">", 0]] as ScDataFilter[]) : []),
       ...(options.mapSelectionOnly
         ? ([["defect_id", "in", mapSelection.value.ids]] as ScDataFilter[])
@@ -291,7 +296,7 @@ export function useSqlInspectionModel(args: {
   }
 
   async function querySamplingDefectIds(
-    count: number,
+    program: ScSamplingProgram,
     seed: number,
     options: ScSamplingCandidateOptions,
   ): Promise<number[]> {
@@ -300,8 +305,24 @@ export function useSqlInspectionModel(args: {
     return source.resolveSelection({
       filters: samplingCandidateFilters(options),
       reticle: args.reticle.value,
-      constraint: { kind: "random", limit: count, seed },
+      constraint: { kind: "sampling-program", program, seed },
     });
+  }
+
+  async function querySamplingGroups(
+    field: string,
+    options: ScSamplingCandidateOptions,
+  ): Promise<ScSamplingGroupPopulation[]> {
+    const source = args.dataSource.value;
+    if (!source) throw new Error("SC data source is not ready");
+    const groups = await source.loadAggregates({
+      filters: samplingCandidateFilters(options),
+      field,
+      reticle: args.reticle.value,
+    });
+    return Object.entries(groups)
+      .map(([value, count]) => ({ value, count }))
+      .sort((left, right) => left.value.localeCompare(right.value, undefined, { numeric: true }));
   }
 
   async function loadGlobalDistinctValues(
@@ -433,6 +454,7 @@ export function useSqlInspectionModel(args: {
     queryLegendSelection,
     querySamplingCandidateCount,
     querySamplingDefectIds,
+    querySamplingGroups,
     applyMapSelection,
     appendMapSelection,
     clearMapSelection,

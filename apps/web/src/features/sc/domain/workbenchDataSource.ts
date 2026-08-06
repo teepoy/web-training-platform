@@ -7,6 +7,7 @@ import type {
 } from "./workbenchInteraction";
 import type { ReticleMapOptions } from "@/features/sc/application/reticleMapOptions";
 import type { ScMapLassoSelection } from "@platform/sc-map-element";
+import type { ScSamplingProgram } from "./samplingRules";
 
 export type ScDataScalar = boolean | number | string | null;
 export type ScDataParameter = ScDataScalar | boolean[] | number[] | string[];
@@ -70,7 +71,8 @@ export type ScSelectionConstraint =
       selection: ScMapLassoSelection;
     }
   | { kind: "legend"; field: string; value: string | number | null }
-  | { kind: "random"; limit: number; seed: number };
+  | { kind: "random"; limit: number; seed: number }
+  | { kind: "sampling-program"; program: ScSamplingProgram; seed: number };
 
 export interface ScSelectionQuery extends ScDataQueryContext {
   constraint: ScSelectionConstraint;

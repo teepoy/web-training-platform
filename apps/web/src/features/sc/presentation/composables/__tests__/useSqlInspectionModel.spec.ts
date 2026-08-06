@@ -4,6 +4,7 @@ import type {
   ScInvalidation,
   ScWorkbenchDataSource,
 } from "@/features/sc/domain/workbenchDataSource";
+import { createDefaultScSamplingProgram } from "@/features/sc/domain/samplingRules";
 import { useSqlInspectionModel } from "../useSqlInspectionModel";
 
 function createDataSource() {
@@ -174,9 +175,12 @@ describe("useSqlInspectionModel", () => {
     await model.applyMapSelection([7, 3]);
     vi.mocked(source.resolveSelection).mockClear();
 
-    await model.querySamplingDefectIds(25, 1234, {
+    const program = createDefaultScSamplingProgram();
+    program.total.limit = 25;
+    await model.querySamplingDefectIds(program, 1234, {
       reviewOnly: true,
       mapSelectionOnly: true,
+      globalFilterEnabled: true,
     });
 
     expect(source.resolveSelection).toHaveBeenCalledWith(
@@ -185,8 +189,41 @@ describe("useSqlInspectionModel", () => {
           ["images", ">", 0],
           ["defect_id", "in", [3, 7]],
         ],
-        constraint: { kind: "random", limit: 25, seed: 1234 },
+        constraint: { kind: "sampling-program", program, seed: 1234 },
       }),
     );
+  });
+
+  it("can exclude the workbench Global Filter from a sampling program", async () => {
+    const { source } = createDataSource();
+    const scope = effectScope();
+    scopes.push(scope);
+    const model = scope.run(() =>
+      useSqlInspectionModel({
+        dataSource: ref(source),
+        legendGroupBy: computed(() => "class" as const),
+        globalFilter: computed(() => ({
+          rough_bin: { filterType: "set" as const, values: [4] },
+        })),
+        tableFilter: computed(() => ({})),
+        tableSort: computed(() => null),
+        reticle: computed(() => ({
+          options: { xDieCount: 2, yDieCount: 2, xDieShift: 0, yDieShift: 0 },
+          dieSizeX: 10,
+          dieSizeY: 20,
+        })),
+        galleryRandomSamplingDefectIds: computed(() => undefined),
+      }),
+    );
+    if (!model) throw new Error("model was not created");
+    vi.mocked(source.loadAggregates).mockClear();
+
+    await model.querySamplingCandidateCount({
+      reviewOnly: false,
+      mapSelectionOnly: false,
+      globalFilterEnabled: false,
+    });
+
+    expect(source.loadAggregates).toHaveBeenCalledWith(expect.objectContaining({ filters: [] }));
   });
 });

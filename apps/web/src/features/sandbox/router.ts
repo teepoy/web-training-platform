@@ -19,6 +19,7 @@ export const sandboxRoutes: RouteRecordRaw[] = [
   {
     path: "/sandbox/sampling-rules",
     name: "sandbox-sampling-rules",
+    meta: { autoCollapseSidebar: true },
     component: () =>
       import("./presentation/pages/scenarios/sampling-rules/SamplingRuleSandbox.vue"),
   },

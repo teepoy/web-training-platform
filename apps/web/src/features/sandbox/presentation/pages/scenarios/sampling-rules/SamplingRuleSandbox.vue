@@ -5,17 +5,23 @@ import {
   NButton,
   NCard,
   NDivider,
+  NInput,
   NInputNumber,
+  NModal,
   NRadioButton,
   NRadioGroup,
   NSelect,
-  NSwitch,
+  NTabPane,
   NTag,
+  NTabs,
   useMessage,
 } from "naive-ui";
 
 type GroupRuleKind = "quota" | "rate";
 type QuotaUnit = "count" | "ratio";
+type GlobalFilterMatch = "all" | "any";
+type GlobalFilterField = "metadata.confidence" | "metadata.defect_code";
+type GlobalFilterOperator = "gte" | "lte" | "eq" | "neq";
 
 interface PopulationGroup {
   key: string;
@@ -36,6 +42,15 @@ interface RuleCatalogItem {
   title: string;
   subtitle: string;
   description: string;
+}
+
+type RuleId = RuleCatalogItem["id"];
+
+interface GlobalFilterCondition {
+  id: number;
+  field: GlobalFilterField;
+  operator: GlobalFilterOperator;
+  value: string;
 }
 
 const groups: PopulationGroup[] = [
@@ -107,9 +122,28 @@ const catalog: RuleCatalogItem[] = [
   },
 ];
 
+const globalFilterFieldOptions = [
+  { label: "Confidence", value: "metadata.confidence" },
+  { label: "Defect code", value: "metadata.defect_code" },
+];
+
+const confidenceOperatorOptions = [
+  { label: "≥", value: "gte" },
+  { label: "≤", value: "lte" },
+];
+
+const categoryOperatorOptions = [
+  { label: "=", value: "eq" },
+  { label: "≠", value: "neq" },
+];
+
 const message = useMessage();
 const globalEnabled = ref(true);
-const confidenceThreshold = ref(0.65);
+const globalFilterMatch = ref<GlobalFilterMatch>("all");
+const globalFilters = ref<GlobalFilterCondition[]>([
+  { id: 1, field: "metadata.confidence", operator: "gte", value: "0.65" },
+]);
+let nextGlobalFilterId = 2;
 const conditionalEnabled = ref(true);
 const conditionalGroup = ref("unknown");
 const conditionalLimit = ref(45);
@@ -120,6 +154,12 @@ const totalEnabled = ref(true);
 const totalLimit = ref(200);
 const seed = ref(20260731);
 const runVersion = ref(1);
+const rulesModalOpen = ref(false);
+const ruleConfigModalOpen = ref(false);
+const editingRule = ref<RuleId | null>(null);
+const selectedDisabledRule = ref<RuleId | null>(null);
+const selectedEnabledRule = ref<RuleId | null>(null);
+const activeConfigurationTab = ref<"rules" | "global">("rules");
 const groupCounts = ref<Record<string, number>>({
   scratch: 80,
   particle: 60,
@@ -140,13 +180,38 @@ const groupRates = ref<Record<string, number>>({
 });
 
 const baseTotal = computed(() => groups.reduce((sum, group) => sum + group.count, 0));
+
+function globalConditionRate(group: PopulationGroup, condition: GlobalFilterCondition): number {
+  if (condition.field === "metadata.defect_code") {
+    const matches = group.key === condition.value.trim().toLowerCase();
+    return condition.operator === "neq" ? Number(!matches) : Number(matches);
+  }
+
+  const threshold = Number(condition.value);
+  if (!Number.isFinite(threshold)) return 0;
+  const greaterThanRate = Math.min(
+    Math.max(group.filterRate + (0.65 - Math.min(Math.max(threshold, 0), 1)) * 0.8, 0),
+    1,
+  );
+  return condition.operator === "lte" ? 1 - greaterThanRate : greaterThanRate;
+}
+
+function combinedGlobalFilterRate(group: PopulationGroup): number {
+  const rates = globalFilters.value.map((condition) => globalConditionRate(group, condition));
+  if (rates.length === 0) return 1;
+  if (globalFilterMatch.value === "any") {
+    return 1 - rates.reduce((missRate, rate) => missRate * (1 - rate), 1);
+  }
+  return rates.reduce((combined, rate) => combined * rate, 1);
+}
+
 const afterGlobal = computed(() =>
   groups.map((group) => {
-    const threshold = Math.min(Math.max(confidenceThreshold.value ?? 0, 0), 1);
-    const adjustedRate = Math.min(Math.max(group.filterRate + (0.65 - threshold) * 0.8, 0), 1);
     return {
       ...group,
-      eligible: globalEnabled.value ? Math.floor(group.count * adjustedRate) : group.count,
+      eligible: globalEnabled.value
+        ? Math.floor(group.count * combinedGlobalFilterRate(group))
+        : group.count,
     };
   }),
 );
@@ -222,8 +287,26 @@ const ratioValid = computed(
     quotaUnit.value !== "ratio" ||
     (totalEnabled.value && ratioTotal.value === 100),
 );
+const globalFiltersValid = computed(
+  () =>
+    globalFilters.value.length > 0 &&
+    globalFilters.value.every((condition) => {
+      if (condition.value.trim() === "") return false;
+      if (condition.field === "metadata.defect_code") {
+        return condition.operator === "eq" || condition.operator === "neq";
+      }
+      const threshold = Number(condition.value);
+      return (
+        (condition.operator === "gte" || condition.operator === "lte") &&
+        Number.isFinite(threshold) &&
+        threshold >= 0 &&
+        threshold <= 1
+      );
+    }),
+);
 const hasConfigurationError = computed(
   () =>
+    (globalEnabled.value && !globalFiltersValid.value) ||
     !ratioValid.value ||
     (conditionalEnabled.value && (conditionalLimit.value ?? -1) < 0) ||
     (totalEnabled.value && (totalLimit.value ?? -1) < 0),
@@ -266,14 +349,13 @@ const rulePayload = computed(() => {
     rules.push({
       type: "global_filter",
       where: {
-        match: "all",
-        conditions: [
-          {
-            field: "metadata.confidence",
-            operator: "gte",
-            value: confidenceThreshold.value,
-          },
-        ],
+        match: globalFilterMatch.value,
+        conditions: globalFilters.value.map((condition) => ({
+          field: condition.field,
+          operator: condition.operator,
+          value:
+            condition.field === "metadata.confidence" ? Number(condition.value) : condition.value,
+        })),
       },
     });
   }
@@ -334,14 +416,77 @@ function ruleIsActive(id: RuleCatalogItem["id"]): boolean {
   return groupEnabled.value && groupRuleKind.value === id;
 }
 
-function activateRule(id: RuleCatalogItem["id"]): void {
-  if (id === "global") globalEnabled.value = !globalEnabled.value;
-  else if (id === "conditional") conditionalEnabled.value = !conditionalEnabled.value;
-  else if (id === "total") totalEnabled.value = !totalEnabled.value;
-  else {
+const disabledRules = computed(() => catalog.filter((rule) => !ruleIsActive(rule.id)));
+const enabledRules = computed(() => catalog.filter((rule) => ruleIsActive(rule.id)));
+const configurableEnabledRules = computed(() =>
+  enabledRules.value.filter((rule) => rule.id !== "global"),
+);
+const editingRuleItem = computed(
+  () => catalog.find((rule) => rule.id === editingRule.value) ?? null,
+);
+
+function globalOperatorOptions(field: GlobalFilterField) {
+  return field === "metadata.confidence" ? confidenceOperatorOptions : categoryOperatorOptions;
+}
+
+function updateGlobalFilterField(condition: GlobalFilterCondition, field: string): void {
+  if (field !== "metadata.confidence" && field !== "metadata.defect_code") return;
+  condition.field = field;
+  condition.operator = field === "metadata.confidence" ? "gte" : "eq";
+  condition.value = field === "metadata.confidence" ? "0.65" : "unknown";
+}
+
+function addGlobalFilter(): void {
+  globalFilters.value.push({
+    id: nextGlobalFilterId,
+    field: "metadata.defect_code",
+    operator: "eq",
+    value: "unknown",
+  });
+  nextGlobalFilterId += 1;
+}
+
+function removeGlobalFilter(id: number): void {
+  globalFilters.value = globalFilters.value.filter((condition) => condition.id !== id);
+}
+
+function setRuleEnabled(id: RuleId, enabled: boolean): void {
+  if (id === "global") globalEnabled.value = enabled;
+  else if (id === "conditional") conditionalEnabled.value = enabled;
+  else if (id === "total") totalEnabled.value = enabled;
+  else if (enabled) {
     groupEnabled.value = true;
     groupRuleKind.value = id;
+  } else if (groupEnabled.value && groupRuleKind.value === id) {
+    groupEnabled.value = false;
   }
+
+  selectedDisabledRule.value = null;
+  selectedEnabledRule.value = enabled ? id : null;
+  if (!enabled && editingRule.value === id) {
+    editingRule.value = null;
+    ruleConfigModalOpen.value = false;
+  }
+}
+
+function moveSelectedRule(enabled: boolean): void {
+  const ruleId = enabled ? selectedDisabledRule.value : selectedEnabledRule.value;
+  if (ruleId) setRuleEnabled(ruleId, enabled);
+}
+
+function openRulesModal(): void {
+  selectedDisabledRule.value = null;
+  selectedEnabledRule.value = null;
+  rulesModalOpen.value = true;
+}
+
+function openRuleConfiguration(id: RuleId): void {
+  if (id === "global") {
+    activeConfigurationTab.value = "global";
+    return;
+  }
+  editingRule.value = id;
+  ruleConfigModalOpen.value = true;
 }
 
 function runPreview(): void {
@@ -385,200 +530,171 @@ function runPreview(): void {
     </section>
 
     <div class="builder-grid">
-      <aside class="catalog-column">
-        <div class="section-label">RULE TYPES</div>
-        <button
-          v-for="item in catalog"
-          :key="item.id"
-          class="catalog-item"
-          :class="{ active: ruleIsActive(item.id) }"
-          type="button"
-          @click="activateRule(item.id)"
-        >
-          <span class="catalog-order">{{ item.order }}</span>
-          <span class="catalog-copy">
-            <strong>{{ item.title }}</strong>
-            <small>{{ item.subtitle }}</small>
-            <em>{{ item.description }}</em>
-          </span>
-          <span class="catalog-state">{{ ruleIsActive(item.id) ? "ON" : "OFF" }}</span>
-        </button>
-        <NAlert type="info" :show-icon="false" class="catalog-note">
-          03A 与 03B 是互斥的分组策略；其他规则按编号固定执行。
-        </NAlert>
-      </aside>
-
       <section class="editor-column">
         <div class="section-heading">
           <div>
             <div class="section-label">ACTIVE PIPELINE</div>
             <h2>Rule configuration</h2>
           </div>
-          <NTag round type="success">{{ activeRuleCount }} active</NTag>
+          <div class="rule-actions">
+            <NTag round type="success">{{ activeRuleCount }} active</NTag>
+            <NButton secondary type="primary" @click="openRulesModal"> Manage rules </NButton>
+          </div>
         </div>
 
-        <NCard v-if="globalEnabled" :bordered="false" class="rule-card">
-          <template #header>
-            <div class="rule-title">
-              <span class="rule-index">01</span>
-              <div><strong>Global filter</strong><small>全局筛选</small></div>
-            </div>
-          </template>
-          <template #header-extra><NSwitch v-model:value="globalEnabled" /></template>
-          <div class="condition-row">
-            <NSelect
-              value="metadata.confidence"
-              :options="[{ label: 'Confidence', value: 'metadata.confidence' }]"
-            />
-            <NSelect value="gte" :options="[{ label: '≥', value: 'gte' }]" />
-            <NInputNumber v-model:value="confidenceThreshold" :min="0" :max="1" :step="0.05" />
-          </div>
-          <div class="rule-foot">
-            <span>作用于所有后续规则</span>
-            <strong>{{ baseTotal.toLocaleString() }} → {{ globalTotal.toLocaleString() }}</strong>
-          </div>
-        </NCard>
+        <NTabs v-model:value="activeConfigurationTab" type="line" animated class="config-tabs">
+          <NTabPane name="rules" tab="Enabled rules">
+            <div class="enabled-rule-list">
+              <article
+                v-for="item in configurableEnabledRules"
+                :key="item.id"
+                class="enabled-rule-item"
+              >
+                <button
+                  class="enabled-rule-main"
+                  type="button"
+                  :aria-label="`Configure ${item.title}`"
+                  @click="openRuleConfiguration(item.id)"
+                >
+                  <span class="rule-index">{{ item.order.replace("A", "").replace("B", "") }}</span>
+                  <span class="enabled-rule-copy">
+                    <strong>{{ item.title }}</strong>
+                    <small>{{ item.subtitle }}</small>
+                    <em>{{ item.description }}</em>
+                  </span>
+                </button>
 
-        <NCard v-if="conditionalEnabled" :bordered="false" class="rule-card">
-          <template #header>
-            <div class="rule-title">
-              <span class="rule-index">02</span>
-              <div><strong>Conditional limit</strong><small>条件总量限制</small></div>
-            </div>
-          </template>
-          <template #header-extra><NSwitch v-model:value="conditionalEnabled" /></template>
-          <div class="condition-row">
-            <NSelect
-              value="metadata.defect_code"
-              :options="[{ label: 'Defect code', value: 'metadata.defect_code' }]"
-            />
-            <NSelect value="eq" :options="[{ label: '=', value: 'eq' }]" />
-            <NSelect
-              v-model:value="conditionalGroup"
-              :options="groups.map((group) => ({ label: group.label, value: group.key }))"
-            />
-            <NInputNumber v-model:value="conditionalLimit" :min="0" :precision="0">
-              <template #suffix>max</template>
-            </NInputNumber>
-          </div>
-          <div class="rule-foot">
-            <span>只收紧命中组，未命中样本保留</span>
-            <strong
-              >{{ globalTotal.toLocaleString() }} → {{ conditionalTotal.toLocaleString() }}</strong
-            >
-          </div>
-        </NCard>
+                <div class="inline-rule-control">
+                  <template v-if="item.id === 'conditional'">
+                    <label>Matched max</label>
+                    <NInputNumber
+                      v-model:value="conditionalLimit"
+                      :min="0"
+                      :precision="0"
+                      aria-label="Conditional limit"
+                    />
+                  </template>
+                  <template v-else-if="item.id === 'total'">
+                    <label>Final max</label>
+                    <NInputNumber
+                      v-model:value="totalLimit"
+                      :min="0"
+                      :precision="0"
+                      aria-label="Total limit"
+                    />
+                  </template>
+                  <template v-else>
+                    <label>Configuration</label>
+                    <NTag size="small" type="success">
+                      {{
+                        groupRuleKind === "quota"
+                          ? quotaUnit === "ratio"
+                            ? `${ratioTotal}% final`
+                            : `${groupTotal} planned`
+                          : `${groupTotal} planned`
+                      }}
+                    </NTag>
+                  </template>
+                </div>
 
-        <NCard v-if="groupEnabled" :bordered="false" class="rule-card group-card">
-          <template #header>
-            <div class="rule-title">
-              <span class="rule-index">03</span>
-              <div>
-                <strong>{{
-                  groupRuleKind === "quota" ? "Group quota" : "Group sampling rate"
-                }}</strong>
-                <small>{{
-                  groupRuleKind === "quota" ? "按组挑选总量 / 构成比例" : "分组挑选比例"
-                }}</small>
+                <NButton
+                  secondary
+                  size="small"
+                  :aria-label="`Open ${item.title} configuration`"
+                  @click="openRuleConfiguration(item.id)"
+                >
+                  Edit
+                </NButton>
+              </article>
+              <div v-if="configurableEnabledRules.length === 0" class="empty-enabled-rules">
+                No configurable rules enabled. Use Manage rules to add one.
               </div>
             </div>
-          </template>
-          <template #header-extra><NSwitch v-model:value="groupEnabled" /></template>
+          </NTabPane>
 
-          <div class="group-toolbar">
-            <NRadioGroup v-model:value="groupRuleKind">
-              <NRadioButton value="quota">Group quota</NRadioButton>
-              <NRadioButton value="rate">Group rate</NRadioButton>
-            </NRadioGroup>
-            <NRadioGroup v-if="groupRuleKind === 'quota'" v-model:value="quotaUnit">
-              <NRadioButton value="count">Count</NRadioButton>
-              <NRadioButton value="ratio">Final ratio</NRadioButton>
-            </NRadioGroup>
-          </div>
+          <NTabPane name="global" tab="Global filter">
+            <NCard :bordered="false" class="global-filter-card">
+              <div class="global-filter-header">
+                <div>
+                  <div class="rule-title">
+                    <span class="rule-index">01</span>
+                    <div><strong>Global filter</strong><small>全局筛选</small></div>
+                  </div>
+                  <p>Combine multiple conditions before any sampling limits are applied.</p>
+                </div>
+                <NTag :type="globalEnabled ? 'success' : 'default'" round>
+                  {{ globalEnabled ? "Enabled" : "Disabled" }}
+                </NTag>
+              </div>
 
-          <NAlert
-            v-if="groupRuleKind === 'quota' && quotaUnit === 'ratio' && !totalEnabled"
-            type="error"
-            :show-icon="false"
-          >
-            Final ratio requires a total limit to resolve absolute quotas.
-          </NAlert>
-          <NAlert
-            v-else-if="groupRuleKind === 'quota' && quotaUnit === 'ratio' && ratioTotal !== 100"
-            type="error"
-            :show-icon="false"
-          >
-            Final composition ratios must total 100%; current total is {{ ratioTotal }}%.
-          </NAlert>
+              <template v-if="globalEnabled">
+                <div class="global-filter-toolbar">
+                  <div>
+                    <span>Match</span>
+                    <NRadioGroup v-model:value="globalFilterMatch" size="small">
+                      <NRadioButton value="all">All conditions</NRadioButton>
+                      <NRadioButton value="any">Any condition</NRadioButton>
+                    </NRadioGroup>
+                  </div>
+                  <NButton secondary type="primary" size="small" @click="addGlobalFilter">
+                    + Add filter
+                  </NButton>
+                </div>
 
-          <div class="group-table">
-            <div class="group-table-head">
-              <span>Group</span><span>Eligible</span><span>Rule value</span><span>Planned</span>
-            </div>
-            <div v-for="group in groupStage" :key="group.key" class="group-table-row">
-              <span class="group-name"
-                ><i :style="{ background: group.color }" />{{ group.label }}</span
-              >
-              <span>{{ group.eligible.toLocaleString() }}</span>
-              <NInputNumber
-                v-if="groupRuleKind === 'quota' && quotaUnit === 'count'"
-                v-model:value="groupCounts[group.key]"
-                :min="0"
-                :precision="0"
-              />
-              <NInputNumber
-                v-else-if="groupRuleKind === 'quota'"
-                v-model:value="groupRatios[group.key]"
-                :min="0"
-                :max="100"
-                :precision="0"
-              >
-                <template #suffix>% final</template>
-              </NInputNumber>
-              <NInputNumber
-                v-else
-                v-model:value="groupRates[group.key]"
-                :min="0"
-                :max="100"
-                :precision="0"
-              >
-                <template #suffix>% group</template>
-              </NInputNumber>
-              <strong>{{ group.selected }}</strong>
-            </div>
-          </div>
-          <div class="rule-foot">
-            <span>{{
-              groupRuleKind === "quota"
-                ? "控制最终构成；组不足时 take_available"
-                : "每个组按自身候选量计算"
-            }}</span>
-            <strong
-              >{{ conditionalTotal.toLocaleString() }} → {{ groupTotal.toLocaleString() }}</strong
-            >
-          </div>
-        </NCard>
+                <div class="global-filter-list">
+                  <div
+                    v-for="(condition, index) in globalFilters"
+                    :key="condition.id"
+                    class="global-filter-row"
+                  >
+                    <span class="filter-sequence">{{ String(index + 1).padStart(2, "0") }}</span>
+                    <NSelect
+                      :value="condition.field"
+                      :options="globalFilterFieldOptions"
+                      aria-label="Global filter field"
+                      @update:value="(value) => updateGlobalFilterField(condition, String(value))"
+                    />
+                    <NSelect
+                      v-model:value="condition.operator"
+                      :options="globalOperatorOptions(condition.field)"
+                      aria-label="Global filter operator"
+                    />
+                    <NInput
+                      v-model:value="condition.value"
+                      :placeholder="
+                        condition.field === 'metadata.confidence' ? '0.00 – 1.00' : 'Defect code'
+                      "
+                      aria-label="Global filter value"
+                    />
+                    <NButton
+                      quaternary
+                      circle
+                      aria-label="Remove global filter"
+                      @click="removeGlobalFilter(condition.id)"
+                    >
+                      ×
+                    </NButton>
+                  </div>
+                </div>
 
-        <NCard v-if="totalEnabled" :bordered="false" class="rule-card">
-          <template #header>
-            <div class="rule-title">
-              <span class="rule-index">04</span>
-              <div><strong>Total limit</strong><small>总量限制</small></div>
-            </div>
-          </template>
-          <template #header-extra><NSwitch v-model:value="totalEnabled" /></template>
-          <div class="total-limit-row">
-            <div>
-              <span>Maximum final samples</span>
-              <small>这是上限，不会为了凑数隐式补样。</small>
-            </div>
-            <NInputNumber v-model:value="totalLimit" :min="0" :precision="0" />
-          </div>
-          <div class="rule-foot">
-            <span>最终随机收口</span>
-            <strong>{{ groupTotal.toLocaleString() }} → {{ finalTotal.toLocaleString() }}</strong>
-          </div>
-        </NCard>
+                <NAlert v-if="!globalFiltersValid" type="error" :show-icon="false">
+                  Add at least one complete filter. Confidence values must be between 0 and 1.
+                </NAlert>
+
+                <div class="rule-foot">
+                  <span>{{ globalFilters.length }} conditions · match {{ globalFilterMatch }}</span>
+                  <strong
+                    >{{ baseTotal.toLocaleString() }} → {{ globalTotal.toLocaleString() }}</strong
+                  >
+                </div>
+              </template>
+
+              <NAlert v-else type="info" :show-icon="false">
+                Global filter is disabled. Enable it from Manage rules to edit its conditions.
+              </NAlert>
+            </NCard>
+          </NTabPane>
+        </NTabs>
 
         <NCard :bordered="false" class="seed-card">
           <div class="seed-row">
@@ -639,6 +755,239 @@ function runPreview(): void {
         </NCard>
       </aside>
     </div>
+
+    <NModal
+      v-model:show="rulesModalOpen"
+      preset="card"
+      title="Manage sampling rules"
+      class="rules-modal"
+      :bordered="false"
+    >
+      <p class="modal-description">
+        Move rules between the two lists to enable or disable them in the sampling pipeline.
+      </p>
+
+      <div class="dual-list">
+        <section class="rule-list-panel">
+          <header>
+            <div>
+              <span>DISABLED</span>
+              <strong>Available rules</strong>
+            </div>
+            <NTag round size="small">{{ disabledRules.length }}</NTag>
+          </header>
+          <div class="rule-list" role="listbox" aria-label="Disabled rules">
+            <button
+              v-for="item in disabledRules"
+              :key="item.id"
+              class="rule-list-item"
+              :class="{ selected: selectedDisabledRule === item.id }"
+              type="button"
+              role="option"
+              :aria-selected="selectedDisabledRule === item.id"
+              @click="selectedDisabledRule = item.id"
+              @dblclick="setRuleEnabled(item.id, true)"
+            >
+              <span class="catalog-order">{{ item.order }}</span>
+              <span class="catalog-copy">
+                <strong>{{ item.title }}</strong>
+                <small>{{ item.subtitle }}</small>
+                <em>{{ item.description }}</em>
+              </span>
+            </button>
+            <div v-if="disabledRules.length === 0" class="empty-list">All rules are enabled.</div>
+          </div>
+        </section>
+
+        <div class="transfer-controls" aria-label="Rule transfer controls">
+          <NButton
+            circle
+            type="primary"
+            aria-label="Enable selected rule"
+            :disabled="selectedDisabledRule === null"
+            @click="moveSelectedRule(true)"
+          >
+            →
+          </NButton>
+          <NButton
+            circle
+            aria-label="Disable selected rule"
+            :disabled="selectedEnabledRule === null"
+            @click="moveSelectedRule(false)"
+          >
+            ←
+          </NButton>
+        </div>
+
+        <section class="rule-list-panel enabled-panel">
+          <header>
+            <div>
+              <span>ENABLED</span>
+              <strong>Active pipeline</strong>
+            </div>
+            <NTag round size="small" type="success">{{ enabledRules.length }}</NTag>
+          </header>
+          <div class="rule-list" role="listbox" aria-label="Enabled rules">
+            <button
+              v-for="item in enabledRules"
+              :key="item.id"
+              class="rule-list-item"
+              :class="{ selected: selectedEnabledRule === item.id }"
+              type="button"
+              role="option"
+              :aria-selected="selectedEnabledRule === item.id"
+              @click="selectedEnabledRule = item.id"
+              @dblclick="setRuleEnabled(item.id, false)"
+            >
+              <span class="catalog-order">{{ item.order }}</span>
+              <span class="catalog-copy">
+                <strong>{{ item.title }}</strong>
+                <small>{{ item.subtitle }}</small>
+                <em>{{ item.description }}</em>
+              </span>
+            </button>
+            <div v-if="enabledRules.length === 0" class="empty-list">No rules are enabled.</div>
+          </div>
+        </section>
+      </div>
+
+      <NAlert type="info" :show-icon="false" class="modal-note">
+        03A 与 03B 是互斥的分组策略；启用其中一项会自动替换另一项。
+      </NAlert>
+    </NModal>
+
+    <NModal
+      v-model:show="ruleConfigModalOpen"
+      preset="card"
+      :title="editingRuleItem ? `Configure ${editingRuleItem.title}` : 'Configure rule'"
+      class="config-modal"
+      :bordered="false"
+    >
+      <div v-if="editingRule === 'conditional'" class="config-panel">
+        <div class="rule-title config-rule-title">
+          <span class="rule-index">02</span>
+          <div><strong>Conditional limit</strong><small>条件总量限制</small></div>
+        </div>
+        <div class="condition-row">
+          <NSelect
+            value="metadata.defect_code"
+            :options="[{ label: 'Defect code', value: 'metadata.defect_code' }]"
+          />
+          <NSelect value="eq" :options="[{ label: '=', value: 'eq' }]" />
+          <NSelect
+            v-model:value="conditionalGroup"
+            :options="groups.map((group) => ({ label: group.label, value: group.key }))"
+          />
+          <NInputNumber v-model:value="conditionalLimit" :min="0" :precision="0">
+            <template #suffix>max</template>
+          </NInputNumber>
+        </div>
+        <div class="rule-foot">
+          <span>只收紧命中组，未命中样本保留</span>
+          <strong
+            >{{ globalTotal.toLocaleString() }} → {{ conditionalTotal.toLocaleString() }}</strong
+          >
+        </div>
+      </div>
+
+      <div v-else-if="editingRule === 'quota' || editingRule === 'rate'" class="config-panel">
+        <div class="rule-title config-rule-title">
+          <span class="rule-index">03</span>
+          <div>
+            <strong>{{ groupRuleKind === "quota" ? "Group quota" : "Group sampling rate" }}</strong>
+            <small>{{
+              groupRuleKind === "quota" ? "按组挑选总量 / 构成比例" : "分组挑选比例"
+            }}</small>
+          </div>
+        </div>
+        <div class="group-toolbar">
+          <NRadioGroup v-if="groupRuleKind === 'quota'" v-model:value="quotaUnit">
+            <NRadioButton value="count">Count</NRadioButton>
+            <NRadioButton value="ratio">Final ratio</NRadioButton>
+          </NRadioGroup>
+        </div>
+
+        <NAlert
+          v-if="groupRuleKind === 'quota' && quotaUnit === 'ratio' && !totalEnabled"
+          type="error"
+          :show-icon="false"
+        >
+          Final ratio requires a total limit to resolve absolute quotas.
+        </NAlert>
+        <NAlert
+          v-else-if="groupRuleKind === 'quota' && quotaUnit === 'ratio' && ratioTotal !== 100"
+          type="error"
+          :show-icon="false"
+        >
+          Final composition ratios must total 100%; current total is {{ ratioTotal }}%.
+        </NAlert>
+
+        <div class="group-table">
+          <div class="group-table-head">
+            <span>Group</span><span>Eligible</span><span>Rule value</span><span>Planned</span>
+          </div>
+          <div v-for="group in groupStage" :key="group.key" class="group-table-row">
+            <span class="group-name"
+              ><i :style="{ background: group.color }" />{{ group.label }}</span
+            >
+            <span>{{ group.eligible.toLocaleString() }}</span>
+            <NInputNumber
+              v-if="groupRuleKind === 'quota' && quotaUnit === 'count'"
+              v-model:value="groupCounts[group.key]"
+              :min="0"
+              :precision="0"
+            />
+            <NInputNumber
+              v-else-if="groupRuleKind === 'quota'"
+              v-model:value="groupRatios[group.key]"
+              :min="0"
+              :max="100"
+              :precision="0"
+            >
+              <template #suffix>% final</template>
+            </NInputNumber>
+            <NInputNumber
+              v-else
+              v-model:value="groupRates[group.key]"
+              :min="0"
+              :max="100"
+              :precision="0"
+            >
+              <template #suffix>% group</template>
+            </NInputNumber>
+            <strong>{{ group.selected }}</strong>
+          </div>
+        </div>
+        <div class="rule-foot">
+          <span>{{
+            groupRuleKind === "quota"
+              ? "控制最终构成；组不足时 take_available"
+              : "每个组按自身候选量计算"
+          }}</span>
+          <strong
+            >{{ conditionalTotal.toLocaleString() }} → {{ groupTotal.toLocaleString() }}</strong
+          >
+        </div>
+      </div>
+
+      <div v-else-if="editingRule === 'total'" class="config-panel">
+        <div class="rule-title config-rule-title">
+          <span class="rule-index">04</span>
+          <div><strong>Total limit</strong><small>总量限制</small></div>
+        </div>
+        <div class="total-limit-row">
+          <div>
+            <span>Maximum final samples</span>
+            <small>这是上限，不会为了凑数隐式补样。</small>
+          </div>
+          <NInputNumber v-model:value="totalLimit" :min="0" :precision="0" />
+        </div>
+        <div class="rule-foot">
+          <span>最终随机收口</span>
+          <strong>{{ groupTotal.toLocaleString() }} → {{ finalTotal.toLocaleString() }}</strong>
+        </div>
+      </div>
+    </NModal>
   </main>
 </template>
 
@@ -672,6 +1021,10 @@ function runPreview(): void {
 
 .page-header {
   margin-bottom: 20px;
+}
+
+.page-header > :deep(.n-button) {
+  flex-shrink: 0;
 }
 
 .eyebrow,
@@ -767,50 +1120,42 @@ h1 {
 
 .builder-grid {
   display: grid;
-  grid-template-columns: minmax(220px, 0.6fr) minmax(560px, 1.55fr) minmax(270px, 0.8fr);
+  grid-template-columns: minmax(560px, 1.55fr) minmax(280px, 0.72fr);
   gap: 18px;
   align-items: start;
 }
 
-.catalog-column,
 .editor-column,
 .preview-column {
   min-width: 0;
 }
 
-.catalog-column > .section-label {
-  display: block;
-  margin: 0 0 10px 4px;
-}
-
-.catalog-item {
+.rule-list-item {
   display: grid;
-  grid-template-columns: 32px 1fr auto;
+  grid-template-columns: 32px 1fr;
   gap: 10px;
   width: 100%;
   padding: 14px 12px;
-  margin-bottom: 9px;
   color: inherit;
   text-align: left;
-  background: rgba(255, 255, 255, 0.72);
-  border: 1px solid #dfe5df;
-  border-radius: 13px;
+  background: #fff;
+  border: 0;
+  border-bottom: 1px solid #e8ece8;
   cursor: pointer;
-  transition:
-    transform 150ms ease,
-    border-color 150ms ease,
-    background 150ms ease;
+  transition: background 150ms ease;
 }
 
-.catalog-item:hover {
-  transform: translateY(-1px);
-  border-color: #a9c8b4;
+.rule-list-item:last-child {
+  border-bottom: 0;
 }
 
-.catalog-item.active {
-  background: white;
-  border-color: #78a88c;
-  box-shadow: 0 8px 26px rgba(40, 87, 62, 0.08);
+.rule-list-item:hover {
+  background: #f5f8f5;
+}
+
+.rule-list-item.selected {
+  background: #e5f1e8;
+  box-shadow: inset 3px 0 #397457;
 }
 
 .catalog-order {
@@ -844,19 +1189,279 @@ h1 {
   line-height: 1.4;
 }
 
-.catalog-state {
+.rule-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.config-tabs {
+  margin-bottom: 14px;
+}
+
+.config-tabs :deep(.n-tabs-nav) {
+  padding: 0 4px;
+}
+
+.enabled-rule-list {
+  margin-bottom: 14px;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid #dfe5df;
+  border-radius: 15px;
+  box-shadow: 0 9px 30px rgba(31, 52, 42, 0.045);
+}
+
+.enabled-rule-item {
+  display: grid;
+  grid-template-columns: minmax(250px, 1fr) minmax(150px, 190px) auto;
+  gap: 16px;
+  align-items: center;
+  min-height: 92px;
+  padding: 13px 16px;
+  border-bottom: 1px solid #e9ede9;
+}
+
+.enabled-rule-item:last-child {
+  border-bottom: 0;
+}
+
+.enabled-rule-main {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 6px;
+  color: inherit;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.enabled-rule-main:hover {
+  background: #f2f7f3;
+}
+
+.enabled-rule-copy,
+.enabled-rule-copy strong,
+.enabled-rule-copy small,
+.enabled-rule-copy em {
+  display: block;
+}
+
+.enabled-rule-copy strong {
+  font-size: 13px;
+}
+
+.enabled-rule-copy small {
+  margin-top: 2px;
+  color: #557264;
+  font-size: 10px;
+}
+
+.enabled-rule-copy em {
+  margin-top: 5px;
+  color: #7a867f;
+  font-size: 10px;
+  font-style: normal;
+}
+
+.inline-rule-control {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.inline-rule-control label {
+  color: #78847d;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.empty-enabled-rules {
+  display: grid;
+  min-height: 130px;
   color: #8a958f;
+  font-size: 12px;
+  place-items: center;
+}
+
+.global-filter-card {
+  overflow: hidden;
+  border: 1px solid #dfe5df;
+  border-radius: 15px;
+  box-shadow: 0 9px 30px rgba(31, 52, 42, 0.045);
+}
+
+.global-filter-header,
+.global-filter-toolbar,
+.global-filter-toolbar > div {
+  display: flex;
+  align-items: center;
+}
+
+.global-filter-header,
+.global-filter-toolbar {
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.global-filter-header p {
+  margin: 8px 0 0;
+  color: #748078;
+  font-size: 11px;
+}
+
+.global-filter-toolbar {
+  padding: 14px 0;
+  margin-top: 18px;
+  border-top: 1px solid #e8ece8;
+  border-bottom: 1px solid #e8ece8;
+}
+
+.global-filter-toolbar > div {
+  gap: 10px;
+}
+
+.global-filter-toolbar span {
+  color: #78847d;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.global-filter-list {
+  margin: 14px 0;
+  overflow: hidden;
+  border: 1px solid #e4e9e4;
+  border-radius: 12px;
+}
+
+.global-filter-row {
+  display: grid;
+  grid-template-columns: 34px minmax(150px, 1.2fr) 90px minmax(130px, 1fr) 34px;
+  gap: 9px;
+  align-items: center;
+  padding: 10px;
+  background: #fbfcfb;
+  border-bottom: 1px solid #e8ece8;
+}
+
+.global-filter-row:last-child {
+  border-bottom: 0;
+}
+
+.filter-sequence {
+  color: #5f8d73;
   font-size: 9px;
   font-weight: 800;
 }
 
-.catalog-item.active .catalog-state {
-  color: #2f7658;
+.rules-modal {
+  width: min(920px, calc(100vw - 32px));
 }
 
-.catalog-note {
-  margin-top: 14px;
+.rules-modal :deep(.n-card__content) {
+  max-height: calc(100vh - 140px);
+  overflow-y: auto;
+}
+
+.modal-description {
+  margin: -4px 0 18px;
+  color: #6d7972;
+  font-size: 13px;
+}
+
+.dual-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 52px minmax(0, 1fr);
+  gap: 14px;
+  align-items: stretch;
+}
+
+.rule-list-panel {
+  overflow: hidden;
+  background: #f8faf8;
+  border: 1px solid #dfe5df;
+  border-radius: 14px;
+}
+
+.rule-list-panel > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 66px;
+  padding: 12px 14px;
+  border-bottom: 1px solid #dfe5df;
+}
+
+.rule-list-panel > header span,
+.rule-list-panel > header strong {
+  display: block;
+}
+
+.rule-list-panel > header span {
+  color: #879189;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.rule-list-panel > header strong {
+  margin-top: 3px;
+  font-size: 14px;
+}
+
+.enabled-panel > header {
+  background: #edf5ef;
+}
+
+.rule-list {
+  min-height: 300px;
+  max-height: 410px;
+  overflow-y: auto;
+}
+
+.transfer-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.empty-list {
+  display: grid;
+  min-height: 300px;
+  color: #929c96;
+  font-size: 12px;
+  place-items: center;
+}
+
+.modal-note {
+  margin-top: 16px;
   font-size: 11px;
+}
+
+.config-modal {
+  width: min(780px, calc(100vw - 32px));
+}
+
+.config-modal :deep(.n-card__content) {
+  max-height: calc(100vh - 160px);
+  overflow-y: auto;
+}
+
+.config-panel {
+  padding: 4px 2px 2px;
+}
+
+.config-rule-title {
+  margin-bottom: 18px;
 }
 
 .section-heading {
@@ -1134,14 +1739,7 @@ h1 {
 
 @media (max-width: 1500px) {
   .builder-grid {
-    grid-template-columns: minmax(210px, 0.55fr) minmax(520px, 1.45fr);
-  }
-
-  .preview-column {
-    display: grid;
-    grid-column: 1 / -1;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 14px;
+    grid-template-columns: minmax(520px, 1.45fr) minmax(260px, 0.72fr);
   }
 }
 
@@ -1153,21 +1751,6 @@ h1 {
   .preview-column {
     grid-column: auto;
     grid-template-columns: 1fr;
-  }
-
-  .catalog-column {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
-  }
-
-  .catalog-column > .section-label,
-  .catalog-note {
-    grid-column: 1 / -1;
-  }
-
-  .catalog-item {
-    margin-bottom: 0;
   }
 }
 
@@ -1193,13 +1776,22 @@ h1 {
     margin-left: 0;
   }
 
-  .catalog-column {
-    grid-template-columns: 1fr;
+  .enabled-rule-item {
+    grid-template-columns: 1fr auto;
   }
 
-  .catalog-column > .section-label,
-  .catalog-note {
-    grid-column: auto;
+  .enabled-rule-main {
+    grid-column: 1 / -1;
+  }
+
+  .inline-rule-control {
+    grid-column: 1;
+  }
+
+  .enabled-rule-item > :deep(.n-button) {
+    grid-row: 2;
+    grid-column: 2;
+    align-self: end;
   }
 
   .condition-row,
@@ -1217,6 +1809,14 @@ h1 {
   .seed-row {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .dual-list {
+    grid-template-columns: 1fr;
+  }
+
+  .transfer-controls {
+    flex-direction: row;
   }
 }
 </style>

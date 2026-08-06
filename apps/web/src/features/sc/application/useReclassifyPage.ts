@@ -24,6 +24,7 @@ import type {
   TrainingJob,
 } from "@/generated/orval/models";
 import type { ScSampleTableFilter } from "../domain/sampleTable";
+import { createDefaultScSamplingProgram, type ScSamplingProgram } from "../domain/samplingRules";
 import type { ScSelectionAction } from "../domain/workbenchInteraction";
 import { useScReclassifyStore } from "./reclassifyStore";
 import type { ScDatasetInfo, ScAnnotationItem } from "../domain/models";
@@ -85,7 +86,7 @@ export interface ReclassifyPageState {
   } | null>;
 
   showSamplingModal: Ref<boolean>;
-  samplingCount: Ref<number>;
+  samplingProgram: Ref<ScSamplingProgram>;
   samplingSeed: Ref<number>;
   samplingReviewOnly: Ref<boolean>;
   samplingMapSelectionOnly: Ref<boolean>;
@@ -556,7 +557,7 @@ export function useReclassifyPage(): ReclassifyPageState {
   // ── Sampling ───────────────────────────────────────────────────────
 
   const showSamplingModal = ref(false);
-  const samplingCount = ref(200);
+  const samplingProgram = ref(createDefaultScSamplingProgram());
   const samplingSeed = ref(42);
   const samplingReviewOnly = ref(true);
   const samplingMapSelectionOnly = ref(false);
@@ -875,7 +876,7 @@ export function useReclassifyPage(): ReclassifyPageState {
     inspectionContext,
 
     showSamplingModal,
-    samplingCount,
+    samplingProgram,
     samplingSeed,
     samplingReviewOnly,
     samplingMapSelectionOnly,

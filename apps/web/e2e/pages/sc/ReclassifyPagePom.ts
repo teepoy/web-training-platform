@@ -39,6 +39,19 @@ export class ReclassifyPagePom extends BasePage {
     return this.page.getByTestId("reclassify-table-loadmore-spinner");
   }
 
+  get samplingButton(): Locator {
+    return this.page.getByRole("button", { name: /^Sampling(?: \(\d+\))?$/ });
+  }
+
+  get reviewSamplingDialog(): Locator {
+    return this.page.getByTestId("review-sampling-modal");
+  }
+
+  async openReviewSampling(): Promise<void> {
+    await this.samplingButton.click();
+    await this.reviewSamplingDialog.waitFor();
+  }
+
   headerSampleCount(total: number): Locator {
     return this.page.getByText(`${total} samples`);
   }

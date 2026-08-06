@@ -31,6 +31,38 @@ def test_allows_scoped_read_queries(sql: str) -> None:
     assert validated.sql.startswith(("SELECT", "WITH"))
 
 
+def test_allows_sampling_rule_pipeline_ctes() -> None:
+    sql = (
+        'WITH "__sc_sampling_base" AS ('
+        'SELECT "defect_id", "rough_bin", "class_number", '
+        '"rough_bin" IS NOT DISTINCT FROM ? AS "__conditional_match" '
+        'FROM samples WHERE "images" > ?), '
+        '"__sc_sampling_conditional_ranked" AS ('
+        'SELECT *, ROW_NUMBER() OVER (PARTITION BY "__conditional_match" '
+        'ORDER BY HASH("defect_id", ?), "defect_id") AS "__conditional_rank" '
+        'FROM "__sc_sampling_base"), '
+        '"__sc_sampling_conditional" AS ('
+        'SELECT * FROM "__sc_sampling_conditional_ranked" '
+        'WHERE NOT "__conditional_match" OR "__conditional_rank" <= ?), '
+        '"__sc_sampling_group_ranked" AS ('
+        'SELECT *, ROW_NUMBER() OVER (PARTITION BY "class_number" '
+        'ORDER BY HASH("defect_id", ?), "defect_id") AS "__group_rank", '
+        'COUNT(*) OVER (PARTITION BY "class_number") AS "__group_population" '
+        'FROM "__sc_sampling_conditional"), '
+        '"__sc_sampling_grouped" AS ('
+        'SELECT * FROM "__sc_sampling_group_ranked" '
+        'WHERE "__group_rank" <= CASE '
+        'WHEN "class_number" IS NOT DISTINCT FROM ? '
+        'THEN ROUND("__group_population" * ? / 100.0) ELSE 0 END) '
+        'SELECT "defect_id" FROM "__sc_sampling_grouped" '
+        'ORDER BY HASH("defect_id", ?), "defect_id" LIMIT ?'
+    )
+
+    validated = validate_sc_sql(sql)
+
+    assert validated.referenced_views == frozenset({"samples"})
+
+
 @pytest.mark.parametrize(
     "sql",
     [

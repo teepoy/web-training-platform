@@ -7,14 +7,11 @@ import {
   NResult,
   NSelect,
   NButton,
-  NInputNumber,
   NText,
   NModal,
-  NCheckbox,
   NTooltip,
   NDescriptions,
   NDescriptionsItem,
-  NAlert,
   NTag,
   useThemeVars,
   useMessage,
@@ -24,9 +21,14 @@ import { FullScreenLayout } from "@/shared/components/full-screen-layout";
 import { useReclassifyPage } from "../../application/useReclassifyPage";
 import { toUserMessage } from "@/shared/api";
 import InspectionQuad from "@/features/sc/presentation/components/InspectionQuad.vue";
+import ReviewSamplingModal from "@/features/sc/presentation/components/ReviewSamplingModal.vue";
 import ReclassifyAnnotationSidebar from "../components/ReclassifyAnnotationSidebar.vue";
 import ReclassifyTaskProgressModal from "../components/ReclassifyTaskProgressModal.vue";
 import type { ScSampleTableFilter } from "@/features/sc/domain/sampleTable";
+import type {
+  ScSamplingGroupPopulation,
+  ScSamplingProgram,
+} from "@/features/sc/domain/samplingRules";
 import {
   getCollectionApiV1DatasetCollectionsCollectionIdGet,
   getDatasetApiV1DatasetsDatasetIdGet,
@@ -73,12 +75,18 @@ const inspectionQuad = ref<{
   querySamplingCandidateCount: (options: {
     reviewOnly: boolean;
     mapSelectionOnly: boolean;
+    globalFilterEnabled: boolean;
   }) => Promise<number>;
   querySamplingDefectIds: (
-    count: number,
+    program: ScSamplingProgram,
     seed: number,
-    options: { reviewOnly: boolean; mapSelectionOnly: boolean },
+    options: { reviewOnly: boolean; mapSelectionOnly: boolean; globalFilterEnabled: boolean },
   ) => Promise<number[]>;
+  querySamplingGroups: (
+    field: string,
+    options: { reviewOnly: boolean; mapSelectionOnly: boolean; globalFilterEnabled: boolean },
+  ) => Promise<ScSamplingGroupPopulation[]>;
+  openGlobalFilterModal: () => void;
 } | null>(null);
 const filterConfirmationVisible = ref(false);
 const filteredWorkflowCount = ref(0);
@@ -86,12 +94,13 @@ const filteredWorkflowFilter = ref<ScSampleTableFilter | null>(null);
 const isPreparingFilteredWorkflow = ref(false);
 const samplingAvailableCount = ref(0);
 const samplingMapSelectionCount = ref(0);
+const samplingGlobalFilter = ref<ScSampleTableFilter>({});
 const isPreparingSampling = ref(false);
-const MAX_SAMPLING_SEED = Number.MAX_SAFE_INTEGER;
 
 const samplingOptions = computed(() => ({
   reviewOnly: page.samplingReviewOnly.value,
   mapSelectionOnly: page.samplingMapSelectionOnly.value,
+  globalFilterEnabled: page.samplingProgram.value.globalFilterEnabled,
 }));
 
 const containerStyle = computed(() => ({
@@ -161,7 +170,11 @@ async function handleTrainAndPredictClick(): Promise<void> {
       filteredWorkflowCount.value =
         sampledIds.length > 0
           ? sampledIds.length
-          : await quad.querySamplingCandidateCount({ reviewOnly: false, mapSelectionOnly: false });
+          : await quad.querySamplingCandidateCount({
+              reviewOnly: false,
+              mapSelectionOnly: false,
+              globalFilterEnabled: true,
+            });
       filterConfirmationVisible.value = true;
     } catch (error) {
       message.error(
@@ -199,6 +212,7 @@ async function openSamplingModal(): Promise<void> {
     if (!quad) throw new Error("Data is still loading. Try again in a moment.");
     const context = quad.getSamplingContext();
     samplingMapSelectionCount.value = context.mapSelectionCount;
+    samplingGlobalFilter.value = quad.getGlobalFilter();
     if (context.mapSelectionCount === 0) page.samplingMapSelectionOnly.value = false;
     page.showSamplingModal.value = true;
     await refreshSamplingAvailableCount();
@@ -214,7 +228,17 @@ async function refreshSamplingAvailableCount(): Promise<void> {
   if (!quad) throw new Error("Data is still loading. Try again in a moment.");
   const count = await quad.querySamplingCandidateCount(samplingOptions.value);
   samplingAvailableCount.value = count;
-  page.samplingCount.value = Math.min(page.samplingCount.value, Math.max(count, 1));
+}
+
+async function loadSamplingGroups(field: string): Promise<ScSamplingGroupPopulation[]> {
+  const quad = inspectionQuad.value;
+  if (!quad) throw new Error("Data is still loading. Try again in a moment.");
+  return quad.querySamplingGroups(field, samplingOptions.value);
+}
+
+function editSamplingGlobalFilter(): void {
+  page.showSamplingModal.value = false;
+  inspectionQuad.value?.openGlobalFilterModal();
 }
 
 async function handleSamplingScopeChange(): Promise<void> {
@@ -232,7 +256,7 @@ async function applyRandomSampling(): Promise<void> {
   isPreparingSampling.value = true;
   try {
     const ids = await inspectionQuad.value?.querySamplingDefectIds(
-      page.samplingCount.value,
+      page.samplingProgram.value,
       page.samplingSeed.value,
       samplingOptions.value,
     );
@@ -437,94 +461,24 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
       </template>
     </div>
 
-    <!-- Sampling modal -->
-    <NModal
+    <ReviewSamplingModal
       v-model:show="page.showSamplingModal.value"
-      preset="card"
-      title="Review Sampling"
-      :style="{ width: '440px' }"
-    >
-      <div class="sc-sampling-form">
-        <NAlert type="info" :show-icon="false">
-          Sampling is deterministic for the same seed and candidate scope. The active cohort is
-          applied to the map, table, gallery, distribution, and Train &amp; Predict.
-        </NAlert>
-        <NCheckbox
-          v-model:checked="page.samplingReviewOnly.value"
-          style="margin-top: 14px"
-          @update:checked="handleSamplingScopeChange"
-        >
-          Review candidates only (has images)
-        </NCheckbox>
-        <NCheckbox
-          v-model:checked="page.samplingMapSelectionOnly.value"
-          :disabled="samplingMapSelectionCount === 0"
-          @update:checked="handleSamplingScopeChange"
-        >
-          Current map selection only
-          <template v-if="samplingMapSelectionCount > 0"
-            >({{ samplingMapSelectionCount }})</template
-          >
-        </NCheckbox>
-        <div class="sc-sampling-field">
-          <NText depth="2" style="font-size: 13px">Sample Count</NText>
-          <NInputNumber
-            v-model:value="page.samplingCount.value"
-            :min="1"
-            :max="samplingAvailableCount"
-            :disabled="isPreparingSampling || samplingAvailableCount === 0"
-            style="width: 100%"
-          />
-          <NText v-if="isPreparingSampling" depth="3" style="font-size: 11px; margin-top: 4px">
-            Loading candidate count…
-          </NText>
-          <NText v-else depth="3" style="font-size: 11px; margin-top: 4px">
-            Total available: {{ samplingAvailableCount }} samples
-          </NText>
-        </div>
-        <div class="sc-sampling-field" style="margin-top: 12px">
-          <NText depth="2" style="font-size: 13px">Seed</NText>
-          <NInputNumber
-            v-model:value="page.samplingSeed.value"
-            :min="0"
-            :max="MAX_SAMPLING_SEED"
-            :precision="0"
-            style="width: 100%"
-          />
-        </div>
-        <NCheckbox v-model:checked="page.assignDefaultDraftLabel.value" style="margin-top: 12px">
-          Assign draft label to sampled
-        </NCheckbox>
-        <NSelect
-          v-if="page.assignDefaultDraftLabel.value"
-          v-model:value="page.samplingDraftLabel.value"
-          :options="
-            page.codeLabels.value.map((item) => ({
-              label: `${item.code} · ${item.name}`,
-              value: item.code,
-            }))
-          "
-          placeholder="Select draft label"
-          style="margin-top: 8px"
-        />
-      </div>
-      <template #footer>
-        <div class="sc-sampling-footer">
-          <NButton @click="page.showSamplingModal.value = false">Cancel</NButton>
-          <NButton
-            type="primary"
-            :loading="isPreparingSampling"
-            :disabled="
-              samplingAvailableCount === 0 ||
-              (page.assignDefaultDraftLabel.value && !page.samplingDraftLabel.value)
-            "
-            @click="applyRandomSampling"
-          >
-            Confirm
-          </NButton>
-        </div>
-      </template>
-    </NModal>
+      v-model:program="page.samplingProgram.value"
+      v-model:seed="page.samplingSeed.value"
+      v-model:review-only="page.samplingReviewOnly.value"
+      v-model:map-selection-only="page.samplingMapSelectionOnly.value"
+      v-model:assign-draft-label="page.assignDefaultDraftLabel.value"
+      v-model:draft-label="page.samplingDraftLabel.value"
+      :loading="isPreparingSampling"
+      :available-count="samplingAvailableCount"
+      :map-selection-count="samplingMapSelectionCount"
+      :global-filter="samplingGlobalFilter"
+      :code-labels="page.codeLabels.value"
+      :load-groups="loadSamplingGroups"
+      @scope-change="handleSamplingScopeChange"
+      @edit-global-filter="editSamplingGlobalFilter"
+      @confirm="applyRandomSampling"
+    />
     <NModal
       v-model:show="filterConfirmationVisible"
       preset="card"
@@ -748,17 +702,6 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
   font-size: 11px;
   color: var(--cv-text-secondary, rgba(255, 255, 255, 0.55));
   flex-shrink: 0;
-}
-
-.sc-sampling-form {
-  display: flex;
-  flex-direction: column;
-}
-
-.sc-sampling-field {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
 }
 
 .sc-sampling-footer {

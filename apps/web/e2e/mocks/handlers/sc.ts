@@ -165,10 +165,17 @@ export async function mockScDataProvider(
     });
   });
   await page.route(`**/api/v1/sc/data/datasets/${datasetId}/query`, async (route) => {
-    const request = route.request().postDataJSON() as { sql: string; parameters: unknown[] };
+    const request = route.request().postDataJSON() as {
+      description?: string;
+      sql: string;
+      parameters: unknown[];
+    };
     const sql = request.sql;
     let columns: Record<string, Array<number | string | null>>;
-    if (sql.includes('AS "group_key"')) {
+    if (request.description === "sc-workbench.selection.sampling-program") {
+      const limit = Number(request.parameters.at(-1) ?? 200);
+      columns = { defect_id: (rows.defect_id ?? []).slice(0, limit) };
+    } else if (sql.includes('AS "group_key"')) {
       columns = { group_key: [0, 1, 2], group_count: [334, 333, 333] };
     } else if (sql.startsWith("SELECT DISTINCT")) {
       const field = /SELECT DISTINCT "([a-z_]+)"/.exec(sql)?.[1] ?? "rough_bin";

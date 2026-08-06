@@ -26,6 +26,13 @@ import type {
 } from "@/features/sc/domain/workbenchInteraction";
 import type { ScSampleTableFilter, ScSampleTableSort } from "@/features/sc/domain/sampleTable";
 import {
+  largestRemainderCounts,
+  scSamplingProgramError,
+  type ScSamplingGroupTarget,
+  type ScSamplingProgram,
+} from "@/features/sc/domain/samplingRules";
+import {
+  isScMissingFilterValue,
   scMissingFilterOption,
   splitScSetFilterValues,
 } from "@/features/sc/domain/missingFilterValue";
@@ -199,6 +206,147 @@ export function compileScWhere(
     sql: predicates.length > 0 ? ` WHERE ${predicates.join(" AND ")}` : "",
     parameters,
   };
+}
+
+interface CompiledSamplingSelection {
+  sql: string;
+  parameters: ScDataParameter[];
+}
+
+function samplingValuePredicate(
+  field: string,
+  value: string,
+  allowedColumns: ReadonlySet<string>,
+): CompiledWhere {
+  const column = quotedColumn(field, allowedColumns);
+  if (isScMissingFilterValue(field, value)) {
+    return { sql: `${column} IS NULL`, parameters: [] };
+  }
+  return { sql: `${column} IS NOT DISTINCT FROM ?`, parameters: [value] };
+}
+
+function samplingTargetExpression(
+  program: ScSamplingProgram,
+  target: ScSamplingGroupTarget,
+  ratioCount: number | undefined,
+): CompiledWhere {
+  if (program.group.kind === "quota") {
+    return {
+      sql: "?",
+      parameters: [program.group.unit === "ratio" ? (ratioCount ?? 0) : target.amount],
+    };
+  }
+  const rounding =
+    program.group.rounding === "floor"
+      ? "FLOOR"
+      : program.group.rounding === "ceil"
+        ? "CEIL"
+        : "ROUND";
+  return {
+    sql: `${rounding}("__group_population" * ? / 100.0)`,
+    parameters: [target.amount],
+  };
+}
+
+export function compileScSamplingSelection(
+  filters: readonly ScDataFilter[],
+  program: ScSamplingProgram,
+  seed: number,
+  reticle?: ScReticleProjection,
+  allowedColumns: ReadonlySet<string> = DEFAULT_ALLOWED_COLUMNS,
+): CompiledSamplingSelection {
+  const validationError = scSamplingProgramError(program);
+  if (validationError) throw new Error(validationError);
+  if (!Number.isSafeInteger(seed) || seed < 0) {
+    throw new Error("Sampling seed must be a non-negative safe integer");
+  }
+
+  const compiledWhere = compileScWhere(filters, reticle, allowedColumns);
+  const selectedFields = [
+    "defect_id",
+    ...(program.conditional.enabled ? [program.conditional.field] : []),
+    ...(program.group.enabled ? [program.group.field] : []),
+  ];
+  const baseColumns = [...new Set(selectedFields)]
+    .map((field) => quotedColumn(field, allowedColumns))
+    .join(", ");
+  const ctes: string[] = [];
+  const parameters: ScDataParameter[] = [];
+  let source = '"__sc_sampling_base"';
+
+  if (program.conditional.enabled) {
+    const predicate = samplingValuePredicate(
+      program.conditional.field,
+      program.conditional.value,
+      allowedColumns,
+    );
+    ctes.push(
+      `"__sc_sampling_base" AS (` +
+        `SELECT ${baseColumns}, ${predicate.sql} AS "__conditional_match" ` +
+        `FROM samples${compiledWhere.sql})`,
+    );
+    parameters.push(...predicate.parameters, ...compiledWhere.parameters);
+    ctes.push(
+      `"__sc_sampling_conditional_ranked" AS (` +
+        `SELECT *, ROW_NUMBER() OVER (` +
+        `PARTITION BY "__conditional_match" ORDER BY HASH("defect_id", ?), "defect_id"` +
+        `) AS "__conditional_rank" FROM ${source})`,
+    );
+    parameters.push(seed);
+    ctes.push(
+      `"__sc_sampling_conditional" AS (` +
+        `SELECT * FROM "__sc_sampling_conditional_ranked" ` +
+        `WHERE NOT "__conditional_match" OR "__conditional_rank" <= ?)`,
+    );
+    parameters.push(program.conditional.limit);
+    source = '"__sc_sampling_conditional"';
+  } else {
+    ctes.push(
+      `"__sc_sampling_base" AS (` + `SELECT ${baseColumns} FROM samples${compiledWhere.sql})`,
+    );
+    parameters.push(...compiledWhere.parameters);
+  }
+
+  if (program.group.enabled) {
+    const groupColumn = quotedColumn(program.group.field, allowedColumns);
+    ctes.push(
+      `"__sc_sampling_group_ranked" AS (` +
+        `SELECT *, ` +
+        `ROW_NUMBER() OVER (PARTITION BY ${groupColumn} ` +
+        `ORDER BY HASH("defect_id", ?), "defect_id") AS "__group_rank", ` +
+        `COUNT(*) OVER (PARTITION BY ${groupColumn}) AS "__group_population" ` +
+        `FROM ${source})`,
+    );
+    parameters.push(seed);
+
+    const ratioCounts =
+      program.group.kind === "quota" && program.group.unit === "ratio"
+        ? largestRemainderCounts(program.group.targets, program.total.limit)
+        : [];
+    const branches = program.group.targets.map((target, index) => {
+      const predicate = samplingValuePredicate(program.group.field, target.value, allowedColumns);
+      const targetExpression = samplingTargetExpression(program, target, ratioCounts[index]);
+      parameters.push(...predicate.parameters, ...targetExpression.parameters);
+      return `WHEN ${predicate.sql} THEN ${targetExpression.sql}`;
+    });
+    const unlistedTarget = program.group.unlisted === "keep" ? '"__group_population"' : "0";
+    ctes.push(
+      `"__sc_sampling_grouped" AS (` +
+        `SELECT * FROM "__sc_sampling_group_ranked" ` +
+        `WHERE "__group_rank" <= CASE ${branches.join(" ")} ELSE ${unlistedTarget} END)`,
+    );
+    source = '"__sc_sampling_grouped"';
+  }
+
+  let sql =
+    `WITH ${ctes.join(", ")} SELECT "defect_id" FROM ${source} ` +
+    `ORDER BY HASH("defect_id", ?), "defect_id"`;
+  parameters.push(seed);
+  if (program.total.enabled) {
+    sql += " LIMIT ?";
+    parameters.push(program.total.limit);
+  }
+  return { sql, parameters };
 }
 
 function filtersFromTableFilter(
@@ -563,6 +711,14 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
     const allowedColumns = await this.allowedColumnsFor([
       ...(query.filters ?? []).map(([field]) => field),
       ...(constraint.kind === "legend" ? [constraint.field] : []),
+      ...(constraint.kind === "sampling-program"
+        ? [
+            ...(constraint.program.conditional.enabled
+              ? [constraint.program.conditional.field]
+              : []),
+            ...(constraint.program.group.enabled ? [constraint.program.group.field] : []),
+          ]
+        : []),
     ]);
     if (constraint.kind === "ids") {
       if (constraint.ids.length === 0) return [];
@@ -580,6 +736,23 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
         "sc-workbench.selection.random",
         `SELECT "defect_id" FROM samples${compiled.sql} ORDER BY HASH("defect_id", ?) LIMIT ?`,
         [...compiled.parameters, constraint.seed, constraint.limit],
+      );
+      return Array.from({ length: result.table.numRows }, (_, index) =>
+        numeric(result.table.getChild("defect_id")?.get(index)),
+      );
+    }
+    if (constraint.kind === "sampling-program") {
+      const compiled = compileScSamplingSelection(
+        filters,
+        constraint.program,
+        constraint.seed,
+        query.reticle,
+        allowedColumns,
+      );
+      const result = await this.query(
+        "sc-workbench.selection.sampling-program",
+        compiled.sql,
+        compiled.parameters,
       );
       return Array.from({ length: result.table.numRows }, (_, index) =>
         numeric(result.table.getChild("defect_id")?.get(index)),

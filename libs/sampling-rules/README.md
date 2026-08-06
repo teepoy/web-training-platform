@@ -67,3 +67,15 @@ result = sample(rows, program=program, seed=7)
 ```
 
 Use `execute_sampling(...)` when a UI or service also needs the per-rule audit plan.
+
+## SC Review Sampling integration
+
+The production SC Reclassify view exposes the same ordered rule forms through
+`ReviewSamplingModal.vue`. Because SC inspection datasets can contain hundreds of
+thousands of rows, the web data source compiles enabled conditional, group, and
+total stages into one scoped DuckDB query and returns only the sampled defect IDs.
+The existing workbench Global Filter remains the shared first stage, and the
+selected cohort stays frontend workbench state rather than a server-side column.
+
+The Python package remains useful for bounded in-memory callers and rule semantics;
+it does not own the SC data-provider endpoint or persistence.
