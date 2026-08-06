@@ -4,6 +4,6 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { LatestAnnotation } from "./latestAnnotation";
+import type { LatestAnnotation } from './latestAnnotation';
 
 export type SampleWithLabelsLatestAnnotation = LatestAnnotation | null;

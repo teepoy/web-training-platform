@@ -4,10 +4,10 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { AgentContextDatasetId } from "./agentContextDatasetId";
-import type { AgentContextJobId } from "./agentContextJobId";
-import type { AgentContextScheduleId } from "./agentContextScheduleId";
-import type { AgentContextExtra } from "./agentContextExtra";
+import type { AgentContextDatasetId } from './agentContextDatasetId';
+import type { AgentContextJobId } from './agentContextJobId';
+import type { AgentContextScheduleId } from './agentContextScheduleId';
+import type { AgentContextExtra } from './agentContextExtra';
 
 /**
  * Client-provided context for the global agent.

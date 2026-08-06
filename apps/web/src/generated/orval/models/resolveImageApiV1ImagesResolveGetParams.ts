@@ -6,5 +6,5 @@
  */
 
 export type ResolveImageApiV1ImagesResolveGetParams = {
-  uri: string;
+uri: string;
 };

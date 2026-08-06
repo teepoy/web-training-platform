@@ -5,4 +5,4 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type SetSettingApiV1SettingsKeyPut200 = { [key: string]: string };
+export type SetSettingApiV1SettingsKeyPut200 = {[key: string]: string};

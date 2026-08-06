@@ -4,8 +4,8 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { AgentContext } from "./agentContext";
-import type { GlobalChatRequestSessionId } from "./globalChatRequestSessionId";
+import type { AgentContext } from './agentContext';
+import type { GlobalChatRequestSessionId } from './globalChatRequestSessionId';
 
 /**
  * User message sent to the global agent.

@@ -4,17 +4,17 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { TaskTrackerSummaryResponseDatasetId } from "./taskTrackerSummaryResponseDatasetId";
-import type { TaskTrackerSummaryResponseDatasetName } from "./taskTrackerSummaryResponseDatasetName";
-import type { TaskTrackerSummaryResponseModelId } from "./taskTrackerSummaryResponseModelId";
-import type { TaskTrackerSummaryResponseTrainerId } from "./taskTrackerSummaryResponseTrainerId";
-import type { TaskTrackerSummaryResponsePrefectState } from "./taskTrackerSummaryResponsePrefectState";
-import type { TaskTrackerSummaryResponseWorkPoolName } from "./taskTrackerSummaryResponseWorkPoolName";
-import type { TaskTrackerSummaryResponseWorkQueueName } from "./taskTrackerSummaryResponseWorkQueueName";
-import type { TaskTrackerSummaryResponseQueuePriority } from "./taskTrackerSummaryResponseQueuePriority";
-import type { TaskTrackerSummaryResponseQueueDepthAhead } from "./taskTrackerSummaryResponseQueueDepthAhead";
-import type { TaskTrackerSummaryResponsePoolConcurrencyLimit } from "./taskTrackerSummaryResponsePoolConcurrencyLimit";
-import type { TaskTrackerSummaryResponsePoolSlotsUsed } from "./taskTrackerSummaryResponsePoolSlotsUsed";
+import type { TaskTrackerSummaryResponseDatasetId } from './taskTrackerSummaryResponseDatasetId';
+import type { TaskTrackerSummaryResponseDatasetName } from './taskTrackerSummaryResponseDatasetName';
+import type { TaskTrackerSummaryResponseModelId } from './taskTrackerSummaryResponseModelId';
+import type { TaskTrackerSummaryResponseTrainerId } from './taskTrackerSummaryResponseTrainerId';
+import type { TaskTrackerSummaryResponsePrefectState } from './taskTrackerSummaryResponsePrefectState';
+import type { TaskTrackerSummaryResponseWorkPoolName } from './taskTrackerSummaryResponseWorkPoolName';
+import type { TaskTrackerSummaryResponseWorkQueueName } from './taskTrackerSummaryResponseWorkQueueName';
+import type { TaskTrackerSummaryResponseQueuePriority } from './taskTrackerSummaryResponseQueuePriority';
+import type { TaskTrackerSummaryResponseQueueDepthAhead } from './taskTrackerSummaryResponseQueueDepthAhead';
+import type { TaskTrackerSummaryResponsePoolConcurrencyLimit } from './taskTrackerSummaryResponsePoolConcurrencyLimit';
+import type { TaskTrackerSummaryResponsePoolSlotsUsed } from './taskTrackerSummaryResponsePoolSlotsUsed';
 
 export interface TaskTrackerSummaryResponse {
   id: string;

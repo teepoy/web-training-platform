@@ -5,6 +5,4 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type SparseSummaryResponseSampleRowsItemAnyOfTwo = {
-  [key: string]: string | number | number | boolean | null;
-};
+export type SparseSummaryResponseSampleRowsItemAnyOfTwo = {[key: string]: string | number | number | boolean | null};

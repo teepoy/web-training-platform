@@ -4,8 +4,8 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { AnnotationVersionResponsePredictionId } from "./annotationVersionResponsePredictionId";
-import type { AnnotationVersionResponseConfidence } from "./annotationVersionResponseConfidence";
+import type { AnnotationVersionResponsePredictionId } from './annotationVersionResponsePredictionId';
+import type { AnnotationVersionResponseConfidence } from './annotationVersionResponseConfidence';
 
 /**
  * Response for a single annotation version entry.

@@ -4,8 +4,8 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { ScBoxFilterRequestMode } from "./scBoxFilterRequestMode";
-import type { ScBoxFilterRequestFilter } from "./scBoxFilterRequestFilter";
+import type { ScBoxFilterRequestMode } from './scBoxFilterRequestMode';
+import type { ScBoxFilterRequestFilter } from './scBoxFilterRequestFilter';
 
 export interface ScBoxFilterRequest {
   mode: ScBoxFilterRequestMode;

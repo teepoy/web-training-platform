@@ -5,13 +5,14 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type JobStatus = (typeof JobStatus)[keyof typeof JobStatus];
+export type JobStatus = typeof JobStatus[keyof typeof JobStatus];
+
 
 // eslint-disable-next-line @typescript-eslint/no-redeclare
 export const JobStatus = {
-  queued: "queued",
-  running: "running",
-  completed: "completed",
-  failed: "failed",
-  cancelled: "cancelled",
+  queued: 'queued',
+  running: 'running',
+  completed: 'completed',
+  failed: 'failed',
+  cancelled: 'cancelled',
 } as const;

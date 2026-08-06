@@ -6,6 +6,6 @@
  */
 
 export type GetJobEventsHistoryApiV1TrainingJobsJobIdEventsHistoryGetParams = {
-  offset?: number;
-  limit?: number;
+offset?: number;
+limit?: number;
 };

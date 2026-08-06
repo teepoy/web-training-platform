@@ -4,12 +4,12 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { DatasetCollectionMemberResponseUnlinkedDefinitionVersion } from "./datasetCollectionMemberResponseUnlinkedDefinitionVersion";
-import type { DatasetCollectionMemberResponseFilterSpec } from "./datasetCollectionMemberResponseFilterSpec";
-import type { DatasetCollectionMemberResponseLabelMapping } from "./datasetCollectionMemberResponseLabelMapping";
-import type { DatasetCollectionMemberResponseSamplingSpec } from "./datasetCollectionMemberResponseSamplingSpec";
-import type { DatasetCollectionMemberResponseUnlinkedBy } from "./datasetCollectionMemberResponseUnlinkedBy";
-import type { DatasetCollectionMemberResponseUnlinkedAt } from "./datasetCollectionMemberResponseUnlinkedAt";
+import type { DatasetCollectionMemberResponseUnlinkedDefinitionVersion } from './datasetCollectionMemberResponseUnlinkedDefinitionVersion';
+import type { DatasetCollectionMemberResponseFilterSpec } from './datasetCollectionMemberResponseFilterSpec';
+import type { DatasetCollectionMemberResponseLabelMapping } from './datasetCollectionMemberResponseLabelMapping';
+import type { DatasetCollectionMemberResponseSamplingSpec } from './datasetCollectionMemberResponseSamplingSpec';
+import type { DatasetCollectionMemberResponseUnlinkedBy } from './datasetCollectionMemberResponseUnlinkedBy';
+import type { DatasetCollectionMemberResponseUnlinkedAt } from './datasetCollectionMemberResponseUnlinkedAt';
 
 export interface DatasetCollectionMemberResponse {
   id: string;

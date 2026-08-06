@@ -4,12 +4,12 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { TaskTrackerSummaryMetricsTotal } from "./taskTrackerSummaryMetricsTotal";
-import type { TaskTrackerSummaryMetricsProcessed } from "./taskTrackerSummaryMetricsProcessed";
-import type { TaskTrackerSummaryMetricsSuccessful } from "./taskTrackerSummaryMetricsSuccessful";
-import type { TaskTrackerSummaryMetricsFailed } from "./taskTrackerSummaryMetricsFailed";
-import type { TaskTrackerSummaryMetricsSkipped } from "./taskTrackerSummaryMetricsSkipped";
-import type { TaskTrackerSummaryMetricsRateHint } from "./taskTrackerSummaryMetricsRateHint";
+import type { TaskTrackerSummaryMetricsTotal } from './taskTrackerSummaryMetricsTotal';
+import type { TaskTrackerSummaryMetricsProcessed } from './taskTrackerSummaryMetricsProcessed';
+import type { TaskTrackerSummaryMetricsSuccessful } from './taskTrackerSummaryMetricsSuccessful';
+import type { TaskTrackerSummaryMetricsFailed } from './taskTrackerSummaryMetricsFailed';
+import type { TaskTrackerSummaryMetricsSkipped } from './taskTrackerSummaryMetricsSkipped';
+import type { TaskTrackerSummaryMetricsRateHint } from './taskTrackerSummaryMetricsRateHint';
 
 export interface TaskTrackerSummaryMetrics {
   total?: TaskTrackerSummaryMetricsTotal;

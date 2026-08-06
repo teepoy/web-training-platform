@@ -4,18 +4,8 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { SparseSummaryResponseSampleRowsItemAnyOfItem } from "./sparseSummaryResponseSampleRowsItemAnyOfItem";
-import type { SparseSummaryResponseSampleRowsItemAnyOfTwo } from "./sparseSummaryResponseSampleRowsItemAnyOfTwo";
-import type { SparseSummaryResponseSampleRowsItemAnyOfThreeItem } from "./sparseSummaryResponseSampleRowsItemAnyOfThreeItem";
+import type { SparseSummaryResponseSampleRowsItemAnyOfItem } from './sparseSummaryResponseSampleRowsItemAnyOfItem';
+import type { SparseSummaryResponseSampleRowsItemAnyOfTwo } from './sparseSummaryResponseSampleRowsItemAnyOfTwo';
+import type { SparseSummaryResponseSampleRowsItemAnyOfThreeItem } from './sparseSummaryResponseSampleRowsItemAnyOfThreeItem';
 
-export type SparseSummaryResponseSampleRowsItem = {
-  [key: string]:
-    | string
-    | number
-    | number
-    | boolean
-    | SparseSummaryResponseSampleRowsItemAnyOfItem[]
-    | SparseSummaryResponseSampleRowsItemAnyOfTwo
-    | SparseSummaryResponseSampleRowsItemAnyOfThreeItem[]
-    | null;
-};
+export type SparseSummaryResponseSampleRowsItem = {[key: string]: string | number | number | boolean | SparseSummaryResponseSampleRowsItemAnyOfItem[] | SparseSummaryResponseSampleRowsItemAnyOfTwo | SparseSummaryResponseSampleRowsItemAnyOfThreeItem[] | null};

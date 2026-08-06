@@ -4,7 +4,7 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { SensorSubscriptionResponseFilterConfig } from "./sensorSubscriptionResponseFilterConfig";
+import type { SensorSubscriptionResponseFilterConfig } from './sensorSubscriptionResponseFilterConfig';
 
 export interface SensorSubscriptionResponse {
   id: string;

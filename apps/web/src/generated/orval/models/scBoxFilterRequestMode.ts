@@ -5,12 +5,12 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type ScBoxFilterRequestMode =
-  (typeof ScBoxFilterRequestMode)[keyof typeof ScBoxFilterRequestMode];
+export type ScBoxFilterRequestMode = typeof ScBoxFilterRequestMode[keyof typeof ScBoxFilterRequestMode];
+
 
 // eslint-disable-next-line @typescript-eslint/no-redeclare
 export const ScBoxFilterRequestMode = {
-  wafer: "wafer",
-  die: "die",
-  reticle: "reticle",
+  wafer: 'wafer',
+  die: 'die',
+  reticle: 'reticle',
 } as const;

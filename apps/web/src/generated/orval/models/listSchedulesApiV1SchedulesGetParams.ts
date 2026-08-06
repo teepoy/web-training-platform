@@ -6,6 +6,6 @@
  */
 
 export type ListSchedulesApiV1SchedulesGetParams = {
-  offset?: number;
-  limit?: number;
+offset?: number;
+limit?: number;
 };

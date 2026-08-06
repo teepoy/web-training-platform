@@ -5,5 +5,4 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type StreamScDatasetPlotPointsProgressApiV1ScDatasetsDatasetIdPlotPointsStreamGetPredictionsAnyOfItem =
-  number | string;
+export type StreamScDatasetPlotPointsProgressApiV1ScDatasetsDatasetIdPlotPointsStreamGetPredictionsAnyOfItem = number | string;

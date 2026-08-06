@@ -5,4 +5,4 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type DeleteSettingApiV1SettingsKeyDelete200 = { [key: string]: string };
+export type DeleteSettingApiV1SettingsKeyDelete200 = {[key: string]: string};

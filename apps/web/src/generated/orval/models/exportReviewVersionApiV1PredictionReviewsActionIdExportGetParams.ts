@@ -6,5 +6,5 @@
  */
 
 export type ExportReviewVersionApiV1PredictionReviewsActionIdExportGetParams = {
-  format_id?: string;
+format_id?: string;
 };

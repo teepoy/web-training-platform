@@ -4,7 +4,7 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { Dataset } from "./dataset";
+import type { Dataset } from './dataset';
 
 export interface PaginatedResponseDataset {
   items: Dataset[];

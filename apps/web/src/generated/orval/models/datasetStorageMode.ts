@@ -5,10 +5,11 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type DatasetStorageMode = (typeof DatasetStorageMode)[keyof typeof DatasetStorageMode];
+export type DatasetStorageMode = typeof DatasetStorageMode[keyof typeof DatasetStorageMode];
+
 
 // eslint-disable-next-line @typescript-eslint/no-redeclare
 export const DatasetStorageMode = {
-  db_full: "db_full",
-  file_shard_sparse: "file_shard_sparse",
+  db_full: 'db_full',
+  file_shard_sparse: 'file_shard_sparse',
 } as const;

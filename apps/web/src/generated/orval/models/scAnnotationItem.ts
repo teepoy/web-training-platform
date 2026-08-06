@@ -4,9 +4,9 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { ScAnnotationItemSampleId } from "./scAnnotationItemSampleId";
-import type { ScAnnotationItemDefectId } from "./scAnnotationItemDefectId";
-import type { ScAnnotationItemLabel } from "./scAnnotationItemLabel";
+import type { ScAnnotationItemSampleId } from './scAnnotationItemSampleId';
+import type { ScAnnotationItemDefectId } from './scAnnotationItemDefectId';
+import type { ScAnnotationItemLabel } from './scAnnotationItemLabel';
 
 export interface ScAnnotationItem {
   sample_id?: ScAnnotationItemSampleId;

@@ -4,10 +4,10 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { DashboardResponseWorkPool } from "./dashboardResponseWorkPool";
-import type { JobQueueStats } from "./jobQueueStats";
-import type { RecentJobSummary } from "./recentJobSummary";
-import type { ServiceStatus } from "./serviceStatus";
+import type { DashboardResponseWorkPool } from './dashboardResponseWorkPool';
+import type { JobQueueStats } from './jobQueueStats';
+import type { RecentJobSummary } from './recentJobSummary';
+import type { ServiceStatus } from './serviceStatus';
 
 export interface DashboardResponse {
   work_pool?: DashboardResponseWorkPool;

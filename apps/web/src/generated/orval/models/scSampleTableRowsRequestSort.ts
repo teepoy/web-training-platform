@@ -4,6 +4,6 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { ScSampleTableSort } from "./scSampleTableSort";
+import type { ScSampleTableSort } from './scSampleTableSort';
 
 export type ScSampleTableRowsRequestSort = ScSampleTableSort | null;

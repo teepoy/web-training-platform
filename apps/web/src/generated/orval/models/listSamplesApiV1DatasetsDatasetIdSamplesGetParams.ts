@@ -6,6 +6,6 @@
  */
 
 export type ListSamplesApiV1DatasetsDatasetIdSamplesGetParams = {
-  offset?: number;
-  limit?: number;
+offset?: number;
+limit?: number;
 };

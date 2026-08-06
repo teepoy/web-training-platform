@@ -5,10 +5,10 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type DatasetTrainDisabledReason =
-  (typeof DatasetTrainDisabledReason)[keyof typeof DatasetTrainDisabledReason];
+export type DatasetTrainDisabledReason = typeof DatasetTrainDisabledReason[keyof typeof DatasetTrainDisabledReason];
+
 
 // eslint-disable-next-line @typescript-eslint/no-redeclare
 export const DatasetTrainDisabledReason = {
-  insufficient_active_classes: "insufficient_active_classes",
+  insufficient_active_classes: 'insufficient_active_classes',
 } as const;

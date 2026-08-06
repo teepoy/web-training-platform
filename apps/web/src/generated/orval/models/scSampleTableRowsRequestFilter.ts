@@ -4,6 +4,6 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { ScSampleTableRowsRequestFilterAnyOf } from "./scSampleTableRowsRequestFilterAnyOf";
+import type { ScSampleTableRowsRequestFilterAnyOf } from './scSampleTableRowsRequestFilterAnyOf';
 
 export type ScSampleTableRowsRequestFilter = ScSampleTableRowsRequestFilterAnyOf | null;

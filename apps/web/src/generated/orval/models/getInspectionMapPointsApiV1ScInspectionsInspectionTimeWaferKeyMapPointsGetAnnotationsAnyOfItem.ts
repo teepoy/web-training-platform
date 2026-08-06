@@ -5,5 +5,4 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type GetInspectionMapPointsApiV1ScInspectionsInspectionTimeWaferKeyMapPointsGetAnnotationsAnyOfItem =
-  number | string;
+export type GetInspectionMapPointsApiV1ScInspectionsInspectionTimeWaferKeyMapPointsGetAnnotationsAnyOfItem = number | string;

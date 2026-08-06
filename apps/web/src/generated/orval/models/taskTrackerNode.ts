@@ -4,9 +4,9 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { TaskTrackerNodeExpectedStartAt } from "./taskTrackerNodeExpectedStartAt";
-import type { TaskTrackerNodeStartedAt } from "./taskTrackerNodeStartedAt";
-import type { TaskTrackerNodeEndedAt } from "./taskTrackerNodeEndedAt";
+import type { TaskTrackerNodeExpectedStartAt } from './taskTrackerNodeExpectedStartAt';
+import type { TaskTrackerNodeStartedAt } from './taskTrackerNodeStartedAt';
+import type { TaskTrackerNodeEndedAt } from './taskTrackerNodeEndedAt';
 
 export interface TaskTrackerNode {
   key: string;

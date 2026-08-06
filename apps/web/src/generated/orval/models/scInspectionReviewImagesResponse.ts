@@ -4,7 +4,7 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { ScReviewImagesByDefectItem } from "./scReviewImagesByDefectItem";
+import type { ScReviewImagesByDefectItem } from './scReviewImagesByDefectItem';
 
 export interface ScInspectionReviewImagesResponse {
   items: ScReviewImagesByDefectItem[];

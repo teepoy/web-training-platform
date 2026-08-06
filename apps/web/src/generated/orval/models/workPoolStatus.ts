@@ -4,7 +4,7 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { WorkPoolStatusConcurrencyLimit } from "./workPoolStatusConcurrencyLimit";
+import type { WorkPoolStatusConcurrencyLimit } from './workPoolStatusConcurrencyLimit';
 
 export interface WorkPoolStatus {
   name: string;

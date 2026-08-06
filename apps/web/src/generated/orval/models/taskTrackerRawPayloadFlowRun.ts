@@ -4,6 +4,6 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { TaskTrackerRawPayloadFlowRunAnyOf } from "./taskTrackerRawPayloadFlowRunAnyOf";
+import type { TaskTrackerRawPayloadFlowRunAnyOf } from './taskTrackerRawPayloadFlowRunAnyOf';
 
 export type TaskTrackerRawPayloadFlowRun = TaskTrackerRawPayloadFlowRunAnyOf | null;

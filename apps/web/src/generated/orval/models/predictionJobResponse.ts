@@ -4,13 +4,13 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { PredictionJobResponseDatasetId } from "./predictionJobResponseDatasetId";
-import type { PredictionJobResponseCollectionId } from "./predictionJobResponseCollectionId";
-import type { PredictionJobResponseCollectionRevisionId } from "./predictionJobResponseCollectionRevisionId";
-import type { PredictionJobResponseModelVersion } from "./predictionJobResponseModelVersion";
-import type { PredictionJobResponseExternalJobId } from "./predictionJobResponseExternalJobId";
-import type { PredictionJobResponseSampleIds } from "./predictionJobResponseSampleIds";
-import type { PredictionJobResponseSummary } from "./predictionJobResponseSummary";
+import type { PredictionJobResponseDatasetId } from './predictionJobResponseDatasetId';
+import type { PredictionJobResponseCollectionId } from './predictionJobResponseCollectionId';
+import type { PredictionJobResponseCollectionRevisionId } from './predictionJobResponseCollectionRevisionId';
+import type { PredictionJobResponseModelVersion } from './predictionJobResponseModelVersion';
+import type { PredictionJobResponseExternalJobId } from './predictionJobResponseExternalJobId';
+import type { PredictionJobResponseSampleIds } from './predictionJobResponseSampleIds';
+import type { PredictionJobResponseSummary } from './predictionJobResponseSummary';
 
 export interface PredictionJobResponse {
   id: string;

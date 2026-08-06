@@ -4,9 +4,6 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { CreateAnnotationRequestAnnotationValueAnyOf } from "./createAnnotationRequestAnnotationValueAnyOf";
+import type { CreateAnnotationRequestAnnotationValueAnyOf } from './createAnnotationRequestAnnotationValueAnyOf';
 
-export type CreateAnnotationRequestAnnotationValue =
-  | CreateAnnotationRequestAnnotationValueAnyOf
-  | unknown[]
-  | null;
+export type CreateAnnotationRequestAnnotationValue = CreateAnnotationRequestAnnotationValueAnyOf | unknown[] | null;

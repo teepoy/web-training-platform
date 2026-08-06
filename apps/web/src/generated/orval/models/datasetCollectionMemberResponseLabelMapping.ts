@@ -5,4 +5,4 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type DatasetCollectionMemberResponseLabelMapping = { [key: string]: string };
+export type DatasetCollectionMemberResponseLabelMapping = {[key: string]: string};

@@ -4,7 +4,7 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { PredictionEventResponse } from "./predictionEventResponse";
+import type { PredictionEventResponse } from './predictionEventResponse';
 
 export interface PaginatedResponsePredictionEventResponse {
   items: PredictionEventResponse[];

@@ -4,8 +4,8 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { UpdateDatasetCollectionRequestName } from "./updateDatasetCollectionRequestName";
-import type { UpdateDatasetCollectionRequestDescription } from "./updateDatasetCollectionRequestDescription";
+import type { UpdateDatasetCollectionRequestName } from './updateDatasetCollectionRequestName';
+import type { UpdateDatasetCollectionRequestDescription } from './updateDatasetCollectionRequestDescription';
 
 export interface UpdateDatasetCollectionRequest {
   name?: UpdateDatasetCollectionRequestName;

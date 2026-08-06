@@ -4,9 +4,9 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { DatasetCollectionMemberInputFilterSpec } from "./datasetCollectionMemberInputFilterSpec";
-import type { DatasetCollectionMemberInputLabelMapping } from "./datasetCollectionMemberInputLabelMapping";
-import type { DatasetCollectionMemberInputSamplingSpec } from "./datasetCollectionMemberInputSamplingSpec";
+import type { DatasetCollectionMemberInputFilterSpec } from './datasetCollectionMemberInputFilterSpec';
+import type { DatasetCollectionMemberInputLabelMapping } from './datasetCollectionMemberInputLabelMapping';
+import type { DatasetCollectionMemberInputSamplingSpec } from './datasetCollectionMemberInputSamplingSpec';
 
 export interface DatasetCollectionMemberInput {
   /**

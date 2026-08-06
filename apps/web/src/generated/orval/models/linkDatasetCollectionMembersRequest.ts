@@ -4,7 +4,7 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { DatasetCollectionMemberInput } from "./datasetCollectionMemberInput";
+import type { DatasetCollectionMemberInput } from './datasetCollectionMemberInput';
 
 export interface LinkDatasetCollectionMembersRequest {
   /** @minimum 0 */

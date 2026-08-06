@@ -4,9 +4,9 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { SparseManifestSummary } from "./sparseManifestSummary";
-import type { SparseShardSummary } from "./sparseShardSummary";
-import type { SparseSummaryResponseSampleRowsItem } from "./sparseSummaryResponseSampleRowsItem";
+import type { SparseManifestSummary } from './sparseManifestSummary';
+import type { SparseShardSummary } from './sparseShardSummary';
+import type { SparseSummaryResponseSampleRowsItem } from './sparseSummaryResponseSampleRowsItem';
 
 export interface SparseSummaryResponse {
   dataset_id: string;

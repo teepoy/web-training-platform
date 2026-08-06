@@ -4,7 +4,7 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { ModelResponse } from "./modelResponse";
+import type { ModelResponse } from './modelResponse';
 
 export interface PaginatedResponseModelResponse {
   items: ModelResponse[];

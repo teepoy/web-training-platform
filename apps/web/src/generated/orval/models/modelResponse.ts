@@ -4,17 +4,17 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { ModelResponseName } from "./modelResponseName";
-import type { ModelResponseFileSize } from "./modelResponseFileSize";
-import type { ModelResponseFileHash } from "./modelResponseFileHash";
-import type { ModelResponseFormat } from "./modelResponseFormat";
-import type { ModelResponseCreatedAt } from "./modelResponseCreatedAt";
-import type { ModelResponseMetadata } from "./modelResponseMetadata";
-import type { ModelResponseDatasetId } from "./modelResponseDatasetId";
-import type { ModelResponseDatasetName } from "./modelResponseDatasetName";
-import type { ModelResponseCollectionId } from "./modelResponseCollectionId";
-import type { ModelResponseCollectionRevisionId } from "./modelResponseCollectionRevisionId";
-import type { ModelResponseCollectionName } from "./modelResponseCollectionName";
+import type { ModelResponseName } from './modelResponseName';
+import type { ModelResponseFileSize } from './modelResponseFileSize';
+import type { ModelResponseFileHash } from './modelResponseFileHash';
+import type { ModelResponseFormat } from './modelResponseFormat';
+import type { ModelResponseCreatedAt } from './modelResponseCreatedAt';
+import type { ModelResponseMetadata } from './modelResponseMetadata';
+import type { ModelResponseDatasetId } from './modelResponseDatasetId';
+import type { ModelResponseDatasetName } from './modelResponseDatasetName';
+import type { ModelResponseCollectionId } from './modelResponseCollectionId';
+import type { ModelResponseCollectionRevisionId } from './modelResponseCollectionRevisionId';
+import type { ModelResponseCollectionName } from './modelResponseCollectionName';
 
 export interface ModelResponse {
   id: string;

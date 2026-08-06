@@ -4,7 +4,7 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { ScImportResponseError } from "./scImportResponseError";
+import type { ScImportResponseError } from './scImportResponseError';
 
 export interface ScImportResponse {
   status: string;

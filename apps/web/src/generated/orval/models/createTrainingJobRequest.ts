@@ -4,9 +4,9 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { CreateTrainingJobRequestDatasetId } from "./createTrainingJobRequestDatasetId";
-import type { CreateTrainingJobRequestCollectionId } from "./createTrainingJobRequestCollectionId";
-import type { CreateTrainingJobRequestCollectionRevisionId } from "./createTrainingJobRequestCollectionRevisionId";
+import type { CreateTrainingJobRequestDatasetId } from './createTrainingJobRequestDatasetId';
+import type { CreateTrainingJobRequestCollectionId } from './createTrainingJobRequestCollectionId';
+import type { CreateTrainingJobRequestCollectionRevisionId } from './createTrainingJobRequestCollectionRevisionId';
 
 export interface CreateTrainingJobRequest {
   dataset_id?: CreateTrainingJobRequestDatasetId;

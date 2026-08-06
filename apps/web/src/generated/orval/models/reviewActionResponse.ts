@@ -4,9 +4,9 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { ReviewActionResponseModelVersion } from "./reviewActionResponseModelVersion";
-import type { ReviewActionResponseCollectionId } from "./reviewActionResponseCollectionId";
-import type { ReviewActionResponseSyncTag } from "./reviewActionResponseSyncTag";
+import type { ReviewActionResponseModelVersion } from './reviewActionResponseModelVersion';
+import type { ReviewActionResponseCollectionId } from './reviewActionResponseCollectionId';
+import type { ReviewActionResponseSyncTag } from './reviewActionResponseSyncTag';
 
 /**
  * Response for a prediction review action.

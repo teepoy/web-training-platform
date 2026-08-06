@@ -4,7 +4,7 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { SyncPredictionCollectionRequestSyncTag } from "./syncPredictionCollectionRequestSyncTag";
+import type { SyncPredictionCollectionRequestSyncTag } from './syncPredictionCollectionRequestSyncTag';
 
 export interface SyncPredictionCollectionRequest {
   sync_tag?: SyncPredictionCollectionRequestSyncTag;

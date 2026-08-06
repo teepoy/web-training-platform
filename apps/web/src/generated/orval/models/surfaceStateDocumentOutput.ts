@@ -4,10 +4,10 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { AgentPanelDescriptor } from "./agentPanelDescriptor";
-import type { SurfaceLayout } from "./surfaceLayout";
-import type { SurfaceStateDocumentOutputExportedAt } from "./surfaceStateDocumentOutputExportedAt";
-import type { SurfaceStateDocumentOutputMetadata } from "./surfaceStateDocumentOutputMetadata";
+import type { AgentPanelDescriptor } from './agentPanelDescriptor';
+import type { SurfaceLayout } from './surfaceLayout';
+import type { SurfaceStateDocumentOutputExportedAt } from './surfaceStateDocumentOutputExportedAt';
+import type { SurfaceStateDocumentOutputMetadata } from './surfaceStateDocumentOutputMetadata';
 
 /**
  * Complete serialisable state of a display surface.

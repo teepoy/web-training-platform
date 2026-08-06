@@ -6,12 +6,12 @@
  */
 
 export type ListPredictionJobPredictionsApiV1PredictionJobsJobIdPredictionsGetParams = {
-  /**
-   * Number of results to skip
-   */
-  offset?: number;
-  /**
-   * Max results to return
-   */
-  limit?: number;
+/**
+ * Number of results to skip
+ */
+offset?: number;
+/**
+ * Max results to return
+ */
+limit?: number;
 };

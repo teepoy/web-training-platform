@@ -4,9 +4,9 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { PredictionCollectionResponseModelVersion } from "./predictionCollectionResponseModelVersion";
-import type { PredictionCollectionResponseSourceJobId } from "./predictionCollectionResponseSourceJobId";
-import type { PredictionCollectionResponseSyncTag } from "./predictionCollectionResponseSyncTag";
+import type { PredictionCollectionResponseModelVersion } from './predictionCollectionResponseModelVersion';
+import type { PredictionCollectionResponseSourceJobId } from './predictionCollectionResponseSourceJobId';
+import type { PredictionCollectionResponseSyncTag } from './predictionCollectionResponseSyncTag';
 
 export interface PredictionCollectionResponse {
   id: string;

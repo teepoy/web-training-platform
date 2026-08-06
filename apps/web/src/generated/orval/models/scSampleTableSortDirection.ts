@@ -5,11 +5,11 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type ScSampleTableSortDirection =
-  (typeof ScSampleTableSortDirection)[keyof typeof ScSampleTableSortDirection];
+export type ScSampleTableSortDirection = typeof ScSampleTableSortDirection[keyof typeof ScSampleTableSortDirection];
+
 
 // eslint-disable-next-line @typescript-eslint/no-redeclare
 export const ScSampleTableSortDirection = {
-  asc: "asc",
-  desc: "desc",
+  asc: 'asc',
+  desc: 'desc',
 } as const;

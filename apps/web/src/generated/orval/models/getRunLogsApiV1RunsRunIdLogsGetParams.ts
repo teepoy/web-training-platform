@@ -6,5 +6,5 @@
  */
 
 export type GetRunLogsApiV1RunsRunIdLogsGetParams = {
-  limit?: number;
+limit?: number;
 };

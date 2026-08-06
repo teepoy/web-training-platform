@@ -4,14 +4,14 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { RunResponseDeploymentId } from "./runResponseDeploymentId";
-import type { RunResponseFlowName } from "./runResponseFlowName";
-import type { RunResponseStateType } from "./runResponseStateType";
-import type { RunResponseStateName } from "./runResponseStateName";
-import type { RunResponseStartTime } from "./runResponseStartTime";
-import type { RunResponseEndTime } from "./runResponseEndTime";
-import type { RunResponseTotalRunTime } from "./runResponseTotalRunTime";
-import type { RunResponseParameters } from "./runResponseParameters";
+import type { RunResponseDeploymentId } from './runResponseDeploymentId';
+import type { RunResponseFlowName } from './runResponseFlowName';
+import type { RunResponseStateType } from './runResponseStateType';
+import type { RunResponseStateName } from './runResponseStateName';
+import type { RunResponseStartTime } from './runResponseStartTime';
+import type { RunResponseEndTime } from './runResponseEndTime';
+import type { RunResponseTotalRunTime } from './runResponseTotalRunTime';
+import type { RunResponseParameters } from './runResponseParameters';
 
 export interface RunResponse {
   id: string;

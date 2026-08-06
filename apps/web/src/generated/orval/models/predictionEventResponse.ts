@@ -4,7 +4,7 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { PredictionEventResponsePayload } from "./predictionEventResponsePayload";
+import type { PredictionEventResponsePayload } from './predictionEventResponsePayload';
 
 export interface PredictionEventResponse {
   job_id: string;

@@ -18,6 +18,6 @@ export interface CreateDatasetCollectionRequest {
    * @maxLength 128
    */
   target_view_id: string;
-  duplicate_policy: "keep_all";
-  missing_data_policy: "fail";
+  duplicate_policy: 'keep_all';
+  missing_data_policy: 'fail';
 }

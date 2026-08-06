@@ -4,7 +4,7 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { TaskTrackerNode } from "./taskTrackerNode";
+import type { TaskTrackerNode } from './taskTrackerNode';
 
 export interface TaskTrackerStage {
   key: string;

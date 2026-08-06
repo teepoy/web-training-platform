@@ -5,9 +5,4 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type SparseSummaryResponseSampleRowsItemAnyOfItem =
-  | string
-  | number
-  | number
-  | boolean
-  | null;
+export type SparseSummaryResponseSampleRowsItemAnyOfItem = string | number | number | boolean | null;

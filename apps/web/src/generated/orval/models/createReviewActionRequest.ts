@@ -4,9 +4,9 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { CreateReviewActionRequestCollectionId } from "./createReviewActionRequestCollectionId";
-import type { CreateReviewActionRequestSyncTag } from "./createReviewActionRequestSyncTag";
-import type { CreateReviewActionRequestModelVersion } from "./createReviewActionRequestModelVersion";
+import type { CreateReviewActionRequestCollectionId } from './createReviewActionRequestCollectionId';
+import type { CreateReviewActionRequestSyncTag } from './createReviewActionRequestSyncTag';
+import type { CreateReviewActionRequestModelVersion } from './createReviewActionRequestModelVersion';
 
 /**
  * Request to start a prediction review session.

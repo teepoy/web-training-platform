@@ -4,7 +4,7 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { BulkCreateSampleItem } from "./bulkCreateSampleItem";
+import type { BulkCreateSampleItem } from './bulkCreateSampleItem';
 
 export interface BulkCreateSampleRequest {
   items?: BulkCreateSampleItem[];

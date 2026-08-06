@@ -6,5 +6,5 @@
  */
 
 export type UnlinkMemberApiV1DatasetCollectionsCollectionIdMembersMemberIdDeleteParams = {
-  expected_definition_version: number;
+expected_definition_version: number;
 };

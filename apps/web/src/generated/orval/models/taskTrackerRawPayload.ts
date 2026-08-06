@@ -4,13 +4,13 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { TaskTrackerRawPayloadPlatformJob } from "./taskTrackerRawPayloadPlatformJob";
-import type { TaskTrackerRawPayloadGpuJobId } from "./taskTrackerRawPayloadGpuJobId";
-import type { TaskTrackerRawPayloadFlowRun } from "./taskTrackerRawPayloadFlowRun";
-import type { TaskTrackerRawPayloadDeployment } from "./taskTrackerRawPayloadDeployment";
-import type { TaskTrackerRawPayloadWorkQueue } from "./taskTrackerRawPayloadWorkQueue";
-import type { TaskTrackerRawPayloadWorkPool } from "./taskTrackerRawPayloadWorkPool";
-import type { TaskTrackerRawPayloadLogsItem } from "./taskTrackerRawPayloadLogsItem";
+import type { TaskTrackerRawPayloadPlatformJob } from './taskTrackerRawPayloadPlatformJob';
+import type { TaskTrackerRawPayloadGpuJobId } from './taskTrackerRawPayloadGpuJobId';
+import type { TaskTrackerRawPayloadFlowRun } from './taskTrackerRawPayloadFlowRun';
+import type { TaskTrackerRawPayloadDeployment } from './taskTrackerRawPayloadDeployment';
+import type { TaskTrackerRawPayloadWorkQueue } from './taskTrackerRawPayloadWorkQueue';
+import type { TaskTrackerRawPayloadWorkPool } from './taskTrackerRawPayloadWorkPool';
+import type { TaskTrackerRawPayloadLogsItem } from './taskTrackerRawPayloadLogsItem';
 
 export interface TaskTrackerRawPayload {
   platform_job?: TaskTrackerRawPayloadPlatformJob;

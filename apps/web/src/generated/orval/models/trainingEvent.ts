@@ -4,7 +4,7 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { TrainingEventPayload } from "./trainingEventPayload";
+import type { TrainingEventPayload } from './trainingEventPayload';
 
 export interface TrainingEvent {
   job_id: string;

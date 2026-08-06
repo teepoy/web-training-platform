@@ -4,7 +4,7 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { PredictionJobResponse } from "./predictionJobResponse";
+import type { PredictionJobResponse } from './predictionJobResponse';
 
 export interface PaginatedResponsePredictionJobResponse {
   items: PredictionJobResponse[];

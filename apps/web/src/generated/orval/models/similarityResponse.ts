@@ -4,7 +4,7 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { SimilarityNeighbor } from "./similarityNeighbor";
+import type { SimilarityNeighbor } from './similarityNeighbor';
 
 export interface SimilarityResponse {
   sample_id: string;

@@ -4,7 +4,7 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { UploadTemplateProfileResponseModelSpec } from "./uploadTemplateProfileResponseModelSpec";
+import type { UploadTemplateProfileResponseModelSpec } from './uploadTemplateProfileResponseModelSpec';
 
 export interface UploadTemplateProfileResponse {
   id: string;

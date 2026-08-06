@@ -4,6 +4,6 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { SensorEventBatchWatermarkAnyOf } from "./sensorEventBatchWatermarkAnyOf";
+import type { SensorEventBatchWatermarkAnyOf } from './sensorEventBatchWatermarkAnyOf';
 
 export type SensorEventBatchWatermark = SensorEventBatchWatermarkAnyOf | null;

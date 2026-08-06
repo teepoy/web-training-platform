@@ -6,6 +6,6 @@
  */
 
 export type ListCollectionsApiV1DatasetCollectionsGetParams = {
-  offset?: number;
-  limit?: number;
+offset?: number;
+limit?: number;
 };

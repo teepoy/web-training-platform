@@ -4,14 +4,14 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { DatasetCollectionRevisionResponseSourceSnapshotItem } from "./datasetCollectionRevisionResponseSourceSnapshotItem";
-import type { DatasetCollectionRevisionResponseRowCount } from "./datasetCollectionRevisionResponseRowCount";
-import type { DatasetCollectionRevisionResponseLabelCounts } from "./datasetCollectionRevisionResponseLabelCounts";
-import type { DatasetCollectionRevisionResponseManifestUri } from "./datasetCollectionRevisionResponseManifestUri";
-import type { DatasetCollectionRevisionResponseProvenanceUri } from "./datasetCollectionRevisionResponseProvenanceUri";
-import type { DatasetCollectionRevisionResponseTriggerRef } from "./datasetCollectionRevisionResponseTriggerRef";
-import type { DatasetCollectionRevisionResponseErrorCode } from "./datasetCollectionRevisionResponseErrorCode";
-import type { DatasetCollectionRevisionResponseErrorDetail } from "./datasetCollectionRevisionResponseErrorDetail";
+import type { DatasetCollectionRevisionResponseSourceSnapshotItem } from './datasetCollectionRevisionResponseSourceSnapshotItem';
+import type { DatasetCollectionRevisionResponseRowCount } from './datasetCollectionRevisionResponseRowCount';
+import type { DatasetCollectionRevisionResponseLabelCounts } from './datasetCollectionRevisionResponseLabelCounts';
+import type { DatasetCollectionRevisionResponseManifestUri } from './datasetCollectionRevisionResponseManifestUri';
+import type { DatasetCollectionRevisionResponseProvenanceUri } from './datasetCollectionRevisionResponseProvenanceUri';
+import type { DatasetCollectionRevisionResponseTriggerRef } from './datasetCollectionRevisionResponseTriggerRef';
+import type { DatasetCollectionRevisionResponseErrorCode } from './datasetCollectionRevisionResponseErrorCode';
+import type { DatasetCollectionRevisionResponseErrorDetail } from './datasetCollectionRevisionResponseErrorDetail';
 
 export interface DatasetCollectionRevisionResponse {
   id: string;

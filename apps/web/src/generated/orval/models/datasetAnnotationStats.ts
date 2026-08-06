@@ -4,7 +4,7 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { DatasetAnnotationStatsLabelCounts } from "./datasetAnnotationStatsLabelCounts";
+import type { DatasetAnnotationStatsLabelCounts } from './datasetAnnotationStatsLabelCounts';
 
 export interface DatasetAnnotationStats {
   total_samples?: number;

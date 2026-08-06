@@ -4,6 +4,6 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { DatasetTrainDisabledReason } from "./datasetTrainDisabledReason";
+import type { DatasetTrainDisabledReason } from './datasetTrainDisabledReason';
 
 export type DatasetStatusResponseTrainDisabledReason = DatasetTrainDisabledReason | null;

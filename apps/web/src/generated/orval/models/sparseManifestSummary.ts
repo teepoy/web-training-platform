@@ -4,7 +4,7 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { SparseManifestSummarySchemaColumnsItem } from "./sparseManifestSummarySchemaColumnsItem";
+import type { SparseManifestSummarySchemaColumnsItem } from './sparseManifestSummarySchemaColumnsItem';
 
 export interface SparseManifestSummary {
   shard_count: number;

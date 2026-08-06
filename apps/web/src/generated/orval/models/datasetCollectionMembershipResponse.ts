@@ -4,8 +4,8 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { DatasetCollectionResponse } from "./datasetCollectionResponse";
-import type { DatasetCollectionMemberResponse } from "./datasetCollectionMemberResponse";
+import type { DatasetCollectionResponse } from './datasetCollectionResponse';
+import type { DatasetCollectionMemberResponse } from './datasetCollectionMemberResponse';
 
 export interface DatasetCollectionMembershipResponse {
   collection: DatasetCollectionResponse;

@@ -4,9 +4,9 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { CreateDatasetRequestDatasetType } from "./createDatasetRequestDatasetType";
-import type { TaskSpec } from "./taskSpec";
-import type { DatasetStorageMode } from "./datasetStorageMode";
+import type { CreateDatasetRequestDatasetType } from './createDatasetRequestDatasetType';
+import type { TaskSpec } from './taskSpec';
+import type { DatasetStorageMode } from './datasetStorageMode';
 
 export interface CreateDatasetRequest {
   name: string;

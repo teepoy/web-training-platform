@@ -4,7 +4,7 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { BulkAnnotationItem } from "./bulkAnnotationItem";
+import type { BulkAnnotationItem } from './bulkAnnotationItem';
 
 export interface BulkAnnotationRequest {
   annotations: BulkAnnotationItem[];

@@ -4,7 +4,7 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { TrainingJob } from "./trainingJob";
+import type { TrainingJob } from './trainingJob';
 
 export interface PaginatedResponseTrainingJob {
   items: TrainingJob[];

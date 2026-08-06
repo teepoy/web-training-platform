@@ -4,8 +4,8 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { PredictionCollectionRequestModelVersion } from "./predictionCollectionRequestModelVersion";
-import type { PredictionCollectionRequestSourceJobId } from "./predictionCollectionRequestSourceJobId";
+import type { PredictionCollectionRequestModelVersion } from './predictionCollectionRequestModelVersion';
+import type { PredictionCollectionRequestSourceJobId } from './predictionCollectionRequestSourceJobId';
 
 export interface PredictionCollectionRequest {
   name: string;

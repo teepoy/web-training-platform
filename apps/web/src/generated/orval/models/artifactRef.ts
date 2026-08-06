@@ -4,12 +4,12 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { ArtifactRefMetadata } from "./artifactRefMetadata";
-import type { ArtifactRefName } from "./artifactRefName";
-import type { ArtifactRefFileSize } from "./artifactRefFileSize";
-import type { ArtifactRefFileHash } from "./artifactRefFileHash";
-import type { ArtifactRefFormat } from "./artifactRefFormat";
-import type { ArtifactRefCreatedAt } from "./artifactRefCreatedAt";
+import type { ArtifactRefMetadata } from './artifactRefMetadata';
+import type { ArtifactRefName } from './artifactRefName';
+import type { ArtifactRefFileSize } from './artifactRefFileSize';
+import type { ArtifactRefFileHash } from './artifactRefFileHash';
+import type { ArtifactRefFormat } from './artifactRefFormat';
+import type { ArtifactRefCreatedAt } from './artifactRefCreatedAt';
 
 export interface ArtifactRef {
   id?: string;
