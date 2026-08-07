@@ -740,7 +740,7 @@ async def execute_cancel_training_job(
     job = await repository.get_job(job_id, org_id=org_id)
     if job is None:
         return {"error": f"Training job '{job_id}' not found"}
-    ok = await submission.cancel_job(job_id)
+    ok = await submission.cancel_job(job_id, org_id=org_id)
     if ok:
         return {"id": job_id, "status": "cancelled"}
     return {

@@ -86,7 +86,6 @@ def _make_dataset_service(repo_mock: AsyncMock, storage_factory_mock: AsyncMock)
     return DatasetService(
         repository=repo_mock,
         storage_factory=storage_factory_mock,
-        payload_store=MagicMock(),
         config=MagicMock(),
     )
 

@@ -33,7 +33,6 @@ from app.modules.training.port.http.schemas import (
 from app.modules.datasets.port.local import DatasetCompatibilityError
 from app.modules.training.domain.submission import (
     TrainingDatasetNotFoundError,
-    TrainingReadinessError,
     TrainingRuntimeUnavailableError,
     TrainingSubmissionError,
 )
@@ -44,6 +43,7 @@ from app.shared.sse.emit import emit_sse
 from app.shared.sse.events import SSEEvent, TrainingStatusEvent
 
 router = APIRouter(prefix="/api/v1", tags=["training"])
+_SSE_EVENT_PAGE_SIZE = 200
 
 
 @router.get("/trainers")
@@ -97,13 +97,10 @@ async def create_training_job(
         )
     except TrainingDatasetNotFoundError:
         raise HTTPException(status_code=404, detail="dataset not found")
-    except TrainingReadinessError as exc:
-        raise HTTPException(
-            status_code=422,
-            detail=exc.report.as_http_detail(),
-        ) from exc
     except (DatasetCompatibilityError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except TrainingRuntimeUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(
             status_code=502, detail=f"Failed to start training job: {exc}"
@@ -123,11 +120,6 @@ async def create_train_and_predict_job(
         )
     except TrainingDatasetNotFoundError:
         raise HTTPException(status_code=404, detail="dataset not found")
-    except TrainingReadinessError as exc:
-        raise HTTPException(
-            status_code=422,
-            detail=exc.report.as_http_detail(),
-        ) from exc
     except DatasetCompatibilityError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except ValueError as exc:
@@ -185,7 +177,7 @@ async def cancel_job(
     org: Organization = Depends(get_current_org),
 ) -> CancelJobResponse:
     try:
-        ok = await submission.cancel_job(job_id)
+        ok = await submission.cancel_job(job_id, org_id=org.id)
     except HTTPException:
         raise
     except Exception as exc:
@@ -205,26 +197,31 @@ async def get_job_events(
         raise HTTPException(status_code=404, detail="job not found")
 
     async def event_stream():
-        idx = 0
+        after_id = 0
         while True:
             if await request.is_disconnected():
                 break
-            events = await repo.list_events(job_id)
-            while idx < len(events):
-                ev = events[idx]
-                yield emit_sse(
-                    SSEEvent(
-                        TrainingStatusEvent(
-                            event_type="status",
-                            job_id=ev.job_id,
-                            ts=ev.ts,
-                            level=ev.level,
-                            message=ev.message,
-                            payload=ev.payload,
+            while True:
+                events, after_id = await repo.list_events_after(
+                    job_id,
+                    after_id=after_id,
+                    limit=_SSE_EVENT_PAGE_SIZE,
+                )
+                for ev in events:
+                    yield emit_sse(
+                        SSEEvent(
+                            TrainingStatusEvent(
+                                event_type="status",
+                                job_id=ev.job_id,
+                                ts=ev.ts,
+                                level=ev.level,
+                                message=ev.message,
+                                payload=ev.payload,
+                            )
                         )
                     )
-                )
-                idx += 1
+                if len(events) < _SSE_EVENT_PAGE_SIZE:
+                    break
             await asyncio.sleep(0.5)
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")

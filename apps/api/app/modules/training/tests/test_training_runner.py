@@ -8,6 +8,7 @@ import pytest
 
 from app.modules.runtime.domain.context import TrainingRuntimeContext
 from app.modules.runtime.domain.events import OperationCompleted
+from app.modules.training.app.services.preflight import TrainingPreflightService
 from app.modules.training.flows.train_job import execute_training_runtime
 
 
@@ -71,7 +72,12 @@ async def _completed_events():
 
 def _app_context() -> Any:
     injector = Mock()
-    injector.get.return_value = object()
+    preflight = Mock()
+    preflight.ensure_ready = AsyncMock()
+    repository = object()
+    injector.get.side_effect = lambda dependency: (
+        preflight if dependency is TrainingPreflightService else repository
+    )
     return cast(
         Any,
         SimpleNamespace(

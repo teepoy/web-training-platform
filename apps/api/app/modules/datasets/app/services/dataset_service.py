@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-import asyncio
 from typing import Any
 
 from fastapi import HTTPException
 from injector import inject
-from app.modules.storage.domain.sparse import DatasetPayloadStore
 
 from app.core.config import AppConfig
 from app.modules.storage.adapter.factory import DatasetStorageFactory
@@ -18,7 +16,6 @@ from app.modules.datasets.domain.status import (
 from app.shared.api.schemas import (
     Annotation,
     Dataset,
-    DatasetStorageMode,
     SPARSE_NO_LS,
 )
 from app.shared.infrastructure.label_studio.client import ls_annotation_to_platform
@@ -33,12 +30,10 @@ class DatasetService:
         self,
         repository: DatasetRepository,
         storage_factory: DatasetStorageFactory,
-        payload_store: DatasetPayloadStore,
         config: AppConfig,
     ) -> None:
         self._repository = repository
         self._storage_factory = storage_factory
-        self._payload_store = payload_store
         self._config = config
 
     def to_response(self, dataset: Dataset) -> Dataset:
@@ -54,46 +49,6 @@ class DatasetService:
                 update={"ls_project_url": f"{ls_url}/projects/{dataset.ls_project_id}"}
             )
         return dataset
-
-    async def to_list_response(self, dataset: Dataset) -> Dataset:
-        """Compute lightweight fields used by the dataset index."""
-        sample_count = await self._resolve_sample_count(dataset)
-        return self._with_list_sample_count(dataset, sample_count)
-
-    async def to_list_responses(self, datasets: list[Dataset]) -> list[Dataset]:
-        """Compute lightweight dataset index fields in bulk."""
-        db_full_ids = [
-            dataset.id
-            for dataset in datasets
-            if dataset.storage_mode == DatasetStorageMode.DB_FULL
-        ]
-        db_counts = await self._repository.count_samples_by_dataset(db_full_ids)
-        sparse_datasets = [
-            dataset
-            for dataset in datasets
-            if dataset.storage_mode == DatasetStorageMode.FILE_SHARD_SPARSE
-        ]
-        sparse_counts = dict(
-            zip(
-                (dataset.id for dataset in sparse_datasets),
-                await asyncio.gather(
-                    *(
-                        self._resolve_sample_count(dataset)
-                        for dataset in sparse_datasets
-                    )
-                ),
-                strict=True,
-            )
-        )
-
-        responses: list[Dataset] = []
-        for dataset in datasets:
-            if dataset.storage_mode == DatasetStorageMode.DB_FULL:
-                sample_count = db_counts.get(dataset.id, 0)
-            else:
-                sample_count = sparse_counts[dataset.id]
-            responses.append(self._with_list_sample_count(dataset, sample_count))
-        return responses
 
     async def get_status(self, dataset_id: str, org_id: str) -> DatasetStatus:
         storage = await self._storage_factory.open(dataset_id, org_id)
@@ -116,31 +71,6 @@ class DatasetService:
             annotated_samples=int(stats.get("annotated_samples", 0)),
             total_samples=int(stats.get("total_samples", 0)),
         )
-
-    def _with_list_sample_count(self, dataset: Dataset, sample_count: int) -> Dataset:
-        dataset_meta = dict(dataset.dataset_meta or {})
-        dataset_meta.update(
-            {"sample_count": sample_count, "total_samples": sample_count}
-        )
-        return self.to_response(
-            dataset.model_copy(update={"dataset_meta": dataset_meta})
-        )
-
-    async def _resolve_sample_count(self, dataset: Dataset) -> int:
-        if not dataset.org_id:
-            raise RuntimeError(
-                f"Dataset is missing required organization ownership: {dataset.id}"
-            )
-        if dataset.storage_mode == DatasetStorageMode.FILE_SHARD_SPARSE:
-            manifest = await self._payload_store.get_manifest(
-                dataset.id,
-                dataset.org_id,
-            )
-            return int(manifest.total_rows)
-
-        storage = await self._storage_factory.open(dataset.id, dataset.org_id)
-        stats = await storage.get_annotation_stats()
-        return int(stats.get("total_samples", 0))
 
     async def build_export_data(
         self,

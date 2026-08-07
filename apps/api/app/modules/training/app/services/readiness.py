@@ -44,7 +44,11 @@ class TrainingReadinessService:
             sample_ids=sample_ids,
             sample_filter=sample_filter,
         )
-        label_counts = self._collect_label_counts(annotated, label_column)
+        label_counts = await asyncio.to_thread(
+            self._collect_label_counts,
+            annotated,
+            label_column,
+        )
         annotated_samples = sum(label_counts.values())
         active_labels = sorted(label_counts)
         reasons: list[str] = []
@@ -156,8 +160,8 @@ class TrainingReadinessService:
             raise ValueError(
                 f"Dataset is missing required organization ownership: {dataset.id}"
             )
-        storage = await self._storage_factory.open(
-            dataset.id,
+        storage = await self._storage_factory.open_from_metadata(
+            dataset,
             org_id=dataset.org_id,
         )
         lazyframe = await storage.list_samples(
@@ -174,7 +178,7 @@ class TrainingReadinessService:
 
         import polars as pl
 
-        schema_names = set(cast(Any, lazyframe).collect_schema().names())
+        schema_names = await asyncio.to_thread(self._schema_names, lazyframe)
         label_column = (
             "label"
             if "label" in schema_names
@@ -189,6 +193,10 @@ class TrainingReadinessService:
                 & (pl.col(label_column).cast(pl.Utf8).str.strip_chars() != "")
             )
         return annotated, label_column
+
+    @staticmethod
+    def _schema_names(lazyframe: Any) -> set[str]:
+        return set(cast(Any, lazyframe).collect_schema().names())
 
     @staticmethod
     def _collect_label_counts(

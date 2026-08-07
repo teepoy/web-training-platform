@@ -6,6 +6,7 @@ from typing import cast
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.modules.training.domain.repository import ActiveTrainingExecution
 from app.shared.api.schemas import (
     ArtifactRef,
     TrainingEvent,
@@ -102,31 +103,69 @@ class TrainingJobRepository:
         self,
         job_id: str,
         status: JobStatus,
-        summary: dict | None = None,
-    ) -> None:
+    ) -> bool:
         async with self.session_factory() as session:
             row = await session.get(TrainingJobORM, job_id)
             if row is None:
-                return
+                return False
+            if row.status == status.value:
+                return False
             row.status = status.value
             row.updated_at = _utcnow()
             await session.commit()
+            return True
 
-    async def get_job_external_id(self, job_id: str) -> str | None:
+    async def get_job_external_id(
+        self,
+        job_id: str,
+        org_id: str | None = None,
+    ) -> str | None:
         async with self.session_factory() as session:
-            row = await session.get(TrainingJobORM, job_id)
-            return None if row is None else row.external_job_id
+            conditions = [TrainingJobORM.id == job_id]
+            if org_id is not None:
+                conditions.append(TrainingJobORM.org_id == org_id)
+            return await session.scalar(
+                select(TrainingJobORM.external_job_id).where(*conditions)
+            )
+
+    async def list_active_executions(self) -> list[ActiveTrainingExecution]:
+        async with self.session_factory() as session:
+            rows = (
+                await session.execute(
+                    select(
+                        TrainingJobORM.id,
+                        TrainingJobORM.external_job_id,
+                        TrainingJobORM.status,
+                    ).where(
+                        TrainingJobORM.external_job_id.is_not(None),
+                        TrainingJobORM.status.in_(
+                            [JobStatus.QUEUED.value, JobStatus.RUNNING.value]
+                        ),
+                    )
+                )
+            ).all()
+            return [
+                ActiveTrainingExecution(
+                    job_id=str(job_id),
+                    external_job_id=str(external_job_id),
+                    status=JobStatus(str(status)),
+                )
+                for job_id, external_job_id, status in rows
+            ]
 
     async def list_jobs(
         self,
         org_id: str | None = None,
         dataset_id: str | None = None,
+        *,
+        include_artifacts: bool = False,
     ) -> list[TrainingJob]:
         items, _ = await self.list_jobs_paginated(
             org_id=org_id,
             dataset_id=dataset_id,
             offset=0,
             limit=None,
+            include_artifacts=include_artifacts,
         )
         return items
 
@@ -137,6 +176,7 @@ class TrainingJobRepository:
         *,
         offset: int = 0,
         limit: int | None = 50,
+        include_artifacts: bool = True,
     ) -> tuple[list[TrainingJob], int]:
         async with self.session_factory() as session:
             conditions = []
@@ -176,7 +216,7 @@ class TrainingJobRepository:
             artifacts_by_job: dict[str, list[ArtifactRef]] = {
                 job_id: [] for job_id in job_ids
             }
-            if job_ids:
+            if include_artifacts and job_ids:
                 artifact_rows = (
                     (
                         await session.execute(
@@ -250,6 +290,31 @@ class TrainingJobRepository:
                 .all()
             )
             return [self._event_to_domain(r) for r in rows]
+
+    async def list_events_after(
+        self,
+        job_id: str,
+        after_id: int,
+        limit: int = 200,
+    ) -> tuple[list[TrainingEvent], int]:
+        async with self.session_factory() as session:
+            rows = (
+                (
+                    await session.execute(
+                        select(TrainingEventORM)
+                        .where(
+                            TrainingEventORM.job_id == job_id,
+                            TrainingEventORM.id > after_id,
+                        )
+                        .order_by(TrainingEventORM.id.asc())
+                        .limit(limit)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            next_after_id = rows[-1].id if rows else after_id
+            return [self._event_to_domain(row) for row in rows], next_after_id
 
     async def list_events_paginated(
         self, job_id: str, offset: int = 0, limit: int = 50

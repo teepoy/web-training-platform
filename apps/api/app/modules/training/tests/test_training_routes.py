@@ -16,6 +16,7 @@ from app.modules.sc.wafer_data_gen import build_patch_sample
 from app.modules.training.port.http.deps import (
     get_training_submission,
 )
+from tests.conftest import DEFAULT_ORG_ID
 
 
 # ---------------------------------------------------------------------------
@@ -28,6 +29,24 @@ def test_cancel_training_job_nonexistent() -> None:
         assert resp.status_code == 200
         # submission.cancel_job returns False for missing jobs
         assert resp.json()["cancelled"] is False
+
+
+def test_cancel_training_job_is_scoped_to_current_org() -> None:
+    with TestClient(app) as c:
+        submission = app.state.app_context.training.training_submission
+        with patch.object(
+            submission,
+            "cancel_job",
+            new=AsyncMock(return_value=False),
+        ) as cancel:
+            app.dependency_overrides[get_training_submission] = lambda: submission
+            try:
+                resp = c.post("/api/v1/training-jobs/job-1/cancel")
+            finally:
+                app.dependency_overrides.pop(get_training_submission, None)
+
+        assert resp.status_code == 200
+        cancel.assert_awaited_once_with("job-1", org_id=DEFAULT_ORG_ID)
 
 
 # ---------------------------------------------------------------------------

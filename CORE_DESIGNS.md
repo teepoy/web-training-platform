@@ -104,6 +104,15 @@ API 可以通过调度器或 runtime service client 创建后台任务、查询�
 - GPU runtime service 执行训练、预测、嵌入等 GPU 计算，并通过 data-plane contract 读取 dataset view、提交 prediction/artifact/progress。
 - Task Tracker 表达产品视角的任务阶段、完成状态和产物位置。
 - Prometheus/Grafana/Loki 是运维观测系统，不是产品任务状态系统。
+- Training 的数据相关 readiness preflight 在已提交的 durable workflow 内执行，HTTP
+  提交路径只做权限、source metadata、capability 与参数校验，不扫描 sample 表、manifest
+  或 raw Parquet。Preflight 必须保持 `assess_classes` 的类别检查语义；图片可读性仍由具体
+  trainer runtime 负责。Preflight 失败写入平台 job 的 failed 状态与事件，不恢复同步
+  HTTP 422 扫描。
+- API lifespan 运行 training status reconciler，从数据库恢复所有具有 external execution
+  ID 的 queued/running job，并以显式配置的间隔对照 execution backend 修正平台业务状态。
+  单个日志监听协程不是状态事实来源；API 重启或日志读取异常不得让任务永久停留在
+  queued/running。
 
 实时进度面向前端首选 SSE。WebSocket 不是默认方案。
 

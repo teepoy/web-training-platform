@@ -196,13 +196,14 @@ Roles must be declared in `images[].role` or `metadata.shard_images[].role`.
 The runtime does not infer roles from `image_uris` position, `image_type`, or review
 images; missing role metadata is a dataset validation failure.
 
-Submission readiness validates the selected annotations and requires at least two
-declared labels, but it does not resolve image bytes. Image availability belongs to
-the SC runtime: both current trainers skip rows without two readable image roles and
-raise `RuntimeExecutionError` if fewer than two effective labels remain after that
-filter. The optional detailed readiness report may still expose readable,
-runtime-resolvable, unusable, and skipped counts; there is no configurable
-`missing_image_policy`.
+The durable training workflow runs a preflight that validates the selected
+annotations and requires at least two declared labels. The HTTP submission path does
+not open sample storage or raw Parquet. Preflight does not resolve image bytes; image
+availability belongs to the SC runtime. Both current trainers skip rows without two
+readable image roles and raise `RuntimeExecutionError` if fewer than two effective
+labels remain after that filter. The optional detailed readiness report may still
+expose readable, runtime-resolvable, unusable, and skipped counts; there is no
+configurable `missing_image_policy`.
 
 For SC Train & Predict, the workflow applies the user-visible training policy after
 the workflow filter: labeled rows are ordered by stable sample identity and at most

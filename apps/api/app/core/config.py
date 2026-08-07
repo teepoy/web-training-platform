@@ -40,6 +40,7 @@ class AppSection(ConfigSection):
 
 class ExecutionConfig(ConfigSection):
     engine: str = "local"
+    status_reconcile_interval_seconds: float = 2.0
 
 
 class DatabaseConfig(ConfigSection):

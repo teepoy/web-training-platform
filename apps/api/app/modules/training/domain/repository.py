@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Protocol
 
 from app.shared.api.schemas import (
@@ -8,6 +9,13 @@ from app.shared.api.schemas import (
     TrainingEvent,
     TrainingJob,
 )
+
+
+@dataclass(frozen=True, slots=True)
+class ActiveTrainingExecution:
+    job_id: str
+    external_job_id: str
+    status: JobStatus
 
 
 class TrainingRepository(Protocol):
@@ -25,6 +33,8 @@ class TrainingRepository(Protocol):
         self,
         org_id: str | None = None,
         dataset_id: str | None = None,
+        *,
+        include_artifacts: bool = False,
     ) -> list[TrainingJob]: ...
 
     async def list_jobs_paginated(
@@ -34,22 +44,35 @@ class TrainingRepository(Protocol):
         *,
         offset: int = 0,
         limit: int = 50,
+        include_artifacts: bool = True,
     ) -> tuple[list[TrainingJob], int]: ...
 
     async def set_job_external_id(self, job_id: str, external_job_id: str) -> None: ...
 
-    async def get_job_external_id(self, job_id: str) -> str | None: ...
+    async def get_job_external_id(
+        self,
+        job_id: str,
+        org_id: str | None = None,
+    ) -> str | None: ...
+
+    async def list_active_executions(self) -> list[ActiveTrainingExecution]: ...
 
     async def update_job_status(
         self,
         job_id: str,
         status: JobStatus,
-        summary: dict | None = None,
-    ) -> None: ...
+    ) -> bool: ...
 
     async def add_event(self, event: TrainingEvent) -> None: ...
 
     async def list_events(self, job_id: str) -> list[TrainingEvent]: ...
+
+    async def list_events_after(
+        self,
+        job_id: str,
+        after_id: int,
+        limit: int = 200,
+    ) -> tuple[list[TrainingEvent], int]: ...
 
     async def list_events_paginated(
         self,

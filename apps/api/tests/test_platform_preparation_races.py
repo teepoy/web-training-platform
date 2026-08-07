@@ -42,6 +42,56 @@ async def test_prepare_platform_rejects_a_concurrent_runner(monkeypatch) -> None
 
 
 @pytest.mark.asyncio
+async def test_prepare_platform_prepares_dev_auth_context(monkeypatch) -> None:
+    connection = AsyncMock()
+    connection.scalar.return_value = True
+
+    class _ConnectionContext:
+        async def __aenter__(self):
+            return connection
+
+        async def __aexit__(self, *_args):
+            return None
+
+    session_factory = object()
+    engine = SimpleNamespace(
+        connect=lambda: _ConnectionContext(),
+        dispose=AsyncMock(),
+    )
+    prefect = SimpleNamespace(close=AsyncMock())
+    shared = SimpleNamespace(
+        db_engine=engine,
+        prefect_client=prefect,
+        session_factory=session_factory,
+    )
+    prepare_dev_auth = AsyncMock()
+    monkeypatch.setattr(platform_setup, "build_shared_infra", lambda _config: shared)
+    monkeypatch.setattr(platform_setup, "_alembic_config", MagicMock())
+    monkeypatch.setattr(platform_setup.asyncio, "to_thread", AsyncMock())
+    monkeypatch.setattr(
+        platform_setup,
+        "validate_database_revision",
+        AsyncMock(),
+    )
+    monkeypatch.setattr(platform_setup, "prepare_dev_auth_context", prepare_dev_auth)
+    monkeypatch.setattr(platform_setup, "prepare_prefect", AsyncMock())
+    monkeypatch.setattr(platform_setup, "validate_platform_dependencies", AsyncMock())
+
+    config = cast(
+        AppConfig,
+        SimpleNamespace(
+            app=SimpleNamespace(env="dev"),
+            auth=SimpleNamespace(enabled=False),
+        ),
+    )
+    await platform_setup.prepare_platform(config)
+
+    prepare_dev_auth.assert_awaited_once_with(session_factory)
+    prefect.close.assert_awaited_once()
+    engine.dispose.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_prefect_create_conflicts_are_reread_and_converged() -> None:
     client = PrefectClient("http://prefect.test/api")
     client._request = AsyncMock(  # type: ignore[method-assign]

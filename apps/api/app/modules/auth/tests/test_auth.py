@@ -11,8 +11,10 @@ from fastapi.testclient import TestClient
 from httpx import Response
 from sqlalchemy import select
 
+import app.modules.auth.port.http.deps as auth_deps
 import app.modules.auth.port.http.router as auth_router
 from app.main import app
+from app.shared.api.schemas import Organization, User
 from app.shared.db.models import UserORM
 
 
@@ -136,6 +138,34 @@ def _request_with_redis(redis_client: object) -> Request:
     app_context = SimpleNamespace(shared=shared)
     state = SimpleNamespace(app_context=app_context)
     return cast(Request, SimpleNamespace(app=SimpleNamespace(state=state)))
+
+
+def test_auth_disabled_dependencies_reuse_initialized_dev_context(monkeypatch) -> None:
+    user = User(email="seed@example.com", name="Seed Admin", is_superadmin=True)
+    organization = Organization(name="Dev No Auth", slug="dev-no-auth")
+    state = SimpleNamespace(
+        dev_auth_context=auth_deps.DevAuthContext(
+            user=user,
+            organization=organization,
+        )
+    )
+    request = cast(
+        Request,
+        SimpleNamespace(
+            app=SimpleNamespace(state=state),
+            headers={"X-Organization-ID": organization.id},
+            query_params={},
+        ),
+    )
+    monkeypatch.setattr(auth_deps, "_auth_enabled", lambda: False)
+
+    def fail_on_request_time_session(_request: Request | None = None) -> None:
+        raise AssertionError("dev auth dependencies must not open a request-time session")
+
+    monkeypatch.setattr(auth_deps, "_get_session_factory", fail_on_request_time_session)
+
+    assert asyncio.run(auth_deps.get_current_user(request)) is user
+    assert asyncio.run(auth_deps.get_current_org(request, user)) is organization
 
 
 def test_jwt_decode_daily_login_event_is_deduped_by_redis(caplog) -> None:

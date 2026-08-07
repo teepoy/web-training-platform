@@ -27,6 +27,73 @@ For example, a sample ratio of `2` means 2% and selects 20 rows from a group of
 1,000; it is not a percentage of the final total limit. Group
 shortfalls still require an explicit policy.
 
+## Dynamic spatial features
+
+The library can derive runtime-only fields before executing the rule pipeline:
+
+- `compute_dynamic_adders(...)` compares the current map with a user-selected
+  reference layer. A current defect with no reference defect inside the
+  inclusive radius receives `adder=1`; otherwise it receives `adder=0`.
+  `ONE_TO_ONE` consumes a matched reference defect, following the conventional
+  semiconductor level-comparison filter. `ANY_REFERENCE` independently checks
+  every current defect against the reference map.
+- `compute_dynamic_clusters(...)` runs deterministic DBSCAN on the current map.
+  Both the neighborhood radius and `minimum_points` are required. It returns
+  one-based cluster IDs and core/border/noise roles; noise has cluster ID `0`.
+- `enrich_rows_with_dynamic_spatial_features(...)` copies rows and adds
+  `dynamic_adder`, `dynamic_cluster`, `dynamic_cluster_id`, match-distance, and
+  cluster-audit fields so Extra filter, conditional limit, and group quota rules
+  can consume them normally.
+
+Spatial radii use the same unit as the chosen coordinate columns. SC wafer
+coordinates are nanometers, so UI values of 50 µm and 500 µm must be passed as
+`50_000` and `500_000`, respectively.
+
+## Review Sampling recipes
+
+`sampling_rules.recipes` contains executable examples that return ordinary
+`SamplingProgram` values:
+
+```python
+from sampling_rules import (
+    Rounding,
+    adder_count_program,
+    clustered_count_program,
+    clustered_ratio_program,
+    per_die_cap_program,
+    prediction_log_quota_program,
+)
+
+# At most 50 dynamically clustered defects.
+cluster_count = clustered_count_program(50)
+
+# 10% of defects belonging to any dynamic cluster; DBSCAN noise is excluded.
+cluster_ratio = clustered_ratio_program(10, rounding=Rounding.NEAREST)
+
+# At most 30 dynamic adders.
+adder_count = adder_count_program(30)
+
+# At most five defects from every die.
+per_die = per_die_cap_program(
+    5,
+    die_x_field="index_x",
+    die_y_field="index_y",
+)
+
+# Per prediction result: x = clip(log10(total), 3, 10), rounded upward.
+by_prediction = prediction_log_quota_program(
+    {"scratch": 921, "particle": 12_500, "residue": 240_000},
+    prediction_field="prediction_label",
+    minimum=3,
+    maximum=10,
+    rounding=Rounding.CEIL,
+)
+```
+
+Count recipes are caps: a group with fewer than its target contributes every
+available row. Prediction populations must come from the same candidate scope
+and filters that will be sampled, otherwise the derived target is stale.
+
 ## Example
 
 ```python

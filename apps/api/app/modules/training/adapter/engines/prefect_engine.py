@@ -23,6 +23,7 @@ from datetime import UTC, datetime
 from app.shared.api.schemas import ArtifactRef, TrainingEvent, TrainingJob
 from app.shared.api.schemas import JobStatus
 from app.modules.runtime.app.services.deployment_seed import TRAIN_RUNTIME_DEPLOYMENT
+from app.modules.training.domain.submission import TrainingRuntimeUnavailableError
 from app.shared.domain.protocols import PrefectClient
 
 # ---------------------------------------------------------------------------
@@ -41,6 +42,7 @@ _PREFECT_STATE_MAP: dict[str, JobStatus] = {
 }
 
 _TERMINAL_STATES = {"COMPLETED", "FAILED", "CANCELLED", "CRASHED"}
+_LOG_PAGE_SIZE = 200
 
 
 class PrefectWorkPoolEngine:
@@ -66,16 +68,13 @@ class PrefectWorkPoolEngine:
     async def _ensure_deployment(self, deployment_name: str) -> str:
         """Resolve the deployment ID, caching it for subsequent calls.
 
-        Raises HTTPException if deployment is not found.
+        Raises TrainingRuntimeUnavailableError if deployment is not found.
         """
         if deployment_name not in self._deployment_ids:
             deployment_id = await self._client.resolve_deployment_id(deployment_name)
             if deployment_id is None:
-                from fastapi import HTTPException
-
-                raise HTTPException(
-                    status_code=503,
-                    detail=f"Deployment '{deployment_name}' not found. "
+                raise TrainingRuntimeUnavailableError(
+                    f"Deployment '{deployment_name}' not found. "
                     "The embedded Prefect runner may still be starting up.",
                 )
             self._deployment_ids[deployment_name] = deployment_id
@@ -156,7 +155,7 @@ class PrefectWorkPoolEngine:
         run = await self._client.get_flow_run(external_job_id)
         job_id: str = run.get("parameters", {}).get("job_id", external_job_id)
 
-        last_log_count = 0
+        log_offset = 0
         prev_state = ""
 
         while True:
@@ -175,16 +174,24 @@ class PrefectWorkPoolEngine:
                 )
                 prev_state = state_type
 
-            # Fetch logs and yield any that are new since last poll
-            logs = await self._client.get_flow_run_logs(external_job_id)
-            for log in logs[last_log_count:]:
-                yield TrainingEvent(
-                    job_id=job_id,
-                    ts=datetime.now(UTC),
-                    message=log.get("message", ""),
-                    payload={"log_level": log.get("level", 0)},
+            # Fetch only logs not consumed by earlier polls. Page until caught up
+            # so bursts larger than the Prefect page size are not truncated.
+            while True:
+                logs = await self._client.get_flow_run_logs(
+                    external_job_id,
+                    limit=_LOG_PAGE_SIZE,
+                    offset=log_offset,
                 )
-            last_log_count = len(logs)
+                for log in logs:
+                    yield TrainingEvent(
+                        job_id=job_id,
+                        ts=datetime.now(UTC),
+                        message=log.get("message", ""),
+                        payload={"log_level": log.get("level", 0)},
+                    )
+                log_offset += len(logs)
+                if len(logs) < _LOG_PAGE_SIZE:
+                    break
 
             # Stop polling once the run has finished
             if state_type in _TERMINAL_STATES:

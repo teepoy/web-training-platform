@@ -1,17 +1,25 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
 from app.modules.runtime.domain.context import TrainAndPredictRuntimeContext
 from app.modules.runtime.domain.events import OperationCompleted
+from app.modules.training.app.services.preflight import TrainingPreflightService
 from app.workflows.train_predict import train_and_predict_flow
 
 
 @pytest.mark.asyncio
 async def test_train_and_predict_flow_invokes_registered_workflow() -> None:
-    app_context = object()
+    preflight = Mock()
+    preflight.ensure_ready = AsyncMock()
+    injector = Mock()
+    injector.get.side_effect = lambda dependency: (
+        preflight if dependency is TrainingPreflightService else object()
+    )
+    app_context = SimpleNamespace(injector=injector)
 
     async def events():
         yield OperationCompleted({"model_id": "model-1"})
@@ -47,3 +55,4 @@ async def test_train_and_predict_flow_invokes_registered_workflow() -> None:
     trainer_id, context = stream.call_args.args
     assert trainer_id == "resnet50-sc-v1"
     assert isinstance(context, TrainAndPredictRuntimeContext)
+    preflight.ensure_ready.assert_awaited_once()

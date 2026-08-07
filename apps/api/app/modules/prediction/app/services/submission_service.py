@@ -32,6 +32,8 @@ from app.shared.api.schemas import JobStatus, PredictionEvent, PredictionJob
 from app.shared.api.schemas import Dataset
 from app.shared.domain.protocols import PrefectClient
 
+_LOG_PAGE_SIZE = 200
+
 
 class PredictionSubmissionService:
     @inject
@@ -230,7 +232,7 @@ class PredictionSubmissionService:
         return None, revision
 
     async def _poll_run(self, job_id: str, external_id: str) -> None:
-        last_log_count = 0
+        log_offset = 0
         previous_state = ""
         while True:
             await asyncio.sleep(2)
@@ -254,17 +256,24 @@ class PredictionSubmissionService:
                         job_id, JobStatus.QUEUED
                     )
                 previous_state = state
-            logs = await self._prefect_client.get_flow_run_logs(external_id)
-            for log in logs[last_log_count:]:
-                await self._repository.add_prediction_event(
-                    PredictionEvent(
-                        job_id=job_id,
-                        ts=datetime.now(UTC),
-                        message=str(log.get("message", "")),
-                        payload={"log_level": log.get("level", 0)},
-                    )
+            while True:
+                logs = await self._prefect_client.get_flow_run_logs(
+                    external_id,
+                    limit=_LOG_PAGE_SIZE,
+                    offset=log_offset,
                 )
-            last_log_count = len(logs)
+                for log in logs:
+                    await self._repository.add_prediction_event(
+                        PredictionEvent(
+                            job_id=job_id,
+                            ts=datetime.now(UTC),
+                            message=str(log.get("message", "")),
+                            payload={"log_level": log.get("level", 0)},
+                        )
+                    )
+                log_offset += len(logs)
+                if len(logs) < _LOG_PAGE_SIZE:
+                    break
             if state in {"COMPLETED", "FAILED", "CANCELLED", "CRASHED"}:
                 break
 

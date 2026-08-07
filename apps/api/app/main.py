@@ -12,13 +12,16 @@ from starlette.routing import compile_path
 
 from app.composition import build_app_context
 from app.modules.auth.app.services.auth_service import decode_access_token
+from app.modules.auth.app.services.dev_auth_context import load_dev_auth_context
 from app.modules.auth.port.http.deps import (
     get_current_org,
     get_current_user,
     require_superadmin,
-    seed_dev_auth_context,
 )
 from app.modules.dashboard.port.http.deps import DashboardServiceDep
+from app.modules.training.app.services.status_reconciler import (
+    TrainingStatusReconciler,
+)
 from app.shared.api.schemas import (
     DashboardResponse,
 )
@@ -56,12 +59,16 @@ async def lifespan(api: FastAPI):
     cfg = load_config()
     init_logging(cfg)
     ctx = build_app_context(cfg)
+    if ctx.injector is None:
+        raise RuntimeError("AppContext injector was not initialized")
+    training_status_reconciler = ctx.injector.get(TrainingStatusReconciler)
     api.state.app_context = ctx
     import redis.asyncio as redis_client  # type: ignore[import-untyped]
 
     metrics_redis: Any | None = None
     api.state.startup_ready = False
     api.state.metrics_redis = None
+    api.state.dev_auth_context = None
     try:
         if bool(cfg.db.auto_create):
             await init_db(ctx.shared.db_engine)
@@ -91,8 +98,10 @@ async def lifespan(api: FastAPI):
             await validate_platform_dependencies(cfg, ctx.shared)
 
         if not bool(getattr(cfg.auth, "enabled", True)):
-            _logger.info("auth disabled — seeding dev user on startup")
-            await seed_dev_auth_context(ctx.shared.session_factory)
+            _logger.info("auth disabled — loading prepared dev auth context")
+            api.state.dev_auth_context = await load_dev_auth_context(
+                ctx.shared.session_factory
+            )
 
         if ctx.jobs is None:
             raise RuntimeError("AppContext jobs module was not initialized")
@@ -103,10 +112,15 @@ async def lifespan(api: FastAPI):
             sensor_count = 0
         _logger.info("Sensor registry: %d sensors loaded", sensor_count)
 
+        if str(cfg.execution.engine) == "prefect":
+            training_status_reconciler.start()
+
         api.state.startup_ready = True
         yield
     finally:
         api.state.startup_ready = False
+        api.state.dev_auth_context = None
+        await training_status_reconciler.stop()
         await online_jwt_users.close()
         if metrics_redis is not None and api.state.metrics_redis is None:
             await metrics_redis.aclose()

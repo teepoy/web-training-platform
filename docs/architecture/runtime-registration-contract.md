@@ -189,8 +189,8 @@ trainer/predictor ID resolves the callable.
 
 Missing-image behavior belongs to the SC implementations:
 
-- submission readiness validates annotation labels only and leaves actual image
-  resolution to runtime;
+- workflow preflight validates annotation labels only, outside the HTTP request path,
+  and leaves actual image resolution to runtime;
 - current ResNet and YOLO trainers skip materialization failures and unreadable
   image pairs;
 - after filtering, training fails with `RuntimeExecutionError` unless at least

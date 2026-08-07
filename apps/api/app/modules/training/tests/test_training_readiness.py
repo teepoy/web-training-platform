@@ -29,6 +29,14 @@ class _StorageFactory:
         _ = org_id
         return self._storage
 
+    async def open_from_metadata(
+        self,
+        _dataset: Dataset,
+        org_id: str | None = None,
+    ) -> _Storage:
+        _ = org_id
+        return self._storage
+
 
 def _factory(rows: list[dict[str, Any]]) -> DatasetStorageFactoryPort:
     return cast(DatasetStorageFactoryPort, _StorageFactory(rows))

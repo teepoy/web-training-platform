@@ -3,31 +3,32 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime, timedelta
+from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request
 from jose import JWTError
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
-
-from typing import Annotated
-
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import load_config
-from app.shared.api.schemas import Organization, User
-from app.modules.auth.domain.repository import AuthRepository
-from app.shared.db.session import AppDatabaseSessionFactory
-from app.shared.injection import resolve
 from app.modules.auth.app.services.auth_service import (
     decode_access_token,
     verify_personal_access_token,
 )
+from app.modules.auth.app.services.dev_auth_context import (
+    DevAuthContext,
+    orm_to_organization,
+    orm_to_user,
+)
+from app.modules.auth.domain.repository import AuthRepository
+from app.shared.api.schemas import Organization, User
 from app.shared.db.registry import (
     OrgMembershipORM,
     OrganizationORM,
     PersonalAccessTokenORM,
     UserORM,
 )
+from app.shared.db.session import AppDatabaseSessionFactory
+from app.shared.injection import resolve
 
 
 logger = logging.getLogger(__name__)
@@ -44,13 +45,6 @@ def get_session_factory(
 
 
 SessionFactory = Annotated[AppDatabaseSessionFactory, Depends(get_session_factory)]
-
-_DEV_USER_ID = "00000000-0000-0000-0000-000000000002"
-_DEV_ORG_ID = "00000000-0000-0000-0000-000000000001"
-_DEV_ORG_SLUG = "dev-no-auth"
-_DEV_USER_EMAIL = "seed@example.com"
-_DEV_USER_NAME = "Seed Admin"
-_DEV_USER_PASSWORD = "seed1234"
 
 
 def _get_session_factory(request: Request | None = None):
@@ -115,165 +109,13 @@ async def _record_daily_jwt_login_seen(request: Request, user_id: str) -> None:
         logger.debug("failed to record daily JWT login event", exc_info=True)
 
 
-def _orm_to_user(orm: UserORM) -> User:
-    return User(
-        id=orm.id,
-        email=orm.email,
-        name=orm.name,
-        is_superadmin=orm.is_superadmin,
-        is_active=orm.is_active,
-        created_at=orm.created_at,
-        oauth_provider=orm.oauth_provider,
-        oauth_provider_id=orm.oauth_provider_id,
-    )
-
-
-def _orm_to_org(orm: OrganizationORM) -> Organization:
-    return Organization(
-        id=orm.id,
-        name=orm.name,
-        slug=orm.slug,
-        created_at=orm.created_at,
-    )
-
-
-async def _seed_dev_user_in_session(
-    session: AsyncSession,
-) -> tuple[UserORM, OrganizationORM]:
-    """Create or update the dev user, org and membership in an active session.
-
-    Caller is responsible for committing / rolling back.
-    """
-    from app.modules.auth.app.services.auth_service import hash_password
-
-    org_result = await session.execute(
-        select(OrganizationORM).where(OrganizationORM.id == _DEV_ORG_ID)
-    )
-    org_orm = org_result.scalar_one_or_none()
-    if org_orm is None:
-        org_orm = OrganizationORM(
-            id=_DEV_ORG_ID,
-            name="Dev No Auth",
-            slug=_DEV_ORG_SLUG,
+def _initialized_dev_auth_context(request: Request) -> DevAuthContext:
+    context = getattr(request.app.state, "dev_auth_context", None)
+    if not isinstance(context, DevAuthContext):
+        raise RuntimeError(
+            "Dev auth context was not initialized during application startup"
         )
-        session.add(org_orm)
-
-    # Look up by email first to avoid unique constraint violations
-    # when another code path (e.g. seedmaker) has already created a
-    # user with the seed email but a different ID.
-    user_result = await session.execute(
-        select(UserORM).where(UserORM.email == _DEV_USER_EMAIL)
-    )
-    user_orm = user_result.scalar_one_or_none()
-
-    if user_orm is not None:
-        # User already exists with seed email — ensure correct attributes
-        user_orm.name = _DEV_USER_NAME
-        user_orm.is_superadmin = True
-        user_orm.is_active = True
-        actual_user_id = user_orm.id
-    else:
-        # No user with seed email — try by dev ID
-        user_result = await session.execute(
-            select(UserORM).where(UserORM.id == _DEV_USER_ID)
-        )
-        user_orm = user_result.scalar_one_or_none()
-        if user_orm is None:
-            user_orm = UserORM(
-                id=_DEV_USER_ID,
-                email=_DEV_USER_EMAIL,
-                name=_DEV_USER_NAME,
-                hashed_password=hash_password(_DEV_USER_PASSWORD),
-                is_superadmin=True,
-                is_active=True,
-            )
-            session.add(user_orm)
-        else:
-            # User exists with dev ID but different email — only update
-            # non-conflicting attributes (do NOT change email)
-            user_orm.name = _DEV_USER_NAME
-            user_orm.is_superadmin = True
-            user_orm.is_active = True
-        actual_user_id = user_orm.id
-
-    membership_result = await session.execute(
-        select(OrgMembershipORM).where(
-            OrgMembershipORM.user_id == actual_user_id,
-            OrgMembershipORM.org_id == _DEV_ORG_ID,
-        )
-    )
-    membership = membership_result.scalar_one_or_none()
-    if membership is None:
-        session.add(
-            OrgMembershipORM(
-                user_id=actual_user_id,
-                org_id=_DEV_ORG_ID,
-                role="admin",
-            )
-        )
-    else:
-        membership.role = "admin"
-
-    return user_orm, org_orm
-
-
-async def _ensure_dev_auth_context(request: Request) -> tuple[User, Organization]:
-    session_factory = _get_session_factory(request)
-    async with session_factory() as session:
-        try:
-            user_orm, org_orm = await _seed_dev_user_in_session(session)
-            await session.commit()
-        except IntegrityError:
-            await session.rollback()
-            # Race with another request — retry once with a fresh session
-            return await _ensure_dev_auth_context_retry(request)
-
-    return _orm_to_user(user_orm), _orm_to_org(org_orm)
-
-
-async def _ensure_dev_auth_context_retry(request: Request) -> tuple[User, Organization]:
-    session_factory = _get_session_factory(request)
-    async with session_factory() as session:
-        try:
-            user_orm, org_orm = await _seed_dev_user_in_session(session)
-            await session.commit()
-        except IntegrityError:
-            await session.rollback()
-            # Data was committed by a concurrent request — fall through to read
-            return await _read_dev_auth_context(request)
-
-    return _orm_to_user(user_orm), _orm_to_org(org_orm)
-
-
-async def _read_dev_auth_context(request: Request) -> tuple[User, Organization]:
-    session_factory = _get_session_factory(request)
-    async with session_factory() as session:
-        org_result = await session.execute(
-            select(OrganizationORM).where(OrganizationORM.id == _DEV_ORG_ID)
-        )
-        org_orm = org_result.scalar_one()
-        user_result = await session.execute(
-            select(UserORM).where(UserORM.id == _DEV_USER_ID)
-        )
-        user_orm = user_result.scalar_one()
-    return _orm_to_user(user_orm), _orm_to_org(org_orm)
-
-
-async def seed_dev_auth_context(
-    session_factory: AppDatabaseSessionFactory,
-) -> None:
-    """Seed the dev user, org and membership at app startup.
-
-    Call this during lifespan when ``auth_enabled`` is ``False`` so the
-    dev user is available before the first request arrives.
-    """
-    async with session_factory() as session:
-        try:
-            await _seed_dev_user_in_session(session)
-            await session.commit()
-        except IntegrityError:
-            await session.rollback()
-            # Race with another request — data is already present
+    return context
 
 
 async def _verify_jwt(token: str, request: Request) -> User:
@@ -293,7 +135,7 @@ async def _verify_jwt(token: str, request: Request) -> User:
     if user_orm is None or not user_orm.is_active:
         raise HTTPException(status_code=401, detail="User not found or inactive")
     await _record_daily_jwt_login_seen(request, user_orm.id)
-    return _orm_to_user(user_orm)
+    return orm_to_user(user_orm)
 
 
 async def _verify_pat(token: str, request: Request) -> User:
@@ -325,7 +167,7 @@ async def _verify_pat(token: str, request: Request) -> User:
 
     if user_orm is None or not user_orm.is_active:
         raise HTTPException(status_code=401, detail="User not found or inactive")
-    return _orm_to_user(user_orm)
+    return orm_to_user(user_orm)
 
 
 async def get_current_user(request: Request) -> User:
@@ -337,8 +179,7 @@ async def get_current_user(request: Request) -> User:
     3. If the resolved token starts with ``ftp_``, treat as a Personal Access Token.
     """
     if not _auth_enabled():
-        dev_user, _ = await _ensure_dev_auth_context(request)
-        return dev_user
+        return _initialized_dev_auth_context(request).user
 
     token: str | None = None
 
@@ -372,9 +213,9 @@ async def get_current_org(
     5. Return 400 (no org) if the user has zero orgs and no context.
     """
     if not _auth_enabled():
-        _, dev_org = await _ensure_dev_auth_context(request)
+        dev_org = _initialized_dev_auth_context(request).organization
         org_id_header = request.headers.get("X-Organization-ID")
-        if not org_id_header:
+        if not org_id_header or org_id_header == dev_org.id:
             return dev_org
 
         session_factory = _get_session_factory(request)
@@ -385,7 +226,7 @@ async def get_current_org(
             org_orm = org_result.scalar_one_or_none()
         if org_orm is None:
             raise HTTPException(status_code=404, detail="Organization not found")
-        return _orm_to_org(org_orm)
+        return orm_to_organization(org_orm)
 
     session_factory = _get_session_factory(request)
     org_id = request.headers.get("X-Organization-ID") or request.query_params.get(
@@ -413,7 +254,7 @@ async def get_current_org(
             org_orm = org_result.scalar_one_or_none()
             if org_orm is None:
                 raise HTTPException(status_code=404, detail="Organization not found")
-            return _orm_to_org(org_orm)
+            return orm_to_organization(org_orm)
 
         if len(memberships) == 1:
             org_result = await session.execute(
@@ -424,7 +265,7 @@ async def get_current_org(
             org_orm = org_result.scalar_one_or_none()
             if org_orm is None:
                 raise HTTPException(status_code=404, detail="Organization not found")
-            return _orm_to_org(org_orm)
+        return orm_to_organization(org_orm)
 
         raise HTTPException(
             status_code=400,

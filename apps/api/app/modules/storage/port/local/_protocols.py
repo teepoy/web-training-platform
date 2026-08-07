@@ -11,6 +11,8 @@ from app.modules.storage.domain.data_plane.manifest import (
 if TYPE_CHECKING:
     import pyarrow as pa
 
+    from app.shared.api.schemas import Dataset
+
     from app.modules.storage.domain.sparse import (
         DatasetPayloadStore,
         SampleLocator,
@@ -34,6 +36,14 @@ class DatasetStorageFactoryPort(Protocol):
         dataset_id: str,
         org_id: str,
     ) -> DatasetStorageAgg: ...
+
+    async def open_from_metadata(
+        self,
+        dataset: Dataset,
+        org_id: str,
+    ) -> DatasetStorageAgg:
+        """Open storage from metadata already authorized by the caller."""
+        ...
 
 
 class DataPlaneSchemaRegistryPort(Protocol):

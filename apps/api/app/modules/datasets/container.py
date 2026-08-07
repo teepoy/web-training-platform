@@ -51,7 +51,6 @@ def init_datasets(
     dataset_service = DatasetService(
         repository=repository,
         storage_factory=storage.dataset_storage_factory,
-        payload_store=storage.dataset_payload_store,
         config=shared.config,
     )
     sample_similarity_service = SampleSimilarityService(

@@ -4,21 +4,10 @@ from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
-from app.modules.storage.domain.sparse.models import DatasetManifest
 
 from app.modules.datasets.app.services.dataset_service import DatasetService
 from app.modules.datasets.domain.status import DatasetTrainDisabledReason
-from app.shared.api.schemas import Dataset, DatasetStorageMode
-
-
-class _PayloadStore:
-    async def get_manifest(self, dataset_id: str, org_id: str) -> DatasetManifest:
-        return DatasetManifest(
-            dataset_id=dataset_id,
-            storage_mode=DatasetStorageMode.FILE_SHARD_SPARSE.value,
-            shard_count=1,
-            total_rows=37,
-        )
+from app.shared.api.schemas import Dataset
 
 
 class _Storage:
@@ -45,7 +34,6 @@ def _service(label_counts: dict[str, int] | None = None) -> DatasetService:
     return DatasetService(
         repository=cast(Any, SimpleNamespace()),
         storage_factory=cast(Any, _StorageFactory(label_counts or {})),
-        payload_store=cast(Any, _PayloadStore()),
         config=cast(
             Any,
             SimpleNamespace(
@@ -57,21 +45,18 @@ def _service(label_counts: dict[str, int] | None = None) -> DatasetService:
     )
 
 
-@pytest.mark.asyncio
-async def test_dataset_list_response_includes_sparse_sample_count() -> None:
+def test_dataset_response_does_not_add_sample_count() -> None:
     dataset = Dataset(
         id="dataset-1",
         name="patch dataset",
         dataset_type="image_sc",
         org_id="org-1",
-        storage_mode=DatasetStorageMode.FILE_SHARD_SPARSE,
         dataset_meta={"task_type": "classification"},
     )
 
-    response = await _service().to_list_response(dataset)
+    response = _service().to_response(dataset)
 
-    assert response.dataset_meta["sample_count"] == 37
-    assert response.dataset_meta["total_samples"] == 37
+    assert response.dataset_meta == {"task_type": "classification"}
 
 
 @pytest.mark.asyncio

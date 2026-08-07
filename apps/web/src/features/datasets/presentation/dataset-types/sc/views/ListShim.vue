@@ -64,23 +64,6 @@ function handleCheckedRowKeysChange(_keys: (string | number)[]) {
   // Reserved for batch operations
 }
 
-function toDisplayCount(value: unknown): string | null {
-  if (typeof value === "number" && Number.isFinite(value)) return String(value);
-  if (typeof value === "string" && value.trim() !== "") return value;
-  return null;
-}
-
-function resolveSampleCount(row: DatasetListItem): string {
-  const meta = row.dataset_meta ?? {};
-  return (
-    toDisplayCount(meta.sample_count) ??
-    toDisplayCount(meta.total_samples) ??
-    toDisplayCount(meta.samples_count) ??
-    toDisplayCount(meta.total_rows) ??
-    "0"
-  );
-}
-
 function resolveCreator(row: DatasetListItem): string {
   return row.creator_name?.trim() || row.created_by?.trim() || "system";
 }
@@ -105,14 +88,7 @@ const filteredDatasets = computed(() => {
   return props.datasets.filter((row) => {
     if (creator && resolveCreator(row) !== creator) return false;
     if (!query) return true;
-    const searchable = [
-      row.name,
-      row.id,
-      row.dataset_type,
-      resolveCreator(row),
-      resolveSampleCount(row),
-      row.created_at,
-    ]
+    const searchable = [row.name, row.id, row.dataset_type, resolveCreator(row), row.created_at]
       .filter(Boolean)
       .join(" ")
       .toLowerCase();
@@ -146,15 +122,6 @@ const columns = computed<DataTableColumns<DatasetListItem>>(() => [
     width: 150,
     render() {
       return h(NTag, { type: "info", size: "small", bordered: false }, { default: () => "Patch" });
-    },
-  },
-  {
-    title: "Samples",
-    key: "sample_count",
-    width: 100,
-    sorter: (left, right) => Number(resolveSampleCount(left)) - Number(resolveSampleCount(right)),
-    render(row) {
-      return h(NText, {}, { default: () => resolveSampleCount(row) });
     },
   },
   {

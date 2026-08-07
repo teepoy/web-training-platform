@@ -28,11 +28,6 @@ class DatasetRepository(Protocol):
 
     async def count_datasets(self, org_id: str | None = None) -> int: ...
 
-    async def count_samples_by_dataset(
-        self,
-        dataset_ids: list[str],
-    ) -> dict[str, int]: ...
-
     async def get_dataset(
         self,
         dataset_id: str,

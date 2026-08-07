@@ -8,6 +8,37 @@ import httpx
 from app.shared.infrastructure.prefect.client import PrefectClient
 
 
+def test_get_flow_run_logs_passes_incremental_offset() -> None:
+    async def run() -> None:
+        requests: list[dict[str, object]] = []
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            requests.append(json.loads(request.content.decode("utf-8")))
+            return httpx.Response(200, json=[])
+
+        client = PrefectClient("http://prefect.example/api")
+        await client._client.aclose()
+        client._client = httpx.AsyncClient(
+            base_url="http://prefect.example/api",
+            transport=httpx.MockTransport(handler),
+        )
+        try:
+            await client.get_flow_run_logs("run-1", limit=50, offset=150)
+        finally:
+            await client.close()
+
+        assert requests == [
+            {
+                "logs": {"flow_run_id": {"any_": ["run-1"]}},
+                "limit": 50,
+                "offset": 150,
+                "sort": "TIMESTAMP_ASC",
+            }
+        ]
+
+    asyncio.run(run())
+
+
 def test_filter_flow_runs_does_not_send_queue_or_deployment_filters() -> None:
     async def run() -> None:
         requests: list[dict[str, object]] = []

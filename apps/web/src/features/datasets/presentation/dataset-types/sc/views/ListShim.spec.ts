@@ -94,7 +94,7 @@ describe("SC dataset list shim", () => {
     expect(wrapper.text()).not.toContain("2026-05-26T08:00:00Z");
   });
 
-  it("shows sample counts from total_samples when sample_count is absent", () => {
+  it("does not show sample counts in the dataset list", () => {
     const wrapper = mount(ListShim, {
       props: {
         datasets: [makeDataset({ total_samples: 37 })],
@@ -104,8 +104,8 @@ describe("SC dataset list shim", () => {
       global: { stubs },
     });
 
-    expect(wrapper.text()).toContain("Samples");
-    expect(wrapper.text()).toContain("37");
+    expect(wrapper.text()).not.toContain("Samples");
+    expect(wrapper.text()).not.toContain("37");
   });
 
   it("shows creator names and filters by keyword", async () => {

@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from typing import Any, Protocol
 
-from app.shared.api.schemas import ArtifactRef, TrainingEvent, TrainingJob
+from app.shared.api.schemas import ArtifactRef, JobStatus, TrainingEvent, TrainingJob
 
 
 class ArtifactStorage(Protocol):
@@ -45,6 +45,10 @@ class ArtifactStorage(Protocol):
 class TrainingExecutionEngine(Protocol):
     async def submit(self, job: TrainingJob) -> str:
         """Submit a training job and return an external execution ID."""
+        ...
+
+    async def status(self, external_job_id: str) -> JobStatus:
+        """Return the current execution status."""
         ...
 
     def stream_events(self, external_job_id: str) -> AsyncIterator[TrainingEvent]:
@@ -165,6 +169,7 @@ class PrefectClient(Protocol):
         self,
         flow_run_id: str,
         limit: int = 200,
+        offset: int = 0,
     ) -> list[dict[str, Any]]: ...
 
     async def list_task_runs(

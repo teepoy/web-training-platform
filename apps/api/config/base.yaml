@@ -5,6 +5,7 @@ app:
 
 execution:
   engine: local
+  status_reconcile_interval_seconds: 2
 
 db:
   url: "sqlite+aiosqlite:///./finetune.db"

@@ -21,6 +21,10 @@ from app.modules.training.app.services.submission_service import (
     TrainingSubmissionService,
 )
 from app.modules.training.app.services.readiness import TrainingReadinessService
+from app.modules.training.app.services.preflight import TrainingPreflightService
+from app.modules.training.app.services.status_reconciler import (
+    TrainingStatusReconciler,
+)
 from app.modules.training.domain.repository import TrainingRepository
 from app.modules.training.port.local import (
     TrainingDatasetUsagePort,
@@ -43,6 +47,7 @@ class TrainingContext:
 
     training_submission: TrainingSubmissionService
     training_readiness: TrainingReadinessService
+    status_reconciler: TrainingStatusReconciler
     repository: TrainingRepository
     # Internal implementation details (not exposed to other modules)
     kubeflow_client: KubeflowClient | None
@@ -118,6 +123,14 @@ def init_training(
         storage_factory=storage_factory,
         artifact_storage=shared.artifact_storage,
     )
+    status_reconciler = TrainingStatusReconciler(
+        engine=engine,
+        repository=repository,
+        notification_sink=shared.notification_sink,
+        interval_seconds=float(
+            shared.config.execution.status_reconcile_interval_seconds
+        ),
+    )
     submission = TrainingSubmissionService(
         engine=engine,
         notification_sink=shared.notification_sink,
@@ -125,12 +138,13 @@ def init_training(
         artifact_service=artifact_service,
         dataset_reader=dataset_reader,
         prefect_client=shared.prefect_client,
-        readiness=readiness,
         collection_revisions=collection_revisions,
+        status_reconciler=status_reconciler,
     )
     return TrainingContext(
         training_submission=submission,
         training_readiness=readiness,
+        status_reconciler=status_reconciler,
         repository=repository,
         kubeflow_client=kube_client,
         training_engine=engine,
@@ -164,6 +178,14 @@ class TrainingModule(Module):
 
     @provider
     @singleton
+    def provide_training_status_reconciler(
+        self,
+        context: TrainingContext,
+    ) -> TrainingStatusReconciler:
+        return context.status_reconciler
+
+    @provider
+    @singleton
     def provide_training_execution(
         self, submission: TrainingSubmissionService
     ) -> TrainingExecutionPort:
@@ -184,6 +206,20 @@ class TrainingModule(Module):
         service: TrainingReadinessService,
     ) -> TrainingReadinessPort:
         return service
+
+    @provider
+    @singleton
+    def provide_training_preflight(
+        self,
+        dataset_reader: DatasetReader,
+        readiness: TrainingReadinessService,
+        collection_revisions: DatasetCollectionRevisionReaderPort,
+    ) -> TrainingPreflightService:
+        return TrainingPreflightService(
+            dataset_reader=dataset_reader,
+            readiness=readiness,
+            collection_revisions=collection_revisions,
+        )
 
     @provider
     @singleton

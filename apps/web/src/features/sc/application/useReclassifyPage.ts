@@ -6,7 +6,6 @@ import { toUserMessage } from "@/shared/api/client";
 
 import {
   useGetDatasetApiV1DatasetsDatasetIdGet,
-  useGetDatasetStatusApiV1DatasetsDatasetIdStatusGet,
   useScBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPost,
   type ScBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPostMutationResult,
   useListTrainersRouteApiV1TrainersGet,
@@ -19,7 +18,6 @@ import { listPredictionJobs } from "@/shared/api/predictions";
 import type { Trainer } from "@/shared/api/types";
 import type {
   DatasetAnnotationStats,
-  DatasetStatusResponse,
   PredictionJobResponse,
   TrainingJob,
 } from "@/generated/orval/models";
@@ -141,17 +139,6 @@ export function useReclassifyPage(): ReclassifyPageState {
 
   const selectedDataset = computed<ScDatasetInfo | undefined>(() => datasetQuery.data.value);
 
-  const datasetStatusQuery =
-    useGetDatasetStatusApiV1DatasetsDatasetIdStatusGet<DatasetStatusResponse>(
-      computed(() => datasetId.value),
-      {
-        query: {
-          enabled: computed(() => !!selectedDataset.value),
-          retry: false,
-        },
-      },
-    );
-
   const isLoading = computed(() => datasetQuery.isLoading.value);
   const isError = computed(() => datasetQuery.isError.value);
   const errorMessage = computed(
@@ -202,19 +189,17 @@ export function useReclassifyPage(): ReclassifyPageState {
     reclassifyStore.clearSelectedDefectIds(datasetId.value);
   }
 
-  const annotatedCount = computed<number>(() => {
-    const statusAnnotated = datasetStatusQuery.data.value?.annotated_samples;
-    if (typeof statusAnnotated === "number" && Number.isFinite(statusAnnotated)) {
-      return Math.max(0, statusAnnotated);
-    }
-    return 0;
-  });
-
   const annotationStatsQuery = useQuery({
     queryKey: computed(() => ["api", "v1", "datasets", datasetId.value, "annotation-stats"]),
     queryFn: () => getAnnotationStatsApiV1DatasetsDatasetIdAnnotationStatsGet(datasetId.value),
     enabled: computed(() => !!selectedDataset.value),
     retry: false,
+  });
+
+  const annotatedCount = computed<number>(() => {
+    const stats = annotationStatsQuery.data.value as DatasetAnnotationStats | undefined;
+    const annotated = stats?.annotated_samples;
+    return typeof annotated === "number" && Number.isFinite(annotated) ? Math.max(0, annotated) : 0;
   });
 
   const collectionRevisionQuery = useQuery({

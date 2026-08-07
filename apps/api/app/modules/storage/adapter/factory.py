@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.modules.storage.domain.sparse import DatasetPayloadStore
 from app.modules.storage.domain.storage_agg import DatasetStorageAgg
-from app.shared.api.schemas import DatasetStorageMode
+from app.shared.api.schemas import Dataset, DatasetStorageMode
 from app.modules.datasets.adapter.repositories.dataset_sql_repository import (
     DatasetSqlRepository,
 )
@@ -52,6 +52,16 @@ class DatasetStorageFactory:
         dataset = await self._repo.get_dataset(dataset_id, org_id)
         if dataset is None:
             raise ValueError(f"Dataset not found: {dataset_id}")
+
+        return await self.open_from_metadata(dataset, org_id)
+
+    async def open_from_metadata(
+        self,
+        dataset: Dataset,
+        org_id: str,
+    ) -> DatasetStorageAgg:
+        """Open a backend without re-reading already-authorized metadata."""
+        dataset_id = dataset.id
 
         if dataset.storage_mode == DatasetStorageMode.DB_FULL:
             from app.modules.storage.adapter.db_full.storage import (

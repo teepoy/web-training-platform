@@ -250,6 +250,6 @@ ruff check apps/api
 ## GOTCHAS
 
 - `main.py` allows all CORS origins.
-- SSE endpoint polls repository state every 0.5s per client.
+- Training SSE polls only events newer than its database cursor every 0.5s per client.
 - Per-sample predictions live in the API DB (`platform_predictions`) instead of Label Studio.
 - If a transport shape belongs in the API contract, update the FastAPI route DTOs, then run `make generate` to re-export `openapi/openapi.yaml`.

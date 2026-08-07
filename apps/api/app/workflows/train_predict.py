@@ -9,6 +9,7 @@ from app.core.config import load_config
 from app.modules.runtime.catalog import runtime_catalog
 from app.modules.runtime.domain.context import TrainAndPredictRuntimeContext
 from app.modules.runtime.domain.events import collect_runtime_events
+from app.modules.training.app.services.preflight import TrainingPreflightService
 
 
 @flow(name="training-train-and-predict")
@@ -40,6 +41,16 @@ async def train_and_predict_flow(
     )
     app_context = build_flow_app_context(load_config(skip_runtime_validation=True))
     try:
+        if app_context.injector is None:
+            raise RuntimeError("AppContext injector was not initialized")
+        await app_context.injector.get(TrainingPreflightService).ensure_ready(
+            dataset_id=dataset_id,
+            collection_id=collection_id,
+            collection_revision_id=collection_revision_id,
+            org_id=org_id,
+            sample_ids=sample_ids,
+            sample_filter=sample_filter,
+        )
         return await collect_runtime_events(
             runtime_catalog.stream_train_and_predict(
                 trainer_id,

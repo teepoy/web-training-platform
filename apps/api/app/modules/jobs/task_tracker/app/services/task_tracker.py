@@ -78,6 +78,7 @@ class TaskTrackerService:
                 org_id=org_id,
                 offset=0 if kind is None else offset,
                 limit=fetch_limit if kind is None else limit,
+                include_artifacts=False,
             )
             total += training_total
             tasks.extend(self._to_training_record(job) for job in jobs)
@@ -153,7 +154,10 @@ class TaskTrackerService:
         if task is None:
             return False
         if task.task_kind == "training":
-            ext = await self._training_repository.get_job_external_id(task_id)
+            ext = await self._training_repository.get_job_external_id(
+                task_id,
+                org_id=org_id,
+            )
             if not ext:
                 return False
             await self._prefect.set_flow_run_state(ext, "CANCELLING")

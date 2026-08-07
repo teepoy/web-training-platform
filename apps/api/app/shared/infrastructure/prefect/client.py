@@ -574,6 +574,7 @@ class PrefectClient:
         self,
         flow_run_id: str,
         limit: int = 200,
+        offset: int = 0,
     ) -> list[dict]:
         """Retrieve log entries for a flow run.
 
@@ -583,6 +584,8 @@ class PrefectClient:
             Prefect flow-run UUID.
         limit:
             Maximum number of log lines to return (default 200).
+        offset:
+            Number of earlier log lines to skip.
 
         Returns
         -------
@@ -592,6 +595,7 @@ class PrefectClient:
         body: dict[str, object] = {
             "logs": {"flow_run_id": {"any_": [flow_run_id]}},
             "limit": limit,
+            "offset": offset,
             "sort": "TIMESTAMP_ASC",
         }
         result = await self._request(

@@ -143,19 +143,6 @@ class DatasetSqlRepository:
                 )  # noqa: E712
             return int((await session.execute(stmt)).scalar_one())
 
-    async def count_samples_by_dataset(self, dataset_ids: list[str]) -> dict[str, int]:
-        if not dataset_ids:
-            return {}
-        unique_ids = list(dict.fromkeys(dataset_ids))
-        async with self.session_factory() as session:
-            stmt = (
-                select(SampleORM.dataset_id, func.count(SampleORM.id))
-                .where(SampleORM.dataset_id.in_(unique_ids))
-                .group_by(SampleORM.dataset_id)
-            )
-            rows = (await session.execute(stmt)).all()
-            return {str(dataset_id): int(count) for dataset_id, count in rows}
-
     async def get_dataset(
         self, dataset_id: str, org_id: str | None = None
     ) -> Dataset | None:

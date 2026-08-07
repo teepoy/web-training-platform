@@ -12,6 +12,7 @@ from app.modules.runtime.app.services.artifact_output_sink import (
 )
 from app.modules.runtime.domain.context import TrainingRuntimeContext
 from app.modules.runtime.domain.events import collect_runtime_events
+from app.modules.training.app.services.preflight import TrainingPreflightService
 from app.modules.training.domain.repository import TrainingRepository
 from app.shared.context import AppContext
 
@@ -35,6 +36,14 @@ async def execute_training_runtime(
     try:
         if app_context.injector is None:
             raise RuntimeError("AppContext injector was not initialized")
+        await app_context.injector.get(TrainingPreflightService).ensure_ready(
+            dataset_id=dataset_id,
+            collection_id=collection_id,
+            collection_revision_id=collection_revision_id,
+            org_id=org_id,
+            sample_ids=sample_ids,
+            sample_filter=sample_filter,
+        )
         return await collect_runtime_events(
             runtime_catalog.stream_train(
                 trainer_id,

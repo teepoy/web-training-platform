@@ -283,7 +283,7 @@ async def list_datasets(
 ) -> PaginatedResponse[Dataset]:
     datasets = await repo.list_datasets(org_id=org.id, limit=limit, offset=offset)
     total = await repo.count_datasets(org_id=org.id)
-    items = await service.to_list_responses(datasets)
+    items = [service.to_response(dataset) for dataset in datasets]
     return PaginatedResponse(items=items, total=total)
 
 

@@ -52,30 +52,26 @@ def _count_selects(engine, operation: Callable[[], object]) -> int:
     return select_count
 
 
-def test_dataset_page_uses_three_selects_for_many_rows() -> None:
+def test_dataset_page_uses_two_selects_for_many_rows() -> None:
     with TestClient(app) as client:
         for index in range(8):
             create_dataset(client, name=f"query-dataset-{index}")
 
         context = app.state.app_context
-        repository = context.datasets.dataset_repository
-        service = context.datasets.dataset_service
+        response = None
 
-        async def load() -> None:
-            rows = await repository.list_datasets(
-                org_id=DEFAULT_ORG_ID,
-                offset=0,
-                limit=8,
-            )
-            total = await repository.count_datasets(org_id=DEFAULT_ORG_ID)
-            items = await service.to_list_responses(rows)
-            assert len(items) == total == 8
+        def load() -> None:
+            nonlocal response
+            response = client.get("/api/v1/datasets?offset=0&limit=8")
 
         count = _count_selects(
             context.shared.db_engine.sync_engine,
-            lambda: asyncio.run(load()),
+            load,
         )
-        assert count == 3
+        assert response is not None
+        assert response.status_code == 200
+        assert len(response.json()["items"]) == response.json()["total"] == 8
+        assert count == 2
 
 
 def test_prediction_job_page_uses_two_selects_for_many_rows() -> None:
@@ -249,3 +245,42 @@ def test_training_job_page_uses_three_selects_for_many_rows() -> None:
             lambda: asyncio.run(load()),
         )
         assert count == 3
+
+
+def test_training_job_summary_page_skips_artifact_select() -> None:
+    with TestClient(app) as client:
+        dataset_id = create_dataset(client, name="training-summary-query-count")
+        context = app.state.app_context
+        repository = context.training.repository
+
+        async def seed() -> None:
+            for index in range(8):
+                await repository.create_job(
+                    TrainingJob(
+                        id=f"query-training-summary-{index}",
+                        org_id=DEFAULT_ORG_ID,
+                        dataset_id=dataset_id,
+                        trainer_id=TRAINER_ID,
+                        status=JobStatus.COMPLETED,
+                        created_by=DEFAULT_USER_ID,
+                    )
+                )
+
+        asyncio.run(seed())
+
+        async def load() -> None:
+            rows, total = await repository.list_jobs_paginated(
+                org_id=DEFAULT_ORG_ID,
+                dataset_id=dataset_id,
+                offset=0,
+                limit=8,
+                include_artifacts=False,
+            )
+            assert len(rows) == total == 8
+            assert all(not row.artifact_refs for row in rows)
+
+        count = _count_selects(
+            context.shared.db_engine.sync_engine,
+            lambda: asyncio.run(load()),
+        )
+        assert count == 2

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 
 from injector import inject
 
@@ -18,7 +19,9 @@ from app.modules.runtime.app.services.deployment_seed import (
     TRAIN_AND_PREDICT_RUNTIME_DEPLOYMENT,
 )
 from app.modules.runtime.catalog import runtime_catalog
-from app.modules.training.app.services.readiness import TrainingReadinessService
+from app.modules.training.app.services.status_reconciler import (
+    TrainingStatusReconciler,
+)
 from app.modules.training.app.services.submission_parameters import (
     train_and_predict_workflow_parameters,
 )
@@ -27,12 +30,10 @@ from app.modules.training.domain.submission import (
     TrainAndPredictSubmission,
     TrainingDatasetNotFoundError,
     TrainingJobCommand,
-    TrainingReadinessError,
     TrainingRuntimeUnavailableError,
     TrainingSubmissionError,
 )
 from app.modules.training.domain.repository import TrainingRepository
-from app.modules.training.domain.readiness import TrainingReadinessReport
 from app.shared.application.artifacts import ArtifactService
 from app.shared.api.schemas import Dataset, TrainingEvent, TrainingJob
 from app.shared.api.schemas import JobStatus
@@ -41,6 +42,8 @@ from app.shared.domain.protocols import (
     PrefectClient,
     TrainingExecutionEngine,
 )
+
+_logger = logging.getLogger(__name__)
 
 
 class TrainingSubmissionService:
@@ -53,8 +56,8 @@ class TrainingSubmissionService:
         artifact_service: ArtifactService,
         dataset_reader: DatasetReader,
         prefect_client: PrefectClient,
-        readiness: TrainingReadinessService,
         collection_revisions: DatasetCollectionRevisionReaderPort,
+        status_reconciler: TrainingStatusReconciler,
     ) -> None:
         self.engine = engine
         self.notification_sink = notification_sink
@@ -62,25 +65,14 @@ class TrainingSubmissionService:
         self.artifact_service = artifact_service
         self._dataset_reader = dataset_reader
         self._prefect_client = prefect_client
-        self._readiness = readiness
         self._collection_revisions = collection_revisions
+        self._status_reconciler = status_reconciler
 
     async def submit_job(self, command: TrainingJobCommand) -> TrainingJob:
-        dataset, revision = await self._validate_source(
+        await self._validate_source(
             command,
             trainer_id=command.trainer_id,
         )
-        readiness_report = (
-            await self._readiness.assess_classes(
-                dataset=dataset,
-                sample_ids=None,
-                sample_filter=None,
-            )
-            if dataset is not None
-            else self._revision_readiness(command, revision)
-        )
-        if not readiness_report.ready:
-            raise TrainingReadinessError(readiness_report)
         return await self._start_job(
             TrainingJob(
                 dataset_id=command.dataset_id,
@@ -127,23 +119,6 @@ class TrainingSubmissionService:
             raise TrainingRuntimeUnavailableError(
                 f"Trainer {command.trainer_id!r} does not support train-and-predict"
             )
-        readiness_report = (
-            await self._readiness.assess_classes(
-                dataset=dataset,
-                sample_ids=(
-                    list(command.sample_ids) if command.sample_ids is not None else None
-                ),
-                sample_filter=command.sample_filter,
-            )
-            if dataset is not None
-            else self._revision_readiness(
-                command,
-                revision,
-            )
-        )
-        if not readiness_report.ready:
-            raise TrainingReadinessError(readiness_report)
-
         deployment_id = await self._prefect_client.resolve_deployment_id(
             TRAIN_AND_PREDICT_RUNTIME_DEPLOYMENT.deployment_name
         )
@@ -179,7 +154,10 @@ class TrainingSubmissionService:
                 idempotency_key=f"train-and-predict:{job.id}",
             )
         except Exception as exc:
-            await self.repository.update_job_status(job.id, JobStatus.FAILED)
+            await self._record_submission_failure(
+                job.id,
+                f"failed to start train and predict workflow: {exc}",
+            )
             raise TrainingSubmissionError(
                 f"Failed to start train and predict workflow: {exc}"
             ) from exc
@@ -201,6 +179,7 @@ class TrainingSubmissionService:
                 },
             )
         )
+        self._status_reconciler.wake()
         job.external_job_id = workflow_run_id
         return TrainAndPredictSubmission(
             train_job=job,
@@ -249,32 +228,6 @@ class TrainingSubmissionService:
             )
         return None, revision
 
-    @staticmethod
-    def _revision_readiness(
-        command: TrainingJobCommand,
-        revision: DatasetCollectionRevision | None,
-    ) -> TrainingReadinessReport:
-        assert revision is not None
-        active_labels = sorted(
-            label for label, count in revision.label_counts.items() if count > 0
-        )
-        reasons = (
-            ()
-            if len(active_labels) >= 2
-            else (f"training requires at least 2 active labels; got {active_labels}",)
-        )
-        annotated = sum(revision.label_counts.values())
-        return TrainingReadinessReport(
-            dataset_id=command.data_source.identity,
-            annotated_samples=annotated,
-            readable_samples=annotated,
-            runtime_resolvable_samples=0,
-            unusable_samples=0,
-            skipped_samples=0,
-            label_counts=dict(revision.label_counts),
-            failure_reasons=reasons,
-        )
-
     async def _start_job(self, job: TrainingJob) -> TrainingJob:
         try:
             job = await self.repository.create_job(job)
@@ -284,8 +237,17 @@ class TrainingSubmissionService:
             ) from exc
         try:
             external_id = await self.engine.submit(job)
+        except TrainingRuntimeUnavailableError:
+            await self._record_submission_failure(
+                job.id,
+                "training runtime is unavailable",
+            )
+            raise
         except Exception as exc:
-            await self.repository.update_job_status(job.id, JobStatus.FAILED)
+            await self._record_submission_failure(
+                job.id,
+                f"failed to submit training job: {exc}",
+            )
             raise TrainingSubmissionError(
                 f"Failed to submit training job: {exc}"
             ) from exc
@@ -297,27 +259,50 @@ class TrainingSubmissionService:
         )
         await self.repository.add_event(queued_event)
         self.notification_sink.notify_job_update(queued_event)
+        self._status_reconciler.wake()
 
         asyncio.create_task(self._run_job(job.id, external_id))
 
         job.external_job_id = external_id
         return job
 
+    async def _record_submission_failure(self, job_id: str, message: str) -> None:
+        await self.repository.update_job_status(job_id, JobStatus.FAILED)
+        event = TrainingEvent(
+            job_id=job_id,
+            message=message,
+            payload={"status": JobStatus.FAILED.value},
+        )
+        await self.repository.add_event(event)
+        self.notification_sink.notify_job_terminal(event)
+
     async def _run_job(self, job_id: str, external_id: str) -> None:
         terminal_status = None
         terminal_event = None
-        async for event in self.engine.stream_events(external_id):
-            await self.repository.add_event(event)
-            self.notification_sink.notify_job_update(event)
-            prefect_state = event.payload.get("prefect_state")
-            if prefect_state == "RUNNING":
-                await self.repository.update_job_status(job_id, JobStatus.RUNNING)
-            elif prefect_state in ("SCHEDULED", "PENDING"):
-                await self.repository.update_job_status(job_id, JobStatus.QUEUED)
-            status_val = event.payload.get("status")
-            if status_val in ("completed", "failed", "cancelled"):
-                terminal_status = status_val
-                terminal_event = event
+        try:
+            async for event in self.engine.stream_events(external_id):
+                await self.repository.add_event(event)
+                self.notification_sink.notify_job_update(event)
+                prefect_state = event.payload.get("prefect_state")
+                if prefect_state == "RUNNING":
+                    await self.repository.update_job_status(job_id, JobStatus.RUNNING)
+                elif prefect_state in ("SCHEDULED", "PENDING"):
+                    await self.repository.update_job_status(job_id, JobStatus.QUEUED)
+                status_val = event.payload.get("status")
+                if status_val in ("completed", "failed", "cancelled"):
+                    terminal_status = status_val
+                    terminal_event = event
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            _logger.warning(
+                "Training event monitor failed for job %s; durable status "
+                "reconciliation will continue",
+                job_id,
+                exc_info=True,
+            )
+            self._status_reconciler.wake()
+            return
 
         if terminal_event is not None:
             if terminal_status == "completed":
@@ -360,8 +345,8 @@ class TrainingSubmissionService:
             if await self.repository.did_user_leave(job_id):
                 self.notification_sink.notify_user_left_and_complete(terminal_event)
 
-    async def cancel_job(self, job_id: str) -> bool:
-        ext = await self.repository.get_job_external_id(job_id)
+    async def cancel_job(self, job_id: str, org_id: str) -> bool:
+        ext = await self.repository.get_job_external_id(job_id, org_id=org_id)
         if not ext:
             return False
         ok = await self.engine.cancel(ext)

@@ -72,7 +72,7 @@ Adds via `docker-compose.dev.yaml`:
 - **sc-data-provider** with bind mounts and its isolated Uvicorn process
 - **web** with bind mount + Vite dev server hot reload
 - **prefect-worker-cpu** with bind mounts for flow code changes
-- **prepare-platform** (ops profile): one-shot database, MinIO, and Prefect preparation
+- **prepare-platform** (ops profile): one-shot database, dev auth identity, MinIO, and Prefect preparation
 - **pgadmin** (`:5050`): optional PostgreSQL admin UI
 - **sc-upstream** with `watchfiles` reload for Python service and protobuf changes
 - **image-parser** with Air reload for Go source changes
@@ -233,11 +233,11 @@ All services at a glance:
 - **prefect-server** (:4200): Prefect 3 control plane
 - **label-studio** (:8080): Annotation UI
 - **api** (:8000): Platform HTTP API (dev: hot reload with bind mounts; prod: uvicorn workers with baked image)
-- **sc-data-provider** (:8001): Isolated DuckDB SQL/Arrow/SSE service with four Uvicorn-managed workers sharing one listening socket
+- **sc-data-provider** (:8001): Isolated DuckDB SQL/Arrow/SSE service; the development overlay runs one hot-reloading process, while production uses four Uvicorn-managed workers sharing one listening socket
 - **web** (:5173 → :80): Frontend (dev: Vite dev server with bind mount; prod: nginx-served baked assets)
 - **prefect-worker-cpu** (no exposed port): CPU-only Prefect worker. Orchestrates flows from `default-cpu` pool, executes CPU-bound work (DSPy, dataset drain). No GPU resources, no CUDA.
 - **prefect-worker-gpu** (no exposed port, profile `gpu`): GPU Prefect worker for CUDA workloads. Starts via `--profile gpu` (Linux/NVIDIA only).
-- **prepare-platform** (one-shot): Applies migrations, reconciles managed MinIO lifecycle rules, and creates Prefect pools/deployments under a global lock.
+- **prepare-platform** (one-shot): Applies migrations, prepares the development user/org for auth-disabled profiles, reconciles managed MinIO lifecycle rules, and creates Prefect pools/deployments under a global lock.
 - **pgadmin** (:5050, dev-only): Optional PostgreSQL admin UI
 
 ## Notes
