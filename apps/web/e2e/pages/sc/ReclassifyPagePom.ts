@@ -39,8 +39,12 @@ export class ReclassifyPagePom extends BasePage {
     return this.page.getByTestId("reclassify-table-loadmore-spinner");
   }
 
-  get samplingButton(): Locator {
-    return this.page.getByRole("button", { name: /^Sampling(?: \(\d+\))?$/ });
+  get randomFilterButton(): Locator {
+    return this.page.getByTestId("sc-random-filter-trigger");
+  }
+
+  get clearRandomFilterButton(): Locator {
+    return this.page.getByTestId("sc-random-filter-clear");
   }
 
   get reviewSamplingDialog(): Locator {
@@ -48,7 +52,7 @@ export class ReclassifyPagePom extends BasePage {
   }
 
   async openReviewSampling(): Promise<void> {
-    await this.samplingButton.click();
+    await this.randomFilterButton.click();
     await this.reviewSamplingDialog.waitFor();
   }
 

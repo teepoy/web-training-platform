@@ -401,10 +401,36 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
                 {{ page.dataset.value?.name ?? "Reclassify" }}
               </NTooltip>
             </div>
-            <div
-              id="sc-reclassify-global-filter-action"
-              class="sc-reclassify-global-filter-action"
-            />
+            <div class="sc-reclassify-filter-actions" data-testid="sc-filter-actions">
+              <div
+                id="sc-reclassify-global-filter-action"
+                class="sc-reclassify-global-filter-action"
+              />
+              <div class="sc-reclassify-random-filter-action">
+                <NButton
+                  data-testid="sc-random-filter-trigger"
+                  size="small"
+                  :type="page.galleryRandomSamplingDefectIds.value.size ? 'primary' : 'default'"
+                  :loading="isPreparingSampling"
+                  @click="openSamplingModal"
+                >
+                  Random Filter{{
+                    page.galleryRandomSamplingDefectIds.value.size
+                      ? ` (${page.galleryRandomSamplingDefectIds.value.size})`
+                      : ""
+                  }}
+                </NButton>
+                <NButton
+                  v-if="page.galleryRandomSamplingDefectIds.value.size"
+                  data-testid="sc-random-filter-clear"
+                  size="small"
+                  quaternary
+                  @click="page.clearGalleryRandomSamplingDefectIds"
+                >
+                  Clear
+                </NButton>
+              </div>
+            </div>
           </div>
           <div class="sc-header-right">
             <NSelect
@@ -446,26 +472,6 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
               @click="taskInsightVisible = true"
             >
               View Task
-            </NButton>
-            <NButton
-              size="small"
-              type="primary"
-              :loading="isPreparingSampling"
-              @click="openSamplingModal"
-            >
-              Sampling{{
-                page.galleryRandomSamplingDefectIds.value.size
-                  ? ` (${page.galleryRandomSamplingDefectIds.value.size})`
-                  : ""
-              }}
-            </NButton>
-            <NButton
-              v-if="page.galleryRandomSamplingDefectIds.value.size"
-              size="small"
-              quaternary
-              @click="page.clearGalleryRandomSamplingDefectIds"
-            >
-              Clear sample
             </NButton>
             <NButton size="small" quaternary @click="router.push('/sc/handbook')">
               Handbook
@@ -620,9 +626,22 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
   min-width: 0;
 }
 
+.sc-reclassify-filter-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
 .sc-reclassify-global-filter-action {
   display: flex;
   align-items: center;
+}
+
+.sc-reclassify-random-filter-action {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   flex: 0 0 auto;
 }
 

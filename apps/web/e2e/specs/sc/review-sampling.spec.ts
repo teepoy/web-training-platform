@@ -205,6 +205,11 @@ test("Review Sampling manages rules and applies the SQL pipeline from Reclassify
 
   const page = new ReclassifyPagePom(authedPage);
   await page.gotoReclassify(DATASET_ID);
+  const filterActions = authedPage.getByTestId("sc-filter-actions");
+  await expect(filterActions.getByTestId("sc-global-filter-trigger")).toBeVisible();
+  await expect(filterActions).toBeVisible();
+  await expect(page.randomFilterButton).toHaveText("Random Filter");
+  await expect(page.clearRandomFilterButton).toHaveCount(0);
   await expect
     .poll(() => dataRequests.filter((body) => body.description === "sc-workbench.map").length)
     .toBe(1);
@@ -248,7 +253,8 @@ test("Review Sampling manages rules and applies the SQL pipeline from Reclassify
   ).length;
   await page.reviewSamplingDialog.getByRole("button", { name: "Apply sampling" }).click();
 
-  await expect(page.samplingButton).toHaveText("Sampling (200)");
+  await expect(page.randomFilterButton).toHaveText("Random Filter (200)");
+  await expect(page.clearRandomFilterButton).toHaveText("Clear");
   await expect
     .poll(
       () =>
@@ -269,4 +275,8 @@ test("Review Sampling manages rules and applies the SQL pipeline from Reclassify
   expect(samplingRequests[0]?.sql).toContain('WITH "__sc_sampling_base" AS');
   expect(samplingRequests[0]?.sql).toContain('ORDER BY HASH("defect_id", ?)');
   expect(samplingRequests[0]?.parameters).toContain(42);
+
+  await page.clearRandomFilterButton.click();
+  await expect(page.randomFilterButton).toHaveText("Random Filter");
+  await expect(page.clearRandomFilterButton).toHaveCount(0);
 });
