@@ -271,6 +271,46 @@ describe("useSqlInspectionModel", () => {
     expect([...new Uint8Array(model.mapArrowData.value?.[0] ?? new ArrayBuffer())]).toEqual([2]);
   });
 
+  it("bounds geometric selection to visible numeric legend values", async () => {
+    const { source } = createDataSource();
+    const model = mount(source);
+    if (!model) throw new Error("model was not created");
+    vi.mocked(source.resolveSelection).mockClear();
+
+    await model.queryBoxSelection("wafer", { x: 1, y: 2, w: 3, h: 4 }, ["7", "9"]);
+
+    expect(source.resolveSelection).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filters: [["class_number", "not in or null", [7, 9]]],
+        constraint: {
+          kind: "rectangle",
+          mode: "wafer",
+          x: 1,
+          y: 2,
+          width: 3,
+          height: 4,
+        },
+      }),
+    );
+  });
+
+  it("resolves existing selection against hidden labels including missing values", async () => {
+    const { source } = createDataSource();
+    const legendGroupBy = ref<ScLegendSource>("annotation");
+    const model = mount(source, { legendGroupBy });
+    if (!model) throw new Error("model was not created");
+    vi.mocked(source.resolveSelection).mockClear();
+
+    await model.queryVisibleMapSelection([9, 3, 9], ["Scratch", "__unlabeled__"]);
+
+    expect(source.resolveSelection).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filters: [["annotation_label", "not in and not null", ["Scratch"]]],
+        constraint: { kind: "ids", ids: [3, 9] },
+      }),
+    );
+  });
+
   it("keeps Review filtering scoped to table and gallery", async () => {
     const { source } = createDataSource();
     const model = mount(source);

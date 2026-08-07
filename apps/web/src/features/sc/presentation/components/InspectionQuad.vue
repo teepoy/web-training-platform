@@ -104,6 +104,16 @@ const reticleOptions = ref<ReticleMapOptions>(
   normalizeReticleMapOptions(DEFAULT_RETICLE_MAP_OPTIONS),
 );
 const legendGroupBy = ref<ScLegendSource | null>(null);
+function emptyHiddenLegendKeysBySource(): Record<ScLegendSource, string[]> {
+  return { class: [], bin: [], annotation: [], prediction: [], final_class: [] };
+}
+const hiddenLegendKeysBySource = ref<Record<ScLegendSource, string[]>>(
+  emptyHiddenLegendKeysBySource(),
+);
+const activeLegendSource = computed<ScLegendSource>(() => legendGroupBy.value ?? "class");
+const activeHiddenLegendKeys = computed(
+  () => hiddenLegendKeysBySource.value[activeLegendSource.value] ?? [],
+);
 const tableFilter = ref<ScSampleTableFilter>({});
 const tableSort = ref<ScSampleTableSort | null>(null);
 const localSelectedDefectIds = ref<string[]>([]);
@@ -246,10 +256,22 @@ function handleReticleOptionsChange(options: ReticleMapOptions): void {
 
 function handleLegendGroupByChange(source: ScLegendSource | null): void {
   legendGroupBy.value = source;
+  mapSelectionQueue.prune(activeHiddenLegendKeys.value);
 }
 
-function commitMapSelectionFilter(mode: ScMapSelectionMode): void {
+function handleLegendHiddenChange(payload: { source: ScLegendSource; hiddenKeys: string[] }): void {
+  hiddenLegendKeysBySource.value = {
+    ...hiddenLegendKeysBySource.value,
+    [payload.source]: [...payload.hiddenKeys],
+  };
+  if (payload.source === activeLegendSource.value) {
+    mapSelectionQueue.prune(payload.hiddenKeys);
+  }
+}
+
+async function commitMapSelectionFilter(mode: ScMapSelectionMode): Promise<void> {
   try {
+    if (!(await mapSelectionQueue.prepareContextAction())) return;
     const next = applyMapSelectionToGlobalFilter(
       globalFilter.value,
       model.mapSelectedDefectIds.value,
@@ -266,24 +288,13 @@ function commitMapSelectionFilter(mode: ScMapSelectionMode): void {
   }
 }
 
-async function handleInvertMapSelectionMode(): Promise<void> {
-  try {
-    const selected = new Set(model.mapSelectedDefectIds.value);
-    const allIds = await model.queryAllMapSelection();
-    const inverted = allIds.filter((id) => !selected.has(id));
-    model.applyMapSelection(inverted);
-    selectedBarChartKey.value = null;
-    mapImmediateCrosshairDefectIds.value =
-      inverted.length <= HIGHLIGHT_MAX_DEFECTS ? [...inverted] : [];
-    mapImmediateCrosshairVersion.value += 1;
-    mapSelectionResetVersion.value += 1;
-  } catch (error) {
-    reportDataError("Invert map selection failed", error);
-  }
+function handleInvertMapSelectionMode(): void {
+  mapSelectionQueue.invert();
 }
 
 async function handleCopySelectedDefectIds(): Promise<void> {
   try {
+    if (!(await mapSelectionQueue.prepareContextAction())) return;
     if (!navigator.clipboard) throw new Error("Clipboard API is unavailable");
     const ids = model.mapSelectedDefectIds.value;
     if (ids.length === 0) throw new Error("Current map selection is empty");
@@ -334,10 +345,11 @@ watch(
     mapZoomByMode.value = emptyMapZoomByMode();
     reticleOptions.value = normalizeReticleMapOptions(DEFAULT_RETICLE_MAP_OPTIONS);
     legendGroupBy.value = null;
+    hiddenLegendKeysBySource.value = emptyHiddenLegendKeysBySource();
     tableFilter.value = {};
     tableSort.value = null;
     localSelectedDefectIds.value = [];
-    void model.clearMapSelection();
+    mapSelectionQueue.clear();
     model.setTableSelection({ kind: "ids", ids: [] });
     clearGalleryRandomSamplingIfActive();
     mapSelectionResetVersion.value += 1;
@@ -677,9 +689,11 @@ function handleBarChartClick(event: ECElementEvent): void {
 function useMapSelectionQueue() {
   let replacementVersion = 0;
   let queue = Promise.resolve();
+  let visibilityQueue = Promise.resolve();
+  let visibilityEpoch = 0;
   let disposed = false;
 
-  function enqueue(operation: () => Promise<void>, failureReason: string): void {
+  function enqueue(operation: () => Promise<void>, failureReason: string): Promise<void> {
     queue = queue
       .then(async () => {
         if (!disposed) await operation();
@@ -687,16 +701,18 @@ function useMapSelectionQueue() {
       .catch((error: unknown) => {
         reportDataError(failureReason, error);
       });
+    return queue;
   }
 
   function append(selection: QueuedAreaSelection): void {
     const version = replacementVersion;
+    const hiddenLegendKeys = [...activeHiddenLegendKeys.value];
     enqueue(async () => {
       if (version !== replacementVersion) return;
       const selectedIds =
         selection.kind === "lasso"
-          ? await model.queryLassoSelection(selection.mode, selection.selection)
-          : await model.queryBoxSelection(selection.mode, selection.region);
+          ? await model.queryLassoSelection(selection.mode, selection.selection, hiddenLegendKeys)
+          : await model.queryBoxSelection(selection.mode, selection.region, hiddenLegendKeys);
       if (version !== replacementVersion || selectedIds.length === 0) return;
       await model.appendMapSelection(selectedIds);
     }, `${selection.kind} selection failed`);
@@ -704,12 +720,13 @@ function useMapSelectionQueue() {
 
   function replace(source: "legend" | "bar-chart", key: string | number | null): void {
     const version = ++replacementVersion;
+    const hiddenLegendKeys = [...activeHiddenLegendKeys.value];
     // Replacement actions supersede slow area queries immediately. Model
     // Selection mutations remain serialized by the workbench model.
     queue = Promise.resolve();
     enqueue(async () => {
       if (version !== replacementVersion) return;
-      const ids = key === null ? [] : await model.queryLegendSelection(key);
+      const ids = key === null ? [] : await model.queryLegendSelection(key, hiddenLegendKeys);
       if (version !== replacementVersion) return;
       if (key !== null && ids.length <= HIGHLIGHT_MAX_DEFECTS) {
         mapImmediateCrosshairDefectIds.value = [...ids];
@@ -722,21 +739,101 @@ function useMapSelectionQueue() {
     }, `${source} selection failed`);
   }
 
-  function clear(): void {
-    const version = ++replacementVersion;
+  function prune(hiddenLegendKeys: readonly string[]): void {
+    replacementVersion += 1;
+    const epoch = visibilityEpoch;
+    const hiddenKeys = [...hiddenLegendKeys];
     queue = Promise.resolve();
-    enqueue(async () => {
-      if (version !== replacementVersion) return;
-      await model.clearMapSelection();
-    }, "clear map selection failed");
+    visibilityQueue = visibilityQueue
+      .then(async () => {
+        if (disposed || epoch !== visibilityEpoch) return;
+        while (true) {
+          const selectedIds = [...model.mapSelectedDefectIds.value];
+          let visibleIds: number[];
+          try {
+            visibleIds = await model.queryVisibleMapSelection(selectedIds, hiddenKeys);
+          } catch (error) {
+            if (!disposed && epoch === visibilityEpoch) {
+              model.clearMapSelection();
+              mapImmediateCrosshairDefectIds.value = [];
+              mapImmediateCrosshairVersion.value += 1;
+              mapSelectionResetVersion.value += 1;
+            }
+            throw error;
+          }
+          if (disposed || epoch !== visibilityEpoch) return;
+          const currentIds = model.mapSelectedDefectIds.value;
+          if (
+            currentIds.length !== selectedIds.length ||
+            currentIds.some((id, index) => id !== selectedIds[index])
+          ) {
+            continue;
+          }
+          model.applyMapSelection(visibleIds);
+          selectedBarChartKey.value = null;
+          mapImmediateCrosshairDefectIds.value =
+            visibleIds.length <= HIGHLIGHT_MAX_DEFECTS ? [...visibleIds] : [];
+          mapImmediateCrosshairVersion.value += 1;
+          mapSelectionResetVersion.value += 1;
+          break;
+        }
+      })
+      .catch((error: unknown) => {
+        if (!disposed && epoch === visibilityEpoch) {
+          reportDataError("Prune map selection to visible legend values failed", error);
+        }
+      });
+  }
+
+  function invert(): void {
+    void prepareContextAction().then((ready) => {
+      if (!ready) return;
+      const version = replacementVersion;
+      const hiddenLegendKeys = [...activeHiddenLegendKeys.value];
+      enqueue(async () => {
+        if (version !== replacementVersion) return;
+        const selected = new Set(model.mapSelectedDefectIds.value);
+        const allIds = await model.queryAllMapSelection(hiddenLegendKeys);
+        if (version !== replacementVersion) return;
+        const inverted = allIds.filter((id) => !selected.has(id));
+        model.applyMapSelection(inverted);
+        selectedBarChartKey.value = null;
+        mapImmediateCrosshairDefectIds.value =
+          inverted.length <= HIGHLIGHT_MAX_DEFECTS ? [...inverted] : [];
+        mapImmediateCrosshairVersion.value += 1;
+        mapSelectionResetVersion.value += 1;
+      }, "Invert map selection failed");
+    });
+  }
+
+  function clear(): void {
+    replacementVersion += 1;
+    visibilityEpoch += 1;
+    queue = Promise.resolve();
+    visibilityQueue = Promise.resolve();
+    model.clearMapSelection();
   }
 
   function dispose(): void {
     disposed = true;
     replacementVersion += 1;
+    visibilityEpoch += 1;
   }
 
-  return { append, replace, clear, dispose };
+  async function prepareContextAction(): Promise<boolean> {
+    const epoch = visibilityEpoch;
+    while (true) {
+      const pendingVisibility = visibilityQueue;
+      await pendingVisibility;
+      if (disposed || epoch !== visibilityEpoch) return false;
+      if (pendingVisibility === visibilityQueue) break;
+    }
+    replacementVersion += 1;
+    queue = Promise.resolve();
+    return true;
+  }
+
+  return { append, replace, prune, invert, clear, dispose, prepareContextAction };
 }
 </script>
 
@@ -815,6 +912,7 @@ function useMapSelectionQueue() {
           @clear-selection="handleClearMapSelection"
           @legend-select="handleLegendSelection"
           @legend-group-change="handleLegendGroupByChange"
+          @legend-hidden-change="handleLegendHiddenChange"
           @zoom-in="handleMapZoomChange"
           @box-select="handleBoxSelect"
           @lasso-select="handleLassoSelect"

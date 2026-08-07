@@ -51,6 +51,16 @@ function legendColumn(source: ScLegendSource | null | undefined): string {
   return "class_number";
 }
 
+function hiddenLegendValue(field: string, key: string): string | number | null {
+  if (isScMissingFilterValue(field, key) || key === "__unlabeled__") return null;
+  if (field !== "class_number" && field !== "rough_bin") return key;
+  const value = Number(key);
+  if (!Number.isFinite(value)) {
+    throw new Error(`Invalid hidden legend key "${key}" for numeric field "${field}"`);
+  }
+  return value;
+}
+
 function transferableBuffer(value: Uint8Array): ArrayBuffer {
   return value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength) as ArrayBuffer;
 }
@@ -91,6 +101,17 @@ export function useSqlInspectionModel(args: {
       samplingIds: args.galleryRandomSamplingDefectIds.value,
     }),
   );
+  function mapSelectionFilters(hiddenLegendKeys: readonly string[]): ScDataFilterExpression[] {
+    if (hiddenLegendKeys.length === 0) return filterPlan.value.selectionFilters;
+    const field = requestedMapLegendColumn.value;
+    const hiddenValues = [...new Set(hiddenLegendKeys.map((key) => hiddenLegendValue(field, key)))];
+    const excludesMissing = hiddenValues.includes(null);
+    const concreteValues = hiddenValues.filter((value): value is string | number => value !== null);
+    return [
+      ...filterPlan.value.selectionFilters,
+      [field, excludesMissing ? "not in and not null" : "not in or null", concreteValues],
+    ];
+  }
   function samplingCandidateFilters(options: ScSamplingCandidateOptions): ScDataFilterExpression[] {
     return buildSamplingCandidateFilters({
       baseFilter: args.globalFilter.value,
@@ -213,11 +234,12 @@ export function useSqlInspectionModel(args: {
   async function queryBoxSelection(
     mode: "wafer" | "die" | "reticle",
     region: { x: number; y: number; w: number; h: number },
+    hiddenLegendKeys: readonly string[] = [],
   ): Promise<number[]> {
     const source = args.dataSource.value;
     if (!source) return [];
     return source.resolveSelection({
-      filters: filterPlan.value.selectionFilters,
+      filters: mapSelectionFilters(hiddenLegendKeys),
       reticle: args.reticle.value,
       constraint: {
         kind: "rectangle",
@@ -233,21 +255,25 @@ export function useSqlInspectionModel(args: {
   async function queryLassoSelection(
     mode: "wafer" | "die" | "reticle",
     selection: ScMapLassoSelection,
+    hiddenLegendKeys: readonly string[] = [],
   ): Promise<number[]> {
     const source = args.dataSource.value;
     if (!source) return [];
     return source.resolveSelection({
-      filters: filterPlan.value.selectionFilters,
+      filters: mapSelectionFilters(hiddenLegendKeys),
       reticle: args.reticle.value,
       constraint: { kind: "polygon", mode, selection },
     });
   }
 
-  async function queryLegendSelection(key: string | number): Promise<number[]> {
+  async function queryLegendSelection(
+    key: string | number,
+    hiddenLegendKeys: readonly string[] = [],
+  ): Promise<number[]> {
     const source = args.dataSource.value;
     if (!source) return [];
     return source.resolveSelection({
-      filters: filterPlan.value.selectionFilters,
+      filters: mapSelectionFilters(hiddenLegendKeys),
       reticle: args.reticle.value,
       constraint: {
         kind: "legend",
@@ -336,13 +362,26 @@ export function useSqlInspectionModel(args: {
     });
   }
 
-  async function queryAllMapSelection(): Promise<number[]> {
+  async function queryAllMapSelection(hiddenLegendKeys: readonly string[] = []): Promise<number[]> {
     const source = args.dataSource.value;
     if (!source) return [];
     return source.resolveSelection({
-      filters: filterPlan.value.selectionFilters,
+      filters: mapSelectionFilters(hiddenLegendKeys),
       reticle: args.reticle.value,
       constraint: { kind: "all" },
+    });
+  }
+
+  async function queryVisibleMapSelection(
+    ids: readonly number[],
+    hiddenLegendKeys: readonly string[] = [],
+  ): Promise<number[]> {
+    const source = args.dataSource.value;
+    if (!source || ids.length === 0) return [];
+    return source.resolveSelection({
+      filters: mapSelectionFilters(hiddenLegendKeys),
+      reticle: args.reticle.value,
+      constraint: { kind: "ids", ids: sortedUniqueIds(ids) },
     });
   }
 
@@ -400,6 +439,7 @@ export function useSqlInspectionModel(args: {
     queryLassoSelection,
     queryLegendSelection,
     queryAllMapSelection,
+    queryVisibleMapSelection,
     querySamplingCandidateCount,
     querySamplingDefectIds,
     querySamplingGroups,

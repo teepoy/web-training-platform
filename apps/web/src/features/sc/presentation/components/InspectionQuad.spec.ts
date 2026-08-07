@@ -38,6 +38,7 @@ const model = vi.hoisted(() => ({
   queryLassoSelection: vi.fn(async () => []),
   queryLegendSelection: vi.fn(async () => []),
   queryAllMapSelection: vi.fn(async () => []),
+  queryVisibleMapSelection: vi.fn(async () => []),
   querySamplingCandidateCount: vi.fn(async () => 0),
   querySamplingDefectIds: vi.fn(async () => []),
   applyMapSelection: vi.fn(async () => undefined),
@@ -68,6 +69,7 @@ vi.mock("./ScMapPanelBinned.vue", () => ({
       "update:reticleOptions",
       "zoom-in",
       "legend-group-change",
+      "legend-hidden-change",
       "legend-select",
       "commit-map-selection-filter",
       "invert-map-selection-mode",
@@ -424,6 +426,171 @@ describe("InspectionQuad state ownership", () => {
     expect(wrapper.emitted("clear-gallery-random-sampling")).toBeUndefined();
   });
 
+  it("prunes transient map selection when legend values are hidden", async () => {
+    model.mapSelectedDefectIds.value = [103, 274];
+    model.queryVisibleMapSelection.mockResolvedValueOnce([103]);
+    const { wrapper } = await mountWithProviders(InspectionQuad, { props: requiredProps });
+    const map = wrapper.findComponent({ name: "ScMapPanelBinned" });
+    const initialSelectionResetVersion = map.props("selectionResetVersion");
+
+    map.vm.$emit("legend-hidden-change", { source: "class", hiddenKeys: ["7"] });
+
+    await vi.waitFor(() => {
+      expect(model.queryVisibleMapSelection).toHaveBeenCalledWith([103, 274], ["7"]);
+      expect(model.applyMapSelection).toHaveBeenCalledWith([103]);
+    });
+    expect(map.props("selectionResetVersion")).toBe(initialSelectionResetVersion + 1);
+  });
+
+  it("does not restore pruned IDs when a legend value is quickly unhidden", async () => {
+    let resolveHiddenPrune!: (ids: number[]) => void;
+    model.mapSelectedDefectIds.value = [103, 274];
+    model.queryVisibleMapSelection
+      .mockImplementationOnce(
+        () => new Promise<number[]>((resolve) => (resolveHiddenPrune = resolve)),
+      )
+      .mockResolvedValueOnce([103]);
+    model.applyMapSelection
+      .mockImplementationOnce(async (ids: number[]) => {
+        model.mapSelectedDefectIds.value = [...ids];
+      })
+      .mockImplementationOnce(async (ids: number[]) => {
+        model.mapSelectedDefectIds.value = [...ids];
+      });
+    const { wrapper } = await mountWithProviders(InspectionQuad, { props: requiredProps });
+    const map = wrapper.findComponent({ name: "ScMapPanelBinned" });
+
+    map.vm.$emit("legend-hidden-change", { source: "class", hiddenKeys: ["7"] });
+    await vi.waitFor(() => {
+      expect(model.queryVisibleMapSelection).toHaveBeenCalledWith([103, 274], ["7"]);
+    });
+
+    map.vm.$emit("legend-hidden-change", { source: "class", hiddenKeys: [] });
+    await wrapper.vm.$nextTick();
+    expect(model.queryVisibleMapSelection).toHaveBeenCalledTimes(1);
+
+    resolveHiddenPrune([103]);
+    await vi.waitFor(() => {
+      expect(model.queryVisibleMapSelection).toHaveBeenNthCalledWith(2, [103], []);
+      expect(model.mapSelectedDefectIds.value).toEqual([103]);
+    });
+    expect(model.applyMapSelection).not.toHaveBeenCalledWith([103, 274]);
+  });
+
+  it("waits for visibility changes queued while a context commit is pending", async () => {
+    let resolveHiddenPrune!: (ids: number[]) => void;
+    let resolveUnhiddenPrune!: (ids: number[]) => void;
+    model.mapSelectedDefectIds.value = [103, 274];
+    model.queryVisibleMapSelection
+      .mockImplementationOnce(
+        () => new Promise<number[]>((resolve) => (resolveHiddenPrune = resolve)),
+      )
+      .mockImplementationOnce(
+        () => new Promise<number[]>((resolve) => (resolveUnhiddenPrune = resolve)),
+      );
+    model.applyMapSelection
+      .mockImplementationOnce(async (ids: number[]) => {
+        model.mapSelectedDefectIds.value = [...ids];
+      })
+      .mockImplementationOnce(async (ids: number[]) => {
+        model.mapSelectedDefectIds.value = [...ids];
+      });
+    const { wrapper } = await mountWithProviders(InspectionQuad, { props: requiredProps });
+    const map = wrapper.findComponent({ name: "ScMapPanelBinned" });
+
+    map.vm.$emit("legend-hidden-change", { source: "class", hiddenKeys: ["7"] });
+    await vi.waitFor(() => expect(model.queryVisibleMapSelection).toHaveBeenCalledTimes(1));
+    map.vm.$emit("commit-map-selection-filter", "exclude");
+    map.vm.$emit("legend-hidden-change", { source: "class", hiddenKeys: [] });
+
+    resolveHiddenPrune([103]);
+    await vi.waitFor(() => {
+      expect(model.queryVisibleMapSelection).toHaveBeenNthCalledWith(2, [103], []);
+    });
+    expect(harness.options?.globalFilter.value.items).toHaveLength(0);
+
+    resolveUnhiddenPrune([103]);
+    await vi.waitFor(() => {
+      expect(harness.options?.globalFilter.value.items[0]).toMatchObject({
+        field: "defect_id",
+        condition: { filterType: "set", values: [103], exclude: true },
+      });
+    });
+  });
+
+  it("does not overwrite a concurrent visible replacement selection with a stale prune", async () => {
+    let resolveHiddenPrune!: (ids: number[]) => void;
+    model.mapSelectedDefectIds.value = [103, 274];
+    model.queryVisibleMapSelection
+      .mockImplementationOnce(
+        () => new Promise<number[]>((resolve) => (resolveHiddenPrune = resolve)),
+      )
+      .mockResolvedValueOnce([936]);
+    model.queryLegendSelection.mockResolvedValueOnce([936]);
+    model.applyMapSelection
+      .mockImplementationOnce(async (ids: number[]) => {
+        model.mapSelectedDefectIds.value = [...ids];
+      })
+      .mockImplementationOnce(async (ids: number[]) => {
+        model.mapSelectedDefectIds.value = [...ids];
+      });
+    const { wrapper } = await mountWithProviders(InspectionQuad, { props: requiredProps });
+    const map = wrapper.findComponent({ name: "ScMapPanelBinned" });
+
+    map.vm.$emit("legend-hidden-change", { source: "class", hiddenKeys: ["7"] });
+    await vi.waitFor(() => expect(model.queryVisibleMapSelection).toHaveBeenCalledTimes(1));
+    map.vm.$emit("legend-select", 8);
+    await vi.waitFor(() => {
+      expect(model.queryLegendSelection).toHaveBeenCalledWith(8, ["7"]);
+      expect(model.mapSelectedDefectIds.value).toEqual([936]);
+    });
+
+    resolveHiddenPrune([103]);
+    await vi.waitFor(() => {
+      expect(model.queryVisibleMapSelection).toHaveBeenNthCalledWith(2, [936], ["7"]);
+      expect(model.mapSelectedDefectIds.value).toEqual([936]);
+    });
+    expect(model.applyMapSelection).not.toHaveBeenCalledWith([103]);
+  });
+
+  it("discards a pending visibility prune when the workbench scope changes", async () => {
+    let resolveHiddenPrune!: (ids: number[]) => void;
+    model.mapSelectedDefectIds.value = [103, 274];
+    model.queryVisibleMapSelection.mockImplementationOnce(
+      () => new Promise<number[]>((resolve) => (resolveHiddenPrune = resolve)),
+    );
+    const { wrapper } = await mountWithProviders(InspectionQuad, { props: requiredProps });
+    const map = wrapper.findComponent({ name: "ScMapPanelBinned" });
+
+    map.vm.$emit("legend-hidden-change", { source: "class", hiddenKeys: ["7"] });
+    await vi.waitFor(() => expect(model.queryVisibleMapSelection).toHaveBeenCalledTimes(1));
+    await wrapper.setProps({ inspectionTime: "2026-07-27T04:00:00+08:00" });
+    expect(model.clearMapSelection).toHaveBeenCalledOnce();
+
+    resolveHiddenPrune([103]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(model.applyMapSelection).not.toHaveBeenCalled();
+  });
+
+  it("cancels a waiting context commit when the workbench unmounts", async () => {
+    let resolveHiddenPrune!: (ids: number[]) => void;
+    model.mapSelectedDefectIds.value = [103, 274];
+    model.queryVisibleMapSelection.mockImplementationOnce(
+      () => new Promise<number[]>((resolve) => (resolveHiddenPrune = resolve)),
+    );
+    const { wrapper } = await mountWithProviders(InspectionQuad, { props: requiredProps });
+    const map = wrapper.findComponent({ name: "ScMapPanelBinned" });
+
+    map.vm.$emit("legend-hidden-change", { source: "class", hiddenKeys: ["7"] });
+    await vi.waitFor(() => expect(model.queryVisibleMapSelection).toHaveBeenCalledTimes(1));
+    map.vm.$emit("commit-map-selection-filter", "exclude");
+    wrapper.unmount();
+
+    resolveHiddenPrune([103]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(harness.options?.globalFilter.value.items).toHaveLength(0);
+  });
+
   it("appends repeated map exclusions as independent Global Filter items", async () => {
     model.mapSelectedDefectIds.value = [103, 274];
     const { wrapper } = await mountWithProviders(InspectionQuad, {
@@ -436,7 +603,10 @@ describe("InspectionQuad state ownership", () => {
     const map = wrapper.findComponent({ name: "ScMapPanelBinned" });
     const initialSelectionResetVersion = map.props("selectionResetVersion");
     map.vm.$emit("commit-map-selection-filter", "exclude");
-    await wrapper.vm.$nextTick();
+    await vi.waitFor(() => {
+      expect(harness.options?.globalFilter.value.items).toHaveLength(1);
+      expect(model.clearMapSelection).toHaveBeenCalledOnce();
+    });
 
     const firstFilter = harness.options?.globalFilter.value;
     expect(firstFilter?.items).toHaveLength(1);
@@ -445,13 +615,12 @@ describe("InspectionQuad state ownership", () => {
       condition: { filterType: "set", values: [103, 274], exclude: true },
       source: { kind: "map-selection", action: "exclude-selected" },
     });
-    expect(model.clearMapSelection).toHaveBeenCalledOnce();
     expect(map.props("selectionResetVersion")).toBe(initialSelectionResetVersion + 1);
     expect(wrapper.emitted("clear-gallery-random-sampling")).toBeUndefined();
 
     model.mapSelectedDefectIds.value = [274, 936];
     map.vm.$emit("commit-map-selection-filter", "exclude");
-    await wrapper.vm.$nextTick();
+    await vi.waitFor(() => expect(harness.options?.globalFilter.value.items).toHaveLength(2));
 
     const secondFilter = harness.options?.globalFilter.value;
     expect(secondFilter?.items).toHaveLength(2);

@@ -151,13 +151,12 @@ const handleTabChange = (value: string | number) => {
 
 const selectedClassNumber = ref<LegendKey | null>(null);
 const legendSource = ref<LegendSource>(props.legendGroupBy ?? "class");
-const hiddenLegendKeysBySource = ref<Record<LegendSource, string[]>>({
-  class: [],
-  bin: [],
-  annotation: [],
-  prediction: [],
-  final_class: [],
-});
+function emptyHiddenLegendKeysBySource(): Record<LegendSource, string[]> {
+  return { class: [], bin: [], annotation: [], prediction: [], final_class: [] };
+}
+const hiddenLegendKeysBySource = ref<Record<LegendSource, string[]>>(
+  emptyHiddenLegendKeysBySource(),
+);
 const colorMapsBySource = ref<Record<LegendSource, Record<string, string>>>(emptyColorMaps());
 const colorMap = computed(() => colorMapsBySource.value[legendSource.value]);
 const legendSourceOptions = computed(() => {
@@ -467,6 +466,8 @@ const defaultColorMap = computed<Record<string, string>>(() => {
 watch(
   () => props.colorMapScopeKey,
   () => {
+    hiddenLegendKeysBySource.value = emptyHiddenLegendKeysBySource();
+    emit("legend-hidden-change", { source: legendSource.value, hiddenKeys: [] });
     const loaded = loadPersistedColorMaps();
     const source = legendSource.value;
     loaded[source] = Object.fromEntries(
