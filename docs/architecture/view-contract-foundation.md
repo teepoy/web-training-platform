@@ -42,7 +42,7 @@ available = view-compatible ∩ model-type-compatible ∩ dataset-policy-allowed
   bundles and validates IDs, exact view versions, materializer outputs, and
   pairings without importing executable ML modules.
 - **SC executable code**: Torch-free adapters live under
-  `apps/api/app/modules/sc/runtime/`; optional Torch/Ultralytics kernels live
+  `apps/api/app/modules/sc/runtime/`; optional Torch/Ultralytics implementations live
   under `libs/ml` and are lazy-loaded through explicit bindings.
 
 ## Future and Deferred Scope
@@ -91,7 +91,7 @@ The foundation consists of the following components:
 **Model implementations**:
 
 - `apps/api/app/modules/sc/runtime/`: Torch-free worker adapters and
-  `libs/ml/`: optional ML kernels.
+  `libs/ml/`: optional ML implementations.
 - Production implementations belong in out-of-process `services/*` runtimes.
 
 **View service** (`apps/api/app/modules/datasets/`):

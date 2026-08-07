@@ -309,6 +309,48 @@ class TrainingJobRepository:
                 )
             await session.commit()
 
+    async def upsert_artifacts(
+        self,
+        job_id: str,
+        artifacts: list[ArtifactRef],
+    ) -> None:
+        """Idempotently persist runtime artifacts with caller-stable IDs."""
+
+        async with self.session_factory() as session:
+            for artifact in artifacts:
+                row = await session.get(ArtifactORM, artifact.id)
+                if row is None:
+                    session.add(
+                        ArtifactORM(
+                            id=artifact.id,
+                            job_id=job_id,
+                            uri=artifact.uri,
+                            kind=artifact.kind,
+                            metadata_json=artifact.metadata,
+                            name=artifact.name,
+                            file_size=artifact.file_size,
+                            file_hash=artifact.file_hash,
+                            format=artifact.format,
+                            created_at=artifact.created_at,
+                        )
+                    )
+                    continue
+                if row.job_id not in {None, job_id}:
+                    raise ValueError(
+                        f"Artifact {artifact.id!r} belongs to another training job"
+                    )
+                row.job_id = job_id
+                row.uri = artifact.uri
+                row.kind = artifact.kind
+                row.metadata_json = artifact.metadata
+                row.name = artifact.name
+                row.file_size = artifact.file_size
+                row.file_hash = artifact.file_hash
+                row.format = artifact.format
+                if artifact.created_at is not None:
+                    row.created_at = artifact.created_at
+            await session.commit()
+
     async def get_artifact(self, artifact_id: str) -> ArtifactRef | None:
         async with self.session_factory() as session:
             row = await session.get(ArtifactORM, artifact_id)

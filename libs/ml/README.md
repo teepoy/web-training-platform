@@ -1,10 +1,10 @@
 # ML Library
 
-Optional execution kernels for SC training and prediction.
+Optional model implementations for SC training and prediction.
 
 This package owns direct imports of Torch, TorchVision, and Ultralytics. It
-accepts plain image bytes and labels and returns plain checkpoints, metrics, and
-prediction records. It must not import FastAPI application modules, Prefect,
+accepts private in-process datasets and value models and returns checkpoint
+paths, metrics, and prediction records. It must not import FastAPI application modules, Prefect,
 repositories, ORM models, or dependency-injection containers.
 
 The dataclasses under `ml_library.models` are private, in-process value models—not
@@ -35,6 +35,12 @@ factory:
 - `stream_parquet_dataset(...)` returns a Torch `IterableDataset` with
   row-group partitioning and bounded-memory shuffle. Use
   `DataLoader(shuffle=False)`; the dataset performs the shuffle itself.
+- `ScTrainingDataset(...)` projects the streaming Parquet rows into valid SC
+  `TrainingSample` values, records unreadable-image counts, preserves compact
+  label order, and can be replayed without retaining all image bytes.
+- `ScPredictionDataset(...)` projects row groups into `PredictionSample` values
+  one row at a time. Missing images remain `None` so predictors can emit the
+  established per-sample failure instead of aborting the stream.
 
 Both Parquet modes generate `__row_index` from the explicit input path order and
 physical row order. The Arrow mode requires the materializer to persist the same

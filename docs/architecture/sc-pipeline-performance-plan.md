@@ -147,9 +147,10 @@ each batch it resolves only that batch's images, writes the materialized
 Parquet batch, releases the image map, and then advances. The image fetch stream
 has explicit concurrency and byte limits.
 
-Change `_prediction_samples()` to an iterator. The existing ML kernels already
-accept `Iterable`, so model loading occurs once and inference consumes bounded
-batches without first building a 300k-element list.
+`ScPredictionDataset` now projects Parquet row groups lazily. The ML
+implementations accept `Iterable`, so the checkpoint loads once from a local
+path and inference consumes bounded batches without first collecting the full
+Parquet table or building a 300k-element list.
 
 Prediction output is appended to immutable job shards. Replace the in-memory
 “existing + all new frames + unique + BytesIO” merge with one of these explicit
@@ -164,7 +165,7 @@ writes and logs use explicit row and time intervals from configuration.
 ### 6. Bound training by bytes as well as rows
 
 Keep the 1,000-per-class rule, add an explicit total-row and materialized-byte
-budget, and stream materialization batches. Training kernels may still receive
+budget, and stream materialization batches. Training implementations may still receive
 a list when required, but only after the configured budget is verified. A job
 that exceeds the budget fails with a capacity error before fetching all images.
 

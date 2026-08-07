@@ -233,6 +233,8 @@ class ScPipelineConfig(ConfigSection):
     prediction_write_batch_rows: int
     training_max_rows: int
     training_max_materialized_bytes: int
+    training_shuffle_seed: int
+    training_shuffle_buffer_rows: int
 
 
 class ScConfig(ConfigSection):
@@ -537,6 +539,11 @@ def load_config(skip_runtime_validation: bool = False) -> AppConfig:
         "SC_PIPELINE_TRAINING_MAX_ROWS": ("training_max_rows", int),
         "SC_PIPELINE_TRAINING_MAX_MATERIALIZED_BYTES": (
             "training_max_materialized_bytes",
+            int,
+        ),
+        "SC_PIPELINE_TRAINING_SHUFFLE_SEED": ("training_shuffle_seed", int),
+        "SC_PIPELINE_TRAINING_SHUFFLE_BUFFER_ROWS": (
+            "training_shuffle_buffer_rows",
             int,
         ),
     }

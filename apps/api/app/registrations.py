@@ -14,4 +14,4 @@ import app.modules.datasets.domain.mapper  # noqa: F401
 # ── Runtime registration ──────────────────────────────────────────────────
 # Runtime metadata, callables, and algorithm identity are registered together by
 # each module's RuntimeRouter. Operations derive from callable Protocols;
-# deployment specs remain infrastructure-owned. Optional ML kernels stay lazy.
+# deployment specs remain infrastructure-owned. Optional ML implementations stay lazy.

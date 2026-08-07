@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import asyncio
-import concurrent.futures
 import logging
 import time
-from collections.abc import Generator, Iterator, Sequence
-from contextlib import AsyncExitStack
+from collections.abc import Generator, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any, Callable, cast
 
 from prefect import get_run_logger
@@ -26,13 +25,12 @@ from app.modules.runtime.domain.events import (
 from app.modules.sc.app.services.sample_filter import (
     parse_and_apply_workflow_sample_filter,
 )
-from app.modules.sc.materialization.port.local import ScInspectionMaterializerPort
 from app.modules.sc.runtime.data_source import (
     ScRuntimeSource,
     decode_collection_row_key,
     open_sc_runtime_source,
 )
-from app.modules.sc.runtime.materialized_input import parquet_paths_from_manifest
+from app.modules.sc.runtime.prediction_workspace import open_sc_prediction_workspace
 from app.modules.storage.port.local import DatasetStorageFactoryPort
 from app.shared.api.schemas import (
     JobStatus,
@@ -41,7 +39,6 @@ from app.shared.api.schemas import (
 )
 from app.shared.db.models import ArtifactORM, DatasetORM, TrainingJobORM
 from app.shared.db.models.dataset_collections import DatasetCollectionORM
-from app.shared.domain.data_plane import DataPlaneManifest
 
 logger = logging.getLogger(__name__)
 
@@ -102,53 +99,17 @@ async def _load_model(ctx: PredictionRuntimeContext) -> Model:
         )
 
 
-def _checkpoint_bytes(artifact_storage: Any, uri: str) -> bytes:
-    async def fetch() -> bytes:
-        return cast(bytes, await artifact_storage.get_bytes(uri))
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-        return executor.submit(
-            lambda: asyncio.new_event_loop().run_until_complete(fetch())
-        ).result()
-
-
-def _prediction_samples(manifest: DataPlaneManifest) -> Iterator[Any]:
-    from ml_library import PredictionSample
-    from ml_library.data_loading import collect_parquet_dataset
-
-    dataset = collect_parquet_dataset(parquet_paths_from_manifest(manifest))
-    for row in dataset:
-        yield PredictionSample(
-            sample_id=str(row["sample_id"]),
-            defective_image=(
-                bytes(cast(bytes, row["patch_defective_bytes"]))
-                if row.get("patch_defective_bytes") is not None
-                else None
-            ),
-            reference_image=(
-                bytes(cast(bytes, row["patch_template_bytes"]))
-                if row.get("patch_template_bytes") is not None
-                else None
-            ),
-        )
-
-
 def _predict_rows(
     *,
-    artifact_storage: Any,
-    model_uri: str,
-    materialization_manifest: DataPlaneManifest,
-    kernel: Callable[..., Any],
+    checkpoint_path: Path,
+    samples: Any,
+    predict_samples: Callable[..., Any],
     label_space: Sequence[str] | None,
 ) -> Generator[dict[str, Any], None, None]:
-    if not model_uri:
-        raise ValueError("model URI is required")
-    checkpoint = _checkpoint_bytes(artifact_storage, model_uri)
-    samples = _prediction_samples(materialization_manifest)
     outputs = (
-        kernel(checkpoint, list(label_space), samples)
+        predict_samples(checkpoint_path, list(label_space), samples)
         if label_space is not None
-        else kernel(checkpoint, samples)
+        else predict_samples(checkpoint_path, samples)
     )
     for output in outputs:
         result: dict[str, Any] = {
@@ -249,7 +210,7 @@ async def _write_collection_predictions(
 async def _run_sc_prediction(
     runtime_ctx: PredictionRuntimeContext,
     *,
-    kernel: Callable[..., Any],
+    predict_samples: Callable[..., Any],
     require_model_labels: bool,
 ) -> dict[str, Any]:
     import app.registrations  # noqa: F401
@@ -338,40 +299,34 @@ async def _run_sc_prediction(
             )
             last_flush = now
 
-        materializer = app_context.injector.get(ScInspectionMaterializerPort)
-        async with AsyncExitStack() as exit_stack:
-            materialization = await materializer.materialize(
-                rows_lazyframe=rows,
-                dataset_id=source.source_identity,
-                job_id=runtime_ctx.job_id,
-                image_types=["patch_template", "patch_defective"],
-                max_output_bytes=(
-                    app_context.shared.config.sc.pipeline.prediction_max_materialized_bytes
-                ),
-            )
-            exit_stack.callback(materialization.cleanup)
-            if materialization.errors:
+        labels: Sequence[str] | None = None
+        if require_model_labels:
+            raw_labels = model_metadata.get("label_space", [])
+            if not isinstance(raw_labels, Sequence) or isinstance(
+                raw_labels, (str, bytes)
+            ):
+                raise ValueError("YOLO model metadata must include label_space")
+            labels = [str(label) for label in raw_labels]
+            if not labels:
+                raise ValueError("YOLO model metadata must include label_space")
+
+        async with open_sc_prediction_workspace(
+            runtime_ctx,
+            rows=rows,
+            source_identity=source.source_identity,
+            model_uri=model.uri,
+        ) as workspace:
+            if workspace.materialization_error_count:
                 _runtime_logger().warning(
                     "SC prediction materialization completed with %d image errors",
-                    len(materialization.errors),
+                    workspace.materialization_error_count,
                 )
-            labels: Sequence[str] | None = None
-            if require_model_labels:
-                raw_labels = model_metadata.get("label_space", [])
-                if not isinstance(raw_labels, Sequence) or isinstance(
-                    raw_labels, (str, bytes)
-                ):
-                    raise ValueError("YOLO model metadata must include label_space")
-                labels = [str(label) for label in raw_labels]
-                if not labels:
-                    raise ValueError("YOLO model metadata must include label_space")
 
             async def prediction_results():
                 for prediction in _predict_rows(
-                    artifact_storage=app_context.shared.artifact_storage,
-                    model_uri=model.uri,
-                    materialization_manifest=materialization.manifest,
-                    kernel=kernel,
+                    checkpoint_path=workspace.checkpoint_path,
+                    samples=workspace.dataset,
+                    predict_samples=predict_samples,
                     label_space=labels,
                 ):
                     confidence_raw = prediction.get("confidence")
@@ -464,7 +419,7 @@ async def resnet_sc_predictor(ctx: PredictionRuntimeContext) -> RuntimeEventStre
 
     summary = await _run_sc_prediction(
         ctx,
-        kernel=predict_resnet,
+        predict_samples=predict_resnet,
         require_model_labels=False,
     )
     failed = int(summary.get("failed", 0))
@@ -482,7 +437,7 @@ async def yolo_sc_predictor(ctx: PredictionRuntimeContext) -> RuntimeEventStream
 
     summary = await _run_sc_prediction(
         ctx,
-        kernel=predict_yolo,
+        predict_samples=predict_yolo,
         require_model_labels=True,
     )
     failed = int(summary.get("failed", 0))

@@ -7,8 +7,12 @@ from prefect import flow, get_run_logger
 from app.composition import build_flow_app_context, close_flow_app_context
 from app.core.config import load_config
 from app.modules.runtime.catalog import runtime_catalog
+from app.modules.runtime.app.services.artifact_output_sink import (
+    PlatformArtifactOutputSink,
+)
 from app.modules.runtime.domain.context import TrainingRuntimeContext
 from app.modules.runtime.domain.events import collect_runtime_events
+from app.modules.training.domain.repository import TrainingRepository
 from app.shared.context import AppContext
 
 
@@ -29,6 +33,8 @@ async def execute_training_runtime(
     if app_context is None:
         app_context = build_flow_app_context(load_config(skip_runtime_validation=True))
     try:
+        if app_context.injector is None:
+            raise RuntimeError("AppContext injector was not initialized")
         return await collect_runtime_events(
             runtime_catalog.stream_train(
                 trainer_id,
@@ -44,7 +50,12 @@ async def execute_training_runtime(
                     collection_id=collection_id,
                     collection_revision_id=collection_revision_id,
                 ),
-            )
+            ),
+            artifact_sink=PlatformArtifactOutputSink(
+                storage=app_context.shared.artifact_storage,
+                repository=app_context.injector.get(TrainingRepository),
+                job_id=job_id,
+            ),
         )
     finally:
         if owns_context:

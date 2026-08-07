@@ -24,7 +24,7 @@
 
 训练、预测、嵌入等带 Torch/CUDA/大型图像依赖的执行逻辑属于 runtime worker/service，不在 HTTP route 请求路径执行。API control plane 负责创建任务、校验权限和参数、按 operation 对应的直接 deployment 提交执行、持久化业务状态和提供前端查询表面。当前 SC compatibility worker 的轻量注册函数可以位于 `apps/api/app/modules/sc`；重 ML 依赖仍只在被选中的注册函数内延迟 import，不得进入 HTTP server image 的必需依赖。
 
-- `libs/ml` 是可选的同进程 ML kernel/data-loading library，不是 transport
+- `libs/ml` 是可选的同进程 ML implementation/data-loading library，不是 transport
   contract。API-local compatibility runtime 只能在选中的 executable callable 内
   延迟导入它；跨进程边界仍使用 manifest、OpenAPI、protobuf 或 Arrow contract。
 - 未来 SDK/runtime service 边界优先使用 OpenAPI、protobuf/gRPC、Arrow schema/manifest 等生成或传输 contract，而不是手写共享 Python DTO 包。
@@ -193,7 +193,7 @@ Label Studio 是人工标注界面和临时同步界面，不是平台 predictio
   callable；操作支持情况由类实际实现的方法决定，不再通过 route 中的 operation
   字段重复声明。Runtime Protocol 负责成员存在性检查，完整签名由 pyright 校验。
 - 被注册的算法函数拥有自己的 dataset construction、view projection、
-  materialization/loading、prediction chunk/batch、输出持久化和错误语义。
+  materialization/loading、prediction chunk/batch、输出构造和错误语义。
   平台不设置中心 materializer registry，不按 view + purpose + storage mode 为
   所有算法统一选择，也不强制统一的 train/predict 输入输出 DTO。
   通用 runtime context 只传递 job/dataset/model/org identity、请求选项与可用的
@@ -221,7 +221,11 @@ Label Studio 是人工标注界面和临时同步界面，不是平台 predictio
 - Registered callable 返回 typed async event stream。闭合 `RuntimeEvent` 联合包含
   artifact、metric、progress、recoverable issue 和唯一 terminal completion；Prefect
   flow 以穷尽 match 消费事件并组装 transport-safe result。算法仍拥有自身 dataset、
-  output persistence 与错误语义；可恢复问题 yield issue，预期致命错误抛
+  workspace、artifact payload/metadata 构造、prediction persistence 与错误语义；
+  artifact event sink 负责大文件上传和平台 artifact record 幂等持久化。算法必须在
+  创建 payload 的 workspace 仍存活时 yield `ArtifactOutput`，直接事件消费者完成
+  上传后才能恢复生成器并清理临时文件。checkpoint 不得以大 bytes 进入 Prefect
+  terminal result。可恢复问题 yield issue，预期致命错误抛
   `RuntimeExecutionError`，未知异常直接冒泡。禁止恢复字符串 `output_contract`
   校验或通用 `Ok`/`Err` result chain。
 - Missing-image 行为由具体 registered callable 实现，不是 registration 或 runtime

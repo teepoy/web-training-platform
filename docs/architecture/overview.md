@@ -10,7 +10,7 @@ runtime and data boundaries.
 | Control plane            | `apps/api`                                                                      | HTTP API, auth, capability queries, compatibility checks, job submission, product state               |
 | Execution backend        | Prefect deployments today                                                       | Submission and execution-state transport; not a capability registry or generic algorithm orchestrator |
 | Runtime modules/services | `apps/api/app/modules/*/runtime` compatibility handlers and target `services/*` | Own trainer/predictor data strategy and execution                                                     |
-| Optional ML library      | `libs/ml`                                                                       | Torch/Ultralytics kernels loaded only inside selected callables                                       |
+| Optional ML library      | `libs/ml`                                                                       | Torch/Ultralytics implementations loaded only inside selected callables                               |
 | Data plane               | module ports, manifests, Arrow/Parquet, signed refs                             | Dataset/view handoff appropriate to local or external execution                                       |
 
 ```text

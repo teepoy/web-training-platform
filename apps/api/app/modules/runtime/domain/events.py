@@ -2,14 +2,53 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator, Mapping
 from dataclasses import dataclass, field
-from typing import TypeAlias, assert_never
+from pathlib import Path
+from typing import Protocol, TypeAlias, assert_never
 
 from app.shared.api.schemas import ArtifactRef
 
 
 @dataclass(frozen=True, slots=True)
-class ArtifactProduced:
-    artifact: ArtifactRef
+class LocalArtifactFile:
+    path: Path
+    object_name: str
+    content_type: str = "application/octet-stream"
+
+    def __post_init__(self) -> None:
+        if not self.object_name:
+            raise ValueError("Artifact object_name must not be empty")
+
+
+@dataclass(frozen=True, slots=True)
+class StoredArtifact:
+    uri: str
+
+    def __post_init__(self) -> None:
+        if not self.uri:
+            raise ValueError("Artifact URI must not be empty")
+
+
+ArtifactPayload: TypeAlias = LocalArtifactFile | StoredArtifact
+
+
+@dataclass(frozen=True, slots=True)
+class ArtifactOutput:
+    id: str
+    kind: str
+    payload: ArtifactPayload
+    metadata: Mapping[str, object] = field(default_factory=dict)
+    name: str | None = None
+    format: str | None = None
+
+    def __post_init__(self) -> None:
+        if not self.id:
+            raise ValueError("Artifact id must not be empty")
+        if not self.kind:
+            raise ValueError("Artifact kind must not be empty")
+
+
+class ArtifactOutputSink(Protocol):
+    async def persist(self, output: ArtifactOutput) -> ArtifactRef: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,7 +76,7 @@ class OperationCompleted:
 
 
 RuntimeEvent: TypeAlias = (
-    ArtifactProduced
+    ArtifactOutput
     | MetricsReported
     | ProgressReported
     | RuntimeIssueReported
@@ -61,7 +100,11 @@ class RuntimeExecutionError(RuntimeError):
         self.details = dict(details or {})
 
 
-async def collect_runtime_events(events: RuntimeEventStream) -> dict[str, object]:
+async def collect_runtime_events(
+    events: RuntimeEventStream,
+    *,
+    artifact_sink: ArtifactOutputSink | None = None,
+) -> dict[str, object]:
     """Consume one runtime stream and build its transport-safe terminal result."""
 
     artifacts: list[dict[str, object]] = []
@@ -74,7 +117,12 @@ async def collect_runtime_events(events: RuntimeEventStream) -> dict[str, object
         if completion is not None:
             raise RuntimeError("Runtime callable emitted an event after completion")
         match event:
-            case ArtifactProduced(artifact=artifact):
+            case ArtifactOutput() as output:
+                if artifact_sink is None:
+                    raise RuntimeError(
+                        "Runtime callable emitted ArtifactOutput without an artifact sink"
+                    )
+                artifact = await artifact_sink.persist(output)
                 artifacts.append(artifact.model_dump(mode="json"))
             case MetricsReported(metrics=reported):
                 metrics.update(reported)
@@ -110,7 +158,10 @@ async def collect_runtime_events(events: RuntimeEventStream) -> dict[str, object
 
 
 __all__ = [
-    "ArtifactProduced",
+    "ArtifactOutput",
+    "ArtifactOutputSink",
+    "ArtifactPayload",
+    "LocalArtifactFile",
     "MetricsReported",
     "OperationCompleted",
     "ProgressReported",
@@ -118,5 +169,6 @@ __all__ = [
     "RuntimeEventStream",
     "RuntimeExecutionError",
     "RuntimeIssueReported",
+    "StoredArtifact",
     "collect_runtime_events",
 ]

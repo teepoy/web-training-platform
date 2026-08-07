@@ -40,7 +40,7 @@ graph TB
 The catalog contains import-safe metadata only. Executable trainer and predictor
 modules are imported at worker execution time, never during API startup.
 SC's Torch-free adapters live under `apps/api/app/modules/sc/runtime/`; their
-optional Torch/Ultralytics kernels live in `libs/ml`. New production ML
+optional Torch/Ultralytics implementations live in `libs/ml`. New production ML
 implementations can move to an out-of-process runtime service and consume
 versioned data-plane manifests.
 

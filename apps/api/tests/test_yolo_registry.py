@@ -1,14 +1,10 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from types import SimpleNamespace
-from typing import cast
-
-import pytest
+from pathlib import Path
 
 from app.modules.runtime.catalog import runtime_catalog
 from app.modules.sc.runtime import predictors, trainers
-from app.shared.domain.data_plane import DataPlaneManifest
 
 
 def test_yolo_registration_contains_metadata_and_protocol_callables() -> None:
@@ -22,12 +18,12 @@ def test_yolo_registration_contains_metadata_and_protocol_callables() -> None:
 
 
 def test_yolo_predict_rows_uses_model_label_space(
-    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
-    loaded: list[tuple[bytes, list[str]]] = []
+    loaded: list[tuple[Path, list[str]]] = []
 
-    def kernel(
-        checkpoint: bytes,
+    def predict_samples(
+        checkpoint: Path,
         labels: list[str],
         samples: Iterable[object],
     ) -> list[object]:
@@ -35,21 +31,20 @@ def test_yolo_predict_rows_uses_model_label_space(
         loaded.append((checkpoint, labels))
         return []
 
-    monkeypatch.setattr(predictors, "_checkpoint_bytes", lambda *_: b"checkpoint")
-    monkeypatch.setattr(predictors, "_prediction_samples", lambda *_: iter(()))
+    checkpoint_path = tmp_path / "model.pt"
+    checkpoint_path.write_bytes(b"checkpoint")
 
     result = list(
         predictors._predict_rows(
-            artifact_storage=object(),
-            model_uri="memory://model.pt",
-            materialization_manifest=cast(DataPlaneManifest, SimpleNamespace()),
-            kernel=kernel,
+            checkpoint_path=checkpoint_path,
+            samples=(),
+            predict_samples=predict_samples,
             label_space=["defect", "clean"],
         )
     )
 
     assert result == []
-    assert loaded == [(b"checkpoint", ["defect", "clean"])]
+    assert loaded == [(checkpoint_path, ["defect", "clean"])]
 
 
 def test_registered_model_contracts_differ_by_algorithm() -> None:

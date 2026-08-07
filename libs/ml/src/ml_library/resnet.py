@@ -3,23 +3,24 @@ from __future__ import annotations
 # pyright: reportPrivateImportUsage=false
 
 import io
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from PIL import Image
 import torch
 import torch.nn.functional as functional
 from torch import nn, optim
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, IterableDataset
 from torchvision import models, transforms
 
 from ml_library.models import (
     Prediction,
     PredictionSample,
     TrainingOutput,
-    TrainingSample,
 )
+from ml_library.data_loading.sc import ScTrainingDataset
 from ml_library.device import select_torch_device
 
 
@@ -46,10 +47,10 @@ class DualResNetClassifier(nn.Module):
         return self.classifier(combined)
 
 
-class _TrainingDataset(Dataset[tuple[Any, Any, int]]):
+class _TrainingDataset(IterableDataset[tuple[Any, Any, int]]):
     def __init__(
         self,
-        samples: Sequence[TrainingSample],
+        samples: ScTrainingDataset,
         *,
         label_to_index: dict[str, int],
     ) -> None:
@@ -69,42 +70,34 @@ class _TrainingDataset(Dataset[tuple[Any, Any, int]]):
     def __len__(self) -> int:
         return len(self._samples)
 
-    def __getitem__(self, index: int) -> tuple[Any, Any, int]:
-        sample = self._samples[index]
-        defective = Image.open(io.BytesIO(sample.defective_image)).convert("RGB")
-        reference = Image.open(io.BytesIO(sample.reference_image)).convert("RGB")
-        return (
-            self._transform(defective),
-            self._transform(reference),
-            self._label_to_index[sample.label],
-        )
-
-
-def _active_labels(
-    samples: Sequence[TrainingSample],
-    label_space: Sequence[str],
-) -> list[str]:
-    active = {sample.label for sample in samples if sample.label}
-    ordered = [label for label in label_space if label in active]
-    return ordered + sorted(active - set(ordered))
+    def __iter__(self) -> Iterator[tuple[Any, Any, int]]:
+        for sample in self._samples:
+            defective = Image.open(io.BytesIO(sample.defective_image)).convert("RGB")
+            reference = Image.open(io.BytesIO(sample.reference_image)).convert("RGB")
+            yield (
+                self._transform(defective),
+                self._transform(reference),
+                self._label_to_index[sample.label],
+            )
 
 
 def train_resnet(
-    samples: Sequence[TrainingSample],
+    samples: ScTrainingDataset,
     label_space: Sequence[str],
     *,
+    work_dir: Path,
     epochs: int = 3,
     batch_size: int = 4,
 ) -> TrainingOutput:
-    labels = _active_labels(samples, label_space)
+    summary = samples.inspect(label_space)
+    labels = list(summary.active_labels)
     if len(labels) < 2:
         raise ValueError(f"need at least 2 active labels for training, got: {labels}")
-    if not samples:
+    if summary.valid_samples == 0:
         raise ValueError("No annotated samples available for training")
 
     label_to_index = {label: index for index, label in enumerate(labels)}
     dataset = _TrainingDataset(samples, label_to_index=label_to_index)
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
     device = select_torch_device(torch)
     model = DualResNetClassifier(num_classes=len(labels)).to(device)
     criterion = nn.CrossEntropyLoss()
@@ -112,8 +105,11 @@ def train_resnet(
 
     epoch_losses: list[float] = []
     model.train()
-    for _ in range(epochs):
+    for epoch in range(epochs):
+        samples.set_epoch(epoch)
+        dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
         running_loss = 0.0
+        batch_count = 0
         for defective, reference, targets in dataloader:
             defective = defective.to(device)
             reference = reference.to(device)
@@ -124,15 +120,18 @@ def train_resnet(
             loss.backward()
             optimizer.step()
             running_loss += float(loss.item())
-        epoch_losses.append(running_loss / max(len(dataloader), 1))
+            batch_count += 1
+        epoch_losses.append(running_loss / max(batch_count, 1))
 
     model.eval()
     correct = 0
     total = 0
     predictions: list[int] = []
     targets_seen: list[int] = []
+    samples.set_epoch(epochs)
+    validation_loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
     with torch.no_grad():
-        for defective, reference, targets in dataloader:
+        for defective, reference, targets in validation_loader:
             output = model(defective.to(device), reference.to(device))
             predicted = torch.max(output, 1).indices
             targets_device = targets.to(device)
@@ -174,11 +173,12 @@ def train_resnet(
         "framework": "pytorch",
         "created_at": datetime.now(UTC).isoformat(),
     }
-    checkpoint_buffer = io.BytesIO()
-    torch.save(checkpoint, checkpoint_buffer)
+    work_dir.mkdir(parents=True, exist_ok=True)
+    checkpoint_path = work_dir / "checkpoint.pt"
+    torch.save(checkpoint, checkpoint_path)
     final_loss = epoch_losses[-1] if epoch_losses else 0.0
     metrics: dict[str, object] = {
-        "num_samples": len(dataset),
+        "num_samples": summary.valid_samples,
         "num_classes": len(labels),
         "epochs": epochs,
         "epoch_losses": epoch_losses,
@@ -189,13 +189,13 @@ def train_resnet(
         "architecture": "dual-resnet50",
     }
     return TrainingOutput(
-        checkpoint=checkpoint_buffer.getvalue(),
+        checkpoint_path=checkpoint_path,
         metrics=metrics,
         metadata={
             "runtime": "resnet50-sc-v1",
             "framework": "pytorch",
             "architecture": "dual-resnet50",
-            "trained_samples": len(dataset),
+            "trained_samples": summary.valid_samples,
             "label_space": labels,
             "label_to_idx": label_to_index,
         },
@@ -203,14 +203,14 @@ def train_resnet(
 
 
 def predict_resnet(
-    checkpoint_bytes: bytes,
+    checkpoint_path: Path,
     samples: Iterable[PredictionSample],
     *,
     batch_size: int = 16,
 ) -> Iterable[Prediction]:
     device = select_torch_device(torch)
     checkpoint = torch.load(
-        io.BytesIO(checkpoint_bytes),
+        checkpoint_path,
         map_location=device,
         weights_only=False,
     )

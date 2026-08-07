@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+from typing import Any, cast
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -11,7 +13,7 @@ from app.modules.training.flows.train_job import execute_training_runtime
 
 @pytest.mark.asyncio
 async def test_training_runtime_host_only_builds_context_and_invokes_registration() -> None:
-    app_context = object()
+    app_context = _app_context()
 
     async def events():
         yield OperationCompleted({"status": "completed"})
@@ -25,7 +27,7 @@ async def test_training_runtime_host_only_builds_context_and_invokes_registratio
             dataset_id="dataset-1",
             trainer_id="resnet50-sc-v1",
             created_by="user-1",
-            app_context=app_context,  # type: ignore[arg-type]
+            app_context=app_context,
         )
 
     assert result == {"status": "completed"}
@@ -38,7 +40,7 @@ async def test_training_runtime_host_only_builds_context_and_invokes_registratio
 
 @pytest.mark.asyncio
 async def test_training_runtime_host_closes_owned_context() -> None:
-    context = object()
+    context = _app_context()
     with (
         patch(
             "app.modules.training.flows.train_job.build_flow_app_context",
@@ -65,3 +67,15 @@ async def test_training_runtime_host_closes_owned_context() -> None:
 
 async def _completed_events():
     yield OperationCompleted()
+
+
+def _app_context() -> Any:
+    injector = Mock()
+    injector.get.return_value = object()
+    return cast(
+        Any,
+        SimpleNamespace(
+            injector=injector,
+            shared=SimpleNamespace(artifact_storage=object()),
+        ),
+    )

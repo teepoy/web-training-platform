@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
 
@@ -8,7 +9,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
-from app.modules.runtime.domain.context import TrainingRuntimeContext
+from app.modules.runtime.domain.context import PredictionRuntimeContext
 from app.modules.runtime.domain.events import RuntimeExecutionError
 from app.modules.sc.runtime.materialized_input import sc_parquet_paths_from_manifest
 from app.shared.domain.data_plane import DataPlaneManifest, DataPlaneShard
@@ -80,51 +81,98 @@ def test_sc_manifest_rejects_non_file_shards(tmp_path) -> None:
         sc_parquet_paths_from_manifest(remote_manifest)
 
 
-def test_sc_runtime_consumers_explicitly_collect_manifest_parquet(
-    tmp_path,
+@pytest.mark.asyncio
+async def test_sc_prediction_workspace_streams_manifest_and_checkpoint_file(
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from app.modules.sc.runtime import predictors, trainers
+    from app.modules.sc.runtime.prediction_workspace import (
+        open_sc_prediction_workspace,
+    )
 
     parquet_path = tmp_path / "materialized.parquet"
     manifest = _manifest(str(parquet_path))
-    rows = [
-        {
-            "sample_id": "sample-1",
-            "label": "defect",
-            "patch_template_bytes": b"template",
-            "patch_defective_bytes": b"defective",
-        }
-    ]
-    collected_paths: list[tuple] = []
+    cleanup_called = False
 
-    def collect_parquet_dataset(paths):
-        collected_paths.append(tuple(paths))
-        return rows
+    def cleanup() -> None:
+        nonlocal cleanup_called
+        cleanup_called = True
 
-    monkeypatch.setitem(
-        sys.modules,
-        "ml_library",
-        SimpleNamespace(
-            PredictionSample=lambda **kwargs: SimpleNamespace(**kwargs),
-            TrainingSample=lambda **kwargs: SimpleNamespace(**kwargs),
-        ),
-    )
+    materializer = SimpleNamespace()
+
+    async def materialize(**kwargs):
+        assert kwargs["rows_lazyframe"] == "rows"
+        assert kwargs["dataset_id"] == "dataset-1"
+        return SimpleNamespace(
+            manifest=manifest,
+            errors=[{"sample_id": "broken"}],
+            cleanup=cleanup,
+        )
+
+    materializer.materialize = materialize
+
+    class Injector:
+        def get(self, _interface: object) -> object:
+            return materializer
+
+    class Storage:
+        async def get_file(self, uri: str, destination: str) -> None:
+            assert uri == "memory://model.pt"
+            Path(destination).write_bytes(b"checkpoint")
+
+    created_paths: list[tuple[Path, ...]] = []
+
+    def prediction_dataset(paths):
+        normalized = tuple(paths)
+        created_paths.append(normalized)
+        return SimpleNamespace(paths=normalized)
+
     monkeypatch.setitem(
         sys.modules,
         "ml_library.data_loading",
-        SimpleNamespace(collect_parquet_dataset=collect_parquet_dataset),
+        SimpleNamespace(ScPredictionDataset=prediction_dataset),
     )
-    monkeypatch.setattr(trainers, "image_bytes_are_readable", lambda value: bool(value))
+    app_context = cast(
+        Any,
+        SimpleNamespace(
+            injector=Injector(),
+            shared=SimpleNamespace(
+                artifact_storage=Storage(),
+                config=SimpleNamespace(
+                    sc=SimpleNamespace(
+                        pipeline=SimpleNamespace(
+                            prediction_max_materialized_bytes=1024
+                        )
+                    )
+                ),
+            ),
+        ),
+    )
+    runtime_ctx = PredictionRuntimeContext(
+        app_context=app_context,
+        job_id="job-1",
+        dataset_id="dataset-1",
+        model_id="model-1",
+        org_id="org-1",
+        predictor_id="resnet50-sc-v1",
+        created_by="user-1",
+        target="image_classification",
+    )
 
-    prediction = list(predictors._prediction_samples(manifest))[0]
-    training = trainers._training_samples(manifest)[0][0]
+    async with open_sc_prediction_workspace(
+        runtime_ctx,
+        rows="rows",
+        source_identity="dataset-1",
+        model_uri="memory://model.pt",
+    ) as workspace:
+        checkpoint_path = workspace.checkpoint_path
+        assert checkpoint_path.read_bytes() == b"checkpoint"
+        assert workspace.materialization_error_count == 1
+        assert workspace.dataset is not None
 
-    assert collected_paths == [(parquet_path,), (parquet_path,)]
-    assert prediction.sample_id == training.sample_id == "sample-1"
-    assert prediction.reference_image == training.reference_image == b"template"
-    assert prediction.defective_image == training.defective_image == b"defective"
-    assert training.label == "defect"
+    assert created_paths == [(parquet_path,)]
+    assert cleanup_called is True
+    assert not checkpoint_path.exists()
 
 
 @pytest.mark.asyncio
@@ -133,29 +181,17 @@ async def test_sc_training_fails_after_filtering_to_fewer_than_two_labels(
 ) -> None:
     from app.modules.sc.runtime import trainers
 
-    samples = [SimpleNamespace(label="Scratch")]
-    monkeypatch.setattr(trainers, "_training_samples", lambda _manifest: (samples, 2))
-    kernel_called = False
-
-    def kernel(_samples: list[Any], _labels: list[str]) -> None:
-        nonlocal kernel_called
-        kernel_called = True
-
-    runtime_ctx = TrainingRuntimeContext(
-        app_context=cast(Any, SimpleNamespace()),
-        job_id="job-1",
-        dataset_id="dataset-1",
-        trainer_id="resnet50-sc-v1",
-        created_by="user-1",
+    dataset = SimpleNamespace(
+        inspect=lambda _labels: SimpleNamespace(
+            active_labels=("Scratch",),
+            skipped_unreadable_samples=2,
+        )
     )
 
     with pytest.raises(RuntimeExecutionError) as exc_info:
-        await trainers._train_kernel(
-            runtime_ctx=runtime_ctx,
-            label_space=["Scratch", "Particle"],
-            artifact_storage=SimpleNamespace(),
-            materialization_manifest=cast(Any, SimpleNamespace()),
-            kernel=kernel,
+        trainers._inspect_training_dataset(
+            cast(Any, dataset),
+            ["Scratch", "Particle"],
         )
 
     assert exc_info.value.code == "sc_training_insufficient_labels_after_image_filter"
@@ -163,4 +199,3 @@ async def test_sc_training_fails_after_filtering_to_fewer_than_two_labels(
         "active_labels": ["Scratch"],
         "skipped_samples": 2,
     }
-    assert kernel_called is False

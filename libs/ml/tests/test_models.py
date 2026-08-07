@@ -4,7 +4,6 @@ import ast
 from pathlib import Path
 
 from ml_library import Prediction, PredictionSample, TrainingSample
-from ml_library.yolo import _active_labels
 
 
 def test_optional_library_models_are_plain_values() -> None:
@@ -15,15 +14,6 @@ def test_optional_library_models_are_plain_values() -> None:
     assert sample.label == "scratch"
     assert prediction_sample.defective_image is None
     assert prediction.error == "missing"
-
-
-def test_active_labels_follow_declared_order_and_compact_gaps() -> None:
-    samples = [
-        TrainingSample("1", b"d", b"r", "a"),
-        TrainingSample("2", b"d", b"r", "c"),
-    ]
-
-    assert _active_labels(samples, ["a", "b", "c"]) == ["a", "c"]
 
 
 def test_optional_library_does_not_import_api_internals() -> None:

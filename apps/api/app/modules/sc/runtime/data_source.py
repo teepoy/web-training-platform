@@ -17,7 +17,7 @@ from app.modules.runtime.domain.context import (
     TrainingRuntimeContext,
 )
 from app.modules.storage.port.local import DatasetStorageFactoryPort
-from app.shared.db.models.datasets import DatasetORM
+from app.shared.api.schemas import Dataset
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,21 +46,12 @@ async def open_sc_runtime_source(
     source = runtime_ctx.data_source
     if source.kind == "dataset":
         assert source.dataset_id is not None
-        async with app_context.shared.session_factory() as session:
-            row = await session.get(DatasetORM, source.dataset_id)
-            if row is None:
-                raise ValueError(f"Dataset not found: {source.dataset_id}")
-            requested_org = getattr(runtime_ctx, "org_id", "")
-            if requested_org and row.org_id != requested_org and not row.is_public:
-                raise ValueError(f"Dataset not found: {source.dataset_id}")
-            dataset_meta = (
-                dict(row.dataset_meta) if isinstance(row.dataset_meta, dict) else {}
-            )
-            dataset_org_id = row.org_id
-            dataset_type = row.dataset_type
-            view_types = tuple(cast(list[str], row.view_types))
         storage_factory = app_context.injector.get(DatasetStorageFactoryPort)
-        storage = await storage_factory.open(source.dataset_id, org_id=dataset_org_id)
+        storage = await storage_factory.open(
+            source.dataset_id,
+            org_id=getattr(runtime_ctx, "org_id", ""),
+        )
+        dataset = cast(Dataset, await storage.get_dataset_metadata())
         rows = cast(
             pl.LazyFrame,
             await storage.list_samples(
@@ -74,12 +65,9 @@ async def open_sc_runtime_source(
         yield ScRuntimeSource(
             rows=rows,
             source_identity=source.identity,
-            label_space=tuple(
-                str(label)
-                for label in cast(list[object], dataset_meta.get("label_space", []))
-            ),
-            view_types=view_types,
-            dataset_type=dataset_type,
+            label_space=tuple(dataset.task_spec.label_space),
+            view_types=tuple(dataset.view_types),
+            dataset_type=dataset.dataset_type,
             dataset_id=source.dataset_id,
             collection_id=None,
             collection_revision_id=None,

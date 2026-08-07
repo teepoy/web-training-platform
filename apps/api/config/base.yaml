@@ -145,6 +145,8 @@ sc:
     prediction_write_batch_rows: 5000
     training_max_rows: 100000
     training_max_materialized_bytes: 8589934592
+    training_shuffle_seed: 0
+    training_shuffle_buffer_rows: 1024
   data_provider:
     implementation: duckdb
     max_rss_mb: 1536

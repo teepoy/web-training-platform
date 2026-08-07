@@ -91,6 +91,8 @@ def test_sc_runtime_and_prediction_storage_accept_environment_overrides(
     monkeypatch.setenv("APP_CONFIG_PROFILE", "test")
     monkeypatch.setenv("SC_PIPELINE_IMPORT_BATCH_ROWS", "4096")
     monkeypatch.setenv("SC_PIPELINE_TRAINING_MAX_ROWS", "12345")
+    monkeypatch.setenv("SC_PIPELINE_TRAINING_SHUFFLE_SEED", "91")
+    monkeypatch.setenv("SC_PIPELINE_TRAINING_SHUFFLE_BUFFER_ROWS", "512")
     monkeypatch.setenv("SC_PIPELINE_PREDICTION_PROGRESS_FLUSH_ROWS", "777")
     monkeypatch.setenv("SC_PIPELINE_PREDICTION_PROGRESS_FLUSH_SECONDS", "2.5")
     monkeypatch.setenv("PREDICTION_COMPACTION_MEMORY_LIMIT", "256MiB")
@@ -99,6 +101,8 @@ def test_sc_runtime_and_prediction_storage_accept_environment_overrides(
 
     assert cfg.sc.pipeline.import_batch_rows == 4096
     assert cfg.sc.pipeline.training_max_rows == 12345
+    assert cfg.sc.pipeline.training_shuffle_seed == 91
+    assert cfg.sc.pipeline.training_shuffle_buffer_rows == 512
     assert cfg.sc.pipeline.prediction_progress_flush_rows == 777
     assert cfg.sc.pipeline.prediction_progress_flush_seconds == 2.5
     assert cfg.prediction.compaction_memory_limit == "256MiB"

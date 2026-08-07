@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import io
 from pathlib import Path
 
+from PIL import Image
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
@@ -9,11 +11,19 @@ from torch.utils.data import DataLoader
 
 from ml_library.data_loading import (
     ROW_INDEX_COLUMN,
+    ScPredictionDataset,
+    ScTrainingDataset,
     StreamingParquetDataset,
     collect_parquet_dataset,
     open_hf_arrow_dataset,
     stream_parquet_dataset,
 )
+
+
+def _image_bytes(color: str) -> bytes:
+    output = io.BytesIO()
+    Image.new("RGB", (2, 2), color=color).save(output, "PNG")
+    return output.getvalue()
 
 
 def _rows(count: int, *, offset: int = 0) -> pa.Table:
@@ -153,6 +163,64 @@ def test_stream_parquet_dataset_requires_dataloader_shuffle_false(
 
     with pytest.raises(ValueError, match="IterableDataset"):
         DataLoader(dataset, batch_size=None, shuffle=True)
+
+
+def test_sc_training_dataset_streams_valid_samples_and_compacts_labels(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "sc.parquet"
+    image = _image_bytes("red")
+    pq.write_table(
+        pa.table(
+            {
+                "sample_id": ["sample-a", "sample-b", "sample-c"],
+                "label": ["a", "b", "c"],
+                "patch_defective_bytes": [image, b"broken", image],
+                "patch_template_bytes": [image, image, image],
+            }
+        ),
+        path,
+        row_group_size=1,
+    )
+    dataset = ScTrainingDataset(
+        path,
+        shuffle=False,
+        seed=19,
+        shuffle_buffer_rows=2,
+    )
+
+    summary = dataset.inspect(["a", "b", "c"])
+
+    assert summary.active_labels == ("a", "c")
+    assert summary.valid_samples == 2
+    assert summary.skipped_unreadable_samples == 1
+    assert len(dataset) == 2
+    assert [sample.sample_id for sample in dataset] == ["sample-a", "sample-c"]
+
+
+def test_sc_prediction_dataset_streams_missing_images_as_none(tmp_path: Path) -> None:
+    path = tmp_path / "sc-prediction.parquet"
+    image = _image_bytes("green")
+    pq.write_table(
+        pa.table(
+            {
+                "sample_id": ["sample-a", "sample-b"],
+                "patch_defective_bytes": [image, None],
+                "patch_template_bytes": [image, image],
+            }
+        ),
+        path,
+        row_group_size=1,
+    )
+    dataset = ScPredictionDataset(path)
+
+    samples = list(dataset)
+
+    assert len(dataset) == 2
+    assert [sample.sample_id for sample in samples] == ["sample-a", "sample-b"]
+    assert samples[0].defective_image == image
+    assert samples[1].defective_image is None
+    assert samples[1].reference_image == image
 
 
 def test_open_hf_arrow_dataset_memory_maps_stream_without_side_files(

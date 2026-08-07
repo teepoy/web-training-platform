@@ -122,7 +122,7 @@ The project supports Python 3.11, so the alias uses `TypeAlias`:
 
 ```python
 RuntimeEvent: TypeAlias = (
-    ArtifactProduced
+    ArtifactOutput
     | MetricsReported
     | ProgressReported
     | RuntimeIssueReported
@@ -132,22 +132,30 @@ RuntimeEvent: TypeAlias = (
 
 Event responsibilities:
 
-| Event                  | Meaning                                                         |
-| ---------------------- | --------------------------------------------------------------- |
-| `ArtifactProduced`     | Reports an artifact already persisted by the owning algorithm.  |
-| `MetricsReported`      | Reports metrics for the flow result and product events.         |
-| `ProgressReported`     | Reports bounded progress without defining algorithm topology.   |
-| `RuntimeIssueReported` | Reports a recoverable or per-item problem; execution continues. |
-| `OperationCompleted`   | The one terminal event carrying the operation summary.          |
+| Event                  | Meaning                                                           |
+| ---------------------- | ----------------------------------------------------------------- |
+| `ArtifactOutput`       | Hands one file/URI payload and its metadata to the artifact sink. |
+| `MetricsReported`      | Reports metrics for the flow result and product events.           |
+| `ProgressReported`     | Reports bounded progress without defining algorithm topology.     |
+| `RuntimeIssueReported` | Reports a recoverable or per-item problem; execution continues.   |
+| `OperationCompleted`   | The one terminal event carrying the operation summary.            |
 
 The generic flow host exhaustively matches the union with `assert_never`,
 rejects events after completion, requires exactly one terminal event, and
 assembles a transport-safe Prefect result. This event type is the output
 boundary; no string `output_contract` is declared or revalidated.
 
-Algorithms still own dataset construction, materialization, batch/chunk policy,
-artifact/prediction persistence, and progress cadence. Events report what the
-algorithm did; they are not generic persistence commands.
+Algorithms own dataset construction, materialization, batch/chunk policy,
+artifact payload/metadata construction, prediction persistence, and progress
+cadence. `ArtifactOutput` deliberately combines the payload and its metadata:
+the event sink uploads a local file with `put_file` (or accepts an already stored
+URI), then idempotently upserts the platform `ArtifactRef`. A stable artifact ID
+and object name make a retry overwrite/upsert the same logical output.
+
+The callable yields a local checkpoint path while its workspace is still open.
+Direct async iteration means the consumer finishes the upload before requesting
+the next event, after which the callable may clean the workspace. Large
+checkpoint bytes never enter the event or Prefect terminal result.
 
 Recoverable failures are emitted as `RuntimeIssueReported`. A function author
 terminates an expected fatal operation by raising `RuntimeExecutionError` with
@@ -167,7 +175,8 @@ flowchart LR
     E --> F["Protocol-bound callable"]
     F --> G["Typed RuntimeEvent stream"]
     G --> H["Flow event consumer"]
-    H --> I["Prefect terminal result"]
+    H --> I["Artifact sink: upload + upsert"]
+    H --> J["Prefect terminal result"]
 ```
 
 Flow parameters contain only transport-safe job/source/model/capability IDs and
@@ -196,7 +205,7 @@ or receive a registration-level policy.
 
 Registration modules must remain import-safe. They may import lightweight
 callables and metadata but must not import Torch/CUDA, load model weights, or
-perform I/O during import. Optional `libs/ml` kernels remain lazy imports inside
+perform I/O during import. Optional `libs/ml` implementations remain lazy imports inside
 the selected callable.
 
 Production execution may later move to `services/*`. External services consume

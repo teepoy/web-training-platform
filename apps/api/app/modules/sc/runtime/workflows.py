@@ -3,9 +3,10 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import select
-
 from app.modules.prediction.domain.repository import PredictionRepository
+from app.modules.runtime.app.services.artifact_output_sink import (
+    PlatformArtifactOutputSink,
+)
 from app.modules.runtime.domain.context import (
     PredictionRuntimeContext,
     TrainAndPredictRuntimeContext,
@@ -23,7 +24,6 @@ from app.shared.api.schemas import (
     PredictionJob,
     TrainingEvent,
 )
-from app.shared.db.models.artifacts import ArtifactORM
 
 
 async def _add_training_event(
@@ -45,20 +45,23 @@ async def _add_training_event(
     )
 
 
-async def _latest_model_artifact_id(
-    ctx: TrainAndPredictRuntimeContext,
-) -> str:
-    async with ctx.app_context.shared.session_factory() as session:
-        stmt = (
-            select(ArtifactORM)
-            .where(ArtifactORM.job_id == ctx.job_id)
-            .where(ArtifactORM.kind == "model")
-            .order_by(ArtifactORM.created_at.desc())
+def _model_artifact_id(training_result: dict[str, object]) -> str:
+    artifacts = training_result.get("artifacts")
+    if not isinstance(artifacts, list):
+        raise RuntimeError("Training completed without artifacts")
+    model_ids = [
+        str(artifact.get("id"))
+        for artifact in artifacts
+        if isinstance(artifact, dict)
+        and artifact.get("kind") == "model"
+        and artifact.get("id")
+    ]
+    if len(model_ids) != 1:
+        raise RuntimeError(
+            "Training must produce exactly one model artifact, "
+            f"received {len(model_ids)}"
         )
-        row = (await session.execute(stmt)).scalars().first()
-        if row is None:
-            raise RuntimeError("Training completed without a model artifact")
-        return row.id
+    return model_ids[0]
 
 
 async def run_sc_train_and_predict(
@@ -93,9 +96,14 @@ async def run_sc_train_and_predict(
                     collection_id=ctx.collection_id,
                     collection_revision_id=ctx.collection_revision_id,
                 ),
-            )
+            ),
+            artifact_sink=PlatformArtifactOutputSink(
+                storage=ctx.app_context.shared.artifact_storage,
+                repository=training_repository,
+                job_id=ctx.job_id,
+            ),
         )
-        model_id = await _latest_model_artifact_id(ctx)
+        model_id = _model_artifact_id(training)
         await training_repository.update_job_status(ctx.job_id, JobStatus.COMPLETED)
         await _add_training_event(
             training_repository,

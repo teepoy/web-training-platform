@@ -26,7 +26,7 @@ registration selected by operation and capability ID.
 Contexts are dispatch context, not universal algorithm I/O contracts. They carry
 platform identities, request options, and the available platform context.
 Algorithm modules choose how to construct datasets, materialize/load views,
-chunk predictions, call kernels, and persist results.
+chunk predictions, invoke model implementations, and construct results.
 
 ## Input And Output
 
@@ -38,13 +38,21 @@ manifests, signed object references, and generated transport contracts.
 The exact view and model contracts in a registration remain compatibility and
 provenance facts. They do not force all implementations through one
 materializer. Temporary resources are cleaned up by the registered callable
-that created them.
+that created them. For local artifact files, cleanup occurs only after the
+synchronous event consumer has uploaded the yielded `ArtifactOutput`.
 
-Training persists model artifacts with trainer, model-contract/version,
-predictor compatibility, algorithm/code provenance, label space, and source job
-identity. Prediction persists sample/model/predictor provenance, payload,
-confidence, counters, and explicit errors according to the owning algorithm's
-failure semantics.
+The API-local SC predictor similarly owns a workspace containing materialized
+Parquet and a checkpoint downloaded with `get_file`. Its model implementation
+receives the checkpoint path and a lazy prediction dataset; neither the full
+checkpoint nor the full Parquet table becomes one in-memory bytes or row-list
+value.
+
+Training emits model artifact payload and metadata with trainer,
+model-contract/version, predictor compatibility, algorithm provenance, label
+space, and source job identity. The platform artifact event sink uploads the
+payload and idempotently records the artifact. Prediction persists
+sample/model/predictor provenance, payload, confidence, counters, and explicit
+errors according to the owning algorithm's failure semantics.
 
 ## Tasks And Composition
 
