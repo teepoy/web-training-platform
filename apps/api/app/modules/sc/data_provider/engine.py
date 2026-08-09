@@ -325,10 +325,13 @@ class DuckDbQueryExecutor:
             "_samples_base",
             samples_dataset,
         )
-        self._connection.register(
-            "_review_images",
-            ds.dataset(materialized.review_images.path, format="parquet"),
-        )
+        review_dataset = ds.dataset(materialized.review_images.path, format="parquet")
+        self._connection.register("_review_images", review_dataset)
+        if "row_key" not in review_dataset.schema.names:
+            raise RuntimeError(
+                "SC review-image cache is missing the required physical row_key column; "
+                "rebuild the data-provider cache with the current materializer"
+            )
         annotation_expression = "NULL::VARCHAR"
         annotation_join = ""
         if materialized.annotation_overlay is not None:
@@ -383,7 +386,7 @@ class DuckDbQueryExecutor:
             CREATE TEMP VIEW review_images AS
             SELECT images.*
             FROM _review_images AS images
-            INNER JOIN _samples_base AS base USING (defect_id)
+            INNER JOIN _samples_base AS base USING (row_key)
             """
         )
 

@@ -33,6 +33,10 @@ function sortedUniqueNumericIds(ids: readonly (number | string)[]): number[] {
   return [...new Set(ids.map(Number).filter(Number.isFinite))].sort((left, right) => left - right);
 }
 
+function sortedUniqueRowKeys(ids: readonly string[]): string[] {
+  return [...new Set(ids.map(String).filter((id) => id.length > 0))].sort();
+}
+
 export function applyMapSelectionToGlobalFilter(
   filter: ScGlobalFilter,
   selectedIds: readonly number[],
@@ -42,7 +46,7 @@ export function applyMapSelectionToGlobalFilter(
   if (selected.length === 0) throw new Error("Current map selection is empty");
   const next = cloneScGlobalFilter(filter);
   const committedItem = createScGlobalFilterItem({
-    field: "defect_id",
+    field: "map_id",
     condition: {
       filterType: "set",
       values: selected,
@@ -77,10 +81,8 @@ export function buildInspectionFilterPlan(args: {
   const mapSelectionIds = sortedUniqueNumericIds(args.mapSelectionIds);
   const samplingIds = sortedUniqueNumericIds([...(args.samplingIds ?? [])]);
   const transientFilters: ScDataFilterExpression[] = [
-    ...(mapSelectionIds.length > 0
-      ? ([["defect_id", "in", mapSelectionIds]] as ScDataFilter[])
-      : []),
-    ...(samplingIds.length > 0 ? ([["defect_id", "in", samplingIds]] as ScDataFilter[]) : []),
+    ...(mapSelectionIds.length > 0 ? ([["map_id", "in", mapSelectionIds]] as ScDataFilter[]) : []),
+    ...(samplingIds.length > 0 ? ([["map_id", "in", samplingIds]] as ScDataFilter[]) : []),
   ];
   const tableExtraFilters: ScDataFilterExpression[] = [
     ...transientFilters,
@@ -111,8 +113,8 @@ export function buildSamplingCandidateFilters(args: {
   }
   const tableSelectionIds =
     args.tableSelection.kind === "ids"
-      ? sortedUniqueNumericIds(args.tableSelection.ids)
-      : sortedUniqueNumericIds(args.tableSelection.excludedIds);
+      ? sortedUniqueRowKeys([...args.tableSelection.ids])
+      : sortedUniqueRowKeys([...args.tableSelection.excludedIds]);
   if (
     args.options.scope === "table" &&
     args.tableSelection.kind === "ids" &&
@@ -124,15 +126,15 @@ export function buildSamplingCandidateFilters(args: {
     ...buildScGlobalDataFilters(args.baseFilter),
     ...(args.options.extraFilterEnabled ? buildScGlobalDataFilters(args.options.extraFilter) : []),
     ...(args.options.scope === "map"
-      ? ([["defect_id", "in", mapSelectionIds]] as ScDataFilter[])
+      ? ([["map_id", "in", mapSelectionIds]] as ScDataFilter[])
       : []),
     ...(args.options.scope === "table" && args.tableSelection.kind === "ids"
-      ? ([["defect_id", "in", tableSelectionIds]] as ScDataFilter[])
+      ? ([["row_key", "in", tableSelectionIds]] as ScDataFilter[])
       : []),
     ...(args.options.scope === "table" &&
     args.tableSelection.kind === "all" &&
     tableSelectionIds.length > 0
-      ? ([["defect_id", "not in", tableSelectionIds]] as ScDataFilter[])
+      ? ([["row_key", "not in", tableSelectionIds]] as ScDataFilter[])
       : []),
   ];
 }

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
+import tempfile
 from collections.abc import Awaitable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
@@ -12,17 +14,26 @@ import polars as pl
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from app.modules.dataset_collections.domain.models import DatasetCollectionRevision
+from app.modules.dataset_collections.port.local import (
+    DatasetCollectionRevisionReaderPort,
+)
 from app.modules.sc.data_provider.cache import CachedDataObject, ScDataObjectCache
 from app.modules.sc.data_provider.scope import ScDataScope
 from app.modules.sc.domain.models import _coerce_naive_to_upstream_tz
 from app.modules.sc.domain.upstream_reader import ScUpstreamReader
 from app.modules.storage.port.local import DatasetStorageFactoryPort
+from app.shared.domain.protocols import ArtifactStorage
 
 
 _SAMPLE_COLUMN_DTYPES = {
     "row_key": pl.Utf8,
+    "map_id": pl.Int32,
     "defect_id": pl.Int32,
     "sample_id": pl.Utf8,
+    "source_dataset_id": pl.Utf8,
+    "source_sample_id": pl.Utf8,
+    "collection_member_id": pl.Utf8,
     "inspection_time": pl.Utf8,
     "wafer_key": pl.Int64,
     "wafer_x": pl.Int64,
@@ -59,10 +70,9 @@ _WORKBENCH_OWNED_SOURCE_COLUMNS = (
     "prediction_confidence",
     "final_class",
 )
-# Bump whenever the physical workbench identity contract changes.  v4 forces
-# caches written before row_key became mandatory to be rebuilt instead of
-# leaking a missing-column Binder error into the browser.
-_SAMPLES_BASE_FORMAT_VERSION = "v4-physical-row-key"
+# Bump whenever the physical workbench identity contract changes.
+_SAMPLES_BASE_FORMAT_VERSION = "v5-collection-row-key"
+_REVIEW_IMAGES_FORMAT_VERSION = "v2-row-key"
 
 
 @dataclass(frozen=True)
@@ -104,6 +114,8 @@ class ScDataMaterializer:
         *,
         upstream_reader: ScUpstreamReader,
         storage_factory: DatasetStorageFactoryPort,
+        collection_revision_reader: DatasetCollectionRevisionReaderPort,
+        artifact_storage: ArtifactStorage,
         cache: ScDataObjectCache,
         batch_rows: int,
     ) -> None:
@@ -111,6 +123,8 @@ class ScDataMaterializer:
             raise ValueError("batch_rows must be greater than zero")
         self._upstream_reader = upstream_reader
         self._storage_factory = storage_factory
+        self._collection_revision_reader = collection_revision_reader
+        self._artifact_storage = artifact_storage
         self._cache = cache
         self._batch_rows = batch_rows
 
@@ -125,7 +139,9 @@ class ScDataMaterializer:
                 wafer_key=int(raw_wafer_key),
                 revision=revision,
             )
-        return await self._materialize_dataset(scope, revision=revision)
+        if scope.kind == "dataset":
+            return await self._materialize_dataset(scope, revision=revision)
+        return await self._materialize_collection(scope, revision=revision)
 
     async def _materialize_inspection(
         self,
@@ -162,11 +178,17 @@ class ScDataMaterializer:
                 ),
             ),
             self._cache.get_or_build(
-                logical_key=f"{base_key}:review-images",
+                logical_key=(
+                    f"{base_key}:review-images:{_REVIEW_IMAGES_FORMAT_VERSION}"
+                ),
                 scope=scope.cache_name,
                 revision=0,
                 revision_tracked=False,
-                builder=lambda: _review_images_table(review_task),
+                builder=lambda: _inspection_review_images_table(
+                    review_task,
+                    inspection_time=parsed_time.isoformat(),
+                    wafer_key=wafer_key,
+                ),
             ),
         )
         return MaterializedScScope(
@@ -218,7 +240,19 @@ class ScDataMaterializer:
             return await review_task
 
         async def build_review_images() -> pa.Table:
-            return (await load_review_images()).to_arrow()
+            sparse_lf = await load_sparse_lazyframe()
+            review_df = await load_review_images()
+            identities = _dataset_identities_lazyframe(
+                sparse_lf,
+                dataset_id=scope.identity,
+            )
+            return (
+                await _review_images_with_row_keys(
+                    review_df,
+                    identities,
+                    join_columns=["defect_id"],
+                )
+            ).to_arrow()
 
         async def build_samples_base(path: Path) -> None:
             sparse_lf = await load_sparse_lazyframe()
@@ -234,7 +268,10 @@ class ScDataMaterializer:
 
         review_images, base = await asyncio.gather(
             self._cache.get_or_build(
-                logical_key=(f"inspection:{inspection_time}/{wafer_key}:review-images"),
+                logical_key=(
+                    f"inspection:{inspection_time}/{wafer_key}:review-images:"
+                    f"{_REVIEW_IMAGES_FORMAT_VERSION}"
+                ),
                 scope=scope.cache_name,
                 revision=0,
                 revision_tracked=False,
@@ -284,6 +321,205 @@ class ScDataMaterializer:
             annotation_overlay=annotation_overlay,
             prediction_overlay=prediction_overlay,
         )
+
+    async def _materialize_collection(
+        self, scope: ScDataScope, *, revision: int
+    ) -> MaterializedScScope:
+        collection_id, revision_id = scope.identity.rsplit("/", 1)
+        collection_revision = await self._collection_revision_reader.get_revision(
+            collection_id,
+            revision_id,
+            scope.org_id,
+        )
+        if (
+            collection_revision.status != "ready"
+            or not collection_revision.manifest_uri
+        ):
+            raise ValueError(
+                f"Collection revision is not ready: {collection_id}/{revision_id}"
+            )
+        source_dataset_ids = _collection_source_dataset_ids(collection_revision)
+        storages = dict(
+            zip(
+                source_dataset_ids,
+                await asyncio.gather(
+                    *(
+                        self._storage_factory.open(dataset_id, scope.org_id)
+                        for dataset_id in source_dataset_ids
+                    )
+                ),
+                strict=True,
+            )
+        )
+        artifact_task: asyncio.Task[Path] | None = None
+        reviews_task: asyncio.Task[pl.DataFrame] | None = None
+
+        with tempfile.TemporaryDirectory(prefix="sc-collection-workbench-") as tmp:
+            artifact_path = Path(tmp) / "revision.parquet"
+
+            async def load_artifact_path() -> Path:
+                nonlocal artifact_task
+                if artifact_task is None:
+
+                    async def download() -> Path:
+                        await self._artifact_storage.get_file(
+                            cast(str, collection_revision.manifest_uri),
+                            str(artifact_path),
+                        )
+                        return artifact_path
+
+                    artifact_task = asyncio.create_task(
+                        download(),
+                        name=f"sc-collection-artifact-{revision_id}",
+                    )
+                return await artifact_task
+
+            async def load_reviews() -> pl.DataFrame:
+                nonlocal reviews_task
+                if reviews_task is None:
+
+                    async def load() -> pl.DataFrame:
+                        frames: list[pl.DataFrame] = []
+                        for dataset_id in source_dataset_ids:
+                            dataset = await storages[dataset_id].get_dataset_metadata()
+                            inspection_time, wafer_key = _dataset_source_scope(
+                                dataset, dataset_id
+                            )
+                            frame = await self._load_review_images(
+                                _parse_inspection_time(inspection_time), wafer_key
+                            )
+                            frames.append(
+                                frame.with_columns(
+                                    pl.lit(dataset_id).alias("source_dataset_id")
+                                )
+                            )
+                        return pl.concat(frames, how="vertical_relaxed")
+
+                    reviews_task = asyncio.create_task(
+                        load(),
+                        name=f"sc-collection-reviews-{revision_id}",
+                    )
+                return await reviews_task
+
+            async def build_samples_base(path: Path) -> None:
+                source_path = await load_artifact_path()
+                source = pl.scan_parquet(source_path)
+                reviews = await load_reviews()
+                await _sink_lazyframe(
+                    _normalize_dataset_base_lazyframe(
+                        source,
+                        reviews,
+                        assign_map_ids=True,
+                    ),
+                    path,
+                )
+
+            async def build_review_images() -> pa.Table:
+                source_path = await load_artifact_path()
+                identities = pl.scan_parquet(source_path).select(
+                    pl.col("source_dataset_id").cast(pl.Utf8),
+                    pl.col("defect_id").cast(pl.Int32, strict=False),
+                    pl.col("row_key").cast(pl.Utf8),
+                )
+                return (
+                    await _review_images_with_row_keys(
+                        await load_reviews(),
+                        identities,
+                        join_columns=["source_dataset_id", "defect_id"],
+                    )
+                ).to_arrow()
+
+            base, review_images = await asyncio.gather(
+                self._cache.get_or_build_file(
+                    logical_key=(
+                        f"collection:{scope.org_id}/{scope.identity}:samples-base:"
+                        f"{_SAMPLES_BASE_FORMAT_VERSION}"
+                    ),
+                    scope=scope.cache_name,
+                    revision=0,
+                    revision_tracked=False,
+                    builder=build_samples_base,
+                ),
+                self._cache.get_or_build(
+                    logical_key=(
+                        f"collection:{scope.org_id}/{scope.identity}:review-images:"
+                        f"{_REVIEW_IMAGES_FORMAT_VERSION}"
+                    ),
+                    scope=scope.cache_name,
+                    revision=0,
+                    revision_tracked=False,
+                    builder=build_review_images,
+                ),
+            )
+
+        annotation_frames: list[pl.LazyFrame] = []
+        prediction_frames: list[pl.LazyFrame] = []
+        annotation_fingerprints: list[str] = []
+        prediction_fingerprints: list[str] = []
+        for dataset_id in source_dataset_ids:
+            storage = cast(_MutableOverlayStorage, storages[dataset_id])
+            (
+                (annotation_lf, annotation_fingerprint),
+                (
+                    prediction_lf,
+                    prediction_fingerprint,
+                ),
+            ) = await asyncio.gather(
+                storage.annotation_overlay_lazyframe(),
+                storage.prediction_overlay_lazyframe(),
+            )
+            annotation_fingerprints.append(f"{dataset_id}:{annotation_fingerprint}")
+            prediction_fingerprints.append(f"{dataset_id}:{prediction_fingerprint}")
+            if annotation_lf is not None:
+                annotation_frames.append(
+                    _prefix_overlay_sample_ids(
+                        cast(pl.LazyFrame, annotation_lf), dataset_id
+                    )
+                )
+            if prediction_lf is not None:
+                prediction_frames.append(
+                    _prefix_overlay_sample_ids(
+                        cast(pl.LazyFrame, prediction_lf), dataset_id
+                    )
+                )
+
+        annotation_overlay, prediction_overlay = await asyncio.gather(
+            self._materialize_annotation_overlay(
+                scope,
+                pl.concat(annotation_frames, how="vertical_relaxed")
+                if annotation_frames
+                else None,
+                _combined_fingerprint(annotation_fingerprints),
+                scope_revision=revision,
+            ),
+            self._materialize_prediction_overlay(
+                scope,
+                pl.concat(prediction_frames, how="vertical_relaxed")
+                if prediction_frames
+                else None,
+                _combined_fingerprint(prediction_fingerprints),
+                scope_revision=revision,
+            ),
+        )
+        return MaterializedScScope(
+            scope=scope,
+            revision=revision,
+            samples_base=base,
+            review_images=review_images,
+            annotation_overlay=annotation_overlay,
+            prediction_overlay=prediction_overlay,
+        )
+
+    async def source_dataset_ids(self, scope: ScDataScope) -> tuple[str, ...]:
+        if scope.kind == "dataset":
+            return (scope.identity,)
+        if scope.kind != "collection":
+            return ()
+        collection_id, revision_id = scope.identity.rsplit("/", 1)
+        revision = await self._collection_revision_reader.get_revision(
+            collection_id, revision_id, scope.org_id
+        )
+        return _collection_source_dataset_ids(revision)
 
     async def _load_review_images(
         self, inspection_time: datetime, wafer_key: int
@@ -438,10 +674,86 @@ def _parse_inspection_time(value: str) -> datetime:
     )
 
 
-async def _review_images_table(
+async def _inspection_review_images_table(
     review_task: Awaitable[pl.DataFrame],
+    *,
+    inspection_time: str,
+    wafer_key: int,
 ) -> pa.Table:
-    return (await review_task).to_arrow()
+    review_df = await review_task
+    return review_df.with_columns(
+        pl.concat_str(
+            [
+                pl.lit(inspection_time),
+                pl.lit(str(wafer_key)),
+                pl.col("defect_id").cast(pl.Utf8),
+            ],
+            separator="::",
+        ).alias("row_key")
+    ).to_arrow()
+
+
+async def _review_images_with_row_keys(
+    review_df: pl.DataFrame,
+    identities: pl.LazyFrame,
+    *,
+    join_columns: list[str],
+) -> pl.DataFrame:
+    return await (
+        review_df.lazy()
+        .join(identities.unique(), on=join_columns, how="inner")
+        .collect_async()
+    )
+
+
+def _dataset_identities_lazyframe(
+    sparse_lf: pl.LazyFrame, *, dataset_id: str
+) -> pl.LazyFrame:
+    names = set(sparse_lf.collect_schema().names())
+    row_key = (
+        pl.col("sample_id").cast(pl.Utf8)
+        if "sample_id" in names
+        else pl.concat_str(
+            [pl.lit(dataset_id), pl.col("defect_id").cast(pl.Utf8)],
+            separator="::",
+        )
+    )
+    return sparse_lf.select(
+        pl.col("defect_id").cast(pl.Int32, strict=False),
+        row_key.alias("row_key"),
+    )
+
+
+def _collection_source_dataset_ids(
+    revision: DatasetCollectionRevision,
+) -> tuple[str, ...]:
+    dataset_ids = tuple(
+        str(item.get("source_dataset_id", "")) for item in revision.source_snapshot
+    )
+    if not dataset_ids or any(not dataset_id for dataset_id in dataset_ids):
+        raise ValueError(
+            f"Collection revision {revision.id} has no valid source dataset snapshot"
+        )
+    if len(dataset_ids) != len(set(dataset_ids)):
+        raise ValueError(
+            f"Collection revision {revision.id} contains duplicate source datasets"
+        )
+    return dataset_ids
+
+
+def _prefix_overlay_sample_ids(
+    lazyframe: pl.LazyFrame, dataset_id: str
+) -> pl.LazyFrame:
+    return lazyframe.with_columns(
+        pl.concat_str(
+            [pl.lit(dataset_id), pl.col("sample_id").cast(pl.Utf8)],
+            separator="::",
+        ).alias("sample_id")
+    )
+
+
+def _combined_fingerprint(parts: list[str]) -> str:
+    return hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()
 
 
 async def _sink_lazyframe(lazyframe: pl.LazyFrame, path: Path) -> None:
@@ -468,16 +780,23 @@ def _empty_samples_frame() -> pl.DataFrame:
     )
 
 
-def _review_aggregate(review_df: pl.DataFrame) -> pl.DataFrame:
+def _review_aggregate(
+    review_df: pl.DataFrame,
+    *,
+    group_columns: list[str] | None = None,
+) -> pl.DataFrame:
+    groups = group_columns or ["defect_id"]
     if review_df.is_empty():
-        return pl.DataFrame(
-            {
-                "defect_id": pl.Series([], dtype=pl.Int32),
-                "images": pl.Series([], dtype=pl.Int32),
-                "review_image_ids_json": pl.Series([], dtype=pl.Utf8),
-            }
-        )
-    return review_df.group_by("defect_id").agg(
+        schema: dict[str, pl.Series] = {
+            "images": pl.Series([], dtype=pl.Int32),
+            "review_image_ids_json": pl.Series([], dtype=pl.Utf8),
+        }
+        for group in groups:
+            schema[group] = pl.Series(
+                [], dtype=pl.Int32 if group == "defect_id" else pl.Utf8
+            )
+        return pl.DataFrame(schema)
+    return review_df.group_by(groups).agg(
         pl.len().cast(pl.Int32).alias("images"),
         pl.col("image_id")
         .implode()
@@ -506,6 +825,7 @@ def _normalize_dataset_base_lazyframe(
     review_df: pl.DataFrame,
     *,
     dataset_id: str = "",
+    assign_map_ids: bool = False,
 ) -> pl.LazyFrame:
     sparse_schema = sparse_lf.collect_schema()
     schema_names = set(sparse_schema.names())
@@ -530,7 +850,23 @@ def _normalize_dataset_base_lazyframe(
             )
         ).alias("row_key"),
     )
-    base = base.join(_review_aggregate(review_df).lazy(), on="defect_id", how="left")
+    if assign_map_ids:
+        # Freeze the numeric map dictionary in revision-artifact order before
+        # joins, whose execution strategy is allowed to reorder output rows.
+        base = base.with_row_index("map_id").with_columns(
+            pl.col("map_id").cast(pl.Int32, strict=False)
+        )
+    join_columns = (
+        ["source_dataset_id", "defect_id"]
+        if "source_dataset_id" in schema_names
+        and "source_dataset_id" in review_df.columns
+        else ["defect_id"]
+    )
+    base = base.join(
+        _review_aggregate(review_df, group_columns=join_columns).lazy(),
+        on=join_columns,
+        how="left",
+    )
     available = set(base.collect_schema().names())
     expressions: list[pl.Expr] = []
     for column, dtype in _SAMPLE_COLUMN_DTYPES.items():
@@ -549,6 +885,16 @@ def _normalize_dataset_base_lazyframe(
             expressions.append(pl.lit(0).cast(dtype).alias(column))
         elif column == "review_image_ids_json":
             expressions.append(pl.lit("[]").cast(dtype).alias(column))
+        elif column == "map_id":
+            expressions.append(
+                pl.col("defect_id").cast(dtype, strict=False).alias(column)
+            )
+        elif column == "source_dataset_id" and dataset_id:
+            expressions.append(pl.lit(dataset_id).cast(dtype).alias(column))
+        elif column == "source_sample_id" and "sample_id" in available:
+            expressions.append(
+                pl.col("sample_id").cast(dtype, strict=False).alias(column)
+            )
         else:
             expressions.append(pl.lit(None).cast(dtype).alias(column))
     return base.with_columns(expressions)
@@ -567,6 +913,10 @@ def _normalize_samples_frame(df: pl.DataFrame) -> pl.DataFrame:
             expressions.append(pl.lit(0).cast(dtype).alias(column))
         elif column == "review_image_ids_json":
             expressions.append(pl.lit("[]").cast(dtype).alias(column))
+        elif column == "map_id":
+            expressions.append(
+                pl.col("defect_id").cast(dtype, strict=False).alias(column)
+            )
         else:
             expressions.append(pl.lit(None).cast(dtype).alias(column))
     df = df.with_columns(expressions)

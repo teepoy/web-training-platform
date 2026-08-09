@@ -163,11 +163,11 @@ const revisionMutation = useMutation({
 });
 
 function openStack(): void {
-  const first = members.value[0];
   const revision = latestReadyRevision.value;
-  if (!first || !revision) return;
+  const firstSource = revision?.source_snapshot[0]?.source_dataset_id;
+  if (!revision || typeof firstSource !== "string" || !firstSource) return;
   void router.push({
-    path: `/dataset-collections/${collectionId.value}/classify/${first.source_dataset_id}`,
+    path: `/dataset-collections/${collectionId.value}/classify/${firstSource}`,
     query: { revisionId: revision.id },
   });
 }

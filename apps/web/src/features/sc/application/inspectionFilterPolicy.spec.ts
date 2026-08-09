@@ -35,8 +35,8 @@ describe("SC inspection filter policy", () => {
     expect(plan.selectionFilters).toEqual(plan.mapFilters);
     expect(plan.tableFilters).toEqual([
       globalExpression,
-      ["defect_id", "in", [3, 9]],
-      ["defect_id", "in", [7, 11]],
+      ["map_id", "in", [3, 9]],
+      ["map_id", "in", [7, 11]],
       ["images", ">", 0],
     ]);
     expect(plan.galleryBaseFilters).toEqual(plan.tableFilters);
@@ -50,11 +50,11 @@ describe("SC inspection filter policy", () => {
     expect(second.items.map((item) => item.id)).toEqual([first.items[0]?.id, second.items[1]?.id]);
     expect(second.items.map((item) => ({ field: item.field, condition: item.condition }))).toEqual([
       {
-        field: "defect_id",
+        field: "map_id",
         condition: { filterType: "set", values: [3, 9], exclude: true },
       },
       {
-        field: "defect_id",
+        field: "map_id",
         condition: { filterType: "set", values: [3, 7], exclude: true },
       },
     ]);
@@ -83,7 +83,7 @@ describe("SC inspection filter policy", () => {
         combinator: "and",
         items: [
           ["defect_id", "in", [1, 2, 3, 4]],
-          ["defect_id", "not in or null", [2, 4]],
+          ["map_id", "not in or null", [2, 4]],
         ],
       },
     ]);
@@ -115,7 +115,7 @@ describe("SC inspection filter policy", () => {
       items: [
         { kind: "group", combinator: "or", items: filter.items },
         {
-          field: "defect_id",
+          field: "map_id",
           condition: { filterType: "set", values: [10, 11], exclude: true },
         },
       ],
@@ -134,7 +134,7 @@ describe("SC inspection filter policy", () => {
           },
         ]),
         mapSelectionIds: [3, 7],
-        tableSelection: { kind: "ids", ids: [11, 12] },
+        tableSelection: { kind: "ids", ids: ["11", "12"] },
         options: {
           scope: "map",
           extraFilterEnabled: true,
@@ -157,7 +157,7 @@ describe("SC inspection filter policy", () => {
         combinator: "and",
         items: [["defect_id", "not in or null", [8, 9]]],
       },
-      ["defect_id", "in", [3, 7]],
+      ["map_id", "in", [3, 7]],
     ]);
   });
 
@@ -173,7 +173,7 @@ describe("SC inspection filter policy", () => {
           },
         ]),
         mapSelectionIds: [3, 7],
-        tableSelection: { kind: "ids", ids: [12, 5] },
+        tableSelection: { kind: "ids", ids: ["12", "5"] },
         options: {
           scope: "table",
           extraFilterEnabled: false,
@@ -185,7 +185,7 @@ describe("SC inspection filter policy", () => {
         combinator: "and",
         items: [["rough_bin", "in", [4]]],
       },
-      ["defect_id", "in", [5, 12]],
+      ["row_key", "in", ["12", "5"]],
     ]);
   });
 });

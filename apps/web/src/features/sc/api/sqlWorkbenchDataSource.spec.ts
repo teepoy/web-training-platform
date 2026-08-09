@@ -152,6 +152,29 @@ describe("SQL workbench data source", () => {
     });
   });
 
+  it("queries and subscribes to one immutable collection revision", async () => {
+    const collectionQueryUrl =
+      "/api/v1/sc/data/collections/collection-1/revisions/revision-2/query";
+    server.use(
+      http.post(collectionQueryUrl, () => arrowResponse({ group_key: [10], group_count: [4] }, 3)),
+    );
+    vi.stubGlobal("EventSource", FakeEventSource);
+    const source = new SqlWorkbenchDataSource({
+      kind: "collection",
+      collectionId: "collection-1",
+      revisionId: "revision-2",
+    });
+    sources.push(source);
+
+    await expect(source.loadAggregates({ field: "rough_bin" })).resolves.toEqual({ "10": 4 });
+    source.subscribeInvalidations(() => undefined);
+
+    expect(source.scopeKey).toBe("collection:collection-1/revision-2");
+    expect(FakeEventSource.instance?.url).toContain(
+      "/api/v1/sc/data/collections/collection-1/revisions/revision-2/events",
+    );
+  });
+
   it("retries one transient query failure before returning the result", async () => {
     const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     let attempts = 0;
@@ -202,7 +225,7 @@ describe("SQL workbench data source", () => {
 
     expect(requestBody).toEqual({
       description: "sc-workbench.map",
-      sql: 'SELECT "defect_id", "wafer_x", "wafer_y", "die_x", "die_y", "reticle_x", "reticle_y", "class_number", "images" FROM samples ORDER BY "defect_id"',
+      sql: 'SELECT "map_id" AS "defect_id", "wafer_x", "wafer_y", "die_x", "die_y", "reticle_x", "reticle_y", "class_number", "images" FROM samples ORDER BY "defect_id"',
       parameters: [],
     });
   });
@@ -376,7 +399,7 @@ describe("SQL workbench data source", () => {
     expect(rowsRequest?.sql).toContain('WITH "__sc_page_ids" AS (SELECT "row_key" FROM samples');
     expect(rowsRequest?.sql).toContain('INNER JOIN "__sc_page_ids" USING ("row_key")');
     expect(rowsRequest?.sql).not.toContain("COUNT(*) OVER");
-    expect(rowsRequest?.sql).toContain('ORDER BY "future_metric" DESC, "defect_id" ASC');
+    expect(rowsRequest?.sql).toContain('ORDER BY "future_metric" DESC, "row_key" ASC');
     expect(rowsRequest?.parameters).toEqual([10, 20, 25, 0]);
   });
 
@@ -716,7 +739,9 @@ describe("SQL workbench data source", () => {
         constraint: { kind: "all" },
       }),
     ).resolves.toEqual([3, 9]);
-    expect(sql).toBe('SELECT "defect_id" FROM samples WHERE "rough_bin" = ? ORDER BY "defect_id"');
+    expect(sql).toBe(
+      'SELECT "map_id" AS "defect_id" FROM samples WHERE "rough_bin" = ? ORDER BY "map_id"',
+    );
     expect(description).toBe("sc-workbench.selection.all");
   });
 
@@ -739,7 +764,7 @@ describe("SQL workbench data source", () => {
     ).resolves.toEqual([9, 3]);
     expect(requestBody).toEqual({
       description: "sc-workbench.selection.random",
-      sql: 'SELECT "defect_id" FROM samples WHERE "images" > ? ORDER BY HASH("defect_id", ?) LIMIT ?',
+      sql: 'SELECT "map_id" AS "defect_id" FROM samples WHERE "images" > ? ORDER BY HASH("map_id", ?) LIMIT ?',
       parameters: [0, 42, 2],
     });
   });
@@ -786,7 +811,7 @@ describe("SQL workbench data source", () => {
     expect(requestBody?.sql).toContain('"__sc_sampling_conditional_ranked" AS');
     expect(requestBody?.sql).toContain('"__sc_sampling_group_ranked" AS');
     expect(requestBody?.sql).toContain('ROW_NUMBER() OVER (PARTITION BY "class_number"');
-    expect(requestBody?.sql).toContain('ORDER BY HASH("defect_id", ?), "defect_id" LIMIT ?');
+    expect(requestBody?.sql).toContain('ORDER BY HASH("map_id", ?), "map_id" LIMIT ?');
     expect(requestBody?.parameters).toEqual(["4", 0, 42, 2, 42, "1", 2, "2", 1, 0, 42, 3]);
   });
 

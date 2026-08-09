@@ -140,6 +140,23 @@ async def query_dataset(
     return await _query_scope(request, scope, query)
 
 
+@router.post("/collections/{collection_id}/revisions/{revision_id}/query")
+async def query_collection(
+    collection_id: str,
+    revision_id: str,
+    query: ScSqlQueryRequest,
+    request: Request,
+    _user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> Response:
+    scope = ScDataScope.collection(
+        collection_id=collection_id,
+        revision_id=revision_id,
+        org_id=org.id,
+    )
+    return await _query_scope(request, scope, query)
+
+
 @router.get("/inspections/{inspection_time}/{wafer_key}/events")
 async def inspection_events(
     inspection_time: str,
@@ -164,6 +181,22 @@ async def dataset_events(
     org: Organization = Depends(get_current_org),
 ) -> StreamingResponse:
     scope = ScDataScope.dataset(dataset_id=dataset_id, org_id=org.id)
+    return _events_response(request, scope)
+
+
+@router.get("/collections/{collection_id}/revisions/{revision_id}/events")
+async def collection_events(
+    collection_id: str,
+    revision_id: str,
+    request: Request,
+    _user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> StreamingResponse:
+    scope = ScDataScope.collection(
+        collection_id=collection_id,
+        revision_id=revision_id,
+        org_id=org.id,
+    )
     return _events_response(request, scope)
 
 
@@ -316,6 +349,7 @@ def _events_response(request: Request, scope: ScDataScope) -> StreamingResponse:
 
 async def _event_stream(request: Request, scope: ScDataScope) -> AsyncIterator[str]:
     runtime = _runtime(request)
+    source_dataset_ids = frozenset(await runtime.materializer.source_dataset_ids(scope))
     pubsub = runtime.redis.pubsub()
     await pubsub.subscribe(ANNOTATION_CHANNEL, PREDICTION_CHANNEL)
     try:
@@ -334,8 +368,16 @@ async def _event_stream(request: Request, scope: ScDataScope) -> AsyncIterator[s
             if not message:
                 yield ": keepalive\n\n"
                 continue
-            event = _invalidation_from_message(scope, message)
+            event = _invalidation_from_message(
+                scope,
+                message,
+                source_dataset_ids=source_dataset_ids,
+            )
             if event is not None:
+                if scope.kind == "collection":
+                    event = event.model_copy(
+                        update={"revision": await runtime.revisions.increment(scope)}
+                    )
                 yield _sse_event(event)
     finally:
         await pubsub.unsubscribe(ANNOTATION_CHANNEL, PREDICTION_CHANNEL)
@@ -343,7 +385,10 @@ async def _event_stream(request: Request, scope: ScDataScope) -> AsyncIterator[s
 
 
 def _invalidation_from_message(
-    scope: ScDataScope, message: dict[str, object]
+    scope: ScDataScope,
+    message: dict[str, object],
+    *,
+    source_dataset_ids: frozenset[str] = frozenset(),
 ) -> ScDataInvalidationEvent | None:
     raw = message.get("data")
     if isinstance(raw, bytes):
@@ -358,6 +403,8 @@ def _invalidation_from_message(
     if not isinstance(data, dict):
         return None
     if scope.kind == "dataset" and data.get("dataset_id") != scope.identity:
+        return None
+    if scope.kind == "collection" and data.get("dataset_id") not in source_dataset_ids:
         return None
     if scope.kind == "inspection":
         if data.get("inspection_time") != scope.identity.rsplit("/", 1)[0]:

@@ -24,6 +24,7 @@ import {
 import { useBlinkRubberBand } from "@/features/sc/presentation/composables/useBlinkRubberBand";
 import { scSampleImageUrl } from "@/features/sc/domain/models";
 import { usePagedDataGallery } from "@/features/sc/presentation/composables/usePagedDataGallery";
+import { cssBackgroundImageUrl } from "@/features/sc/presentation/components/scSpriteStyle";
 import type {
   ScGalleryDataQuery,
   ScWorkbenchDataSource,
@@ -33,6 +34,10 @@ interface BlinkSample {
   rowIndex: number;
   rowKey: string;
   sampleId?: string | null;
+  sourceDatasetId?: string | null;
+  sourceSampleId?: string | null;
+  inspectionTime?: string | null;
+  waferKey?: number | null;
   defectId: number;
   reviewImages: number[];
   annotationLabel: string | null;
@@ -119,6 +124,7 @@ const PATCH_IMAGE_SPRITE_TOKENS: Record<PatchImageType, string> = {
   Difference: "patchDifference",
 };
 const DEFAULT_PATCH_IMAGE_TYPES: PatchImageType[] = ["Defective", "Reference", "Difference"];
+const SC_SPRITE_RENDER_VERSION = "3";
 const patchImageTypeByInput: Record<string, PatchImageType> = {
   defective: "Defective",
   reference: "Reference",
@@ -200,6 +206,10 @@ function samplesFromArrow(data: unknown, offset: number, review: boolean): Blink
   const defectIds = table.getChild("defect_id");
   const rowKeys = table.getChild("row_key");
   const sampleIds = table.getChild("sample_id");
+  const sourceDatasetIds = table.getChild("source_dataset_id");
+  const sourceSampleIds = table.getChild("source_sample_id");
+  const inspectionTimes = table.getChild("inspection_time");
+  const waferKeys = table.getChild("wafer_key");
   const reviewImages = table.getChild("review_image_ids_json");
   const annotationLabels = table.getChild("annotation_label");
   const predictionLabels = table.getChild("prediction_label");
@@ -213,6 +223,10 @@ function samplesFromArrow(data: unknown, offset: number, review: boolean): Blink
       rowIndex: offset + index,
       rowKey: String(rowKeys?.get(index) ?? sampleId ?? defectId),
       sampleId: review ? sampleId : null,
+      sourceDatasetId: stringOrNull(sourceDatasetIds?.get(index)),
+      sourceSampleId: stringOrNull(sourceSampleIds?.get(index)),
+      inspectionTime: stringOrNull(inspectionTimes?.get(index)),
+      waferKey: waferKeys?.get(index) == null ? null : numeric(waferKeys.get(index)),
       defectId,
       reviewImages: review ? parseReviewImages(reviewImages?.get(index)) : EMPTY_REVIEW_IMAGES,
       annotationLabel: stringOrNull(annotationLabels?.get(index)),
@@ -586,8 +600,10 @@ const previewImageSrc = ref<string | null>(null);
 const hiddenImageRef = ref<InstanceType<typeof NImage> | null>(null);
 
 function handleReviewPreview(sample: BlinkSample, imageId: number) {
-  if (!props.datasetId || !sample.sampleId) return;
-  previewImageSrc.value = scSampleImageUrl(props.datasetId, sample.sampleId, imageId);
+  const datasetId = sample.sourceDatasetId ?? props.datasetId;
+  const sampleId = sample.sourceSampleId ?? sample.sampleId;
+  if (!datasetId || !sampleId) return;
+  previewImageSrc.value = scSampleImageUrl(datasetId, sampleId, imageId);
   void nextTick(() => {
     const el = hiddenImageRef.value?.$el;
     if (el instanceof HTMLElement) {
@@ -601,11 +617,14 @@ function getSpriteUrl(sample: BlinkSample): string {
   const cs = isPatch ? patchImageSize.value : reviewImageSize.value;
   const params = new URLSearchParams();
   params.set("cell_size", String(cs));
+  params.set("render_version", SC_SPRITE_RENDER_VERSION);
   for (const type of spriteImageTypesForSample(sample)) {
     params.append("image_types", type);
   }
   const spriteMode = isPatch ? "patch" : "review";
-  return `/api/v1/sc/sprites/${spriteMode}/${props.inspectionTime}/${props.waferKey}/${
+  const inspectionTime = sample.inspectionTime ?? props.inspectionTime;
+  const waferKey = sample.waferKey ?? props.waferKey;
+  return `/api/v1/sc/sprites/${spriteMode}/${inspectionTime}/${waferKey}/${
     sample.defectId
   }?${params.toString()}`;
 }
@@ -627,7 +646,7 @@ function getSpriteStyle(sample: BlinkSample, colIndex: number) {
   const bgPos = `${-colIndex * cellSize.value}px 0`;
 
   return {
-    backgroundImage: `url(${withAuthQueryParams(url)})`,
+    backgroundImage: cssBackgroundImageUrl(withAuthQueryParams(url)),
     backgroundSize: bgSize,
     backgroundPosition: bgPos,
     backgroundRepeat: "no-repeat",

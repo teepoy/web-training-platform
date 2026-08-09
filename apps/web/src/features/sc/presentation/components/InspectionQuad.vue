@@ -48,6 +48,8 @@ use([BarChart, GridComponent, TooltipComponent, CanvasRenderer]);
 const props = defineProps<{
   variant?: "preview" | "reclassify";
   datasetId?: string;
+  collectionId?: string;
+  collectionRevisionId?: string;
   inspectionTime: string;
   waferKey: number;
   annotationDrafts?: Record<string, string>;
@@ -151,9 +153,11 @@ const enabledLegendSources = computed<ScLegendSource[]>(() =>
     : ["class", "bin"],
 );
 const mapColorMapScopeKey = computed(() =>
-  props.datasetId
-    ? `dataset:${props.datasetId}`
-    : `inspection:${props.inspectionTime}:${props.waferKey}`,
+  props.collectionId && props.collectionRevisionId
+    ? `collection:${props.collectionId}/${props.collectionRevisionId}`
+    : props.datasetId
+      ? `dataset:${props.datasetId}`
+      : `inspection:${props.inspectionTime}:${props.waferKey}`,
 );
 const waferGeometryModel = computed(() => {
   const geometry = props.waferGeometry;
@@ -175,6 +179,8 @@ const reticleProjectionModel = computed(() => ({
 const { workbench, dataReady, model, reportDataError } = useInspectionQuadData({
   variant: computed(() => props.variant),
   datasetId: computed(() => props.datasetId),
+  collectionId: computed(() => props.collectionId),
+  collectionRevisionId: computed(() => props.collectionRevisionId),
   inspectionTime: computed(() => props.inspectionTime),
   waferKey: computed(() => props.waferKey),
   legendGroupBy: computed(() => legendGroupBy.value),

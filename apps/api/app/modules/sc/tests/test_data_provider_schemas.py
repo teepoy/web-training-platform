@@ -101,3 +101,37 @@ def test_dataset_materializer_preserves_dynamic_metadata_columns() -> None:
     assert row["cluster_id"] == 8
     assert row["future_metric"] == 12.5
     assert row["upstream_payload"] == "kept"
+
+
+def test_collection_materializer_keeps_duplicate_defects_as_distinct_rows() -> None:
+    source = pl.DataFrame(
+        {
+            "row_key": ["dataset-a::sample-1", "dataset-b::sample-9"],
+            "sample_id": ["dataset-a::sample-1", "dataset-b::sample-9"],
+            "source_dataset_id": ["dataset-a", "dataset-b"],
+            "source_sample_id": ["sample-1", "sample-9"],
+            "collection_member_id": ["member-a", "member-b"],
+            "defect_id": [42, 42],
+        }
+    ).lazy()
+    review_images = pl.DataFrame(
+        {
+            "source_dataset_id": ["dataset-a", "dataset-b"],
+            "defect_id": [42, 42],
+            "image_id": [100, 200],
+        }
+    )
+
+    rows = _normalize_dataset_base_lazyframe(
+        source,
+        review_images,
+        assign_map_ids=True,
+    ).collect()
+
+    assert rows["row_key"].to_list() == [
+        "dataset-a::sample-1",
+        "dataset-b::sample-9",
+    ]
+    assert rows["map_id"].to_list() == [0, 1]
+    assert rows["defect_id"].to_list() == [42, 42]
+    assert rows["review_image_ids_json"].to_list() == ["[100]", "[200]"]

@@ -6,7 +6,7 @@ from typing import Literal
 
 @dataclass(frozen=True)
 class ScDataScope:
-    kind: Literal["inspection", "dataset"]
+    kind: Literal["inspection", "dataset", "collection"]
     identity: str
     org_id: str
 
@@ -23,6 +23,16 @@ class ScDataScope:
     @classmethod
     def dataset(cls, *, dataset_id: str, org_id: str) -> ScDataScope:
         return cls(kind="dataset", identity=dataset_id, org_id=org_id)
+
+    @classmethod
+    def collection(
+        cls, *, collection_id: str, revision_id: str, org_id: str
+    ) -> ScDataScope:
+        return cls(
+            kind="collection",
+            identity=f"{collection_id}/{revision_id}",
+            org_id=org_id,
+        )
 
     @property
     def public_name(self) -> str:

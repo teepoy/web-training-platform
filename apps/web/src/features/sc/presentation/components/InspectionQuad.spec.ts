@@ -553,7 +553,7 @@ describe("InspectionQuad state ownership", () => {
     resolveUnhiddenPrune([103]);
     await vi.waitFor(() => {
       expect(harness.options?.globalFilter.value.items[0]).toMatchObject({
-        field: "defect_id",
+        field: "map_id",
         condition: { filterType: "set", values: [103], exclude: true },
       });
     });
@@ -652,7 +652,7 @@ describe("InspectionQuad state ownership", () => {
     const firstFilter = harness.options?.globalFilter.value;
     expect(firstFilter?.items).toHaveLength(1);
     expect(firstFilter?.items[0]).toMatchObject({
-      field: "defect_id",
+      field: "map_id",
       condition: { filterType: "set", values: [103, 274], exclude: true },
       source: { kind: "map-selection", action: "exclude-selected" },
     });
@@ -694,7 +694,7 @@ describe("InspectionQuad state ownership", () => {
 
     expect(model.appendMapSelection).not.toHaveBeenCalled();
     expect(harness.options?.globalFilter.value.items[0]).toMatchObject({
-      field: "defect_id",
+      field: "map_id",
       condition: { filterType: "set", values: [103], exclude: true },
     });
   });

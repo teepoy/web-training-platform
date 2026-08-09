@@ -4,7 +4,8 @@ import type { ScWorkbenchDataSource } from "@/features/sc/domain/workbenchDataSo
 
 export type ScDataWorkbenchOptions =
   | { kind: "preview"; inspectionTime: string; waferKey: number }
-  | { kind: "reclassify"; datasetId: string };
+  | { kind: "reclassify"; datasetId: string }
+  | { kind: "collection"; collectionId: string; revisionId: string };
 
 export interface ScDataWorkbenchState {
   dataSource: Ref<ScWorkbenchDataSource | null>;
@@ -19,14 +20,21 @@ export function useScDataWorkbench(): ScDataWorkbenchState {
 
   async function connect(options: ScDataWorkbenchOptions): Promise<void> {
     const previous = dataSource.value;
-    dataSource.value =
+    dataSource.value = new SqlWorkbenchDataSource(
       options.kind === "preview"
-        ? new SqlWorkbenchDataSource({
+        ? {
             kind: "inspection",
             inspectionTime: options.inspectionTime,
             waferKey: options.waferKey,
-          })
-        : new SqlWorkbenchDataSource({ kind: "dataset", datasetId: options.datasetId });
+          }
+        : options.kind === "collection"
+          ? {
+              kind: "collection",
+              collectionId: options.collectionId,
+              revisionId: options.revisionId,
+            }
+          : { kind: "dataset", datasetId: options.datasetId },
+    );
     previous?.close();
     dataReady.value = true;
   }

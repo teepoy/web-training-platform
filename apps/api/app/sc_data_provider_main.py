@@ -16,6 +16,9 @@ from sqlalchemy import text
 
 from app.core.config import ScDataProviderConfig, load_config
 from app.core.logger import init_logging
+from app.modules.dataset_collections.port.local import (
+    DatasetCollectionRevisionReaderPort,
+)
 from app.modules.auth.app.services.dev_auth_context import load_dev_auth_context
 from app.modules.sc.data_provider.cache import ScDataObjectCache
 from app.modules.sc.data_provider.engine import DuckDbQueryExecutor
@@ -28,6 +31,7 @@ from app.modules.sc.data_provider.router import (
 )
 from app.modules.sc.domain.upstream_reader import ScUpstreamReader
 from app.modules.storage.port.local import DatasetStorageFactoryPort
+from app.shared.domain.protocols import ArtifactStorage
 from app.sc_data_provider_composition import (
     build_sc_data_provider_app_context,
     close_sc_data_provider_app_context,
@@ -163,6 +167,10 @@ async def lifespan(data_app: FastAPI):
     materializer = ScDataMaterializer(
         upstream_reader=context.injector.get(ScUpstreamReader),
         storage_factory=context.injector.get(DatasetStorageFactoryPort),
+        collection_revision_reader=context.injector.get(
+            DatasetCollectionRevisionReaderPort
+        ),
+        artifact_storage=context.injector.get(ArtifactStorage),
         cache=cache,
         batch_rows=provider_config.arrow_batch_rows,
     )

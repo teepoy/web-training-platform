@@ -9,6 +9,8 @@ import { useScDataWorkbench } from "./useScDataWorkbench";
 interface InspectionQuadDataOptions {
   variant: ComputedRef<"preview" | "reclassify" | undefined>;
   datasetId: ComputedRef<string | undefined>;
+  collectionId: ComputedRef<string | undefined>;
+  collectionRevisionId: ComputedRef<string | undefined>;
   inspectionTime: ComputedRef<string>;
   waferKey: ComputedRef<number>;
   legendGroupBy: ComputedRef<ScLegendSource | null | undefined>;
@@ -42,9 +44,24 @@ export function useInspectionQuadData(options: InspectionQuadDataOptions) {
   });
 
   const stopConnectionWatch = watch(
-    [options.variant, options.datasetId, options.inspectionTime, options.waferKey],
-    async ([variant, datasetId, inspectionTime, waferKey]) => {
+    [
+      options.variant,
+      options.datasetId,
+      options.collectionId,
+      options.collectionRevisionId,
+      options.inspectionTime,
+      options.waferKey,
+    ],
+    async ([variant, datasetId, collectionId, collectionRevisionId, inspectionTime, waferKey]) => {
       if (variant === "reclassify") {
+        if (collectionId && collectionRevisionId) {
+          await workbench.connect({
+            kind: "collection",
+            collectionId,
+            revisionId: collectionRevisionId,
+          });
+          return;
+        }
         if (!datasetId) return workbench.disconnect();
         await workbench.connect({ kind: "reclassify", datasetId });
         return;

@@ -50,6 +50,7 @@ def load_inspection_seed(
     inspection_db_url: str,
     wafer_key: int,
     expected_total_defects: int,
+    inspection_time: datetime | None = None,
 ) -> InspectionSeed:
     """Load and validate the latest inspection used to build patch zip files.
 
@@ -64,21 +65,35 @@ def load_inspection_seed(
 
     engine = create_engine(inspection_db_url)
     with engine.connect() as conn:
+        inspection_filter = (
+            "AND inspection_time = :inspection_time "
+            if inspection_time is not None
+            else ""
+        )
+        inspection_params: dict[str, object] = {"wafer_key": wafer_key}
+        if inspection_time is not None:
+            inspection_params["inspection_time"] = inspection_time.strftime(
+                "%Y-%m-%d %H:%M:%S.%f"
+            )
         summary = (
             conn.execute(
                 text(
                     "SELECT inspection_time, wafer_key, lot_id, wafer_id, device, "
                     "layer_id, defects FROM insp_wafer_summary "
                     "WHERE wafer_key = :wafer_key "
+                    f"{inspection_filter}"
                     "ORDER BY inspection_time DESC LIMIT 1"
                 ),
-                {"wafer_key": wafer_key},
+                inspection_params,
             )
             .mappings()
             .one_or_none()
         )
         if summary is None:
-            raise ValueError(f"inspection not found for wafer_key={wafer_key}")
+            scope = f"wafer_key={wafer_key}"
+            if inspection_time is not None:
+                scope += f", inspection_time={inspection_time.isoformat()}"
+            raise ValueError(f"inspection not found for {scope}")
 
         inspection_time_value = summary["inspection_time"]
         stats = (
@@ -322,15 +337,29 @@ def main() -> None:
     )
     parser.add_argument("--defects-per-zip", type=int, default=DEFECTS_PER_ZIP)
     parser.add_argument("--wafer-key", type=int, default=1)
+    parser.add_argument(
+        "--inspection-time",
+        help=(
+            "Seed one existing inspection instead of the latest inspection for the wafer. "
+            "Timezone offsets are treated as the mock database's local wall time."
+        ),
+    )
     args = parser.parse_args()
 
     if args.defects_per_zip <= 0:
         raise ValueError("defects per zip must be greater than zero")
 
+    requested_inspection_time: datetime | None = None
+    if args.inspection_time:
+        requested_inspection_time = datetime.fromisoformat(
+            args.inspection_time.replace("Z", "+00:00")
+        ).replace(tzinfo=None)
+
     inspection = load_inspection_seed(
         args.inspection_db_url,
         args.wafer_key,
         args.total_defects,
+        inspection_time=requested_inspection_time,
     )
     print(
         "Validated inspection alignment: "

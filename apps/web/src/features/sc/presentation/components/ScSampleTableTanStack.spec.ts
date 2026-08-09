@@ -43,6 +43,7 @@ vi.mock("@tanstack/vue-virtual", () => ({
 
 function sampleRow(defectId: string, images: number): ScSampleTableDisplayRow {
   return {
+    row_key: `dataset::${defectId}`,
     defect_id: defectId,
     rough_bin: 0,
     class_number: 0,
@@ -189,5 +190,35 @@ describe("ScSampleTableTanStack", () => {
 
     await vi.waitFor(() => expect(wrapper.text()).toContain("future_metric"));
     expect(wrapper.text()).toContain("12.5");
+  });
+
+  it("shows the stable row key as Sample ID so duplicate defect IDs stay distinguishable", async () => {
+    const loadRows = vi.fn<ScSampleTableDataSource["loadRows"]>(async () => ({
+      items: [
+        { ...sampleRow("1", 0), row_key: "dataset-a::sample-1" },
+        { ...sampleRow("1", 0), row_key: "dataset-b::sample-1" },
+      ],
+      total: 2,
+      nextAnchor: null,
+    }));
+    const dataSource: ScSampleTableDataSource = {
+      scopeKey: "collection:identity",
+      loadColumns: async () => [
+        describedColumn("row_key", "Sample ID", 1),
+        describedColumn("map_id", "Map ID", 5, "internal"),
+        describedColumn("defect_id", "Defect ID", 0),
+        describedColumn("sample_id", "Sample ID", 6, "internal"),
+        describedColumn("source_sample_id", "Source Sample ID", 7, "internal"),
+      ],
+      loadRows,
+    };
+    const { wrapper } = await mountWithProviders(ScSampleTableTanStack, {
+      props: { dataSource },
+    });
+
+    await vi.waitFor(() => expect(wrapper.text()).toContain("Sample ID"));
+    expect(wrapper.text()).toContain("dataset-a::sample-1");
+    expect(wrapper.text()).toContain("dataset-b::sample-1");
+    expect(wrapper.text()).not.toContain("map_id");
   });
 });

@@ -24,6 +24,8 @@ export interface ScSelectionAction {
 export interface ScSampleTableDisplayRow extends ScSampleTableRow {
   row_key: string;
   sample_id?: string | null;
+  source_dataset_id?: string | null;
+  source_sample_id?: string | null;
   annotation_label?: string | null;
   prediction_label?: string | null;
   prediction_confidence?: number | null;

@@ -54,7 +54,7 @@ def _materialized(tmp_path: Path) -> MaterializedScScope:
     )
     review_images = _cached_table(
         tmp_path / "review-images.parquet",
-        pa.table({"defect_id": [2], "image_id": [100]}),
+        pa.table({"row_key": ["2"], "defect_id": [2], "image_id": [100]}),
         object_id="review-images",
     )
     return MaterializedScScope(

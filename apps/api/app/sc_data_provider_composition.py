@@ -9,6 +9,13 @@ from injector import Binder, Injector, Module, provider, singleton
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.core.config import AppConfig
+from app.modules.dataset_collections.adapter.repositories import (
+    DatasetCollectionSqlRepository,
+)
+from app.modules.dataset_collections.domain.models import DatasetCollectionRevision
+from app.modules.dataset_collections.port.local import (
+    DatasetCollectionRevisionReaderPort,
+)
 from app.modules.sc.adapter.grpc_upstream import GrpcScUpstream
 from app.modules.sc.domain.upstream_reader import ScUpstreamReader
 from app.modules.storage.port.local import DatasetStorageFactoryPort
@@ -17,6 +24,7 @@ from app.shared.db.session import (
     create_engine,
     create_session_factory,
 )
+from app.shared.domain.protocols import ArtifactStorage
 
 
 @dataclass
@@ -39,15 +47,7 @@ def _required_environment(name: str) -> str:
     return value
 
 
-def _build_dataset_storage_factory(
-    cfg: AppConfig,
-    session_factory: AppDatabaseSessionFactory,
-) -> DatasetStorageFactoryPort:
-    from app.modules.datasets.adapter.repositories.dataset_sql_repository import (
-        DatasetSqlRepository,
-    )
-    from app.modules.storage.adapter.factory import DatasetStorageFactory
-    from app.modules.storage.domain.sparse import DatasetPayloadStore
+def _build_artifact_storage(cfg: AppConfig) -> ArtifactStorage:
     from app.shared.infrastructure.storage.memory import InMemoryArtifactStorage
     from app.shared.infrastructure.storage.minio import (
         MinioArtifactStorage,
@@ -56,9 +56,9 @@ def _build_dataset_storage_factory(
 
     storage_kind = str(cfg.storage.kind)
     if storage_kind == "memory":
-        artifact_storage = InMemoryArtifactStorage()
-    elif storage_kind == "minio":
-        artifact_storage = MinioArtifactStorage(
+        return InMemoryArtifactStorage()
+    if storage_kind == "minio":
+        return MinioArtifactStorage(
             endpoint=str(cfg.storage.minio.endpoint),
             access_key=str(cfg.storage.minio.access_key),
             secret_key=str(cfg.storage.minio.secret_key),
@@ -66,8 +66,19 @@ def _build_dataset_storage_factory(
             secure=bool(cfg.storage.minio.secure),
             export_lifecycle=build_minio_export_lifecycle(cfg),
         )
-    else:
-        raise RuntimeError(f"Unsupported storage.kind: {storage_kind}")
+    raise RuntimeError(f"Unsupported storage.kind: {storage_kind}")
+
+
+def _build_dataset_storage_factory(
+    cfg: AppConfig,
+    session_factory: AppDatabaseSessionFactory,
+    artifact_storage: ArtifactStorage,
+) -> DatasetStorageFactoryPort:
+    from app.modules.datasets.adapter.repositories.dataset_sql_repository import (
+        DatasetSqlRepository,
+    )
+    from app.modules.storage.adapter.factory import DatasetStorageFactory
+    from app.modules.storage.domain.sparse import DatasetPayloadStore
 
     repository = DatasetSqlRepository(session_factory=session_factory.sessionmaker)
     payload_store = DatasetPayloadStore(
@@ -83,6 +94,23 @@ def _build_dataset_storage_factory(
         prediction_compaction_temp_limit=cfg.prediction.compaction_temp_limit,
         prediction_compaction_row_group_rows=(cfg.prediction.compaction_row_group_rows),
     )
+
+
+class _ScCollectionRevisionReader:
+    def __init__(self, repository: DatasetCollectionSqlRepository) -> None:
+        self._repository = repository
+
+    async def get_revision(
+        self, collection_id: str, revision_id: str, org_id: str
+    ) -> DatasetCollectionRevision:
+        revision = await self._repository.get_revision(
+            collection_id, revision_id, org_id
+        )
+        if revision is None:
+            raise ValueError(
+                f"Collection revision not found: {collection_id}/{revision_id}"
+            )
+        return revision
 
 
 class _ScDataProviderModule(Module):
@@ -111,8 +139,27 @@ class _ScDataProviderModule(Module):
 
     @provider
     @singleton
-    def provide_dataset_storage_factory(self) -> DatasetStorageFactoryPort:
-        return _build_dataset_storage_factory(self._cfg, self._session_factory)
+    def provide_artifact_storage(self) -> ArtifactStorage:
+        return _build_artifact_storage(self._cfg)
+
+    @provider
+    @singleton
+    def provide_dataset_storage_factory(
+        self, artifact_storage: ArtifactStorage
+    ) -> DatasetStorageFactoryPort:
+        return _build_dataset_storage_factory(
+            self._cfg,
+            self._session_factory,
+            artifact_storage,
+        )
+
+    @provider
+    @singleton
+    def provide_collection_revision_reader(
+        self,
+    ) -> DatasetCollectionRevisionReaderPort:
+        repository = DatasetCollectionSqlRepository(self._session_factory.sessionmaker)
+        return _ScCollectionRevisionReader(repository)
 
 
 def build_sc_data_provider_app_context(cfg: AppConfig) -> ScDataProviderAppContext:

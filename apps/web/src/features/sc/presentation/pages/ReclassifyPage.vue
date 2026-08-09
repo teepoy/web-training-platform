@@ -40,7 +40,7 @@ import type { ScSamplingCandidateScope } from "@/features/sc/application/inspect
 import {
   getCollectionApiV1DatasetCollectionsCollectionIdGet,
   getDatasetApiV1DatasetsDatasetIdGet,
-  listMembersApiV1DatasetCollectionsCollectionIdMembersGet,
+  getRevisionApiV1DatasetCollectionsCollectionIdRevisionsRevisionIdGet,
 } from "@/generated/orval/endpoints/api";
 
 const page = useReclassifyPage();
@@ -52,30 +52,34 @@ const collectionId = computed(() => {
   const value = route.params.collectionId;
   return typeof value === "string" && value.length > 0 ? value : null;
 });
+const collectionRevisionId = computed(() => {
+  const value = route.query.revisionId;
+  return typeof value === "string" && value.length > 0 ? value : null;
+});
 const collectionStackQuery = useQuery({
-  queryKey: computed(() => ["dataset-collections", collectionId.value, "classify-stack"]),
-  enabled: computed(() => !!collectionId.value),
+  queryKey: computed(() => [
+    "dataset-collections",
+    collectionId.value,
+    "classify-stack",
+    collectionRevisionId.value,
+  ]),
+  enabled: computed(() => !!collectionId.value && !!collectionRevisionId.value),
   queryFn: async () => {
     const id = collectionId.value;
-    if (!id) throw new Error("Collection id is required");
-    const [collection, members] = await Promise.all([
+    const revisionId = collectionRevisionId.value;
+    if (!id || !revisionId) throw new Error("Collection revision is required");
+    const [collection, revision] = await Promise.all([
       getCollectionApiV1DatasetCollectionsCollectionIdGet(id),
-      listMembersApiV1DatasetCollectionsCollectionIdMembersGet(id),
+      getRevisionApiV1DatasetCollectionsCollectionIdRevisionsRevisionIdGet(id, revisionId),
     ]);
     const datasets = await Promise.all(
-      [...members]
-        .sort((left, right) => left.position - right.position)
-        .map((member) => getDatasetApiV1DatasetsDatasetIdGet(member.source_dataset_id)),
+      revision.source_snapshot.map((source) =>
+        getDatasetApiV1DatasetsDatasetIdGet(String(source.source_dataset_id)),
+      ),
     );
-    return { collection, datasets };
+    return { collection, revision, datasets };
   },
 });
-const stackDatasetOptions = computed(() =>
-  (collectionStackQuery.data.value?.datasets ?? []).map((dataset, index) => ({
-    label: `${index + 1}. ${dataset.name}`,
-    value: String(dataset.id ?? ""),
-  })),
-);
 const globalFilterTriggerTarget = ref<HTMLElement | null>(null);
 const taskInsightVisible = ref(false);
 const inspectionQuad = ref<{
@@ -163,14 +167,6 @@ function goBack() {
     return;
   }
   router.back();
-}
-
-function openStackDataset(datasetId: string): void {
-  if (!collectionId.value || datasetId === page.datasetId.value) return;
-  void router.push({
-    path: `/dataset-collections/${collectionId.value}/classify/${datasetId}`,
-    query: route.query,
-  });
 }
 
 const selectedDraftCount = computed(() => {
@@ -380,16 +376,9 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
             <NTag v-if="collectionId" size="small" type="info">
               {{ collectionStackQuery.data.value?.collection.name ?? "Collection" }}
             </NTag>
-            <NSelect
-              v-if="collectionId"
-              :value="page.datasetId.value"
-              :options="stackDatasetOptions"
-              :loading="collectionStackQuery.isLoading.value"
-              size="small"
-              :style="{ width: '220px' }"
-              aria-label="Collection dataset"
-              @update:value="openStackDataset"
-            />
+            <NTag v-if="collectionId" size="small" :bordered="false">
+              {{ collectionStackQuery.data.value?.datasets.length ?? 0 }} datasets combined
+            </NTag>
             <div class="sc-dataset-title" data-testid="sc-dataset-name">
               <NTooltip>
                 <template #trigger>
@@ -490,6 +479,8 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
             v-else
             variant="reclassify"
             :dataset-id="page.datasetId.value"
+            :collection-id="collectionId ?? undefined"
+            :collection-revision-id="collectionRevisionId ?? undefined"
             :inspection-time="page.inspectionContext.value.inspectionTime"
             :wafer-key="Number(page.inspectionContext.value.waferKey)"
             :wafer-geometry="page.waferGeometry.value"

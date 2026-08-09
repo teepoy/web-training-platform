@@ -198,7 +198,7 @@ test("map selection filters the table and continuously accumulates exclusions @m
     .poll(() =>
       tableRequests.some(
         (body) =>
-          body.sql.includes('"defect_id" = ANY(?)') &&
+          body.sql.includes('"map_id" = ANY(?)') &&
           body.parameters.some((value) => JSON.stringify(value) === "[1,2]"),
       ),
     )
@@ -217,13 +217,13 @@ test("map selection filters the table and continuously accumulates exclusions @m
   };
   await excludeSelected();
   await expect
-    .poll(() => tableRequests.some((body) => body.sql.includes('NOT ("defect_id" = ANY(?))')))
+    .poll(() => tableRequests.some((body) => body.sql.includes('NOT ("map_id" = ANY(?))')))
     .toBe(true);
   await expect
     .poll(() =>
       mapRequests.some(
         (body) =>
-          body.sql.includes('NOT ("defect_id" = ANY(?))') &&
+          body.sql.includes('NOT ("map_id" = ANY(?))') &&
           body.parameters.some((value) => JSON.stringify(value) === "[1,2]"),
       ),
     )
@@ -234,7 +234,7 @@ test("map selection filters the table and continuously accumulates exclusions @m
     .poll(() =>
       tableRequests.some(
         (body) =>
-          body.sql.includes('NOT ("defect_id" = ANY(?))') &&
+          body.sql.includes('NOT ("map_id" = ANY(?))') &&
           body.parameters.some((value) => JSON.stringify(value) === "[1,2]") &&
           body.parameters.some((value) => JSON.stringify(value) === "[3,4]"),
       ),
@@ -245,7 +245,7 @@ test("map selection filters the table and continuously accumulates exclusions @m
     .poll(() =>
       mapRequests.some(
         (body) =>
-          body.sql.includes('NOT ("defect_id" = ANY(?))') &&
+          body.sql.includes('NOT ("map_id" = ANY(?))') &&
           body.parameters.some((value) => JSON.stringify(value) === "[1,2]") &&
           body.parameters.some((value) => JSON.stringify(value) === "[3,4]"),
       ),
@@ -335,7 +335,7 @@ test("Review Sampling manages rules and applies the SQL pipeline from Reclassify
         dataRequests.filter(
           (body) =>
             body.description === "sc-workbench.table.rows" &&
-            body.sql.includes('"defect_id" = ANY(?)'),
+            body.sql.includes('"map_id" = ANY(?)'),
         ).length,
     )
     .toBeGreaterThan(0);
@@ -347,7 +347,7 @@ test("Review Sampling manages rules and applies the SQL pipeline from Reclassify
   );
   expect(samplingRequests).toHaveLength(1);
   expect(samplingRequests[0]?.sql).toContain('WITH "__sc_sampling_base" AS');
-  expect(samplingRequests[0]?.sql).toContain('ORDER BY HASH("defect_id", ?)');
+  expect(samplingRequests[0]?.sql).toContain('ORDER BY HASH("map_id", ?)');
   expect(samplingRequests[0]?.parameters).toContain(42);
 
   await page.clearRandomFilterButton.click();

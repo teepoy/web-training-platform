@@ -439,27 +439,29 @@ irreproducible.
 
 ### 4.6 Classify/read contract
 
-The future combined collection classify page can read the mutable collection
-head through an SC data-provider collection scope:
+The combined collection classify page reads one explicit immutable revision
+through an SC data-provider collection scope:
 
 ```text
-POST /api/v1/sc/data/collections/{collection_id}/query
-GET  /api/v1/sc/data/collections/{collection_id}/events
+POST /api/v1/sc/data/collections/{collection_id}/revisions/{revision_id}/query
+GET  /api/v1/sc/data/collections/{collection_id}/revisions/{revision_id}/events
 ```
 
-This combined scope is not part of the current MVP. The implemented stack
-route opens one physical member at a time through the existing dataset scope,
-while retaining collection context and the selected immutable revision in the
-URL. A future `ScDataScope(kind="collection")` materializer would open every
-member through `DatasetStorageFactory`, project a compatible workbench schema, add
-the identity columns above, and composes sources with LazyFrame/Arrow union.
-It does not instantiate storage implementations or read shards ad hoc.
+`ScDataScope(kind="collection")` downloads the pinned revision artifact,
+opens every source overlay through `DatasetStorageFactory`, projects a
+compatible workbench schema, adds the identity columns above, and composes the
+sources with LazyFrame/Arrow union. It does not instantiate storage
+implementations or read shards ad hoc. Link/unlink changes therefore become
+visible after a new ready revision is created; an already-open historical
+revision does not drift.
 
 The DuckDB `samples` view, pagination CTEs, annotation overlay, prediction
-overlay, gallery, sampling, and selection joins use `row_key`. `defect_id`
-remains a filterable/display column and may match multiple rows. Map payloads
-must carry or dictionary-encode `row_key`; a numeric `defect_id` is not a
-selection identity.
+overlay, gallery, and annotation drafts use `row_key`. `defect_id` remains a
+filterable/display column and may match multiple rows. The existing numeric map
+component receives revision-local `map_id` values as its dictionary key; SQL
+selection filters use that key while physical writes resolve through
+`row_key`. A source `defect_id` is never used as a collection selection
+identity.
 
 Collection annotation requests carry `row_key` plus the expected collection
 definition version. The collection service resolves physical sample refs,
@@ -594,19 +596,15 @@ The route is:
 /dataset-collections/:collectionId/classify/:datasetId?revisionId=:revisionId
 ```
 
-The page reuses the SC dataset workbench and adds a source stack control. Each
-member remains independently openable. Training and prediction use the
-`revisionId` carried by the collection route even though classify display is
-currently scoped to one physical member.
+The page reuses the SC dataset workbench and opens the revision as one combined
+table/gallery/filter/sampling scope. Each member remains independently
+openable through the existing dataset route. Training and prediction use the
+same `revisionId` carried by the collection route.
 
-- A future `All sources` mode can combine the table, gallery, filters,
-  distribution, sampling, drafts, and bulk annotation across compatible
-  members.
-- Selecting one source scopes the wafer/die/reticle map and may also scope the
-  other panels.
-- The MVP does not overlay several wafer maps. Different inspection geometry
-  makes such an overlay misleading. Multi-source map comparison requires a
-  separately specified visualization contract.
+- The combined mode covers table, gallery, filters, distribution, sampling,
+  drafts, and bulk annotation across compatible members.
+- Patch/review image requests use each row's source inspection, wafer, dataset,
+  and sample identity instead of the route's representative dataset.
 - Selection and annotation drafts use `row_key`. The UI may display
   `defect_id`, inspection, wafer, lot, and member name, but none of those
   display fields is used as a collection row key.

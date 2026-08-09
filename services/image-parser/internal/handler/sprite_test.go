@@ -93,3 +93,31 @@ func TestCreateSpriteFromResized_Empty(t *testing.T) {
 		t.Errorf("expected nil for empty input")
 	}
 }
+
+func TestBlankSquarePNG_IsVisibleMissingImagePlaceholder(t *testing.T) {
+	result, err := blankSquarePNG(64)
+	if err != nil {
+		t.Fatalf("blank square: %v", err)
+	}
+
+	img, _, err := image.Decode(bytes.NewReader(result))
+	if err != nil {
+		t.Fatalf("decode output: %v", err)
+	}
+	if img.Bounds() != image.Rect(0, 0, 64, 64) {
+		t.Fatalf("bounds = %v, want 64x64", img.Bounds())
+	}
+
+	background := color.RGBAModel.Convert(img.At(8, 16)).(color.RGBA)
+	center := color.RGBAModel.Convert(img.At(32, 32)).(color.RGBA)
+	if background == (color.RGBA{0, 0, 0, 255}) {
+		t.Fatalf("background stayed opaque black: %#v", background)
+	}
+	if center == background {
+		t.Fatalf(
+			"placeholder marker is not visible: center=%#v background=%#v",
+			center,
+			background,
+		)
+	}
+}

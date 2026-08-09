@@ -22,4 +22,19 @@ describe("useScDataWorkbench", () => {
     expect(isReactive(workbench.dataSource.value)).toBe(false);
     expect(() => workbench.disconnect()).not.toThrow();
   });
+
+  it("opens an immutable collection revision as one data scope", async () => {
+    const scope = effectScope();
+    scopes.push(scope);
+    const workbench = scope.run(useScDataWorkbench);
+    if (!workbench) throw new Error("workbench was not created");
+
+    await workbench.connect({
+      kind: "collection",
+      collectionId: "collection-1",
+      revisionId: "revision-2",
+    });
+
+    expect(workbench.dataSource.value?.scopeKey).toBe("collection:collection-1/revision-2");
+  });
 });

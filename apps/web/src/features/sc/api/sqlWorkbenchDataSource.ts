@@ -41,7 +41,8 @@ import {
 
 export type ScSqlWorkbenchScope =
   | { kind: "inspection"; inspectionTime: string; waferKey: number }
-  | { kind: "dataset"; datasetId: string };
+  | { kind: "dataset"; datasetId: string }
+  | { kind: "collection"; collectionId: string; revisionId: string };
 
 const QUERY_TIMEOUT_MS = 35_000;
 const QUERY_MAX_ATTEMPTS = 2;
@@ -78,7 +79,11 @@ const SAMPLE_COLUMNS = [
 const DEFAULT_ALLOWED_COLUMNS = new Set<string>([
   ...SAMPLE_COLUMNS,
   "row_key",
+  "map_id",
   "sample_id",
+  "source_dataset_id",
+  "source_sample_id",
+  "collection_member_id",
   "inspection_time",
   "wafer_key",
   "review_image_ids_json",
@@ -310,7 +315,7 @@ export function compileScSamplingSelection(
 
   const compiledWhere = compileScWhere(filters, reticle, allowedColumns);
   const selectedFields = [
-    "defect_id",
+    "map_id",
     ...(program.conditional.enabled ? [program.conditional.field] : []),
     ...(program.group.enabled ? [program.group.field] : []),
   ];
@@ -336,7 +341,7 @@ export function compileScSamplingSelection(
     ctes.push(
       `"__sc_sampling_conditional_ranked" AS (` +
         `SELECT *, ROW_NUMBER() OVER (` +
-        `PARTITION BY "__conditional_match" ORDER BY HASH("defect_id", ?), "defect_id"` +
+        `PARTITION BY "__conditional_match" ORDER BY HASH("map_id", ?), "map_id"` +
         `) AS "__conditional_rank" FROM ${source})`,
     );
     parameters.push(seed);
@@ -360,7 +365,7 @@ export function compileScSamplingSelection(
       `"__sc_sampling_group_ranked" AS (` +
         `SELECT *, ` +
         `ROW_NUMBER() OVER (PARTITION BY ${groupColumn} ` +
-        `ORDER BY HASH("defect_id", ?), "defect_id") AS "__group_rank", ` +
+        `ORDER BY HASH("map_id", ?), "map_id") AS "__group_rank", ` +
         `COUNT(*) OVER (PARTITION BY ${groupColumn}) AS "__group_population" ` +
         `FROM ${source})`,
     );
@@ -383,8 +388,8 @@ export function compileScSamplingSelection(
   }
 
   let sql =
-    `WITH ${ctes.join(", ")} SELECT "defect_id" FROM ${source} ` +
-    `ORDER BY HASH("defect_id", ?), "defect_id"`;
+    `WITH ${ctes.join(", ")} SELECT "map_id" AS "defect_id" FROM ${source} ` +
+    `ORDER BY HASH("map_id", ?), "map_id"`;
   parameters.push(seed);
   if (program.total.enabled) {
     sql += " LIMIT ?";
@@ -419,9 +424,8 @@ function stableTableOrderBy(
   allowedColumns: ReadonlySet<string>,
 ): string {
   const ordered = orderBy(sort, allowedColumns);
-  return sort?.direction && sort.field !== "defect_id"
-    ? `${ordered}, ${quotedColumn("defect_id", allowedColumns)} ASC`
-    : ordered;
+  if (sort?.field === "row_key") return ordered;
+  return `${ordered}, ${quotedColumn("row_key", allowedColumns)} ASC`;
 }
 
 function rowIdentityColumn(columns: readonly ScDataColumn[]): "row_key" {
@@ -503,11 +507,15 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
     const scopePath =
       scope.kind === "inspection"
         ? `inspections/${encodeURIComponent(scope.inspectionTime)}/${encodeURIComponent(scope.waferKey)}`
-        : `datasets/${encodeURIComponent(scope.datasetId)}`;
+        : scope.kind === "collection"
+          ? `collections/${encodeURIComponent(scope.collectionId)}/revisions/${encodeURIComponent(scope.revisionId)}`
+          : `datasets/${encodeURIComponent(scope.datasetId)}`;
     this.scopeKey =
       scope.kind === "inspection"
         ? `inspection:${scope.inspectionTime}/${scope.waferKey}`
-        : `dataset:${scope.datasetId}`;
+        : scope.kind === "collection"
+          ? `collection:${scope.collectionId}/${scope.revisionId}`
+          : `dataset:${scope.datasetId}`;
     this.queryUrl = `${API_BASE}/sc/data/${scopePath}/query`;
     this.eventsUrl = `${API_BASE}/sc/data/${scopePath}/events`;
   }
@@ -538,7 +546,7 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
 
   async loadMap(query: ScMapDataQuery): Promise<Uint8Array> {
     const columns = [
-      "defect_id",
+      "map_id",
       "wafer_x",
       "wafer_y",
       "die_x",
@@ -557,7 +565,11 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
       await this.query(
         "sc-workbench.map",
         `SELECT ${[...new Set(columns)]
-          .map((field) => selectColumn(field, query.reticle, allowedColumns))
+          .map((field) =>
+            field === "map_id"
+              ? `${selectColumn(field, query.reticle, allowedColumns)} AS "defect_id"`
+              : selectColumn(field, query.reticle, allowedColumns),
+          )
           .join(", ")} ` + `FROM samples${compiled.sql} ORDER BY "defect_id"`,
         compiled.parameters,
       )
@@ -629,6 +641,10 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
         ? [
             "row_key",
             "sample_id",
+            "source_dataset_id",
+            "source_sample_id",
+            "inspection_time",
+            "wafer_key",
             "defect_id",
             "review_image_ids_json",
             "annotation_label",
@@ -638,6 +654,10 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
         : [
             "row_key",
             "sample_id",
+            "source_dataset_id",
+            "source_sample_id",
+            "inspection_time",
+            "wafer_key",
             "defect_id",
             "annotation_label",
             "prediction_label",
@@ -782,7 +802,7 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
     ]);
     if (constraint.kind === "ids") {
       if (constraint.ids.length === 0) return [];
-      filters.push(["defect_id", "in", [...constraint.ids]]);
+      filters.push(["map_id", "in", [...constraint.ids]]);
     }
     if (constraint.kind === "random") {
       if (!Number.isInteger(constraint.limit) || constraint.limit <= 0) {
@@ -794,7 +814,7 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
       const compiled = compileScWhere(filters, query.reticle, allowedColumns);
       const result = await this.query(
         "sc-workbench.selection.random",
-        `SELECT "defect_id" FROM samples${compiled.sql} ORDER BY HASH("defect_id", ?) LIMIT ?`,
+        `SELECT "map_id" AS "defect_id" FROM samples${compiled.sql} ORDER BY HASH("map_id", ?) LIMIT ?`,
         [...compiled.parameters, constraint.seed, constraint.limit],
       );
       return Array.from({ length: result.table.numRows }, (_, index) =>
@@ -836,11 +856,11 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
     const compiled = compileScWhere(filters, query.reticle, allowedColumns);
     const columns =
       constraint.kind === "polygon"
-        ? `"defect_id", ${selectColumn(`${constraint.mode}_x`, query.reticle, allowedColumns)}, ${selectColumn(`${constraint.mode}_y`, query.reticle, allowedColumns)}`
-        : '"defect_id"';
+        ? `"map_id" AS "defect_id", ${selectColumn(`${constraint.mode}_x`, query.reticle, allowedColumns)}, ${selectColumn(`${constraint.mode}_y`, query.reticle, allowedColumns)}`
+        : '"map_id" AS "defect_id"';
     const result = await this.query(
       `sc-workbench.selection.${constraint.kind}`,
-      `SELECT ${columns} FROM samples${compiled.sql} ORDER BY "defect_id"`,
+      `SELECT ${columns} FROM samples${compiled.sql} ORDER BY "map_id"`,
       compiled.parameters,
     );
     const ids: number[] = [];

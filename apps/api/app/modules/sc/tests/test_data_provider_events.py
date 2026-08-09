@@ -109,6 +109,48 @@ def test_dataset_event_maps_atomic_revision_and_changed_kind() -> None:
     assert _sse_event(event).startswith("event: invalidation\ndata: {")
 
 
+def test_collection_event_accepts_only_revision_source_datasets() -> None:
+    scope = ScDataScope.collection(
+        collection_id="collection-1",
+        revision_id="revision-1",
+        org_id="org-1",
+    )
+    message: dict[str, object] = {
+        "channel": PREDICTION_CHANNEL,
+        "data": json.dumps(
+            {
+                "revision": 4,
+                "data": {"dataset_id": "dataset-a"},
+            }
+        ),
+    }
+
+    event = _invalidation_from_message(
+        scope,
+        message,
+        source_dataset_ids=frozenset({"dataset-a", "dataset-b"}),
+    )
+
+    assert event == ScDataInvalidationEvent(
+        scope="collection:collection-1/revision-1",
+        revision=4,
+        changed_kinds=["prediction"],
+    )
+    assert (
+        _invalidation_from_message(
+            scope,
+            {
+                **message,
+                "data": json.dumps(
+                    {"revision": 4, "data": {"dataset_id": "dataset-c"}}
+                ),
+            },
+            source_dataset_ids=frozenset({"dataset-a", "dataset-b"}),
+        )
+        is None
+    )
+
+
 @pytest.mark.parametrize("wafer_key", [None, "invalid", [], {}])
 def test_malformed_inspection_event_is_ignored(wafer_key: object) -> None:
     scope = ScDataScope.inspection(

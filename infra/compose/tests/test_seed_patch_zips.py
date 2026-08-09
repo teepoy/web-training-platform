@@ -66,6 +66,30 @@ def test_load_inspection_seed_accepts_contiguous_aligned_ids(tmp_path) -> None:
     assert inspection.lot_id == "A123456"
 
 
+def test_load_inspection_seed_selects_an_explicit_older_inspection(tmp_path) -> None:
+    path = str(tmp_path / "inspection.db")
+    db_url = _seed_inspection_db(path, summary_defects=3, defect_ids=[1, 2, 3])
+    newer_time = "2026-08-02 04:00:00.000000"
+    with sqlite3.connect(path) as conn:
+        conn.execute(
+            "INSERT INTO insp_wafer_summary VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (1, newer_time, "A123456", "24", "DEVICE-DEMO-A", "LAYER-M1", 3),
+        )
+        conn.executemany(
+            "INSERT INTO inspect_defect VALUES (?, ?, ?)",
+            [(1, newer_time, defect_id) for defect_id in [1, 2, 3]],
+        )
+
+    inspection = load_inspection_seed(
+        db_url,
+        wafer_key=1,
+        expected_total_defects=3,
+        inspection_time=datetime(2026, 8, 1, 4, 0),
+    )
+
+    assert inspection.inspection_time == datetime(2026, 8, 1, 4, 0)
+
+
 def test_load_inspection_seed_rejects_configured_count_mismatch(tmp_path) -> None:
     db_url = _seed_inspection_db(
         str(tmp_path / "inspection.db"),

@@ -14,8 +14,7 @@ import { toUserMessage } from "@/shared/api/client";
 
 import {
   useGetDatasetApiV1DatasetsDatasetIdGet,
-  useScBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPost,
-  type ScBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPostMutationResult,
+  scBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPost,
   useListTrainersRouteApiV1TrainersGet,
   getJobApiV1TrainingJobsJobIdGet,
   getAnnotationStatsApiV1DatasetsDatasetIdAnnotationStatsGet,
@@ -191,23 +190,23 @@ export function useReclassifyPage(): ReclassifyPageState {
   // page owns workflow state, including Global Filter, so outer routes and
   // Train & Predict share one persisted workspace-scoped value.
   const galleryRandomSamplingDefectIds = ref<Set<string>>(
-    new Set(reclassifyStore.samplingDefectIdsByDataset?.[datasetId.value] ?? []),
+    new Set(reclassifyStore.samplingDefectIdsByDataset?.[workspaceKey.value] ?? []),
   );
 
   const selectedDefectIds = computed(
-    () => new Set(reclassifyStore.selectedDefectIdsByDataset[datasetId.value] ?? []),
+    () => new Set(reclassifyStore.selectedDefectIdsByDataset[workspaceKey.value] ?? []),
   );
   const selectedCount = computed(() => selectedDefectIds.value.size);
 
   function applySelectionAction(action: ScSelectionAction): void {
     if (action.mode === "replace") {
-      reclassifyStore.setSelectedDefectIds(datasetId.value, action.ids);
+      reclassifyStore.setSelectedDefectIds(workspaceKey.value, action.ids);
     } else if (action.mode === "add") {
       const next = new Set(selectedDefectIds.value);
       for (const id of action.ids) {
         next.add(id);
       }
-      reclassifyStore.setSelectedDefectIds(datasetId.value, next);
+      reclassifyStore.setSelectedDefectIds(workspaceKey.value, next);
     } else {
       const next = new Set(selectedDefectIds.value);
       for (const id of action.ids) {
@@ -217,12 +216,12 @@ export function useReclassifyPage(): ReclassifyPageState {
           next.add(id);
         }
       }
-      reclassifyStore.setSelectedDefectIds(datasetId.value, next);
+      reclassifyStore.setSelectedDefectIds(workspaceKey.value, next);
     }
   }
 
   function clearSelection(): void {
-    reclassifyStore.clearSelectedDefectIds(datasetId.value);
+    reclassifyStore.clearSelectedDefectIds(workspaceKey.value);
   }
 
   const annotationStatsQuery = useQuery({
@@ -504,52 +503,94 @@ export function useReclassifyPage(): ReclassifyPageState {
 
   // ── Submit annotations using the stable dataset sample identity ───
 
-  const bulkAnnotateMutation =
-    useScBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPost({
-      mutation: {
-        onSuccess: (
-          data: ScBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPostMutationResult,
-          variables,
-        ) => {
-          const created = data.created;
-          const submittedCount = variables.data.annotations.length;
-          message.success(
-            created > 0
-              ? `Applied ${submittedCount} annotation update(s)`
-              : `Cleared ${submittedCount} annotation(s)`,
-          );
+  const isSubmittingAnnotations = ref(false);
 
-          annotationDraft.value = {};
-          pendingLabelNames.value = [];
-          void queryClient.invalidateQueries({
-            queryKey: ["api", "v1", "datasets", datasetId.value],
-          });
-          void queryClient.invalidateQueries({
-            queryKey: ["api", "v1", "datasets", datasetId.value, "status"],
-          });
-        },
-        onError: (error) => {
-          message.error(toUserMessage(error, "Failed to create annotations"));
-        },
-      },
-    });
+  function collectionAnnotationTarget(rowKey: string): { datasetId: string; sampleId: string } {
+    if (!collectionId.value) {
+      return { datasetId: datasetId.value, sampleId: rowKey };
+    }
+    const sourceDatasetIds = (collectionRevisionQuery.data.value?.source_snapshot ?? [])
+      .map((item) => String(item.source_dataset_id ?? ""))
+      .filter(Boolean)
+      .sort((left, right) => right.length - left.length);
+    const sourceDatasetId = sourceDatasetIds.find((id) => rowKey.startsWith(`${id}::`));
+    if (!sourceDatasetId) {
+      throw new Error(`Collection row has no source dataset identity: ${rowKey}`);
+    }
+    return {
+      datasetId: sourceDatasetId,
+      sampleId: rowKey.slice(sourceDatasetId.length + 2),
+    };
+  }
 
-  function submitAnnotations(): void {
+  async function submitAnnotations(): Promise<void> {
     const entries = Object.entries(annotationDraft.value).filter(([, label]) => label);
     if (entries.length === 0) {
       message.warning("No annotations to submit");
       return;
     }
-    bulkAnnotateMutation.mutate({
-      datasetId: datasetId.value,
-      data: {
-        annotations: entries.map<ScAnnotationItem>(([sample_id, label]) => ({
-          sample_id,
+    const byDataset = new Map<string, { annotations: ScAnnotationItem[]; rowKeys: string[] }>();
+    try {
+      for (const [rowKey, label] of entries) {
+        const target = collectionAnnotationTarget(rowKey);
+        const submission = byDataset.get(target.datasetId) ?? { annotations: [], rowKeys: [] };
+        submission.annotations.push({
+          sample_id: target.sampleId,
           label,
           annotator: "platform-user",
-        })),
-      },
-    });
+        });
+        submission.rowKeys.push(rowKey);
+        byDataset.set(target.datasetId, submission);
+      }
+      isSubmittingAnnotations.value = true;
+      const submissions = [...byDataset.entries()];
+      const results = await Promise.allSettled(
+        submissions.map(([targetDatasetId, submission]) =>
+          scBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPost(targetDatasetId, {
+            annotations: submission.annotations,
+          }),
+        ),
+      );
+      const succeeded = submissions.filter((_, index) => results[index]?.status === "fulfilled");
+      const failed = submissions.filter((_, index) => results[index]?.status === "rejected");
+      const submittedRowCount = succeeded.reduce(
+        (total, [, submission]) => total + submission.rowKeys.length,
+        0,
+      );
+      if (succeeded.length === 0) {
+        const firstFailure = results.find((result) => result.status === "rejected");
+        throw firstFailure?.reason ?? new Error("Every dataset annotation write failed");
+      }
+      const nextDraft = { ...annotationDraft.value };
+      for (const [, submission] of succeeded) {
+        for (const rowKey of submission.rowKeys) delete nextDraft[rowKey];
+      }
+      annotationDraft.value = nextDraft;
+      if (failed.length === 0) {
+        pendingLabelNames.value = [];
+        message.success(
+          `Applied ${submittedRowCount} annotation update(s) across ${succeeded.length} dataset(s)`,
+        );
+      } else {
+        message.warning(
+          `Applied ${submittedRowCount} update(s); ${failed.length} dataset write(s) failed and remain as drafts`,
+        );
+      }
+      await Promise.all(
+        succeeded.flatMap(([targetDatasetId]) => [
+          queryClient.invalidateQueries({
+            queryKey: ["api", "v1", "datasets", targetDatasetId],
+          }),
+          queryClient.invalidateQueries({
+            queryKey: ["api", "v1", "datasets", targetDatasetId, "status"],
+          }),
+        ]),
+      );
+    } catch (error) {
+      message.error(toUserMessage(error, "Failed to create annotations"));
+    } finally {
+      isSubmittingAnnotations.value = false;
+    }
   }
 
   // ── Add label ──────────────────────────────────────────────────────
@@ -583,7 +624,7 @@ export function useReclassifyPage(): ReclassifyPageState {
   const samplingProgram = ref(createDefaultScSamplingProgram());
   const samplingScope = ref<ScSamplingCandidateScope>("all");
 
-  watch(datasetId, (id) => {
+  watch(workspaceKey, (id) => {
     galleryRandomSamplingDefectIds.value = new Set(
       reclassifyStore.samplingDefectIdsByDataset?.[id] ?? [],
     );
@@ -591,7 +632,7 @@ export function useReclassifyPage(): ReclassifyPageState {
 
   function clearGalleryRandomSamplingDefectIds(): void {
     galleryRandomSamplingDefectIds.value = new Set();
-    reclassifyStore.clearSamplingDefectIds(datasetId.value);
+    reclassifyStore.clearSamplingDefectIds(workspaceKey.value);
   }
 
   function applySampling(defectIds: string[]): void {
@@ -599,7 +640,7 @@ export function useReclassifyPage(): ReclassifyPageState {
     if (sampled.length === 0) return;
 
     galleryRandomSamplingDefectIds.value = new Set(sampled);
-    reclassifyStore.setSamplingDefectIds(datasetId.value, sampled);
+    reclassifyStore.setSamplingDefectIds(workspaceKey.value, sampled);
 
     showSamplingModal.value = false;
   }
@@ -875,7 +916,7 @@ export function useReclassifyPage(): ReclassifyPageState {
     annotationDraft,
     draftCount,
     trainingSampleLimitNotice,
-    isSubmitting: computed(() => bulkAnnotateMutation.isPending.value),
+    isSubmitting: computed(() => isSubmittingAnnotations.value),
     setAnnotationDraft,
     setAnnotationDrafts,
     clearDrafts,

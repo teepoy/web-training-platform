@@ -932,6 +932,14 @@ defineExpose({
             :key="String(virtualColumn.key)"
             class="sst-tanstack-cell"
             :style="virtualColumnStyle(virtualColumn)"
+            :title="
+              definitionForColumn(scrollColumns[virtualColumn.index]?.id ?? '')
+                ? renderSampleTableCell(
+                    definitionForColumn(scrollColumns[virtualColumn.index]?.id ?? '')!,
+                    rowAt(virtualRow.index),
+                  )
+                : ''
+            "
             role="cell"
           >
             {{
@@ -962,6 +970,8 @@ defineExpose({
 
 <style scoped>
 .sst-tanstack {
+  --sst-row-background: var(--cv-card-bg, #1a1a2e);
+  --sst-row-hover-background: color-mix(in srgb, var(--sst-row-background) 94%, currentColor 6%);
   position: relative;
   flex: 1;
   min-height: 0;
@@ -1040,7 +1050,7 @@ defineExpose({
 }
 
 .sst-tanstack-row:hover .sst-tanstack-cell {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--sst-row-hover-background);
 }
 
 .sst-tanstack-row--placeholder {
@@ -1059,7 +1069,7 @@ defineExpose({
   line-height: 35px;
   white-space: nowrap;
   text-overflow: ellipsis;
-  background: var(--cv-card-bg, #1a1a2e);
+  background: var(--sst-row-background);
   border-right: 1px solid rgba(255, 255, 255, 0.08);
 }
 
@@ -1071,6 +1081,11 @@ defineExpose({
   position: sticky;
   z-index: 20;
   justify-content: center;
+  background: var(--sst-row-background);
+}
+
+.sst-tanstack-row:hover .sst-tanstack-cell--pinned {
+  background: var(--sst-row-hover-background);
 }
 
 .sst-tanstack-cell--defect {
