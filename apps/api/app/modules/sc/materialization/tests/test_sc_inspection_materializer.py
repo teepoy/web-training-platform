@@ -13,6 +13,7 @@ from app.modules.storage.domain.data_plane import DataPlaneSchemaRegistry
 from app.modules.sc.materialization.app.services.sc_inspection_materializer import (
     ScInspectionMaterializer,
 )
+from app.modules.sc.runtime.data_source import _normalize_storage_rows
 from app.modules.sc.wafer_data_gen import build_patch_sample
 
 
@@ -240,33 +241,33 @@ async def test_sc_materializer_uses_inline_seed_images_before_upstream(
     tmp_path,
 ) -> None:
     sample = build_patch_sample(0)
-    lf = pl.DataFrame(
-        [
-            {
-                "id": "sample-1",
-                "image_uris": [
-                    image.image_id for image in sample.shard_images
-                ],
-                "metadata_json": {
-                    "sample_id": "sample-1",
-                    "defect_id": sample.defect_id,
-                    "inspection_time": sample.inspection_time.isoformat()
-                    if sample.inspection_time
-                    else "",
-                    "wafer_key": sample.wafer_key,
-                    "wafer_x": sample.wafer_x,
-                    "wafer_y": sample.wafer_y,
-                    "rough_bin": sample.rough_bin,
-                    "shard_images": [
-                        image.model_dump(mode="json")
-                        for image in sample.shard_images
-                    ],
-                },
-                "label": "Scratch",
-            }
-        ],
-        infer_schema_length=None,
-    ).lazy()
+    lf = _normalize_storage_rows(
+        pl.DataFrame(
+            [
+                {
+                    "id": "sample-1",
+                    "image_uris": [image.image_id for image in sample.shard_images],
+                    "metadata_json": {
+                        "sample_id": "upstream-sample-1",
+                        "defect_id": sample.defect_id,
+                        "inspection_time": sample.inspection_time.isoformat()
+                        if sample.inspection_time
+                        else "",
+                        "wafer_key": sample.wafer_key,
+                        "wafer_x": sample.wafer_x,
+                        "wafer_y": sample.wafer_y,
+                        "rough_bin": sample.rough_bin,
+                        "shard_images": [
+                            image.model_dump(mode="json")
+                            for image in sample.shard_images
+                        ],
+                    },
+                    "label": "Scratch",
+                }
+            ],
+            infer_schema_length=None,
+        ).lazy()
+    )
     materializer = ScInspectionMaterializer(
         _UnexpectedImageSource(),
         schema_registry=DataPlaneSchemaRegistry.default(),

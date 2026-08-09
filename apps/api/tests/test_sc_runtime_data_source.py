@@ -34,7 +34,13 @@ async def test_dataset_runtime_source_reuses_storage_metadata_without_direct_ses
                 {
                     "id": ["sample-1"],
                     "dataset_id": ["dataset-1"],
-                    "metadata_json": [{"inspection_time": "2026-08-07"}],
+                    "metadata_json": [
+                        {
+                            "sample_id": "upstream-sample-1",
+                            "defect_id": "defect-1",
+                            "inspection_time": "2026-08-07",
+                        }
+                    ],
                 }
             )
 
@@ -79,7 +85,11 @@ async def test_dataset_runtime_source_reuses_storage_metadata_without_direct_ses
         assert source.view_types == ("sc.patch_image.v1",)
         assert source.label_space == ("scratch", "particle")
         assert source.rows.collect().to_dicts() == [
-            {"sample_id": "sample-1", "inspection_time": "2026-08-07"}
+            {
+                "sample_id": "sample-1",
+                "defect_id": "defect-1",
+                "inspection_time": "2026-08-07",
+            }
         ]
 
     assert calls == [

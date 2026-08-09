@@ -27,6 +27,7 @@ def _create_sc_sample(client: TestClient, dataset_id: str) -> None:
         json={
             "image_uris": [],
             "metadata": {
+                "sample_id": "upstream-42",
                 "inspection_time": "2026-08-05T08:00:00",
                 "wafer_key": 1,
                 "defect_id": "42",

@@ -84,7 +84,7 @@ def normalize_sc_training_row(row: dict[str, Any]) -> dict[str, Any]:
     if isinstance(raw_images, list):
         images.extend(dict(image) for image in raw_images if isinstance(image, dict))
 
-    shard_images = metadata.get("shard_images")
+    shard_images = row.get("shard_images") or metadata.get("shard_images")
     if isinstance(shard_images, list):
         for image in shard_images:
             if not isinstance(image, dict):

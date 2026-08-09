@@ -555,7 +555,9 @@ def _normalize_storage_rows(rows: pl.LazyFrame) -> pl.LazyFrame:
     )
     metadata_dtype = schema.get("metadata_json")
     if isinstance(metadata_dtype, pl.Struct):
-        existing = set(columns)
+        # Collection provenance uses the platform sample identity.  An SC
+        # upstream ``sample_id`` in metadata must not shadow that identity.
+        existing = set(columns) | {"sample_id"}
         expressions.extend(
             pl.col("metadata_json").struct.field(field.name).alias(field.name)
             for field in metadata_dtype.fields

@@ -67,6 +67,7 @@ def _seed_labeled_samples(
                     "defect_id": patch_sample.defect_id,
                     "wafer_x": patch_sample.wafer_x,
                     "wafer_y": patch_sample.wafer_y,
+                    "rough_bin": patch_sample.rough_bin,
                     "class_number": patch_sample.class_number,
                     "shard_images": [
                         image.model_dump(mode="json")
@@ -98,9 +99,14 @@ def _related_prediction_jobs(
         params={"dataset_id": dataset_id},
     )
     response.raise_for_status()
+    payload = response.json()
+    items = payload.get("items") if isinstance(payload, dict) else None
+    if not isinstance(items, list):
+        raise RuntimeError("prediction jobs response did not contain an items list")
     return [
         item
-        for item in response.json()
+        for item in items
+        if isinstance(item, dict)
         if item.get("summary", {}).get("source_training_job_id") == training_job_id
     ]
 
@@ -133,11 +139,11 @@ def _wait_for_workflow(
             )
             last_messages = messages
 
-        if "predict stage failed; trained model remains available" in messages:
+        if "SC prediction failed; trained model remains available" in messages:
             raise RuntimeError(f"prediction failed: {events[-1]}")
         if job["status"] == "failed":
             raise RuntimeError(f"training failed: {events[-3:]}")
-        if "predict stage completed" not in messages:
+        if "SC prediction completed" not in messages:
             time.sleep(2)
             continue
 
