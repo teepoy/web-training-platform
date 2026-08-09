@@ -237,6 +237,47 @@ describe("InspectionQuad state ownership", () => {
     expect(wrapper.emitted("update:global-filter")).toBeUndefined();
   });
 
+  it("accepts an outer Global Filter model and emits controlled updates", async () => {
+    const initialFilter: ScGlobalFilter = {
+      combinator: "and",
+      items: [
+        {
+          id: "rough-bin",
+          field: "rough_bin",
+          condition: { filterType: "set", values: [1] },
+          source: { kind: "manual" },
+        },
+      ],
+    };
+    const updatedFilter: ScGlobalFilter = {
+      combinator: "and",
+      items: [
+        {
+          id: "rough-bin",
+          field: "rough_bin",
+          condition: { filterType: "set", values: [2, 3] },
+          source: { kind: "manual" },
+        },
+      ],
+    };
+    const { wrapper } = await mountWithProviders(InspectionQuad, {
+      props: { ...requiredProps, globalFilter: initialFilter },
+    });
+
+    expect(harness.options?.globalFilter.value).toEqual(initialFilter);
+    wrapper.findComponent({ name: "ScGlobalFilterModal" }).vm.$emit("update:filter", updatedFilter);
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.emitted("update:globalFilter")?.[0]?.[0]).toEqual(updatedFilter);
+    expect(harness.options?.globalFilter.value).toEqual(initialFilter);
+
+    await wrapper.setProps({ globalFilter: updatedFilter });
+    expect(harness.options?.globalFilter.value).toEqual(updatedFilter);
+    expect(wrapper.get('[data-testid="sc-global-filter-trigger"]').text()).toBe(
+      "Global Filter (1)",
+    );
+  });
+
   it("counts complete conditions inside nested Global Filter groups", async () => {
     const { wrapper } = await mountWithProviders(InspectionQuad, {
       props: requiredProps,

@@ -66,6 +66,80 @@ test("Global Filter waits for explicit confirmation before refreshing consumers 
   await expect(authedPage.getByTestId("sc-global-filter-trigger")).toHaveText("Global Filter (1)");
 });
 
+test("Train & Predict submits the page-owned Global Filter @mock", async ({
+  authedPage,
+  apiMocks,
+}) => {
+  await mockScDataset(authedPage, DATASET_ID);
+  await mockScPlotPoints(authedPage, DATASET_ID, 20);
+  await mockScDefectIds(authedPage, DATASET_ID, 20);
+  await mockScViewSamplesPaged(authedPage, DATASET_ID, "patch_image_v1", 20, 20);
+  await mockScSamplesWithLabels(authedPage, DATASET_ID, 20, 20);
+  await apiMocks.datasets.mockAnnotationStats(DATASET_ID, {
+    total_samples: 20,
+    annotated_samples: 10,
+    unlabeled_samples: 10,
+    label_counts: { Scratch: 5, Particle: 5 },
+  });
+  await apiMocks.training.mockListTrainers([
+    {
+      id: "resnet50-sc-e2e",
+      name: "ResNet-50 SC",
+      trainable: true,
+      view_type: "patch_image_v1",
+    },
+  ]);
+
+  const workflowRequests: Array<Record<string, unknown>> = [];
+  await authedPage.route("**/api/v1/training-jobs/train-and-predict", async (route) => {
+    workflowRequests.push(route.request().postDataJSON() as Record<string, unknown>);
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        train_job: { id: "train-filter-e2e", status: "queued" },
+        workflow_run_id: "workflow-filter-e2e",
+      }),
+    });
+  });
+
+  const page = new ReclassifyPagePom(authedPage);
+  await page.gotoReclassify(DATASET_ID);
+  await expect(authedPage.getByTestId("sc-train-predict")).toBeEnabled();
+
+  await authedPage.getByTestId("sc-global-filter-trigger").click();
+  const filterModal = authedPage.getByTestId("sc-global-filter-modal");
+  await filterModal.getByTestId("query-add-condition").click();
+  await filterModal.getByTestId("query-rule-property").click();
+  await filterModal.getByTestId("query-rule-property").locator("input").fill("Rough Bin");
+  await authedPage.getByText("Rough Bin", { exact: true }).click();
+  await filterModal.getByRole("checkbox", { name: "2" }).check();
+  await filterModal.getByRole("button", { name: "Apply", exact: true }).click();
+  await filterModal.getByTestId("sc-global-filter-apply").click();
+  await expect(authedPage.getByTestId("sc-global-filter-trigger")).toHaveText("Global Filter (1)");
+
+  await authedPage.getByTestId("sc-train-predict").click();
+  const confirmation = authedPage.getByText("Filtered Train & Predict", { exact: true });
+  await expect(confirmation).toBeVisible();
+  await authedPage.getByRole("button", { name: /Continue with \d+ defects/ }).click();
+
+  await expect.poll(() => workflowRequests.length).toBe(1);
+  expect(workflowRequests[0]).toMatchObject({
+    dataset_id: DATASET_ID,
+    trainer_id: "resnet50-sc-e2e",
+    sample_filter: {
+      combinator: "and",
+      items: [
+        {
+          kind: "condition",
+          field: "rough_bin",
+          condition: { filterType: "set", values: [2] },
+        },
+      ],
+    },
+  });
+});
+
 test("map selection filters the table and continuously accumulates exclusions @mock", async ({
   authedPage,
 }) => {

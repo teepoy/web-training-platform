@@ -31,6 +31,7 @@ const inspectionTime = computed(() => String(route.params.inspectionTime ?? ""))
 const waferKey = computed(() => Number(route.params.waferKey));
 const isImporting = ref(false);
 const importedDatasetId = ref<string | null>(null);
+const globalFilterTriggerTarget = ref<HTMLElement | null>(null);
 
 const inspectionQuery = useGetInspectionApiV1ScInspectionsInspectionTimeWaferKeyGet(
   inspectionTime,
@@ -130,7 +131,11 @@ async function startReclassifyImport(): Promise<void> {
       <div class="sc-inspection-toolbar">
         <div class="sc-inspection-heading">
           <div class="sc-inspection-title">{{ pageTitle }}</div>
-          <div id="sc-inspection-global-filter-action" class="sc-inspection-global-filter-action" />
+          <div
+            ref="globalFilterTriggerTarget"
+            id="sc-inspection-global-filter-action"
+            class="sc-inspection-global-filter-action"
+          />
         </div>
         <div class="sc-inspection-actions">
           <NButton size="small" quaternary @click="router.push('/sc/preview')">Summary</NButton>
@@ -169,7 +174,7 @@ async function startReclassifyImport(): Promise<void> {
         :inspection-time="inspectionTime"
         :wafer-key="waferKey"
         :wafer-geometry="waferGeometry"
-        global-filter-trigger-target="#sc-inspection-global-filter-action"
+        :global-filter-trigger-target="globalFilterTriggerTarget ?? undefined"
       />
     </div>
   </FullScreenLayout>

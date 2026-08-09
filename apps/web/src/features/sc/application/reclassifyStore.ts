@@ -1,9 +1,11 @@
 import { defineStore } from "pinia";
+import { cloneScGlobalFilter, type ScGlobalFilter } from "@/features/sc/domain/globalFilter";
 
 export const useScReclassifyStore = defineStore("scReclassify", {
   state: () => ({
     selectedDefectIdsByDataset: {} as Record<string, string[]>,
     samplingDefectIdsByDataset: {} as Record<string, string[]>,
+    globalFiltersByWorkspace: {} as Record<string, ScGlobalFilter>,
   }),
   actions: {
     setSelectedDefectIds(datasetId: string, defectIds: Iterable<string>): void {
@@ -19,6 +21,14 @@ export const useScReclassifyStore = defineStore("scReclassify", {
     clearSamplingDefectIds(datasetId: string): void {
       this.samplingDefectIdsByDataset ??= {};
       delete this.samplingDefectIdsByDataset[datasetId];
+    },
+    setGlobalFilter(workspaceKey: string, filter: ScGlobalFilter): void {
+      this.globalFiltersByWorkspace ??= {};
+      this.globalFiltersByWorkspace[workspaceKey] = cloneScGlobalFilter(filter);
+    },
+    clearGlobalFilter(workspaceKey: string): void {
+      this.globalFiltersByWorkspace ??= {};
+      delete this.globalFiltersByWorkspace[workspaceKey];
     },
   },
 });

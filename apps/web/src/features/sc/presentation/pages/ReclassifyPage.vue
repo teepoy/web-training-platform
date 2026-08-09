@@ -76,9 +76,9 @@ const stackDatasetOptions = computed(() =>
     value: String(dataset.id ?? ""),
   })),
 );
+const globalFilterTriggerTarget = ref<HTMLElement | null>(null);
 const taskInsightVisible = ref(false);
 const inspectionQuad = ref<{
-  getGlobalFilter: () => ScGlobalFilter;
   getSamplingContext: () => {
     mapSelectionCount: number;
     tableSelectionAvailable: boolean;
@@ -201,8 +201,7 @@ async function handleTrainAndPredictClick(): Promise<void> {
     message.error("Data is still loading. Try again in a moment.");
     return;
   }
-  const globalFilter = quad.getGlobalFilter();
-  const workflowFilter = page.resolveTrainSampleFilter(globalFilter);
+  const workflowFilter = page.resolveTrainSampleFilter();
   if (workflowFilter) {
     isPreparingFilteredWorkflow.value = true;
     try {
@@ -222,12 +221,12 @@ async function handleTrainAndPredictClick(): Promise<void> {
     }
     return;
   }
-  await submitTrainAndPredict(null);
+  await submitTrainAndPredict();
 }
 
-async function submitTrainAndPredict(sampleFilter: ScGlobalFilter | null): Promise<void> {
+async function submitTrainAndPredict(): Promise<void> {
   filterConfirmationVisible.value = false;
-  await page.trainAndPredict(sampleFilter);
+  await page.trainAndPredict();
   if (page.trainPredictTaskId.value) {
     taskInsightVisible.value = true;
   }
@@ -403,6 +402,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
             </div>
             <div class="sc-reclassify-filter-actions" data-testid="sc-filter-actions">
               <div
+                ref="globalFilterTriggerTarget"
                 id="sc-reclassify-global-filter-action"
                 class="sc-reclassify-global-filter-action"
               />
@@ -496,7 +496,8 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
             :selected-defect-ids="Array.from(page.selectedDefectIds.value)"
             :gallery-random-sampling-defect-ids="page.galleryRandomSamplingDefectIds.value"
             :annotation-drafts="page.annotationDraft.value"
-            global-filter-trigger-target="#sc-reclassify-global-filter-action"
+            v-model:global-filter="page.globalFilter.value"
+            :global-filter-trigger-target="globalFilterTriggerTarget ?? undefined"
             @clear-gallery-random-sampling="page.clearGalleryRandomSamplingDefectIds"
             @selection-change="page.applySelectionAction"
           >
@@ -562,7 +563,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
           <NButton
             type="primary"
             :disabled="filteredWorkflowCount === 0"
-            @click="submitTrainAndPredict(filteredWorkflowFilter)"
+            @click="submitTrainAndPredict"
           >
             Continue with {{ filteredWorkflowCount }} defects
           </NButton>

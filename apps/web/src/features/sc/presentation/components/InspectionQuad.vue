@@ -62,12 +62,14 @@ const props = defineProps<{
   } | null;
   selectedDefectIds?: Array<number | string>;
   galleryRandomSamplingDefectIds?: Set<string>;
-  globalFilterTriggerTarget?: string;
+  globalFilter?: ScGlobalFilter;
+  globalFilterTriggerTarget?: string | HTMLElement;
 }>();
 
 const emit = defineEmits<{
   (e: "clear-gallery-random-sampling"): void;
   (e: "selection-change", action: ScSelectionAction): void;
+  (e: "update:globalFilter", filter: ScGlobalFilter): void;
 }>();
 
 const DEFAULT_COLUMN_PCT = 35;
@@ -93,12 +95,9 @@ const globalNumericRangeLoading = ref<Record<string, boolean>>({});
 const globalNumericRangeErrors = ref<Record<string, boolean>>({});
 const globalFilterSearchVersions = new Map<string, number>();
 const globalRangeVersions = new Map<string, number>();
-// Merge note for the follow-up workbench redesign: 89ae5235 kept global/table
-// filters and several map controls in ReclassifyPage. They are intentionally
-// local now because their controls and consumers all belong to this workbench.
-// Parent workflows may read a cloned GlobalFilter snapshot, but must not mirror
-// workbench-local state through props/events again.
-const globalFilter = ref<ScGlobalFilter>(emptyScGlobalFilter());
+// Preview uses the local fallback. ReclassifyPage supplies the controlled model
+// so workflow consumers and outer route shells share the same Global Filter.
+const localGlobalFilter = ref<ScGlobalFilter>(emptyScGlobalFilter());
 const globalFilterModalVisible = ref(false);
 const activeMapTab = ref<MapMode>("wafer");
 const mapZoomByMode = ref<Record<MapMode, MapViewport | null>>(emptyMapZoomByMode());
@@ -134,8 +133,18 @@ type QueuedAreaSelection =
     };
 
 const isReclassify = computed(() => props.variant === "reclassify");
-const globalFilterModel = computed(() => globalFilter.value);
-const globalFilterCount = computed(() => scGlobalFilterConditionCount(globalFilter.value));
+const globalFilterModel = computed<ScGlobalFilter>({
+  get: () => props.globalFilter ?? localGlobalFilter.value,
+  set: (filter) => {
+    const snapshot = cloneScGlobalFilter(filter);
+    if (props.globalFilter === undefined) {
+      localGlobalFilter.value = snapshot;
+      return;
+    }
+    emit("update:globalFilter", snapshot);
+  },
+});
+const globalFilterCount = computed(() => scGlobalFilterConditionCount(globalFilterModel.value));
 const enabledLegendSources = computed<ScLegendSource[]>(() =>
   isReclassify.value
     ? ["class", "bin", "annotation", "prediction", "final_class"]
@@ -254,7 +263,7 @@ function cloneSampleTableFilter(filter: ScSampleTableFilter): ScSampleTableFilte
 }
 
 function getGlobalFilter(): ScGlobalFilter {
-  return cloneScGlobalFilter(globalFilter.value);
+  return cloneScGlobalFilter(globalFilterModel.value);
 }
 
 function clearGalleryRandomSamplingIfActive(): void {
@@ -262,7 +271,7 @@ function clearGalleryRandomSamplingIfActive(): void {
 }
 
 function handleGlobalFilterApply(filter: ScGlobalFilter): void {
-  globalFilter.value = cloneScGlobalFilter(filter);
+  globalFilterModel.value = filter;
 }
 
 function handleActiveMapTabChange(mode: MapMode): void {
@@ -296,11 +305,11 @@ async function commitMapSelectionFilter(mode: ScMapSelectionMode): Promise<void>
   try {
     if (!(await mapSelectionQueue.prepareContextAction())) return;
     const next = applyMapSelectionToGlobalFilter(
-      globalFilter.value,
+      globalFilterModel.value,
       model.mapSelectedDefectIds.value,
       mode,
     );
-    globalFilter.value = next;
+    globalFilterModel.value = next;
     mapSelectionQueue.clear();
     selectedBarChartKey.value = null;
     mapImmediateCrosshairDefectIds.value = [];
@@ -356,7 +365,9 @@ watch(
   () => [props.variant ?? "preview", props.datasetId ?? "", props.inspectionTime, props.waferKey],
   (scope, previousScope) => {
     if (!previousScope || scope.every((value, index) => value === previousScope[index])) return;
-    globalFilter.value = emptyScGlobalFilter();
+    if (props.globalFilter === undefined) {
+      localGlobalFilter.value = emptyScGlobalFilter();
+    }
     globalFilterModalVisible.value = false;
     globalDistinctValues.value = {};
     globalNumericRanges.value = {};

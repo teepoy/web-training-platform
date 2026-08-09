@@ -1,4 +1,12 @@
 import { test, expect } from "../../fixtures";
+import { tableFromArrays, tableToIPC } from "apache-arrow";
+import {
+  mockScDataset,
+  mockScDefectIds,
+  mockScPlotPoints,
+  mockScSamplesWithLabels,
+  mockScViewSamplesPaged,
+} from "../../mocks/handlers";
 
 const datasetId = "sc-classify-1";
 
@@ -17,4 +25,69 @@ test("SC classify page shows error state for missing dataset @mock", async ({ au
   await expect(authedPage.getByRole("button", { name: "Go Back" })).toBeVisible({
     timeout: 10_000,
   });
+});
+
+test("Global Filter persists with statistics from the dataset detail page @mock", async ({
+  authedPage,
+}) => {
+  const cachedDatasetId = "sc-classify-cached-detail";
+  await mockScDataset(authedPage, cachedDatasetId);
+  await mockScPlotPoints(authedPage, cachedDatasetId, 20);
+  await mockScDefectIds(authedPage, cachedDatasetId, 20);
+  await mockScViewSamplesPaged(authedPage, cachedDatasetId, "patch_image_v1", 20, 20);
+  await mockScSamplesWithLabels(authedPage, cachedDatasetId, 20, 20);
+  await authedPage.route(`**/api/v1/sc/data/datasets/${cachedDatasetId}/query`, async (route) => {
+    const request = route.request().postDataJSON() as { description?: string; sql?: string } | null;
+    if (request?.description !== "sc-workbench.aggregate.class_number") {
+      await route.fallback();
+      return;
+    }
+    const filtered = request.sql?.includes('"rough_bin" = ANY(?)') ?? false;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/vnd.apache.arrow.stream",
+      headers: { "X-SC-Data-Revision": "0" },
+      body: Buffer.from(
+        tableToIPC(
+          tableFromArrays({
+            group_key: [0],
+            group_count: [filtered ? 8 : 20],
+          }),
+        ),
+      ),
+    });
+  });
+
+  const teleportWarnings: string[] = [];
+  authedPage.on("console", (entry) => {
+    if (entry.text().includes("Failed to locate Teleport target")) {
+      teleportWarnings.push(entry.text());
+    }
+  });
+
+  await authedPage.goto(`/datasets/${cachedDatasetId}`);
+  await expect(authedPage.getByText("Training Jobs", { exact: true })).toBeVisible();
+  await expect(authedPage.getByTestId("sc-dataset-global-filter-trigger")).toBeVisible();
+  await expect(authedPage.getByTestId("sc-dataset-filter-stats")).toContainText("20 / 20 samples");
+
+  await authedPage.getByTestId("sc-dataset-global-filter-trigger").click();
+  const modal = authedPage.getByTestId("sc-global-filter-modal");
+  await modal.getByTestId("query-add-condition").click();
+  await modal.getByTestId("query-rule-property").click();
+  await modal.getByTestId("query-rule-property").locator("input").fill("Rough Bin");
+  await authedPage.getByText("Rough Bin", { exact: true }).click();
+  await modal.getByRole("checkbox", { name: "2" }).check();
+  await modal.getByRole("button", { name: "Apply", exact: true }).click();
+  await modal.getByTestId("sc-global-filter-apply").click();
+
+  const filterStats = authedPage.getByTestId("sc-dataset-filter-stats");
+  await expect(filterStats).toContainText("8 / 20 samples");
+  await expect(filterStats).toContainText("40%");
+  await expect(filterStats).toContainText("12 excluded");
+
+  await authedPage.getByRole("button", { name: "Classify", exact: true }).click();
+
+  await expect(authedPage).toHaveURL(`/datasets/${cachedDatasetId}/sc/classify`);
+  await expect(authedPage.getByTestId("sc-global-filter-trigger")).toHaveText("Global Filter (1)");
+  expect(teleportWarnings).toEqual([]);
 });

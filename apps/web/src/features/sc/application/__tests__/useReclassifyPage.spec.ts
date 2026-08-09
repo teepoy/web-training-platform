@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineComponent, h, ref } from "vue";
+import type { Pinia } from "pinia";
 import { NMessageProvider } from "naive-ui";
 import { mountWithProviders, createTestQueryClient } from "@/testing";
 import { server } from "@/testing/msw/server";
@@ -52,6 +53,7 @@ async function mountPage(
   datasetId: string,
   dataset: ScDatasetInfo,
   annotationStats: Record<string, number> = { Scratch: 1, Clean: 1 },
+  pinia?: Pinia,
 ) {
   const qc = createTestQueryClient();
 
@@ -95,8 +97,13 @@ async function mountPage(
   // Seed dataset query (Orval query key)
   qc.setQueryData(["api", "v1", "datasets", datasetId], dataset);
 
-  const { wrapper, queryClient } = await mountWithProviders(MakeReclassifyPageWrapper, {
+  const {
+    wrapper,
+    queryClient,
+    pinia: mountedPinia,
+  } = await mountWithProviders(MakeReclassifyPageWrapper, {
     queryClient: qc,
+    pinia,
     routes: [
       {
         path: "/datasets/:id",
@@ -113,6 +120,7 @@ async function mountPage(
   return {
     wrapper,
     queryClient,
+    pinia: mountedPinia,
     state: (inner.vm as Record<string, any>).state,
   };
 }
@@ -269,20 +277,7 @@ describe("useReclassifyPage - review sampling", () => {
   it("keeps the active cohort out of the Train & Predict Global Filter", async () => {
     const { state } = await mountPage("ds-sampled-train", DEFAULT_DATASET);
     state.applySampling(["3", "9"]);
-
-    expect(
-      state.resolveTrainSampleFilter({
-        combinator: "and",
-        items: [
-          {
-            id: "final-class",
-            field: "final_class",
-            condition: { filterType: "set", values: ["Scratch"] },
-            source: { kind: "manual" },
-          },
-        ],
-      }),
-    ).toEqual({
+    state.setGlobalFilter({
       combinator: "and",
       items: [
         {
@@ -293,6 +288,67 @@ describe("useReclassifyPage - review sampling", () => {
         },
       ],
     });
+
+    expect(state.resolveTrainSampleFilter()).toEqual({
+      combinator: "and",
+      items: [
+        {
+          id: "final-class",
+          field: "final_class",
+          condition: { filterType: "set", values: ["Scratch"] },
+          source: { kind: "manual" },
+        },
+      ],
+    });
+  });
+
+  it("restores map identity to defect identity for standalone training", async () => {
+    const { state } = await mountPage("ds-map-filter", DEFAULT_DATASET);
+    state.setGlobalFilter({
+      combinator: "and",
+      items: [
+        {
+          id: "map-selection",
+          field: "map_id",
+          condition: { filterType: "set", values: [3, 9], exclude: true },
+          source: { kind: "map-selection", action: "exclude-selected" },
+        },
+      ],
+    });
+
+    expect(state.resolveTrainSampleFilter()).toMatchObject({
+      items: [
+        {
+          field: "defect_id",
+          condition: { filterType: "set", values: [3, 9], exclude: true },
+        },
+      ],
+    });
+  });
+
+  it("persists the page-owned Global Filter across dataset-view remounts", async () => {
+    const first = await mountPage("ds-filter-state", DEFAULT_DATASET);
+    const filter = {
+      combinator: "and" as const,
+      items: [
+        {
+          id: "rough-bin",
+          field: "rough_bin",
+          condition: { filterType: "set" as const, values: [1, 2] },
+          source: { kind: "manual" as const },
+        },
+      ],
+    };
+
+    first.state.setGlobalFilter(filter);
+    const second = await mountPage(
+      "ds-filter-state",
+      DEFAULT_DATASET,
+      { Scratch: 1, Clean: 1 },
+      first.pinia,
+    );
+
+    expect(second.state.globalFilter.value).toEqual(filter);
   });
 });
 
@@ -355,7 +411,7 @@ describe("useReclassifyPage - train defaults", () => {
     await waitForCondition(() => state.selectedTrainerId.value === "resnet50-sc-v1");
     await waitForCondition(() => state.activeClassCount.value === 2);
 
-    await state.trainAndPredict({
+    state.setGlobalFilter({
       combinator: "and",
       items: [
         {
@@ -366,6 +422,7 @@ describe("useReclassifyPage - train defaults", () => {
         },
       ],
     });
+    await state.trainAndPredict();
 
     expect(trainRequests).toHaveLength(1);
     expect(trainRequests[0]?.sample_filter).toEqual({

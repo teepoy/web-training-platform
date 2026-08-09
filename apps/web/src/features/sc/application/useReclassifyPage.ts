@@ -1,4 +1,12 @@
-import { ref, computed, watch, onBeforeUnmount, type Ref, type ComputedRef } from "vue";
+import {
+  ref,
+  computed,
+  watch,
+  onBeforeUnmount,
+  type Ref,
+  type ComputedRef,
+  type WritableComputedRef,
+} from "vue";
 import { useRoute } from "vue-router";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { useMessage } from "naive-ui";
@@ -23,9 +31,12 @@ import type {
 } from "@/generated/orval/models";
 import {
   cloneScGlobalFilter,
+  emptyScGlobalFilter,
+  isScGlobalFilterGroup,
   scGlobalFilterHasConditions,
   toScWorkflowSampleFilter,
   type ScGlobalFilter,
+  type ScGlobalFilterNode,
 } from "../domain/globalFilter";
 import { createDefaultScSamplingProgram, type ScSamplingProgram } from "../domain/samplingRules";
 import type { ScSamplingCandidateScope } from "./inspectionFilterPolicy";
@@ -95,7 +106,10 @@ export interface ReclassifyPageState {
   applySampling: (defectIds: string[]) => void;
   galleryRandomSamplingDefectIds: Ref<Set<string>>;
   clearGalleryRandomSamplingDefectIds: () => void;
-  resolveTrainSampleFilter: (globalFilter: ScGlobalFilter) => ScGlobalFilter | null;
+  globalFilter: WritableComputedRef<ScGlobalFilter>;
+  setGlobalFilter: (filter: ScGlobalFilter) => void;
+  clearGlobalFilter: () => void;
+  resolveTrainSampleFilter: () => ScGlobalFilter | null;
 
   selectedTrainerId: Ref<string | null>;
   trainerOptions: ComputedRef<{ label: string; value: string }[]>;
@@ -108,7 +122,7 @@ export interface ReclassifyPageState {
   trainPredictPredictionPercent: ComputedRef<number | null>;
   trainPredictPredictionProgressLabel: ComputedRef<string>;
   trainPredictPredictionProcessing: ComputedRef<boolean>;
-  trainAndPredict: (sampleFilter?: ScGlobalFilter | null) => Promise<void>;
+  trainAndPredict: () => Promise<void>;
 }
 
 export function useReclassifyPage(): ReclassifyPageState {
@@ -122,9 +136,30 @@ export function useReclassifyPage(): ReclassifyPageState {
     const value = route.query.revisionId;
     return typeof value === "string" && value.length > 0 ? value : null;
   });
+  const workspaceKey = computed(() =>
+    collectionId.value && collectionRevisionId.value
+      ? `collection:${collectionId.value}/${collectionRevisionId.value}`
+      : datasetId.value,
+  );
   const message = useMessage();
   const queryClient = useQueryClient();
   const reclassifyStore = useScReclassifyStore();
+
+  function setGlobalFilter(filter: ScGlobalFilter): void {
+    reclassifyStore.setGlobalFilter(workspaceKey.value, filter);
+  }
+
+  function clearGlobalFilter(): void {
+    reclassifyStore.clearGlobalFilter(workspaceKey.value);
+  }
+
+  const globalFilter = computed<ScGlobalFilter>({
+    get: () =>
+      cloneScGlobalFilter(
+        reclassifyStore.globalFiltersByWorkspace?.[workspaceKey.value] ?? emptyScGlobalFilter(),
+      ),
+    set: setGlobalFilter,
+  });
   // ── Dataset ────────────────────────────────────────────────────────
 
   const datasetQuery = useGetDatasetApiV1DatasetsDatasetIdGet<ScDatasetInfo>(
@@ -152,8 +187,9 @@ export function useReclassifyPage(): ReclassifyPageState {
         | undefined) ?? [],
   );
 
-  // InspectionQuad owns SC sample loading and all workbench-local controls.
-  // Keep this composable limited to annotation, sampling and workflow state.
+  // InspectionQuad owns SC sample loading and view-only workbench controls. The
+  // page owns workflow state, including Global Filter, so outer routes and
+  // Train & Predict share one persisted workspace-scoped value.
   const galleryRandomSamplingDefectIds = ref<Set<string>>(
     new Set(reclassifyStore.samplingDefectIdsByDataset?.[datasetId.value] ?? []),
   );
@@ -568,9 +604,19 @@ export function useReclassifyPage(): ReclassifyPageState {
     showSamplingModal.value = false;
   }
 
-  function resolveTrainSampleFilter(globalFilter: ScGlobalFilter): ScGlobalFilter | null {
+  function resolveTrainSampleFilter(): ScGlobalFilter | null {
     if (collectionId.value) return null;
-    return scGlobalFilterHasConditions(globalFilter) ? cloneScGlobalFilter(globalFilter) : null;
+    if (!scGlobalFilterHasConditions(globalFilter.value)) return null;
+    const workflowFilter = cloneScGlobalFilter(globalFilter.value);
+    const restoreDatasetField = (node: ScGlobalFilterNode): void => {
+      if (isScGlobalFilterGroup(node)) {
+        node.items.forEach(restoreDatasetField);
+      } else if (node.field === "map_id") {
+        node.field = "defect_id";
+      }
+    };
+    workflowFilter.items.forEach(restoreDatasetField);
+    return workflowFilter;
   }
 
   // ── Train & Predict ─────────────────────────────────────────────────
@@ -749,7 +795,7 @@ export function useReclassifyPage(): ReclassifyPageState {
     mounted.value = false;
   });
 
-  async function trainAndPredict(sampleFilter: ScGlobalFilter | null = null): Promise<void> {
+  async function trainAndPredict(): Promise<void> {
     const trainerId = selectedTrainerId.value;
     if (!trainerId) {
       message.warning("Please select a trainer first");
@@ -771,6 +817,7 @@ export function useReclassifyPage(): ReclassifyPageState {
       if (collectionId.value && !collectionRevisionId.value) {
         throw new Error("Open a ready collection revision before starting training");
       }
+      const sampleFilter = resolveTrainSampleFilter();
       const workflow = await createTrainAndPredictJobApiV1TrainingJobsTrainAndPredictPost({
         ...(collectionId.value
           ? {
@@ -845,6 +892,9 @@ export function useReclassifyPage(): ReclassifyPageState {
     applySampling,
     galleryRandomSamplingDefectIds,
     clearGalleryRandomSamplingDefectIds,
+    globalFilter,
+    setGlobalFilter,
+    clearGlobalFilter,
     resolveTrainSampleFilter,
 
     selectedTrainerId,

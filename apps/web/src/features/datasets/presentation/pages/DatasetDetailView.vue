@@ -21,6 +21,7 @@ import PreviewExportPlugin from "@/features/datasets/presentation/components/Pre
 import DatasetTrainTab from "@/features/datasets/presentation/components/DatasetTrainTab.vue";
 import DatasetPredictTab from "@/features/datasets/presentation/components/DatasetPredictTab.vue";
 import DatasetViewPage from "@/features/datasets/presentation/pages/DatasetViewPage.vue";
+import ScDatasetGlobalFilterControl from "@/features/sc/presentation/components/ScDatasetGlobalFilterControl.vue";
 
 const route = useRoute();
 const router = useRouter();
@@ -197,6 +198,8 @@ function openScClassify() {
           >Classify</n-button
         >
       </div>
+
+      <ScDatasetGlobalFilterControl v-if="dataset.task_spec?.task_type === 'sc'" :dataset-id="id" />
 
       <div style="margin-bottom: 16px; display: flex; align-items: center; gap: 8px">
         <n-button
