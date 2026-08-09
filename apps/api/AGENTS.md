@@ -180,6 +180,10 @@ Training, prediction, embedding, image parsing, and other heavy dependency execu
   executable bindings, and algorithm identity. Direct Prefect deployment specs
   own flow entrypoints and work-pool binding; Prefect is the current
   submission/execution-state backend, not another capability registry.
+- Organize API-local runtime implementations by algorithm: one module contains
+  that algorithm's train and predict callables. Do not split implementations
+  into generic `trainers.py` / `predictors.py` modules or parameterize a shared
+  runner with callables and behavior flags. Share only platform I/O boundaries.
 - Registration modules may import lightweight callables. They must not import
   Torch/CUDA libraries or load model weights at module import time.
 - Runtime services must not import `apps/api/app/modules/*` service/repository/ORM/FastAPI internals.

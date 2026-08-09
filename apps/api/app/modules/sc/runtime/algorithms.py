@@ -5,9 +5,9 @@ from app.modules.sc.capabilities import (
     SC_RESNET_MODEL_V1,
     SC_YOLO_MODEL_V1,
 )
-from app.modules.sc.runtime.predictors import resnet_sc_predictor, yolo_sc_predictor
+from app.modules.sc.runtime.resnet50 import resnet_sc_predictor, resnet_sc_train
 from app.modules.sc.runtime.router import SC_RUNTIME_ROUTER
-from app.modules.sc.runtime.trainers import resnet_sc_train, yolo_sc_train
+from app.modules.sc.runtime.ultralytics import yolo_sc_predictor, yolo_sc_train
 from app.modules.sc.runtime.workflows import run_sc_train_and_predict
 
 

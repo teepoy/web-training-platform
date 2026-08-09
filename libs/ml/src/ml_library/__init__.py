@@ -7,7 +7,7 @@ from ml_library.models import (
     TrainingSample,
 )
 from ml_library.resnet import predict_resnet, train_resnet
-from ml_library.yolo import predict_yolo, train_yolo
+from ml_library.ultralytics import predict_yolo, train_yolo
 
 __all__ = [
     "Prediction",

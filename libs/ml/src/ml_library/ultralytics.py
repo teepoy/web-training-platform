@@ -1,3 +1,5 @@
+"""Ultralytics-specific SC training and prediction implementation."""
+
 from __future__ import annotations
 
 # pyright: reportPrivateImportUsage=false
@@ -18,7 +20,8 @@ from ml_library.models import (
     TrainingOutput,
     TrainingSample,
 )
-from ml_library.data_loading.sc import ScTrainingDataset
+from ml_library.data_loading._parquet import ParquetPaths
+from ml_library.data_loading.sc import iter_sc_training_samples
 from ml_library.device import select_torch_device, select_ultralytics_device
 
 
@@ -32,18 +35,22 @@ def _combined_image(sample: TrainingSample | PredictionSample) -> Image.Image:
 
 
 def train_yolo(
-    samples: ScTrainingDataset,
+    parquet_paths: ParquetPaths,
     label_space: Sequence[str],
     *,
+    valid_samples: int,
     work_dir: Path,
+    shuffle_seed: int,
+    shuffle_buffer_rows: int,
     epochs: int = 3,
 ) -> TrainingOutput:
     from ultralytics import YOLO
 
-    summary = samples.inspect(label_space)
-    labels = list(summary.active_labels)
+    labels = list(label_space)
     if len(labels) < 2:
         raise ValueError(f"need at least 2 active labels for training, got: {labels}")
+    if valid_samples == 0:
+        raise ValueError("no valid defective images with labels found")
 
     work_dir.mkdir(parents=True, exist_ok=True)
     dataset_root = work_dir / "ultralytics-data"
@@ -51,6 +58,12 @@ def train_yolo(
     staging_root.mkdir(parents=True)
     staged_by_label: dict[str, Path] = {}
     trained_samples = 0
+    samples = iter_sc_training_samples(
+        parquet_paths,
+        shuffle=True,
+        seed=shuffle_seed,
+        shuffle_buffer_rows=shuffle_buffer_rows,
+    )
     for index, sample in enumerate(samples):
         label_root = staged_by_label.get(sample.label)
         if label_root is None:
@@ -62,8 +75,11 @@ def train_yolo(
         image_path = label_root / f"{index:012d}-{sample_token}.jpg"
         _combined_image(sample).save(image_path, "JPEG")
         trained_samples += 1
-    if trained_samples == 0:
-        raise ValueError("no valid defective images with labels found")
+    if trained_samples != valid_samples:
+        raise RuntimeError(
+            "SC training sample count changed between inspection and materialization: "
+            f"inspected={valid_samples} materialized={trained_samples}"
+        )
 
     train_root = dataset_root / "train"
     train_root.mkdir()

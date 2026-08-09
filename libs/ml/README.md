@@ -35,12 +35,14 @@ factory:
 - `stream_parquet_dataset(...)` returns a Torch `IterableDataset` with
   row-group partitioning and bounded-memory shuffle. Use
   `DataLoader(shuffle=False)`; the dataset performs the shuffle itself.
-- `ScTrainingDataset(...)` projects the streaming Parquet rows into valid SC
-  `TrainingSample` values, records unreadable-image counts, preserves compact
-  label order, and can be replayed without retaining all image bytes.
-- `ScPredictionDataset(...)` projects row groups into `PredictionSample` values
-  one row at a time. Missing images remain `None` so predictors can emit the
-  established per-sample failure instead of aborting the stream.
+- `inspect_sc_training_samples(...)` returns the plain active-label/count tuple;
+  `iter_sc_training_samples(...)` streams valid samples for a requested epoch.
+- `iter_sc_prediction_samples(...)` streams `PredictionSample` values one row at
+  a time. Missing images remain `None` so predictors can record a per-sample
+  failure without aborting the stream.
+
+The SC helpers accept Parquet paths and return ordinary tuples or iterators.
+They do not introduce a shared ResNet/Ultralytics dataset or workspace object.
 
 Both Parquet modes generate `__row_index` from the explicit input path order and
 physical row order. The Arrow mode requires the materializer to persist the same

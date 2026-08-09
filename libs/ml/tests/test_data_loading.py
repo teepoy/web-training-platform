@@ -11,10 +11,11 @@ from torch.utils.data import DataLoader
 
 from ml_library.data_loading import (
     ROW_INDEX_COLUMN,
-    ScPredictionDataset,
-    ScTrainingDataset,
     StreamingParquetDataset,
     collect_parquet_dataset,
+    inspect_sc_training_samples,
+    iter_sc_prediction_samples,
+    iter_sc_training_samples,
     open_hf_arrow_dataset,
     stream_parquet_dataset,
 )
@@ -165,7 +166,7 @@ def test_stream_parquet_dataset_requires_dataloader_shuffle_false(
         DataLoader(dataset, batch_size=None, shuffle=True)
 
 
-def test_sc_training_dataset_streams_valid_samples_and_compacts_labels(
+def test_sc_training_iterators_stream_valid_samples_and_compact_labels(
     tmp_path: Path,
 ) -> None:
     path = tmp_path / "sc.parquet"
@@ -182,23 +183,28 @@ def test_sc_training_dataset_streams_valid_samples_and_compacts_labels(
         path,
         row_group_size=1,
     )
-    dataset = ScTrainingDataset(
+    labels, valid_samples, skipped_samples = inspect_sc_training_samples(
         path,
-        shuffle=False,
-        seed=19,
-        shuffle_buffer_rows=2,
+        ["a", "b", "c"],
+    )
+    samples = list(
+        iter_sc_training_samples(
+            path,
+            shuffle=False,
+            seed=19,
+            shuffle_buffer_rows=2,
+        )
     )
 
-    summary = dataset.inspect(["a", "b", "c"])
-
-    assert summary.active_labels == ("a", "c")
-    assert summary.valid_samples == 2
-    assert summary.skipped_unreadable_samples == 1
-    assert len(dataset) == 2
-    assert [sample.sample_id for sample in dataset] == ["sample-a", "sample-c"]
+    assert labels == ("a", "c")
+    assert valid_samples == 2
+    assert skipped_samples == 1
+    assert [sample.sample_id for sample in samples] == ["sample-a", "sample-c"]
 
 
-def test_sc_prediction_dataset_streams_missing_images_as_none(tmp_path: Path) -> None:
+def test_sc_prediction_iterator_streams_missing_images_as_none(
+    tmp_path: Path,
+) -> None:
     path = tmp_path / "sc-prediction.parquet"
     image = _image_bytes("green")
     pq.write_table(
@@ -212,11 +218,9 @@ def test_sc_prediction_dataset_streams_missing_images_as_none(tmp_path: Path) ->
         path,
         row_group_size=1,
     )
-    dataset = ScPredictionDataset(path)
 
-    samples = list(dataset)
+    samples = list(iter_sc_prediction_samples(path))
 
-    assert len(dataset) == 2
     assert [sample.sample_id for sample in samples] == ["sample-a", "sample-b"]
     assert samples[0].defective_image == image
     assert samples[1].defective_image is None

@@ -41,11 +41,12 @@ materializer. Temporary resources are cleaned up by the registered callable
 that created them. For local artifact files, cleanup occurs only after the
 synchronous event consumer has uploaded the yielded `ArtifactOutput`.
 
-The API-local SC predictor similarly owns a workspace containing materialized
-Parquet and a checkpoint downloaded with `get_file`. Its model implementation
-receives the checkpoint path and a lazy prediction dataset; neither the full
-checkpoint nor the full Parquet table becomes one in-memory bytes or row-list
-value.
+API-local runtime modules are algorithm-first: `resnet50` contains its train and
+predict chain, while `ultralytics` contains its own. Each chain owns its temporary
+Parquet/checkpoint directory and passes plain paths and iterators to `libs/ml`;
+neither the full checkpoint nor the full Parquet table becomes one in-memory
+bytes or row-list value. Only platform I/O such as source opening and prediction
+persistence is shared across algorithms.
 
 Training emits model artifact payload and metadata with trainer,
 model-contract/version, predictor compatibility, algorithm provenance, label

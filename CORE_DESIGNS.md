@@ -207,6 +207,11 @@ Label Studio 是人工标注界面和临时同步界面，不是平台 predictio
   所有算法统一选择，也不强制统一的 train/predict 输入输出 DTO。
   通用 runtime context 只传递 job/dataset/model/org identity、请求选项与可用的
   平台上下文；具体 module 再选择 storage/domain/data-plane port。
+- API-local compatibility runtime 按算法组织 module，而不是按 operation 组织：同一
+  算法的 train 与 predict 必须放在同一 module。禁止恢复独立的 `trainers.py` /
+  `predictors.py` 分层，也禁止用 callable 参数或行为 flag 把多种算法塞进同一个通用
+  train/predict runner。跨算法共享只限 data-source、artifact/prediction persistence
+  等平台 I/O 边界；dataset 准备、workspace 生命周期与模型调用留在算法 module。
 - Trainer 必须显式声明一个或多个配对 predictor。Train-and-predict 在只有一个配对
   predictor 时可以确定性解析；存在多个配对项时必须由请求显式选择，禁止根据同名
   ID、目录名或模型名猜测。

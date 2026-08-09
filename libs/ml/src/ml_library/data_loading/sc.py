@@ -2,10 +2,8 @@ from __future__ import annotations
 
 import io
 from collections.abc import Iterator, Sequence
-from dataclasses import dataclass
 
 from PIL import Image
-from torch.utils.data import IterableDataset
 
 from ml_library.data_loading._parquet import ParquetPaths
 from ml_library.data_loading.streaming import stream_parquet_dataset
@@ -17,110 +15,94 @@ _SC_TRAINING_COLUMNS = (
     "patch_defective_bytes",
     "patch_template_bytes",
 )
+_SC_PREDICTION_COLUMNS = (
+    "sample_id",
+    "patch_defective_bytes",
+    "patch_template_bytes",
+)
 
 
-@dataclass(frozen=True, slots=True)
-class ScTrainingDatasetSummary:
-    active_labels: tuple[str, ...]
-    valid_samples: int
-    skipped_unreadable_samples: int
+def inspect_sc_training_samples(
+    paths: ParquetPaths,
+    label_space: Sequence[str],
+) -> tuple[tuple[str, ...], int, int]:
+    """Return active labels, valid sample count, and unreadable sample count."""
+
+    active: set[str] = set()
+    valid_samples = 0
+    skipped_unreadable_samples = 0
+    for row in _training_rows(
+        paths,
+        shuffle=False,
+        seed=0,
+        shuffle_buffer_rows=1,
+        epoch=0,
+    ):
+        sample = _training_sample(row)
+        if sample is None:
+            if row.get("label"):
+                skipped_unreadable_samples += 1
+            continue
+        active.add(sample.label)
+        valid_samples += 1
+    declared = [label for label in label_space if label in active]
+    labels = tuple(declared + sorted(active - set(declared)))
+    return labels, valid_samples, skipped_unreadable_samples
 
 
-class ScTrainingDataset(IterableDataset[TrainingSample]):
-    """Replayable, bounded-memory SC training samples backed by Parquet."""
-
-    def __init__(
-        self,
-        paths: ParquetPaths,
-        *,
-        shuffle: bool,
-        seed: int,
-        shuffle_buffer_rows: int,
-    ) -> None:
-        super().__init__()
-        self._rows = stream_parquet_dataset(
-            paths,
-            columns=_SC_TRAINING_COLUMNS,
-            shuffle=shuffle,
-            seed=seed,
-            shuffle_buffer_rows=shuffle_buffer_rows,
-        )
-        self._summary: ScTrainingDatasetSummary | None = None
-
-    @property
-    def row_count(self) -> int:
-        return self._rows.row_count
-
-    @property
-    def summary(self) -> ScTrainingDatasetSummary | None:
-        return self._summary
-
-    def __len__(self) -> int:
-        if self._summary is None:
-            raise RuntimeError("Inspect ScTrainingDataset before requesting its length")
-        return self._summary.valid_samples
-
-    def set_epoch(self, epoch: int) -> None:
-        self._rows.set_epoch(epoch)
-
-    def inspect(self, label_space: Sequence[str]) -> ScTrainingDatasetSummary:
-        if self._summary is not None:
-            return self._summary
-
-        active: set[str] = set()
-        valid_samples = 0
-        skipped_unreadable_samples = 0
-        for row in self._rows:
-            sample = _training_sample(row)
-            if sample is None:
-                if row.get("label"):
-                    skipped_unreadable_samples += 1
-                continue
-            active.add(sample.label)
-            valid_samples += 1
-        declared = [label for label in label_space if label in active]
-        labels = declared + sorted(active - set(declared))
-        self._summary = ScTrainingDatasetSummary(
-            active_labels=tuple(labels),
-            valid_samples=valid_samples,
-            skipped_unreadable_samples=skipped_unreadable_samples,
-        )
-        return self._summary
-
-    def __iter__(self) -> Iterator[TrainingSample]:
-        for row in self._rows:
-            sample = _training_sample(row)
-            if sample is not None:
-                yield sample
+def iter_sc_training_samples(
+    paths: ParquetPaths,
+    *,
+    shuffle: bool,
+    seed: int,
+    shuffle_buffer_rows: int,
+    epoch: int = 0,
+) -> Iterator[TrainingSample]:
+    for row in _training_rows(
+        paths,
+        shuffle=shuffle,
+        seed=seed,
+        shuffle_buffer_rows=shuffle_buffer_rows,
+        epoch=epoch,
+    ):
+        sample = _training_sample(row)
+        if sample is not None:
+            yield sample
 
 
-class ScPredictionDataset(IterableDataset[PredictionSample]):
-    """Replayable, bounded-memory SC prediction samples backed by Parquet."""
-
-    def __init__(self, paths: ParquetPaths) -> None:
-        super().__init__()
-        self._rows = stream_parquet_dataset(
-            paths,
-            columns=(
-                "sample_id",
-                "patch_defective_bytes",
-                "patch_template_bytes",
-            ),
-            shuffle=False,
-            seed=0,
-            shuffle_buffer_rows=1,
+def iter_sc_prediction_samples(paths: ParquetPaths) -> Iterator[PredictionSample]:
+    rows = stream_parquet_dataset(
+        paths,
+        columns=_SC_PREDICTION_COLUMNS,
+        shuffle=False,
+        seed=0,
+        shuffle_buffer_rows=1,
+    )
+    for row in rows:
+        yield PredictionSample(
+            sample_id=str(row.get("sample_id") or ""),
+            defective_image=_optional_bytes(row.get("patch_defective_bytes")),
+            reference_image=_optional_bytes(row.get("patch_template_bytes")),
         )
 
-    def __len__(self) -> int:
-        return self._rows.row_count
 
-    def __iter__(self) -> Iterator[PredictionSample]:
-        for row in self._rows:
-            yield PredictionSample(
-                sample_id=str(row.get("sample_id") or ""),
-                defective_image=_optional_bytes(row.get("patch_defective_bytes")),
-                reference_image=_optional_bytes(row.get("patch_template_bytes")),
-            )
+def _training_rows(
+    paths: ParquetPaths,
+    *,
+    shuffle: bool,
+    seed: int,
+    shuffle_buffer_rows: int,
+    epoch: int,
+) -> Iterator[dict[str, object]]:
+    rows = stream_parquet_dataset(
+        paths,
+        columns=_SC_TRAINING_COLUMNS,
+        shuffle=shuffle,
+        seed=seed,
+        shuffle_buffer_rows=shuffle_buffer_rows,
+    )
+    rows.set_epoch(epoch)
+    yield from rows
 
 
 def _training_sample(row: dict[str, object]) -> TrainingSample | None:
@@ -164,7 +146,7 @@ def _optional_bytes(value: object) -> bytes | None:
 
 
 __all__ = [
-    "ScPredictionDataset",
-    "ScTrainingDataset",
-    "ScTrainingDatasetSummary",
+    "inspect_sc_training_samples",
+    "iter_sc_prediction_samples",
+    "iter_sc_training_samples",
 ]

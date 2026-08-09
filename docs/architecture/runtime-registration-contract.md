@@ -157,6 +157,12 @@ Direct async iteration means the consumer finishes the upload before requesting
 the next event, after which the callable may clean the workspace. Large
 checkpoint bytes never enter the event or Prefect terminal result.
 
+Local implementations are grouped by algorithm, not operation. The ResNet module
+contains both ResNet train and predict; the Ultralytics module contains both
+Ultralytics train and predict. A generic callable-parameterized train/predict
+runner or separate `trainers.py` / `predictors.py` implementation modules would
+erase algorithm-owned dataset and error semantics and are not used.
+
 Recoverable failures are emitted as `RuntimeIssueReported`. A function author
 terminates an expected fatal operation by raising `RuntimeExecutionError` with
 a stable code and details. Unknown exceptions propagate unchanged and fail the

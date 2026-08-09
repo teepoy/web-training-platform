@@ -155,7 +155,7 @@ each batch it resolves only that batch's images, writes the materialized
 Parquet batch, releases the image map, and then advances. The image fetch stream
 has explicit concurrency and byte limits.
 
-`ScPredictionDataset` now projects Parquet row groups lazily. The ML
+`iter_sc_prediction_samples(...)` now projects Parquet row groups lazily. The ML
 implementations accept `Iterable`, so the checkpoint loads once from a local
 path and inference consumes bounded batches without first collecting the full
 Parquet table or building a 300k-element list.
