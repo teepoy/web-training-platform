@@ -6,12 +6,14 @@ import {
   scGlobalFilterConditionCount,
   type ScGlobalFilter,
 } from "@/features/sc/domain/globalFilter";
+import type { ScDataColumn } from "@/features/sc/domain/workbenchDataSource";
 import ScGlobalFilterBar from "./ScGlobalFilterBar.vue";
 
 const props = withDefaults(
   defineProps<{
     show: boolean;
     filter: ScGlobalFilter;
+    columns?: ScDataColumn[];
     distinctValues: Record<string, Array<string | number>>;
     numericRanges?: Record<string, { min: number; max: number } | null>;
     numericRangeLoading?: Record<string, boolean>;
@@ -96,6 +98,7 @@ watch(
     <ScGlobalFilterBar
       class="sc-global-filter-editor"
       :filter="draftFilter"
+      :columns="columns"
       :distinct-values="distinctValues"
       :numeric-ranges="numericRanges"
       :numeric-range-loading="numericRangeLoading"

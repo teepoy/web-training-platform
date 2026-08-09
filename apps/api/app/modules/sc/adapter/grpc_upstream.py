@@ -7,8 +7,8 @@ from contextlib import suppress
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-import pyarrow as pa
 import polars as pl
+import pyarrow as pa
 import pyarrow.flight as flight  # pyright: ignore[reportPrivateImportUsage]
 from grpc import aio as grpc_aio
 
@@ -24,6 +24,13 @@ if TYPE_CHECKING:
 def _parse_upstream_datetime(value: str) -> datetime:
     dt = datetime.fromisoformat(value)
     return _coerce_naive_to_upstream_tz(dt)
+
+
+def _empty_record_batch(schema: pa.Schema) -> pa.RecordBatch:
+    return pa.RecordBatch.from_arrays(
+        [pa.array([], type=field.type) for field in schema],
+        schema=schema,
+    )
 
 
 class GrpcScUpstream:
@@ -45,34 +52,6 @@ class GrpcScUpstream:
 
     def _ensure_flight_client(self) -> flight.FlightClient:  # pyright: ignore[reportPrivateImportUsage]
         return flight.FlightClient(self._flight_addr)  # pyright: ignore[reportPrivateImportUsage]
-
-    def _read_list_samples_table(
-        self,
-        ticket: flight.Ticket,  # pyright: ignore[reportPrivateImportUsage]
-        on_progress: ScSampleProgressCallback | None,
-    ) -> pa.Table:
-        fc = self._ensure_flight_client()
-        reader = fc.do_get(ticket)
-        batches: list[pa.RecordBatch] = []
-        loaded = 0
-        while True:
-            try:
-                chunk = reader.read_chunk()
-            except StopIteration:
-                break
-            data = chunk.data
-            if data is None or data.num_rows == 0:
-                continue
-            if isinstance(data, pa.Table):
-                batches.extend(data.to_batches())
-            else:
-                batches.append(data)
-            loaded += data.num_rows
-            if on_progress is not None:
-                on_progress(loaded)
-        if not batches:
-            return pa.table({})
-        return pa.Table.from_batches(batches)
 
     @staticmethod
     def _read_flight_chunk(
@@ -198,6 +177,7 @@ class GrpcScUpstream:
         client = self._ensure_flight_client()
         reader = await asyncio.to_thread(client.do_get, ticket)
         loaded = 0
+        received_batch = False
         try:
             while True:
                 data = await asyncio.to_thread(self._read_flight_chunk, reader)
@@ -205,12 +185,13 @@ class GrpcScUpstream:
                     break
                 batches = data.to_batches() if isinstance(data, pa.Table) else [data]
                 for batch in batches:
-                    if batch.num_rows == 0:
-                        continue
+                    received_batch = True
                     loaded += batch.num_rows
                     if on_progress is not None:
                         on_progress(loaded)
                     yield batch
+            if not received_batch:
+                yield _empty_record_batch(reader.schema)
         finally:
             with suppress(Exception):
                 await asyncio.to_thread(reader.cancel)
@@ -238,27 +219,13 @@ class GrpcScUpstream:
                 on_progress=on_progress,
             )
         ]
-        table = pa.Table.from_batches(batches) if batches else pa.table({})
+        if not batches:
+            raise RuntimeError("SC upstream Flight stream returned no schema batch")
+        table = pa.Table.from_batches(batches)
         df: pl.DataFrame = pl.from_arrow(table)  # type: ignore[assignment]
 
-        if df.height == 0 and not df.columns:
-            df = pl.DataFrame(
-                {
-                    "defect_id": pl.Series([], dtype=pl.Int64),
-                    "wafer_x": pl.Series([], dtype=pl.Int64),
-                    "wafer_y": pl.Series([], dtype=pl.Int64),
-                    "origin_x": pl.Series([], dtype=pl.Int64),
-                    "origin_y": pl.Series([], dtype=pl.Int64),
-                    "die_size_x": pl.Series([], dtype=pl.Int64),
-                    "die_size_y": pl.Series([], dtype=pl.Int64),
-                }
-            )
-        elif "defect_id" not in df.columns:
-            df = (
-                df.with_row_index("_row_index")
-                .with_columns(pl.col("_row_index").cast(pl.Int64).alias("defect_id"))
-                .drop("_row_index")
-            )
+        if "defect_id" not in df.columns:
+            raise RuntimeError("SC upstream sample schema is missing defect_id")
 
         geometry_exprs: list[pl.Expr] = []
         for column, default in (

@@ -65,12 +65,22 @@ class ScInspectionMaterializer:
         if max_output_bytes <= 0:
             raise ValueError("max_output_bytes must be greater than zero")
         image_types = image_types or list(DEFAULT_PATCH_IMAGE_TYPES)
+        schema = self._schema_registry.get(
+            SC_PATCH_IMAGE_V1.contract,
+            SC_PATCH_IMAGE_V1.schema_version,
+        )
         requested_roles = {
             _materialized_column_name(image_type): _image_role(image_type)
             for image_type in image_types
         }
         errors: list[dict[str, str]] = []
         columns = [_materialized_column_name(t) for t in image_types]
+        unsupported_columns = sorted(set(columns).difference(schema.names))
+        if unsupported_columns:
+            raise ValueError(
+                f"{SC_PATCH_IMAGE_V1.view_id} does not declare requested materialized "
+                f"columns: {', '.join(unsupported_columns)}"
+            )
         with ExitStack() as cleanup:
             handle = tempfile.NamedTemporaryFile(
                 suffix=".parquet", delete=False, dir=self._temp_dir
@@ -100,6 +110,7 @@ class ScInspectionMaterializer:
                         image_types=image_types,
                         columns=columns,
                         errors=errors,
+                        schema=schema,
                     )
                     logical_output_bytes += table.nbytes
                     if logical_output_bytes > max_output_bytes:
@@ -108,7 +119,7 @@ class ScInspectionMaterializer:
                             f"{logical_output_bytes} > {max_output_bytes} bytes"
                         )
                     if writer is None:
-                        writer = pq.ParquetWriter(handle.name, table.schema)
+                        writer = pq.ParquetWriter(handle.name, schema)
                     await asyncio.to_thread(writer.write_table, table)
                     row_count += table.num_rows
                     if os.path.getsize(handle.name) > max_output_bytes:
@@ -120,17 +131,24 @@ class ScInspectionMaterializer:
                 if writer is not None:
                     await asyncio.to_thread(writer.close)
             if writer is None:
-                await asyncio.to_thread(pq.write_table, _rows_to_table([]), handle.name)
+                await asyncio.to_thread(
+                    pq.write_table,
+                    _rows_to_table([], schema=schema),
+                    handle.name,
+                )
             size_bytes = os.path.getsize(handle.name)
             if size_bytes > max_output_bytes:
                 raise ScMaterializationCapacityError(
                     "SC materialization Parquet exceeded configured output budget: "
                     f"{size_bytes} > {max_output_bytes} bytes"
                 )
-            schema = self._schema_registry.get(
-                SC_PATCH_IMAGE_V1.contract,
-                SC_PATCH_IMAGE_V1.schema_version,
-            )
+            physical_schema = await asyncio.to_thread(pq.read_schema, handle.name)
+            if not physical_schema.equals(schema):
+                raise ValueError(
+                    "SC materialization Parquet schema does not match "
+                    f"{SC_PATCH_IMAGE_V1.view_id}: "
+                    f"expected {schema}, got {physical_schema}"
+                )
             manifest = DataPlaneManifest.from_schema(
                 view_contract=SC_PATCH_IMAGE_V1.contract,
                 view_schema_version=SC_PATCH_IMAGE_V1.schema_version,
@@ -173,6 +191,7 @@ class ScInspectionMaterializer:
         image_types: list[str],
         columns: list[str],
         errors: list[dict[str, str]],
+        schema: pa.Schema,
     ) -> pa.Table:
         image_bytes: dict[tuple[str, int, str, str], bytes] = {}
         missing_by_inspection: dict[tuple[str, int], set[int]] = {}
@@ -265,7 +284,7 @@ class ScInspectionMaterializer:
                     (inspection_time, wafer_key, defect_id, column)
                 )
             materialized_rows.append(out)
-        return _rows_to_table(materialized_rows)
+        return _rows_to_table(materialized_rows, schema=schema)
 
     def _append_error(
         self,
@@ -328,64 +347,12 @@ def _image_role(image_type: str) -> str:
             return normalized
 
 
-def _rows_to_table(rows: list[dict[str, Any]]) -> pa.Table:
-    arrays = {
-        "sample_id": pa.array(_str_values(rows, "sample_id"), type=pa.string()),
-        "inspection_time": pa.array(
-            _str_values(rows, "inspection_time"),
-            type=pa.string(),
-        ),
-        "wafer_key": pa.array(_int_values(rows, "wafer_key"), type=pa.int64()),
-        "defect_id": pa.array(_str_values(rows, "defect_id"), type=pa.string()),
-        "wafer_x": pa.array(_int_values(rows, "wafer_x"), type=pa.int64()),
-        "wafer_y": pa.array(_int_values(rows, "wafer_y"), type=pa.int64()),
-        "die_x": pa.array(_int_values(rows, "die_x"), type=pa.int64()),
-        "die_y": pa.array(_int_values(rows, "die_y"), type=pa.int64()),
-        "rough_bin": pa.array(_int_values(rows, "rough_bin"), type=pa.int64()),
-        "class_number": pa.array(
-            _int_values(rows, "class_number"),
-            type=pa.int64(),
-        ),
-        "test_id": pa.array(_int_values(rows, "test_id"), type=pa.int64()),
-        "label": pa.array(_nullable_str_values(rows, "label"), type=pa.string()),
-        "predicted_label": pa.array(
-            _nullable_str_values(rows, "predicted_label"),
-            type=pa.string(),
-        ),
-        "confidence": pa.array(
-            _float_values(rows, "confidence"),
-            type=pa.float64(),
-        ),
-        "patch_template_bytes": pa.array(
-            _binary_values(rows, "patch_template_bytes"),
-            type=pa.binary(),
-        ),
-        "patch_defective_bytes": pa.array(
-            _binary_values(rows, "patch_defective_bytes"),
-            type=pa.binary(),
-        ),
-    }
-    return pa.table(arrays)
-
-
-def _str_values(rows: list[dict[str, Any]], key: str) -> list[str]:
-    return [_optional_str(row.get(key)) or "" for row in rows]
-
-
-def _nullable_str_values(rows: list[dict[str, Any]], key: str) -> list[str | None]:
-    return [_optional_str(row.get(key)) for row in rows]
-
-
-def _int_values(rows: list[dict[str, Any]], key: str) -> list[int | None]:
-    return [_optional_int(row.get(key)) for row in rows]
-
-
-def _float_values(rows: list[dict[str, Any]], key: str) -> list[float | None]:
-    return [_optional_float(row.get(key)) for row in rows]
-
-
-def _binary_values(rows: list[dict[str, Any]], key: str) -> list[bytes | None]:
-    return [_optional_bytes(row.get(key)) for row in rows]
+def _rows_to_table(
+    rows: list[dict[str, Any]],
+    *,
+    schema: pa.Schema,
+) -> pa.Table:
+    return pa.Table.from_pylist(rows, schema=schema)
 
 
 def _optional_str(raw: object) -> str | None:
@@ -414,13 +381,3 @@ def _optional_float(raw: object) -> float | None:
         return float(raw)
     except (TypeError, ValueError):
         return None
-
-
-def _optional_bytes(raw: object) -> bytes | None:
-    if raw is None:
-        return None
-    if isinstance(raw, bytes):
-        return raw
-    if isinstance(raw, bytearray):
-        return bytes(raw)
-    return None

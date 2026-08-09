@@ -1,6 +1,6 @@
 import { tableFromArrays, tableToIPC } from "apache-arrow";
 import { http, HttpResponse } from "msw";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { server } from "@/testing/msw/server";
 import { createDefaultScSamplingProgram } from "@/features/sc/domain/samplingRules";
 import {
@@ -10,6 +10,29 @@ import {
 } from "./sqlWorkbenchDataSource";
 
 const QUERY_URL = "/api/v1/sc/data/datasets/ds-1/query";
+const DESCRIPTOR_URL = "/api/v1/sc/data/sample-table-descriptor";
+
+const sampleTableDescriptor = {
+  version: "sc.sample-table.v1",
+  columns: [
+    {
+      key: "defect_id",
+      title: "Defect ID",
+      width: 130,
+      filter: "set",
+      visibility: "default",
+      format: "integer",
+    },
+    {
+      key: "row_key",
+      title: "Sample ID",
+      width: 260,
+      filter: "set",
+      visibility: "default",
+      format: "plain",
+    },
+  ],
+};
 
 class FakeEventSource {
   static instance: FakeEventSource | null = null;
@@ -46,6 +69,10 @@ function arrowResponse(
 
 describe("SQL workbench data source", () => {
   const sources: SqlWorkbenchDataSource[] = [];
+
+  beforeEach(() => {
+    server.use(http.get(DESCRIPTOR_URL, () => HttpResponse.json(sampleTableDescriptor)));
+  });
 
   afterEach(() => {
     for (const source of sources) source.close();
@@ -299,8 +326,18 @@ describe("SQL workbench data source", () => {
     sources.push(source);
 
     await expect(source.loadColumns()).resolves.toEqual([
-      { name: "row_key", arrowType: "Null", nullable: true },
-      { name: "defect_id", arrowType: "Int32", nullable: true },
+      {
+        name: "row_key",
+        arrowType: "Null",
+        nullable: true,
+        presentation: { ...sampleTableDescriptor.columns[1], order: 1 },
+      },
+      {
+        name: "defect_id",
+        arrowType: "Int32",
+        nullable: true,
+        presentation: { ...sampleTableDescriptor.columns[0], order: 0 },
+      },
       { name: "future_metric", arrowType: "Float64", nullable: true },
       { name: "upstream_payload", arrowType: "Null", nullable: true },
     ]);

@@ -7,6 +7,9 @@ from pydantic import ValidationError
 from app.modules.sc.data_provider.materializer import (
     _normalize_dataset_base_lazyframe,
 )
+from app.modules.sc.data_provider.sample_table_descriptor import (
+    SC_SAMPLE_TABLE_DESCRIPTOR,
+)
 from app.modules.sc.data_provider.schemas import ScSqlQueryRequest
 
 
@@ -49,6 +52,20 @@ def test_query_description_requires_a_bounded_machine_readable_usage(
                 "parameters": [],
             }
         )
+
+
+def test_sample_table_descriptor_is_versioned_and_has_unique_columns() -> None:
+    descriptor = SC_SAMPLE_TABLE_DESCRIPTOR
+    keys = [column.key for column in descriptor.columns]
+
+    assert descriptor.version == "sc.sample-table.v1"
+    assert len(keys) == len(set(keys))
+    assert next(column for column in descriptor.columns if column.key == "final_class").visibility == (
+        "filter_only"
+    )
+    assert next(column for column in descriptor.columns if column.key == "map_id").visibility == (
+        "internal"
+    )
 
 
 def test_dataset_materializer_preserves_dynamic_metadata_columns() -> None:

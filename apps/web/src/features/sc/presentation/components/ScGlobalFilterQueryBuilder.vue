@@ -20,6 +20,7 @@ import {
   type ScGlobalFilterNode,
 } from "@/features/sc/domain/globalFilter";
 import { scMissingFilterOption } from "@/features/sc/domain/missingFilterValue";
+import type { ScDataColumn } from "@/features/sc/domain/workbenchDataSource";
 import { scGlobalFilterColumns, type ScFilterColumnDefinition } from "./scSampleTableColumns";
 import ScRangeFilterMenu from "./ScRangeFilterMenu.vue";
 import ScSetFilterMenu from "./ScSetFilterMenu.vue";
@@ -40,6 +41,7 @@ const ROOT_GROUP_ID = "sc-global-filter-root";
 const props = withDefaults(
   defineProps<{
     filter: ScGlobalFilter;
+    columns?: ScDataColumn[];
     distinctValues: Record<string, Array<string | number>>;
     numericRanges?: Record<string, { min: number; max: number } | null>;
     numericRangeLoading?: Record<string, boolean>;
@@ -69,7 +71,7 @@ const editingRuleId = ref<string | null>(null);
 const activeCount = computed(() => scGlobalFilterConditionCount(props.filter));
 const hasBuilderNodes = computed(() => builderModel.value.items.length > 0);
 const fieldDefinitions = computed(() =>
-  scGlobalFilterColumns(props.showReclassifyColumns === true),
+  scGlobalFilterColumns(props.columns ?? [], props.showReclassifyColumns === true),
 );
 const fieldOptions = computed(() =>
   fieldDefinitions.value.map((definition) => ({

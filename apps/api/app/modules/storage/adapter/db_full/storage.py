@@ -16,6 +16,7 @@ from app.modules.datasets.domain.sample_row import (
     PredictionResult,
     SampleRow,
 )
+from app.modules.storage.domain.columnar_schemas import DB_FULL_MATERIALIZED_SCHEMA
 from app.modules.storage.domain.storage_agg import MaterializeResult
 from app.shared.api.schemas import (
     Annotation,
@@ -595,18 +596,8 @@ class DbFullDatasetStorage:
                 )
 
         buf = _io.BytesIO()
-        if rows_data:
-            table = pa.Table.from_pylist(rows_data)
-            pq.write_table(table, buf)
-        else:
-            schema = pa.schema(
-                [
-                    ("sample_id", pa.string()),
-                    ("image_uris", pa.list_(pa.string())),
-                    ("metadata", pa.string()),
-                ]
-            )
-            pq.write_table(pa.table({}, schema=schema), buf)
+        table = pa.Table.from_pylist(rows_data, schema=DB_FULL_MATERIALIZED_SCHEMA)
+        pq.write_table(table, buf)
 
         parquet_bytes = buf.getvalue()
         row_count = len(rows_data)

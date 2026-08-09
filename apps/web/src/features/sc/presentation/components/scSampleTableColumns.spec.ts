@@ -1,31 +1,66 @@
 import { describe, expect, it } from "vitest";
-import {
-  SC_RECLASSIFY_TABLE_COLUMNS,
-  SC_SAMPLE_TABLE_COLUMNS,
-  scGlobalFilterColumns,
-  scSampleTableColumns,
-} from "./scSampleTableColumns";
+import type { ScDataColumn } from "@/features/sc/domain/workbenchDataSource";
+import { scGlobalFilterColumns, scSampleTableColumns } from "./scSampleTableColumns";
 
-function fieldNames(columns: Array<{ key: string }>): string[] {
-  return columns.map((column) => String(column.key));
+function column(
+  name: string,
+  order: number,
+  visibility: NonNullable<ScDataColumn["presentation"]>["visibility"] = "default",
+): ScDataColumn {
+  return {
+    name,
+    arrowType: name.includes("confidence") ? "Float64" : "Utf8",
+    nullable: true,
+    presentation: {
+      title: name,
+      width: 120,
+      filter: name.includes("confidence") ? "range" : "set",
+      visibility,
+      format: "plain",
+      order,
+    },
+  };
 }
 
-describe("SC sample table filter columns", () => {
-  it("offers every preview table field as a global filter", () => {
-    expect(fieldNames(scGlobalFilterColumns(false))).toEqual(
-      fieldNames(scSampleTableColumns(false)),
-    );
+const columns = [
+  column("defect_id", 0),
+  column("annotation_label", 1, "reclassify"),
+  column("prediction_confidence", 2, "reclassify"),
+  column("final_class", 3, "filter_only"),
+  column("sample_id", 4, "internal"),
+];
+
+function fieldNames(items: Array<{ key: string }>): string[] {
+  return items.map((item) => item.key);
+}
+
+describe("SC sample-table descriptor projection", () => {
+  it("uses default columns for preview tables and global filters", () => {
+    expect(fieldNames(scSampleTableColumns(columns, false))).toEqual(["defect_id"]);
+    expect(fieldNames(scGlobalFilterColumns(columns, false))).toEqual(["defect_id"]);
   });
 
-  it("offers every reclassify table field and final class as global filters", () => {
-    const globalFields = fieldNames(scGlobalFilterColumns(true));
-
-    expect(globalFields).toEqual([
-      ...fieldNames(SC_SAMPLE_TABLE_COLUMNS),
-      ...fieldNames(SC_RECLASSIFY_TABLE_COLUMNS),
+  it("adds reclassify and filter-only properties without exposing internals", () => {
+    expect(fieldNames(scSampleTableColumns(columns, true))).toEqual([
+      "defect_id",
+      "annotation_label",
+      "prediction_confidence",
+    ]);
+    expect(fieldNames(scGlobalFilterColumns(columns, true))).toEqual([
+      "defect_id",
+      "annotation_label",
+      "prediction_confidence",
       "final_class",
     ]);
-    expect(globalFields).toContain("annotation_label");
-    expect(globalFields).toContain("prediction_confidence");
+  });
+
+  it("keeps unknown physical metadata columns visible and filterable", () => {
+    const dynamic = { name: "future_metric", arrowType: "Float64", nullable: true };
+
+    expect(scSampleTableColumns([...columns, dynamic], false).at(-1)).toMatchObject({
+      key: "future_metric",
+      title: "future_metric",
+      filter: "range",
+    });
   });
 });

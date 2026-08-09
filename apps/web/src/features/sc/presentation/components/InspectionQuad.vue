@@ -24,7 +24,10 @@ import type {
   ScSamplingGroupPopulation,
   ScSamplingProgram,
 } from "@/features/sc/domain/samplingRules";
-import type { ScTableSelectionConstraint } from "@/features/sc/domain/workbenchDataSource";
+import type {
+  ScDataColumn,
+  ScTableSelectionConstraint,
+} from "@/features/sc/domain/workbenchDataSource";
 import type {
   ScLegendSource,
   ScMapRegion,
@@ -172,6 +175,26 @@ const { workbench, dataReady, model, reportDataError } = useInspectionQuadData({
   reticle: reticleProjectionModel,
   galleryRandomSamplingDefectIds: computed(() => props.galleryRandomSamplingDefectIds),
 });
+const sampleTableColumns = ref<ScDataColumn[]>([]);
+let sampleTableColumnsVersion = 0;
+
+watch(
+  () => model.sampleTableDataSource.value,
+  async (source) => {
+    const version = ++sampleTableColumnsVersion;
+    sampleTableColumns.value = [];
+    if (!source?.loadColumns) return;
+    try {
+      const columns = await source.loadColumns();
+      if (version === sampleTableColumnsVersion) sampleTableColumns.value = columns;
+    } catch (error) {
+      if (version === sampleTableColumnsVersion) {
+        reportDataError("Load sample-table descriptor failed", error);
+      }
+    }
+  },
+  { immediate: true },
+);
 
 async function querySamplingCandidateCount(options: ScSamplingCandidateOptions): Promise<number> {
   return model.querySamplingCandidateCount(options);
@@ -852,6 +875,7 @@ function useMapSelectionQueue() {
     <ScGlobalFilterModal
       v-model:show="globalFilterModalVisible"
       :filter="globalFilterModel"
+      :columns="sampleTableColumns"
       :distinct-values="globalDistinctValues"
       :numeric-ranges="globalNumericRanges"
       :numeric-range-loading="globalNumericRangeLoading"

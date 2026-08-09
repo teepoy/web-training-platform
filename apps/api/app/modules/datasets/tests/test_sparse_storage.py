@@ -6,7 +6,7 @@ fixtures from ``conftest.py`` — no mocks.
 
 from __future__ import annotations
 
-import os
+import io as _io
 from collections.abc import AsyncIterator
 from datetime import datetime, timezone
 from typing import Any
@@ -16,6 +16,10 @@ import pytest
 import pytest_asyncio  # type: ignore[import-untyped]
 
 from app.modules.storage.adapter.sparse.storage import SparseDatasetStorage
+from app.modules.storage.domain.columnar_schemas import (
+    SPARSE_MATERIALIZED_SCHEMA,
+    SPARSE_PREDICTION_SCHEMA,
+)
 from app.modules.datasets.domain.sample_row import (
     BulkSampleRow,
     PredictionResult,
@@ -505,6 +509,18 @@ class TestSparseDatasetStorage:
             model_version="v1",
         )
         assert count == 3
+        prediction_uris = await _test_infra["storage"].list_prefix(
+            f"datasets/{org_id}/{dataset_id}/predictions/test-job/"
+        )
+        prediction_uri = next(
+            uri for uri in prediction_uris if uri.endswith("0000.parquet")
+        )
+        prediction_bytes = await _test_infra["storage"].get_bytes(prediction_uri)
+        import pyarrow.parquet as pq
+
+        assert pq.read_schema(_io.BytesIO(prediction_bytes)).equals(
+            SPARSE_PREDICTION_SCHEMA
+        )
         await _create_prediction_job(
             _test_infra,
             job_id="test-job",
@@ -668,21 +684,22 @@ class TestSparseDatasetStorage:
     # ── 13. materialize ─────────────────────────────────────────────────
 
     @pytest.mark.asyncio
-    async def test_materialize(self, storage: SparseDatasetStorage) -> None:
+    async def test_materialize(
+        self,
+        storage: SparseDatasetStorage,
+        _test_infra: dict,
+    ) -> None:
         """Materialize produces valid parquet with row_count=5."""
         result = await storage.materialize()
         assert result.row_count == 5
         assert result.manifest_uri is not None
 
-        # For InMemoryArtifactStorage, manifest_uri typically points to a
-        # real temp path or is an in-memory key — try reading as parquet
-        if os.path.isfile(result.manifest_uri):
-            import pyarrow.parquet as pq
+        import pyarrow.parquet as pq
 
-            table = pq.read_table(result.manifest_uri)
-            assert table.num_rows == 5
-            assert "sample_id" in table.column_names
-            os.unlink(result.manifest_uri)
+        parquet_bytes = await _test_infra["storage"].get_bytes(result.manifest_uri)
+        table = pq.read_table(_io.BytesIO(parquet_bytes))
+        assert table.num_rows == 5
+        assert table.schema.equals(SPARSE_MATERIALIZED_SCHEMA)
 
     # ── 14. recent_annotations ──────────────────────────────────────────
 

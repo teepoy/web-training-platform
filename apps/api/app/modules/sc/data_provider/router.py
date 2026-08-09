@@ -24,8 +24,12 @@ from app.modules.sc.data_provider.engine import (
 )
 from app.modules.sc.data_provider.materializer import ScDataMaterializer
 from app.modules.sc.data_provider.revision import RevisionRedis, ScDataRevisionStore
+from app.modules.sc.data_provider.sample_table_descriptor import (
+    SC_SAMPLE_TABLE_DESCRIPTOR,
+)
 from app.modules.sc.data_provider.schemas import (
     ScDataInvalidationEvent,
+    ScSampleTableDescriptor,
     ScSqlQueryRequest,
 )
 from app.modules.sc.data_provider.scope import ScDataScope
@@ -98,6 +102,13 @@ class ScDataProviderRedis(CacheRedis, RevisionRedis, Protocol):
 
 
 router = APIRouter(prefix="/api/v1/sc/data", tags=["sc-data-provider"])
+
+
+@router.get("/sample-table-descriptor", response_model=ScSampleTableDescriptor)
+async def sample_table_descriptor(
+    _user: User = Depends(get_current_user),
+) -> ScSampleTableDescriptor:
+    return SC_SAMPLE_TABLE_DESCRIPTOR
 
 
 @router.post("/inspections/{inspection_time}/{wafer_key}/query")

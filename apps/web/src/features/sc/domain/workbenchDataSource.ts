@@ -100,6 +100,14 @@ export interface ScDataColumn {
   name: string;
   arrowType: string;
   nullable: boolean;
+  presentation?: {
+    title: string;
+    width: number;
+    filter: "set" | "range" | null;
+    visibility: "default" | "reclassify" | "filter_only" | "internal";
+    format: "plain" | "integer" | "fixed_3";
+    order: number;
+  };
 }
 
 export interface ScWorkbenchDataSource {

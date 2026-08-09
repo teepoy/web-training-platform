@@ -53,6 +53,10 @@ from typing import TYPE_CHECKING
 
 import pyarrow as pa
 
+from app.modules.storage.domain.columnar_schemas import (
+    SPARSE_EMBEDDED_IMAGE_STRUCT_DTYPE,
+)
+
 if TYPE_CHECKING:
     from app.modules.storage.domain.sparse.models import DatasetManifest
 
@@ -64,18 +68,7 @@ SC_SOURCE_SCHEMA_VERSION = SC_SOURCE_SCHEMA_VERSION_V3
 
 # ── Image struct dtype ────────────────────────────────────────────────────
 
-SC_IMAGE_STRUCT_DTYPE = pa.struct(
-    [
-        pa.field("image_id", pa.string(), nullable=False),
-        pa.field("image_type", pa.string(), nullable=False),
-        pa.field("role", pa.string(), nullable=False),
-        pa.field("content_type", pa.string(), nullable=False),
-        pa.field("filename", pa.string(), nullable=False),
-        pa.field("bytes", pa.binary(), nullable=True),
-        pa.field("review_image_id", pa.int32(), nullable=True),
-        pa.field("source_uri", pa.string(), nullable=True),
-    ]
-)
+SC_IMAGE_STRUCT_DTYPE = SPARSE_EMBEDDED_IMAGE_STRUCT_DTYPE
 """PyArrow struct dtype for a single SC image stored inline in shards.
 
 Fields

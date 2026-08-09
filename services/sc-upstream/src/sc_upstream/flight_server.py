@@ -6,8 +6,9 @@ from datetime import datetime
 from contextlib import suppress
 from typing import Any, Iterator
 
-import pyarrow.flight as flight
+import polars as pl
 import pyarrow as pa
+import pyarrow.flight as flight
 
 from .cache import QueryCache
 from .upstream_db import UpstreamDB
@@ -80,27 +81,20 @@ class UpstreamFlightServer(flight.FlightServerBase):
             lock_ctx.__exit__(None, None, None)
             return flight.RecordBatchStream(cached.collect().to_arrow())
 
-        batch_iter = self._db.iter_list_samples_batches(
+        sample_stream = self._db.open_list_samples_stream(
             inspection_time,
             wafer_key,
             batch_size=batch_rows,
         )
-        try:
-            first_df = next(batch_iter)
-        except StopIteration:
-            lock_ctx.__exit__(None, None, None)
-            return flight.RecordBatchStream(pa.table({}))
 
         def _stream_batches() -> Iterator[pa.Table]:
             writer = self._cache.sync_start_list_samples_writer(
                 req["inspection_time"],
                 wafer_key,
-                first_df.to_arrow().schema,
+                sample_stream.schema,
             )
             try:
-                writer.write_frame(first_df)
-                yield first_df.to_arrow()
-                for df in batch_iter:
+                for df in sample_stream.batches:
                     writer.write_frame(df)
                     yield df.to_arrow()
                 writer.finish()
@@ -110,7 +104,7 @@ class UpstreamFlightServer(flight.FlightServerBase):
             finally:
                 lock_ctx.__exit__(None, None, None)
 
-        return flight.GeneratorStream(first_df.to_arrow().schema, _stream_batches())
+        return flight.GeneratorStream(sample_stream.schema, _stream_batches())
 
     def _uncached_stream(
         self,
@@ -122,47 +116,46 @@ class UpstreamFlightServer(flight.FlightServerBase):
         batch_rows: int,
         projection: list[str] | None,
     ) -> flight.FlightDataStream:
-        batch_iter = self._db.iter_list_samples_batches(
+        sample_stream = self._db.open_list_samples_stream(
             inspection_time,
             wafer_key,
             batch_size=batch_rows,
             offset=offset,
             count=count,
         )
-        try:
-            first_df = next(batch_iter)
-        except StopIteration:
-            return flight.RecordBatchStream(pa.table({}))
-        if projection is not None:
-            first_df = first_df.select(projection)
+        schema = _project_schema(sample_stream.schema, projection)
 
         def _stream_batches() -> Iterator[pa.Table]:
             try:
-                yield first_df.to_arrow()
-                for frame in batch_iter:
+                for frame in sample_stream.batches:
                     if projection is not None:
                         frame = frame.select(projection)
                     yield frame.to_arrow()
             finally:
                 with suppress(Exception):
-                    batch_iter.close()  # type: ignore[attr-defined]
+                    sample_stream.batches.close()  # type: ignore[attr-defined]
 
-        return flight.GeneratorStream(first_df.to_arrow().schema, _stream_batches())
+        return flight.GeneratorStream(schema, _stream_batches())
 
 
 def _lazyframe_stream(frame: Any, *, batch_rows: int) -> flight.FlightDataStream:
+    schema = pl.DataFrame(schema=frame.collect_schema()).to_arrow().schema
     batches = frame.collect_batches(chunk_size=batch_rows, maintain_order=True)
-    try:
-        first = next(batches)
-    except StopIteration:
-        return flight.RecordBatchStream(pa.table({}))
 
     def _stream() -> Iterator[pa.Table]:
-        yield first.to_arrow()
         for batch in batches:
             yield batch.to_arrow()
 
-    return flight.GeneratorStream(first.to_arrow().schema, _stream())
+    return flight.GeneratorStream(schema, _stream())
+
+
+def _project_schema(schema: pa.Schema, projection: list[str] | None) -> pa.Schema:
+    if projection is None:
+        return schema
+    return pa.schema(
+        [schema.field(column) for column in projection],
+        metadata=schema.metadata,
+    )
 
 
 def _parse_ticket(ticket: flight.Ticket) -> dict[str, Any]:

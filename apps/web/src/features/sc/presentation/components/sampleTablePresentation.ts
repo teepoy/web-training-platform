@@ -1,6 +1,6 @@
 import type { ScDataColumn } from "@/features/sc/domain/workbenchDataSource";
 import type { ScSampleTableDisplayRow } from "@/features/sc/domain/workbenchInteraction";
-import { SC_RECLASSIFY_TABLE_COLUMNS, SC_SAMPLE_TABLE_COLUMNS } from "./scSampleTableColumns";
+import { scSampleTableColumns } from "./scSampleTableColumns";
 
 export interface ScSampleTablePresentationRow
   extends Partial<ScSampleTableDisplayRow>, Record<string, unknown> {
@@ -17,49 +17,35 @@ export interface ScSampleTablePresentationColumn {
   render?: (row: ScSampleTablePresentationRow) => string;
 }
 
-const knownColumns = new Map<string, ScSampleTablePresentationColumn>(
-  [...SC_SAMPLE_TABLE_COLUMNS, ...SC_RECLASSIFY_TABLE_COLUMNS].map((column) => [
-    String(column.key),
-    column as ScSampleTablePresentationColumn,
-  ]),
-);
-const reclassifyColumnKeys = new Set(
-  SC_RECLASSIFY_TABLE_COLUMNS.map((column) => String(column.key)),
-);
-
-function dynamicColumn(column: ScDataColumn): ScSampleTablePresentationColumn {
-  const arrowType = column.arrowType.toLowerCase();
-  const numeric = /(^|[^a-z])(u?int|float|double|decimal)/.test(arrowType);
-  const scalar =
-    numeric ||
-    arrowType.includes("bool") ||
-    arrowType.includes("utf8") ||
-    arrowType.includes("string") ||
-    arrowType.includes("date") ||
-    arrowType.includes("time");
-  return {
-    key: column.name,
-    title: column.name,
-    width: Math.max(120, Math.min(240, column.name.length * 9 + 44)),
-    filter: numeric ? "range" : scalar ? "set" : null,
-  };
+function formattedValue(
+  key: string,
+  format: "plain" | "integer" | "fixed_3",
+  row: ScSampleTablePresentationRow,
+): string {
+  const value = row[key];
+  if (format === "integer") return String(Number(value));
+  if (format === "fixed_3") {
+    const numeric = Number(value);
+    return value != null && Number.isFinite(numeric) ? numeric.toFixed(3) : "-";
+  }
+  return String(value);
 }
 
 export function sampleTablePresentationColumns(
   sourceColumns: readonly ScDataColumn[] | null,
   showReclassifyColumns: boolean,
 ): ScSampleTablePresentationColumn[] {
-  if (sourceColumns === null) {
-    return showReclassifyColumns
-      ? ([
-          ...SC_SAMPLE_TABLE_COLUMNS,
-          ...SC_RECLASSIFY_TABLE_COLUMNS,
-        ] as ScSampleTablePresentationColumn[])
-      : (SC_SAMPLE_TABLE_COLUMNS as ScSampleTablePresentationColumn[]);
-  }
-  return sourceColumns
-    .filter((column) => showReclassifyColumns || !reclassifyColumnKeys.has(column.name))
-    .map((column) => knownColumns.get(column.name) ?? dynamicColumn(column));
+  if (sourceColumns === null) return [];
+  return scSampleTableColumns(sourceColumns, showReclassifyColumns).map(
+    ({ format, ...column }) => ({
+      ...column,
+      ...(format === "plain"
+        ? {}
+        : {
+            render: (row: ScSampleTablePresentationRow) => formattedValue(column.key, format, row),
+          }),
+    }),
+  );
 }
 
 export function normalizeSampleTableFilterValue(

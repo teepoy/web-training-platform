@@ -126,8 +126,12 @@ const table = useVueTable({
   manualSorting: true,
 });
 
-const selectionColumn = computed(() => table.getColumn(SELECTION_COLUMN_ID));
-const defectColumn = computed(() => table.getColumn("defect_id"));
+const selectionColumn = computed(() =>
+  table.getAllLeafColumns().find((column) => column.id === SELECTION_COLUMN_ID),
+);
+const defectColumn = computed(() =>
+  table.getAllLeafColumns().find((column) => column.id === "defect_id"),
+);
 const scrollColumns = computed(() =>
   table
     .getVisibleLeafColumns()

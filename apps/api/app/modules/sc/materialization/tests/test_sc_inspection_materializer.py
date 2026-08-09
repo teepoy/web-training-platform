@@ -76,6 +76,9 @@ async def test_sc_materializer_cleans_partial_files_when_dataset_load_fails(
                     "defect_id": ["7"],
                     "inspection_time": ["2026-01-01T00:00:00"],
                     "wafer_key": [42],
+                    "wafer_x": [10],
+                    "wafer_y": [11],
+                    "rough_bin": [3],
                 }
             ).lazy(),
             dataset_id="dataset-1",
@@ -104,6 +107,9 @@ async def test_sc_materializer_returns_parquet_without_runtime_dataset(
                 "defect_id": ["7"],
                 "inspection_time": ["2026-01-01T00:00:00"],
                 "wafer_key": [42],
+                "wafer_x": [10],
+                "wafer_y": [11],
+                "rough_bin": [3],
             }
         ).lazy(),
         dataset_id="dataset-1",
@@ -124,9 +130,10 @@ async def test_sc_materializer_returns_parquet_without_runtime_dataset(
 async def test_sc_inspection_materializer_returns_data_plane_manifest(
     tmp_path,
 ) -> None:
+    schema_registry = DataPlaneSchemaRegistry.default()
     materializer = ScInspectionMaterializer(
         _ImageSource(),
-        schema_registry=DataPlaneSchemaRegistry.default(),
+        schema_registry=schema_registry,
         batch_rows=2,
         max_error_records=100,
         temp_dir=str(tmp_path),
@@ -166,12 +173,66 @@ async def test_sc_inspection_materializer_returns_data_plane_manifest(
         assert result.manifest.shards[0].row_count == 1
 
         table = pq.read_table(result.parquet_path)
+        expected_schema = schema_registry.get("sc.patch_image.v1", "1")
+        assert pq.read_schema(result.parquet_path).equals(expected_schema)
+        assert table.schema.equals(expected_schema)
         assert table.schema.field("test_id").nullable is True
         assert table.column("test_id").to_pylist() == [99]
         assert table.column("patch_template_bytes").to_pylist() == [b"template"]
         assert table.column("patch_defective_bytes").to_pylist() == [b"defective"]
     finally:
         result.cleanup()
+
+
+@pytest.mark.asyncio
+async def test_sc_materializer_empty_output_uses_registered_schema(tmp_path) -> None:
+    schema_registry = DataPlaneSchemaRegistry.default()
+    materializer = ScInspectionMaterializer(
+        _UnexpectedImageSource(),
+        schema_registry=schema_registry,
+        batch_rows=2,
+        max_error_records=100,
+        temp_dir=str(tmp_path),
+    )
+
+    result = await materializer.materialize(
+        rows_lazyframe=pl.DataFrame(
+            schema={
+                "sample_id": pl.String,
+                "defect_id": pl.String,
+                "inspection_time": pl.String,
+                "wafer_key": pl.Int64,
+            }
+        ).lazy(),
+        dataset_id="dataset-1",
+        job_id="job-1",
+        max_output_bytes=100_000_000,
+    )
+    try:
+        assert result.row_count == 0
+        assert pq.read_schema(result.parquet_path).equals(
+            schema_registry.get("sc.patch_image.v1", "1")
+        )
+    finally:
+        result.cleanup()
+
+
+@pytest.mark.asyncio
+async def test_sc_materializer_rejects_columns_outside_view_contract(tmp_path) -> None:
+    materializer = ScInspectionMaterializer(
+        _UnexpectedImageSource(),
+        schema_registry=DataPlaneSchemaRegistry.default(),
+        batch_rows=2,
+        max_error_records=100,
+        temp_dir=str(tmp_path),
+    )
+
+    with pytest.raises(ValueError, match="patch_difference_bytes"):
+        await materializer.materialize(
+            rows_lazyframe=pl.DataFrame().lazy(),
+            image_types=["patch_difference"],
+            max_output_bytes=100_000_000,
+        )
 
 
 @pytest.mark.asyncio
@@ -193,6 +254,9 @@ async def test_sc_materializer_uses_inline_seed_images_before_upstream(
                     if sample.inspection_time
                     else "",
                     "wafer_key": sample.wafer_key,
+                    "wafer_x": sample.wafer_x,
+                    "wafer_y": sample.wafer_y,
+                    "rough_bin": sample.rough_bin,
                     "shard_images": [
                         image.model_dump(mode="json")
                         for image in sample.shard_images

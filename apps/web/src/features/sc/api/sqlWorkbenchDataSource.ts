@@ -1,6 +1,12 @@
 import { tableFromIPC, type Table } from "apache-arrow";
 import { pointInPolygon } from "@platform/sc-map-element";
-import { API_BASE, isApiError, requestRaw, withAuthQueryParams } from "@/shared/api/client";
+import {
+  API_BASE,
+  isApiError,
+  requestData,
+  requestRaw,
+  withAuthQueryParams,
+} from "@/shared/api/client";
 import type {
   ScAggregateDataQuery,
   ScArrowQueryResult,
@@ -39,6 +45,8 @@ export type ScSqlWorkbenchScope =
 
 const QUERY_TIMEOUT_MS = 35_000;
 const QUERY_MAX_ATTEMPTS = 2;
+const SAMPLE_TABLE_DESCRIPTOR_VERSION = "sc.sample-table.v1";
+const SAMPLE_TABLE_DESCRIPTOR_URL = `${API_BASE}/sc/data/sample-table-descriptor`;
 const RETRYABLE_QUERY_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
 const SAMPLE_COLUMNS = [
   "defect_id",
@@ -79,6 +87,34 @@ const DEFAULT_ALLOWED_COLUMNS = new Set<string>([
 interface CompiledWhere {
   sql: string;
   parameters: ScDataParameter[];
+}
+
+interface ScSampleTableDescriptorResponse {
+  version: string;
+  columns: Array<{
+    key: string;
+    title: string;
+    width: number;
+    filter: "set" | "range" | null;
+    visibility: "default" | "reclassify" | "filter_only" | "internal";
+    format: "plain" | "integer" | "fixed_3";
+  }>;
+}
+
+function sampleTableDescriptorByColumn(
+  descriptor: ScSampleTableDescriptorResponse,
+): Map<string, NonNullable<ScDataColumn["presentation"]>> {
+  if (descriptor.version !== SAMPLE_TABLE_DESCRIPTOR_VERSION) {
+    throw new Error(`Unsupported SC sample-table descriptor: ${descriptor.version}`);
+  }
+  const result = new Map<string, NonNullable<ScDataColumn["presentation"]>>();
+  descriptor.columns.forEach((column, order) => {
+    if (result.has(column.key)) {
+      throw new Error(`SC sample-table descriptor contains duplicate column: ${column.key}`);
+    }
+    result.set(column.key, { ...column, order });
+  });
+  return result;
 }
 
 function isRetryableQueryError(error: unknown): boolean {
@@ -478,14 +514,21 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
 
   loadColumns(): Promise<ScDataColumn[]> {
     if (this.columnsPromise) return this.columnsPromise;
-    const request = this.query("sc-workbench.schema", "SELECT * FROM samples LIMIT 0", []).then(
-      ({ table }) =>
-        table.schema.fields.map((field) => ({
+    const request = Promise.all([
+      this.query("sc-workbench.schema", "SELECT * FROM samples LIMIT 0", []),
+      requestData<ScSampleTableDescriptorResponse>(SAMPLE_TABLE_DESCRIPTOR_URL),
+    ]).then(([{ table }, descriptor]) => {
+      const presentationByColumn = sampleTableDescriptorByColumn(descriptor);
+      return table.schema.fields.map((field) => {
+        const presentation = presentationByColumn.get(field.name);
+        return {
           name: field.name,
           arrowType: field.type.toString(),
           nullable: field.nullable,
-        })),
-    );
+          ...(presentation ? { presentation } : {}),
+        };
+      });
+    });
     this.columnsPromise = request.catch((error: unknown) => {
       this.columnsPromise = null;
       throw error;

@@ -1,4 +1,4 @@
-import type { ScSampleTableDisplayRow } from "@/features/sc/domain/workbenchInteraction";
+import type { ScDataColumn } from "@/features/sc/domain/workbenchDataSource";
 
 export interface ScFilterColumnDefinition {
   key: string;
@@ -6,75 +6,87 @@ export interface ScFilterColumnDefinition {
   filter: "set" | "range";
 }
 
-export interface ScSampleTableColumnDefinition extends ScFilterColumnDefinition {
-  key: keyof ScSampleTableDisplayRow;
+export interface ScSampleTableColumnDefinition {
+  key: string;
+  title: string;
   width: number;
-  render?: (row: Partial<ScSampleTableDisplayRow>) => string;
+  filter: "set" | "range" | null;
+  format: "plain" | "integer" | "fixed_3";
 }
 
-export const SC_SAMPLE_TABLE_COLUMNS: ScSampleTableColumnDefinition[] = [
-  {
-    key: "defect_id",
-    title: "Defect ID",
-    width: 130,
-    filter: "set",
-    render: (row) => String(Number(row.defect_id)),
-  },
-  { key: "images", title: "Images", width: 110, filter: "range" },
-  { key: "test_id", title: "Test ID", width: 120, filter: "set" },
-  { key: "index_x", title: "Index X", width: 120, filter: "range" },
-  { key: "index_y", title: "Index Y", width: 120, filter: "range" },
-  { key: "wafer_x", title: "Wafer X", width: 120, filter: "range" },
-  { key: "wafer_y", title: "Wafer Y", width: 120, filter: "range" },
-  { key: "die_x", title: "Die X", width: 120, filter: "range" },
-  { key: "die_y", title: "Die Y", width: 120, filter: "range" },
-  { key: "size_x", title: "Size X", width: 120, filter: "range" },
-  { key: "size_y", title: "Size Y", width: 120, filter: "range" },
-  { key: "size_d", title: "Size D", width: 120, filter: "range" },
-  { key: "area", title: "Area", width: 120, filter: "range" },
-  { key: "class_number", title: "Class", width: 120, filter: "set" },
-  { key: "rough_bin", title: "Rough Bin", width: 120, filter: "set" },
-  { key: "final_bin", title: "Final Bin", width: 120, filter: "set" },
-  { key: "manual_bin", title: "Manual Bin", width: 120, filter: "set" },
-  { key: "adder", title: "Adder", width: 120, filter: "set" },
-  { key: "cluster_id", title: "Cluster ID", width: 120, filter: "set" },
-  {
-    key: "kill_ratio",
-    title: "Kill Ratio",
-    width: 120,
-    filter: "range",
-    render: (row) => (row.kill_ratio != null ? row.kill_ratio.toFixed(3) : "-"),
-  },
-];
+function inferredFilter(column: ScDataColumn): "set" | "range" | null {
+  const arrowType = column.arrowType.toLowerCase();
+  const numeric = /(^|[^a-z])(u?int|float|double|decimal)/.test(arrowType);
+  if (numeric) return "range";
+  if (
+    arrowType.includes("bool") ||
+    arrowType.includes("utf8") ||
+    arrowType.includes("string") ||
+    arrowType.includes("date") ||
+    arrowType.includes("time")
+  ) {
+    return "set";
+  }
+  return null;
+}
 
-export const SC_RECLASSIFY_TABLE_COLUMNS: ScSampleTableColumnDefinition[] = [
-  { key: "annotation_label", title: "Annotation", width: 140, filter: "set" },
-  { key: "prediction_label", title: "Prediction", width: 140, filter: "set" },
-  {
-    key: "prediction_confidence",
-    title: "Confidence",
-    width: 130,
-    filter: "range",
-    render: (row) =>
-      row.prediction_confidence != null ? row.prediction_confidence.toFixed(3) : "-",
-  },
-];
+function orderedColumns(columns: readonly ScDataColumn[]): ScDataColumn[] {
+  return columns
+    .map((column, physicalOrder) => ({ column, physicalOrder }))
+    .sort(
+      (left, right) =>
+        (left.column.presentation?.order ?? Number.MAX_SAFE_INTEGER) -
+          (right.column.presentation?.order ?? Number.MAX_SAFE_INTEGER) ||
+        left.physicalOrder - right.physicalOrder,
+    )
+    .map(({ column }) => column);
+}
 
-export const SC_FINAL_CLASS_FILTER_COLUMN: ScFilterColumnDefinition = {
-  key: "final_class",
-  title: "Final Class",
-  filter: "set",
-};
+function definition(column: ScDataColumn): ScSampleTableColumnDefinition {
+  const presentation = column.presentation;
+  return {
+    key: column.name,
+    title: presentation?.title ?? column.name,
+    width: presentation?.width ?? Math.max(120, Math.min(240, column.name.length * 9 + 44)),
+    filter: presentation ? presentation.filter : inferredFilter(column),
+    format: presentation?.format ?? "plain",
+  };
+}
 
 export function scSampleTableColumns(
+  columns: readonly ScDataColumn[],
   showReclassifyColumns: boolean,
 ): ScSampleTableColumnDefinition[] {
-  return showReclassifyColumns
-    ? [...SC_SAMPLE_TABLE_COLUMNS, ...SC_RECLASSIFY_TABLE_COLUMNS]
-    : SC_SAMPLE_TABLE_COLUMNS;
+  return orderedColumns(columns)
+    .filter((column) => {
+      const visibility = column.presentation?.visibility ?? "default";
+      return (
+        visibility !== "internal" &&
+        visibility !== "filter_only" &&
+        (showReclassifyColumns || visibility !== "reclassify")
+      );
+    })
+    .map(definition);
 }
 
-export function scGlobalFilterColumns(showReclassifyColumns: boolean): ScFilterColumnDefinition[] {
-  const columns = scSampleTableColumns(showReclassifyColumns);
-  return showReclassifyColumns ? [...columns, SC_FINAL_CLASS_FILTER_COLUMN] : columns;
+export function scGlobalFilterColumns(
+  columns: readonly ScDataColumn[],
+  showReclassifyColumns: boolean,
+): ScFilterColumnDefinition[] {
+  return orderedColumns(columns).flatMap((column) => {
+    const visibility = column.presentation?.visibility ?? "default";
+    if (visibility === "internal" || (!showReclassifyColumns && visibility !== "default")) {
+      return [];
+    }
+    const columnDefinition = definition(column);
+    return columnDefinition.filter === null
+      ? []
+      : [
+          {
+            key: columnDefinition.key,
+            title: columnDefinition.title,
+            filter: columnDefinition.filter,
+          },
+        ];
+  });
 }

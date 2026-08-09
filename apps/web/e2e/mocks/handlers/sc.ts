@@ -156,6 +156,49 @@ export async function mockScDataProvider(
   total = 1000,
 ): Promise<void> {
   const rows = mockScColumns(total);
+  await page.route("**/api/v1/sc/data/sample-table-descriptor", async (route) => {
+    const columns = [
+      ["defect_id", "Defect ID", 130, "set", "default", "integer"],
+      ["row_key", "Sample ID", 260, "set", "default", "plain"],
+      ["images", "Images", 110, "range", "default", "plain"],
+      ["test_id", "Test ID", 120, "set", "default", "plain"],
+      ["index_x", "Index X", 120, "range", "default", "plain"],
+      ["index_y", "Index Y", 120, "range", "default", "plain"],
+      ["wafer_x", "Wafer X", 120, "range", "default", "plain"],
+      ["wafer_y", "Wafer Y", 120, "range", "default", "plain"],
+      ["die_x", "Die X", 120, "range", "default", "plain"],
+      ["die_y", "Die Y", 120, "range", "default", "plain"],
+      ["size_x", "Size X", 120, "range", "default", "plain"],
+      ["size_y", "Size Y", 120, "range", "default", "plain"],
+      ["size_d", "Size D", 120, "range", "default", "plain"],
+      ["area", "Area", 120, "range", "default", "plain"],
+      ["class_number", "Class", 120, "set", "default", "plain"],
+      ["rough_bin", "Rough Bin", 120, "set", "default", "plain"],
+      ["final_bin", "Final Bin", 120, "set", "default", "plain"],
+      ["manual_bin", "Manual Bin", 120, "set", "default", "plain"],
+      ["adder", "Adder", 120, "set", "default", "plain"],
+      ["cluster_id", "Cluster ID", 120, "set", "default", "plain"],
+      ["kill_ratio", "Kill Ratio", 120, "range", "default", "fixed_3"],
+      ["annotation_label", "Annotation", 140, "set", "reclassify", "plain"],
+      ["prediction_label", "Prediction", 140, "set", "reclassify", "plain"],
+      ["prediction_confidence", "Confidence", 130, "range", "reclassify", "fixed_3"],
+      ["final_class", "Final Class", 120, "set", "filter_only", "plain"],
+      ["sample_id", "Sample ID", 120, null, "internal", "plain"],
+      ["review_image_ids_json", "Review Image IDs", 120, null, "internal", "plain"],
+    ].map(([key, title, width, filter, visibility, format]) => ({
+      key,
+      title,
+      width,
+      filter,
+      visibility,
+      format,
+    }));
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ version: "sc.sample-table.v1", columns }),
+    });
+  });
   await page.route(`**/api/v1/sc/data/datasets/${datasetId}/events**`, async (route) => {
     await route.fulfill({
       status: 200,

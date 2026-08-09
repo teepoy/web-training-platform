@@ -2,7 +2,32 @@ import { describe, expect, it } from "vitest";
 import { NSelect } from "naive-ui";
 import { mountWithProviders } from "@/testing";
 import type { ScGlobalFilter } from "@/features/sc/domain/globalFilter";
+import type { ScDataColumn } from "@/features/sc/domain/workbenchDataSource";
 import ScGlobalFilterBar from "./ScGlobalFilterBar.vue";
+
+const filterColumns: ScDataColumn[] = [
+  ["defect_id", "Defect ID", "set", "default"],
+  ["area", "Area", "range", "default"],
+  ["class_number", "Class", "set", "default"],
+  ["kill_ratio", "Kill Ratio", "range", "default"],
+  ["rough_bin", "Rough Bin", "set", "default"],
+  ["annotation_label", "Annotation", "set", "reclassify"],
+  ["prediction_label", "Prediction", "set", "reclassify"],
+  ["prediction_confidence", "Confidence", "range", "reclassify"],
+  ["final_class", "Final Class", "set", "filter_only"],
+].map(([name, title, filter, visibility], order) => ({
+  name,
+  arrowType: filter === "range" ? "Float64" : "Utf8",
+  nullable: true,
+  presentation: {
+    title,
+    width: 120,
+    filter,
+    visibility,
+    format: "plain",
+    order,
+  },
+})) as ScDataColumn[];
 
 function globalFilter(items: ScGlobalFilter["items"] = []): ScGlobalFilter {
   return { combinator: "and", items };
@@ -11,7 +36,7 @@ function globalFilter(items: ScGlobalFilter["items"] = []): ScGlobalFilter {
 describe("ScGlobalFilterBar", () => {
   it("starts an incomplete draft without changing the effective filter", async () => {
     const { wrapper } = await mountWithProviders(ScGlobalFilterBar, {
-      props: { filter: globalFilter(), distinctValues: {} },
+      props: { filter: globalFilter(), columns: filterColumns, distinctValues: {} },
     });
 
     await wrapper.get('[data-testid="query-combinator-or"]').trigger("click");
@@ -28,7 +53,12 @@ describe("ScGlobalFilterBar", () => {
 
   it("drops incomplete editor drafts when the workbench scope changes", async () => {
     const { wrapper } = await mountWithProviders(ScGlobalFilterBar, {
-      props: { filter: globalFilter(), distinctValues: {}, resetKey: "inspection:one" },
+      props: {
+        filter: globalFilter(),
+        columns: filterColumns,
+        distinctValues: {},
+        resetKey: "inspection:one",
+      },
     });
 
     await wrapper.get('[data-testid="query-add-condition"]').trigger("click");
@@ -44,6 +74,7 @@ describe("ScGlobalFilterBar", () => {
     const { wrapper } = await mountWithProviders(ScGlobalFilterBar, {
       props: {
         filter: globalFilter(),
+        columns: filterColumns,
         distinctValues: {},
         showReclassifyColumns: true,
       },
@@ -60,7 +91,11 @@ describe("ScGlobalFilterBar", () => {
 
   it("promotes a configured draft to one complete item", async () => {
     const { wrapper } = await mountWithProviders(ScGlobalFilterBar, {
-      props: { filter: globalFilter(), distinctValues: { rough_bin: [1, 2] } },
+      props: {
+        filter: globalFilter(),
+        columns: filterColumns,
+        distinctValues: { rough_bin: [1, 2] },
+      },
     });
 
     await wrapper.get('[data-testid="query-add-condition"]').trigger("click");
@@ -97,7 +132,7 @@ describe("ScGlobalFilterBar", () => {
       },
     ]);
     const { wrapper } = await mountWithProviders(ScGlobalFilterBar, {
-      props: { filter, distinctValues: {} },
+      props: { filter, columns: filterColumns, distinctValues: {} },
     });
 
     expect(wrapper.findAll(".query-builder__rule")).toHaveLength(2);
@@ -130,7 +165,7 @@ describe("ScGlobalFilterBar", () => {
       },
     ]);
     const { wrapper } = await mountWithProviders(ScGlobalFilterBar, {
-      props: { filter, distinctValues: {} },
+      props: { filter, columns: filterColumns, distinctValues: {} },
     });
 
     await wrapper
@@ -164,6 +199,7 @@ describe("ScGlobalFilterBar", () => {
     const { wrapper } = await mountWithProviders(ScGlobalFilterBar, {
       props: {
         filter,
+        columns: filterColumns,
         distinctValues: {},
         numericRanges: { "area-filter": { min: 1.25, max: 98.5 } },
       },
@@ -196,7 +232,7 @@ describe("ScGlobalFilterBar", () => {
       },
     ]);
     const { wrapper } = await mountWithProviders(ScGlobalFilterBar, {
-      props: { filter, distinctValues: {} },
+      props: { filter, columns: filterColumns, distinctValues: {} },
     });
     const rows = wrapper.findAll("[data-query-builder-node-id]");
 

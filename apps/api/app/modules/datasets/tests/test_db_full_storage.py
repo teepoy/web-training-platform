@@ -6,7 +6,7 @@ Uses real SQLite via the ``_test_infra`` and ``db_full_fixture`` fixtures from
 
 from __future__ import annotations
 
-import os
+import io as _io
 from collections.abc import AsyncIterator
 from datetime import datetime, timezone
 from typing import Any, cast
@@ -16,6 +16,7 @@ import pytest
 import pytest_asyncio  # type: ignore[import-untyped]
 
 from app.modules.storage.adapter.db_full.storage import DbFullDatasetStorage
+from app.modules.storage.domain.columnar_schemas import DB_FULL_MATERIALIZED_SCHEMA
 from app.modules.datasets.domain.sample_row import PredictionResult, SampleRow
 from app.modules.datasets.adapter.repositories.dataset_sql_repository import DatasetSqlRepository
 from app.shared.api.schemas import Annotation, Dataset, DatasetStorageMode, TaskSpec
@@ -553,21 +554,22 @@ class TestDbFullDatasetStorage:
     # ── 17. materialize ─────────────────────────────────────────────────
 
     @pytest.mark.asyncio
-    async def test_materialize(self, storage: DbFullDatasetStorage) -> None:
+    async def test_materialize(
+        self,
+        storage: DbFullDatasetStorage,
+        _test_infra: dict,
+    ) -> None:
         """Materialize produces valid parquet with row_count=5."""
         result = await storage.materialize()
         assert result.row_count == 5
         assert result.manifest_uri is not None
 
-        # Since no real ArtifactStorage (InMemory), manifest_uri is a temp file
-        if os.path.isfile(result.manifest_uri):
-            # Verify it's valid parquet
-            import pyarrow.parquet as pq
+        import pyarrow.parquet as pq
 
-            table = pq.read_table(result.manifest_uri)
-            assert table.num_rows == 5
-            assert "sample_id" in table.column_names
-            os.unlink(result.manifest_uri)
+        parquet_bytes = await _test_infra["storage"].get_bytes(result.manifest_uri)
+        table = pq.read_table(_io.BytesIO(parquet_bytes))
+        assert table.num_rows == 5
+        assert table.schema.equals(DB_FULL_MATERIALIZED_SCHEMA)
 
     # ── 18. delete_samples ───────────────────────────────────────────────
 

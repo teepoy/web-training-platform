@@ -120,6 +120,7 @@ PRE_RELEASE_LOCAL_RUNTIME_ENV := \
 	IMAGE_PARSER_IMAGE=$(PRE_RELEASE_LOCAL_IMAGE_PREFIX)/image-parser:$(PRE_RELEASE_LOCAL_TAG)
 TEST_TIMEOUT ?= 300
 PYTEST_FAULTHANDLER_TIMEOUT ?= 120
+UV_RUN_INSTALLED := uv run --no-sync --offline
 LITELLM_LOCAL_MODEL_COST_MAP="True"
 MYPY_PROTOBUF_VERSION ?= 5.1.0
 GRPCIO_TOOLS_VERSION ?= 1.80.0
@@ -189,11 +190,11 @@ test: test-api check-openapi-sync ## Run all tests
 .PHONY: test-api
 test-api: ## Run API tests
 	@if command -v timeout >/dev/null 2>&1; then \
-		timeout --foreground --signal=TERM --kill-after=10s $(TEST_TIMEOUT)s bash -lc 'cd $(API_DIR) && uv run --extra dev python -m pytest -o faulthandler_timeout=$(PYTEST_FAULTHANDLER_TIMEOUT) $(ARGS)'; \
+		timeout --foreground --signal=TERM --kill-after=10s $(TEST_TIMEOUT)s bash -lc 'cd $(API_DIR) && $(UV_RUN_INSTALLED) --extra dev python -m pytest -o faulthandler_timeout=$(PYTEST_FAULTHANDLER_TIMEOUT) $(ARGS)'; \
 	elif command -v gtimeout >/dev/null 2>&1; then \
-		gtimeout --foreground --signal=TERM --kill-after=10s $(TEST_TIMEOUT)s bash -lc 'cd $(API_DIR) && uv run --extra dev python -m pytest -o faulthandler_timeout=$(PYTEST_FAULTHANDLER_TIMEOUT) $(ARGS)'; \
+		gtimeout --foreground --signal=TERM --kill-after=10s $(TEST_TIMEOUT)s bash -lc 'cd $(API_DIR) && $(UV_RUN_INSTALLED) --extra dev python -m pytest -o faulthandler_timeout=$(PYTEST_FAULTHANDLER_TIMEOUT) $(ARGS)'; \
 	else \
-		python3 scripts/run_with_timeout.py --timeout $(TEST_TIMEOUT) -- bash -lc 'cd $(API_DIR) && uv run --extra dev python -m pytest -o faulthandler_timeout=$(PYTEST_FAULTHANDLER_TIMEOUT) $(ARGS)'; \
+		python3 scripts/run_with_timeout.py --timeout $(TEST_TIMEOUT) -- bash -lc 'cd $(API_DIR) && $(UV_RUN_INSTALLED) --extra dev python -m pytest -o faulthandler_timeout=$(PYTEST_FAULTHANDLER_TIMEOUT) $(ARGS)'; \
 	fi
 
 .PHONY: test-web
@@ -234,7 +235,7 @@ full-test: ## Run all tests and checks (API + web unit + e2e + build + lint)
 	$(MAKE) test-e2e && \
 	$(MAKE) build-web && \
 	ruff check apps/api && \
-	uv run --directory apps/api pyright .
+	$(UV_RUN_INSTALLED) --directory apps/api pyright .
 
 .PHONY: build-web
 build-web: ## Build frontend for production
@@ -303,7 +304,7 @@ generate-protos-deps: ## Install fixed-version proto generators used by generate
 
 .PHONY: check-openapi-sync
 check-openapi-sync: ## Check FastAPI route schema against openapi/openapi.yaml
-	cd $(API_DIR) && APP_CONFIG_PROFILE=test uv run python ../../scripts/check_openapi_sync.py
+	cd $(API_DIR) && APP_CONFIG_PROFILE=test $(UV_RUN_INSTALLED) python ../../scripts/check_openapi_sync.py
 
 .PHONY: docs-build
 docs-build: ## Build the MkDocs documentation site

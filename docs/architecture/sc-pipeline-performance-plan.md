@@ -86,9 +86,10 @@ Transform each Arrow batch with Arrow/Polars expressions and give the resulting
 RecordBatch/Table directly to a streaming sparse writer. New SC source schema
 v3 shards preserve the complete upstream Arrow columns plus required platform
 identity columns; they do not repeat three deterministic patch-image structs
-per defect. The first batch establishes the concrete schema recorded in the
-manifest, and later batches must match it. Patch and review images are resolved
-on demand. Existing source schema v2 shards retain their explicit embedded
+per defect. The upstream Flight stream supplies its concrete schema before the
+first batch, including for zero-row results; that schema is recorded in the
+manifest and every batch must match it. Patch and review images are resolved on
+demand. Existing source schema v2 shards retain their explicit embedded
 `images`-column read path.
 
 The writer persists the SC source `schema_version` in both the dataset manifest
@@ -135,6 +136,13 @@ The provider's `samples` view uses the immutable base plus `LEFT JOIN` against
 the current annotation and prediction overlays. `final_class` is computed in
 the view. The public monotonic dataset revision and SSE event shape remain
 unchanged.
+
+The browser discovers physical sample columns from the Arrow schema returned by
+`SELECT * FROM samples LIMIT 0`. It merges those fields with the versioned
+`sc.sample-table.v1` descriptor exposed by the SQL provider. The descriptor is
+the single source for stable titles, widths, filter modes, visibility, ordering,
+and numeric formatting; unknown physical metadata columns remain dynamically
+visible and infer their filter mode from the Arrow type.
 
 Annotation compaction runs after explicit file-count/byte thresholds. Reads for
 stats, recent entries, and selected IDs use projection, predicate, aggregate,

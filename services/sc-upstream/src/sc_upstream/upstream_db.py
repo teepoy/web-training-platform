@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Iterator
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Protocol
 
 import polars as pl
+import pyarrow as pa
 from sqlalchemy import create_engine
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -21,6 +23,12 @@ from .models import (
 
 _SQLITE_PREFIX = "sqlite:///"
 _ASYNC_SQLITE_PREFIX = "sqlite+aiosqlite:///"
+
+
+@dataclass(frozen=True)
+class SampleBatchStream:
+    schema: pa.Schema
+    batches: Iterator[pl.DataFrame]
 
 
 class UpstreamDB(Protocol):
@@ -48,7 +56,7 @@ class UpstreamDB(Protocol):
         self, inspection_time: datetime, wafer_key: int
     ) -> int: ...
 
-    def iter_list_samples_batches(
+    def open_list_samples_stream(
         self,
         inspection_time: datetime,
         wafer_key: int,
@@ -56,7 +64,7 @@ class UpstreamDB(Protocol):
         batch_size: int = 65536,
         offset: int = 0,
         count: int | None = None,
-    ) -> Iterator[pl.DataFrame]: ...
+    ) -> SampleBatchStream: ...
 
     async def list_review_images(
         self, inspection_time: datetime, wafer_key: int
@@ -106,6 +114,13 @@ class _MockUpstreamDB:
                 iter_batches=True,
                 batch_size=batch_size,
             )
+        finally:
+            conn.close()
+
+    def _read_frame(self, query: str) -> pl.DataFrame:
+        conn = self._sync_engine.connect()
+        try:
+            return pl.read_database(query, connection=conn)
         finally:
             conn.close()
 
@@ -237,7 +252,7 @@ class _MockUpstreamDB:
         result = await count_frame.collect_async()
         return int(result.item(0, "sample_count"))
 
-    def iter_list_samples_batches(
+    def open_list_samples_stream(
         self,
         inspection_time: datetime,
         wafer_key: int,
@@ -245,7 +260,7 @@ class _MockUpstreamDB:
         batch_size: int = 65536,
         offset: int = 0,
         count: int | None = None,
-    ) -> Iterator[pl.DataFrame]:
+    ) -> SampleBatchStream:
         if offset < 0:
             raise ValueError("offset must not be negative")
         if count is not None and count < 0:
@@ -268,17 +283,30 @@ class _MockUpstreamDB:
         {limit_clause}
         {offset_clause}
         """
-        for df in self._read_batches(query, batch_size=batch_size):
-            yield df.with_columns(
-                [
-                    (
-                        (pl.col("wafer_x") - pl.col("origin_x")) % pl.col("die_size_x")
-                    ).alias("die_x"),
-                    (
-                        (pl.col("wafer_y") - pl.col("origin_y")) % pl.col("die_size_y")
-                    ).alias("die_y"),
-                ]
+        source_batches = self._read_batches(query, batch_size=batch_size)
+
+        def normalize(frame: pl.DataFrame) -> pl.DataFrame:
+            return frame.with_columns(
+                ((pl.col("wafer_x") - pl.col("origin_x")) % pl.col("die_size_x")).alias(
+                    "die_x"
+                ),
+                ((pl.col("wafer_y") - pl.col("origin_y")) % pl.col("die_size_y")).alias(
+                    "die_y"
+                ),
             )
+
+        try:
+            first = normalize(next(source_batches))
+        except StopIteration:
+            empty = normalize(self._read_frame(query))
+            return SampleBatchStream(schema=empty.to_arrow().schema, batches=iter(()))
+
+        def batches() -> Iterator[pl.DataFrame]:
+            yield first
+            for frame in source_batches:
+                yield normalize(frame)
+
+        return SampleBatchStream(schema=first.to_arrow().schema, batches=batches())
 
     async def list_review_images(
         self, inspection_time: datetime, wafer_key: int

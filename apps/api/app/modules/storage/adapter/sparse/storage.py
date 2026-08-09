@@ -14,6 +14,12 @@ import pyarrow as pa
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from app.modules.storage.domain.columnar_schemas import (
+    SPARSE_EMBEDDED_IMAGE_STRUCT_DTYPE,
+    SPARSE_MATERIALIZED_SCHEMA,
+    SPARSE_PREDICTION_COLUMNS,
+    SPARSE_PREDICTION_SCHEMA,
+)
 from app.modules.storage.domain.sparse import (
     DatasetPayloadStore,
     SparseAnnotationRecord,
@@ -53,17 +59,6 @@ _SCAN_PARQUET_SCHEMES = ("s3://", "file://")
 _FINAL_PREDICTION_DIR = "final"
 _ACCUMULATED_PREDICTION_FILE = "accumulated.parquet"
 _CURRENT_PREDICTION_POINTER = "current.json"
-_PREDICTION_COLUMNS = [
-    "sample_id",
-    "predicted_label",
-    "confidence",
-    "all_scores",
-    "model_id",
-    "target",
-    "model_version",
-    "job_id",
-    "error",
-]
 
 
 # ---------------------------------------------------------------------------
@@ -1084,22 +1079,14 @@ class SparseDatasetStorage:
     def _build_write_schema(
         schema_columns: list[ColumnSchema] | None,
     ) -> pa.Schema:
-        image_struct = pa.struct(
-            [
-                pa.field("image_id", pa.string()),
-                pa.field("image_type", pa.string()),
-                pa.field("role", pa.string()),
-                pa.field("content_type", pa.string()),
-                pa.field("filename", pa.string()),
-                pa.field("bytes", pa.binary()),
-                pa.field("source_uri", pa.string()),
-            ]
-        )
-
         fields = [
-            pa.field("id", pa.string()),
-            pa.field("sample_id", pa.string()),
-            pa.field("images", pa.list_(image_struct)),
+            pa.field("id", pa.string(), nullable=False),
+            pa.field("sample_id", pa.string(), nullable=False),
+            pa.field(
+                "images",
+                pa.list_(SPARSE_EMBEDDED_IMAGE_STRUCT_DTYPE),
+                nullable=False,
+            ),
         ]
 
         if schema_columns:
@@ -1132,7 +1119,8 @@ class SparseDatasetStorage:
                         "content_type": img.content_type,
                         "filename": img.filename,
                         "bytes": img.bytes_,
-                        "source_uri": img.source_uri or "",
+                        "review_image_id": img.review_image_id,
+                        "source_uri": img.source_uri,
                     }
                     for img in row.images
                 ]
@@ -1579,7 +1567,7 @@ class SparseDatasetStorage:
                 }
             )
 
-        table = pa.Table.from_pylist(rows)
+        table = pa.Table.from_pylist(rows, schema=SPARSE_PREDICTION_SCHEMA)
         buf = _io.BytesIO()
         pq.write_table(table, buf, compression="snappy")
 
@@ -1634,7 +1622,7 @@ class SparseDatasetStorage:
                     f"FROM read_parquet({_sql_literal(path)}, union_by_name=true)"
                     for rank, path in enumerate(source_paths)
                 )
-                columns = ", ".join(_PREDICTION_COLUMNS)
+                columns = ", ".join(SPARSE_PREDICTION_COLUMNS)
                 connection.execute(
                     f"""
                     COPY (
@@ -1926,16 +1914,8 @@ class SparseDatasetStorage:
                 rows_data.append(row_dict)
 
         buf = _io.BytesIO()
-        if rows_data:
-            table = pa.Table.from_pylist(rows_data)
-            pq.write_table(table, buf, compression="snappy")
-        else:
-            schema = pa.schema(
-                [
-                    ("sample_id", pa.string()),
-                ]
-            )
-            pq.write_table(pa.table({}, schema=schema), buf)
+        table = pa.Table.from_pylist(rows_data, schema=SPARSE_MATERIALIZED_SCHEMA)
+        pq.write_table(table, buf, compression="snappy")
 
         parquet_bytes = buf.getvalue()
         row_count = len(rows_data)

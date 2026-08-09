@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ScSampleTableDisplayRow } from "@/features/sc/domain/workbenchInteraction";
 import type { ScSampleTableDataSource } from "@/features/sc/domain/workbenchInteraction";
+import type { ScDataColumn } from "@/features/sc/domain/workbenchDataSource";
 import { mountWithProviders } from "@/testing";
 import ScSampleTableTanStack from "./ScSampleTableTanStack.vue";
 
@@ -65,6 +66,32 @@ function sampleRow(defectId: string, images: number): ScSampleTableDisplayRow {
   };
 }
 
+function describedColumn(
+  name: string,
+  title: string,
+  order: number,
+  visibility: NonNullable<ScDataColumn["presentation"]>["visibility"] = "default",
+): ScDataColumn {
+  return {
+    name,
+    arrowType: "Int32",
+    nullable: false,
+    presentation: {
+      title,
+      width: 120,
+      filter: visibility === "internal" ? null : "range",
+      visibility,
+      format: "plain",
+      order,
+    },
+  };
+}
+
+const defaultColumns = [
+  describedColumn("defect_id", "Defect ID", 0),
+  describedColumn("images", "Images", 1),
+];
+
 describe("ScSampleTableTanStack", () => {
   it("keeps the pinned selection and Defect ID cells in the same row", async () => {
     const loadRows = vi.fn<ScSampleTableDataSource["loadRows"]>(async () => ({
@@ -72,7 +99,11 @@ describe("ScSampleTableTanStack", () => {
       total: 1,
       nextAnchor: null,
     }));
-    const dataSource: ScSampleTableDataSource = { scopeKey: "dataset:layout", loadRows };
+    const dataSource: ScSampleTableDataSource = {
+      scopeKey: "dataset:layout",
+      loadColumns: async () => defaultColumns,
+      loadRows,
+    };
     const { wrapper } = await mountWithProviders(ScSampleTableTanStack, {
       props: { dataSource, enableSelection: true },
     });
@@ -89,7 +120,11 @@ describe("ScSampleTableTanStack", () => {
       total: 300_000,
       nextAnchor: "2",
     }));
-    const dataSource: ScSampleTableDataSource = { scopeKey: "dataset:one", loadRows };
+    const dataSource: ScSampleTableDataSource = {
+      scopeKey: "dataset:one",
+      loadColumns: async () => defaultColumns,
+      loadRows,
+    };
     const { wrapper } = await mountWithProviders(ScSampleTableTanStack, {
       props: { dataSource, enableSelection: true },
     });
@@ -111,7 +146,11 @@ describe("ScSampleTableTanStack", () => {
       total: 2,
       nextAnchor: null,
     }));
-    const dataSource: ScSampleTableDataSource = { scopeKey: "dataset:sort", loadRows };
+    const dataSource: ScSampleTableDataSource = {
+      scopeKey: "dataset:sort",
+      loadColumns: async () => defaultColumns,
+      loadRows,
+    };
     const { wrapper } = await mountWithProviders(ScSampleTableTanStack, {
       props: { dataSource },
     });
@@ -139,7 +178,7 @@ describe("ScSampleTableTanStack", () => {
     const dataSource: ScSampleTableDataSource = {
       scopeKey: "dataset:dynamic",
       loadColumns: async () => [
-        { name: "defect_id", arrowType: "Int32", nullable: false },
+        describedColumn("defect_id", "Defect ID", 0),
         { name: "future_metric", arrowType: "Float64", nullable: true },
       ],
       loadRows,

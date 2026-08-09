@@ -48,3 +48,21 @@ class ScDataInvalidationEvent(BaseModel):
     scope: str
     revision: Annotated[int, Field(ge=0)]
     changed_kinds: list[Literal["annotation", "prediction", "samples", "images"]]
+
+
+class ScSampleTableColumnDescriptor(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    key: Annotated[str, Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")]
+    title: Annotated[str, Field(min_length=1, max_length=80)]
+    width: Annotated[int, Field(ge=60, le=600)]
+    filter: Literal["set", "range"] | None
+    visibility: Literal["default", "reclassify", "filter_only", "internal"]
+    format: Literal["plain", "integer", "fixed_3"] = "plain"
+
+
+class ScSampleTableDescriptor(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    version: Literal["sc.sample-table.v1"]
+    columns: tuple[ScSampleTableColumnDescriptor, ...]

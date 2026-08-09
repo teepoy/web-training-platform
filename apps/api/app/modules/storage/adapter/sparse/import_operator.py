@@ -20,6 +20,8 @@ import tempfile
 from contextlib import suppress
 from typing import TYPE_CHECKING, Any
 
+from app.modules.storage.domain.columnar_schemas import SPARSE_INDEX_SCHEMA
+
 if TYPE_CHECKING:
     import pyarrow as pa
 
@@ -292,16 +294,14 @@ class SparseColumnarImportSession:
             table=table,
         )
         identities = table[row_id_column].cast(pa.string())
-        index_table = pa.table(
-            {
-                "sample_id": identities,
-                "shard_index": pa.array(
-                    [shard_index] * table.num_rows,
-                    type=pa.int32(),
-                ),
-                "row_index": pa.array(range(table.num_rows), type=pa.int32()),
-                "upstream_item_id": identities,
-            }
+        index_table = pa.Table.from_arrays(
+            [
+                identities,
+                pa.array([shard_index] * table.num_rows, type=pa.int32()),
+                pa.array(range(table.num_rows), type=pa.int32()),
+                identities,
+            ],
+            schema=SPARSE_INDEX_SCHEMA,
         )
 
         def _write_index() -> None:
@@ -340,14 +340,7 @@ class SparseColumnarImportSession:
                 await asyncio.to_thread(self._index_writer.close)
                 self._index_writer = None
             else:
-                empty_index = pa.table(
-                    {
-                        "sample_id": pa.array([], type=pa.string()),
-                        "shard_index": pa.array([], type=pa.int32()),
-                        "row_index": pa.array([], type=pa.int32()),
-                        "upstream_item_id": pa.array([], type=pa.string()),
-                    }
-                )
+                empty_index = pa.Table.from_pylist([], schema=SPARSE_INDEX_SCHEMA)
                 await asyncio.to_thread(
                     pq.write_table,
                     empty_index,

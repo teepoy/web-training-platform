@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import type { ScGlobalFilter } from "@/features/sc/domain/globalFilter";
+import type { ScDataColumn } from "@/features/sc/domain/workbenchDataSource";
 import ScGlobalFilterQueryBuilder from "./ScGlobalFilterQueryBuilder.vue";
 
 withDefaults(
   defineProps<{
     filter: ScGlobalFilter;
+    columns?: ScDataColumn[];
     distinctValues: Record<string, Array<string | number>>;
     numericRanges?: Record<string, { min: number; max: number } | null>;
     numericRangeLoading?: Record<string, boolean>;

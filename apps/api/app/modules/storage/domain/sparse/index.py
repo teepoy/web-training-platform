@@ -6,6 +6,13 @@ from pathlib import Path
 
 import pyarrow.parquet as pq
 
+from app.modules.storage.domain.columnar_schemas import (
+    SPARSE_INDEX_COLUMNS,
+    SPARSE_INDEX_ROW_COLUMN,
+    SPARSE_INDEX_SAMPLE_ID_COLUMN,
+    SPARSE_INDEX_SHARD_COLUMN,
+    SPARSE_INDEX_UPSTREAM_ID_COLUMN,
+)
 from app.modules.storage.domain.sparse.models import SampleLocator, SparseIndexEntry
 from app.shared.domain.protocols import ArtifactStorage
 
@@ -64,15 +71,15 @@ class SparseIndexReader:
         table = await asyncio.to_thread(
             pq.read_table,
             path,
-            columns=["sample_id", "shard_index", "row_index", "upstream_item_id"],
-            filters=[("sample_id", "in", wanted)],
+            columns=SPARSE_INDEX_COLUMNS,
+            filters=[(SPARSE_INDEX_SAMPLE_ID_COLUMN, "in", wanted)],
         )
         result: dict[str, SampleLocator] = {}
         for sample_id, shard_index, row_index, upstream_item_id in zip(
-            table["sample_id"].to_pylist(),
-            table["shard_index"].to_pylist(),
-            table["row_index"].to_pylist(),
-            table["upstream_item_id"].to_pylist(),
+            table[SPARSE_INDEX_SAMPLE_ID_COLUMN].to_pylist(),
+            table[SPARSE_INDEX_SHARD_COLUMN].to_pylist(),
+            table[SPARSE_INDEX_ROW_COLUMN].to_pylist(),
+            table[SPARSE_INDEX_UPSTREAM_ID_COLUMN].to_pylist(),
             strict=True,
         ):
             result[str(sample_id)] = SampleLocator(
@@ -92,5 +99,11 @@ class SparseIndexReader:
         storage: ArtifactStorage,
     ) -> list[str]:
         path = await self._local_path(entry, storage)
-        table = await asyncio.to_thread(pq.read_table, path, columns=["sample_id"])
-        return [str(value) for value in table["sample_id"].to_pylist()]
+        table = await asyncio.to_thread(
+            pq.read_table,
+            path,
+            columns=[SPARSE_INDEX_SAMPLE_ID_COLUMN],
+        )
+        return [
+            str(value) for value in table[SPARSE_INDEX_SAMPLE_ID_COLUMN].to_pylist()
+        ]
