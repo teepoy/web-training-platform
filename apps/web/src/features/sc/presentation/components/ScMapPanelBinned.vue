@@ -2,9 +2,11 @@
 import { computed, h, nextTick, ref, watch, type Component } from "vue";
 import {
   defineScMapElement,
+  ScMapElement,
   type ScMapErrorDetail,
   type ScMapGeometry,
   type ScMapLassoSelection,
+  type ScMapSelectionCommand,
 } from "@platform/sc-map-element";
 import {
   NTabs,
@@ -39,7 +41,6 @@ if (import.meta.env.MODE !== "test") defineScMapElement();
 type LegendSource = "class" | "bin" | "annotation" | "prediction" | "final_class";
 type LegendKey = number | string;
 type BoxSelectionRegion = { x: number; y: number; w: number; h: number };
-type CrosshairPoint = { x: number; y: number };
 type MapTab = "wafer" | "die" | "reticle";
 type MapToolAction = "select" | "lasso" | "zoomin" | "pan";
 
@@ -80,8 +81,7 @@ const props = withDefaults(
 
     /** IDs resolved against the Arrow snapshot already retained by <sc-map>. */
     highlightDefectIds?: number[];
-    immediateCrosshairDefectIds?: number[];
-    immediateCrosshairVersion?: number;
+    selectionDefectIds?: number[];
     selectionResetVersion?: number;
   }>(),
   {
@@ -112,6 +112,7 @@ const emit = defineEmits<{
 }>();
 
 const internalTab = ref<MapTab>(props.activeMapTab ?? "wafer");
+const nativeMapElement = ref<ScMapElement | null>(null);
 const mapMode = ref<Record<MapTab, MapToolAction>>({
   wafer: "select",
   die: "select",
@@ -121,6 +122,10 @@ const drawerVisible = ref<boolean>(!loadPersistedState("sc_map_panel.drawer_coll
 const nativeMapLoading = ref(false);
 const nativeMapError = ref<string | null>(null);
 const nativeMapProgressMessage = ref("");
+const mapReadyWaiters = new Set<{
+  resolve: () => void;
+  reject: (error: Error) => void;
+}>();
 const keepMapVisibleWhileRendering = ref(false);
 const showImageMarkers = ref(props.showImageMarkers ?? true);
 const defectSize = ref(props.defectSize ?? 2);
@@ -142,8 +147,6 @@ watch(
 
 const handleTabChange = (value: string | number) => {
   const tab = value as MapTab;
-  clearLocalImmediateCrosshair();
-  emit("zoom-in", null);
   internalTab.value = tab;
   selectedClassNumber.value = null;
   emit("update:activeMapTab", tab);
@@ -254,7 +257,6 @@ watch(drawerVisible, (val) => {
 });
 
 const handleZoomIn = (vp: { x: number; y: number; w: number; h: number } | null) => {
-  clearLocalImmediateCrosshair();
   emit("zoom-in", vp);
 };
 
@@ -280,7 +282,6 @@ function fullMapRegion(): { x: number; y: number; w: number; h: number } {
 }
 
 function zoomBy(factor: number): void {
-  clearLocalImmediateCrosshair();
   const full = fullMapRegion();
   const current = props.zoom ?? full;
   const width = Math.min(full.w, current.w * factor);
@@ -505,11 +506,6 @@ const predictionGroups = computed(() =>
 const finalClassGroups = computed(() =>
   legendSource.value === "final_class" ? (props.legendGroups ?? undefined) : undefined,
 );
-const localImmediateCrosshairPoints = ref<Record<MapTab, CrosshairPoint[]>>({
-  wafer: [],
-  die: [],
-  reticle: [],
-});
 const nativeGeometry = computed<ScMapGeometry>(() => ({
   waferRadiusNm: props.waferRadiusNm ?? 150_000_000,
   centerX: props.waferGeometry?.centerX ?? 0,
@@ -521,10 +517,6 @@ const nativeGeometry = computed<ScMapGeometry>(() => ({
   reticleXDieCount: effectiveReticleOptions.value.xDieCount,
   reticleYDieCount: effectiveReticleOptions.value.yDieCount,
 }));
-
-const activeImmediatePoints = computed(() => {
-  return localImmediateCrosshairPoints.value[internalTab.value];
-});
 
 function onNativeZoom(event: Event): void {
   keepMapVisibleWhileRendering.value = true;
@@ -542,15 +534,7 @@ function onNativeLassoSelect(event: Event): void {
 }
 
 function onNativeClearSelection(): void {
-  clearLocalImmediateCrosshair();
   emit("clear-selection");
-}
-
-function onNativeImmediateCrosshair(event: Event): void {
-  localImmediateCrosshairPoints.value = {
-    ...localImmediateCrosshairPoints.value,
-    [internalTab.value]: (event as CustomEvent<CrosshairPoint[]>).detail,
-  };
 }
 
 function onNativeMapProgress(event: Event): void {
@@ -564,6 +548,8 @@ function onNativeMapReady(): void {
   nativeMapLoading.value = false;
   keepMapVisibleWhileRendering.value = false;
   nativeMapProgressMessage.value = "Map ready";
+  for (const waiter of mapReadyWaiters) waiter.resolve();
+  mapReadyWaiters.clear();
 }
 
 function onNativeMapError(event: Event): void {
@@ -572,6 +558,9 @@ function onNativeMapError(event: Event): void {
   const detail = (event as CustomEvent<ScMapErrorDetail | string>).detail;
   nativeMapError.value =
     typeof detail === "string" ? detail : `${detail.context}: ${detail.message}`;
+  const error = new Error(nativeMapError.value);
+  for (const waiter of mapReadyWaiters) waiter.reject(error);
+  mapReadyWaiters.clear();
 }
 
 watch(
@@ -593,24 +582,31 @@ const effectiveMapProgressMessage = computed(
     "Loading map...",
 );
 
-function clearLocalImmediateCrosshair(): void {
-  localImmediateCrosshairPoints.value = { wafer: [], die: [], reticle: [] };
-}
-
-watch(
-  () => props.immediateCrosshairVersion,
-  () => {
-    localImmediateCrosshairPoints.value = { wafer: [], die: [], reticle: [] };
-  },
-);
-
 watch(
   () => props.selectionResetVersion,
   () => {
-    clearLocalImmediateCrosshair();
     selectedClassNumber.value = null;
   },
 );
+
+async function updateMapSelection(command: ScMapSelectionCommand): Promise<number[]> {
+  await nextTick();
+  if (nativeMapLoading.value) {
+    await new Promise<void>((resolve, reject) => {
+      mapReadyWaiters.add({ resolve, reject });
+    });
+  }
+  const map = nativeMapElement.value;
+  if (!map) throw new Error("Map element is not ready");
+  return map.updateSelection(command);
+}
+
+function clearMapSelection(): void {
+  nativeMapElement.value?.clearSelection();
+  selectedClassNumber.value = null;
+}
+
+defineExpose({ updateMapSelection, clearMapSelection });
 
 function onBoxSelect(region: BoxSelectionRegion): void {
   emit("box-select", region);
@@ -745,6 +741,7 @@ function handleHiddenLegendKeysUpdate(keys: string[]): void {
             </NText>
           </div>
           <sc-map
+            ref="nativeMapElement"
             data-testid="sc-unified-map"
             title="Right-drag or two-finger scroll to pan · Pinch to zoom"
             :arrowData.prop="arrowData ?? null"
@@ -758,15 +755,13 @@ function handleHiddenLegendKeysUpdate(keys: string[]): void {
             :zoom.prop="zoom ?? null"
             :geometry.prop="nativeGeometry"
             :highlightDefectIds.prop="highlightDefectIds ?? []"
-            :immediateDefectIds.prop="immediateCrosshairDefectIds ?? []"
-            :immediatePoints.prop="activeImmediatePoints"
+            :selectionDefectIds.prop="selectionDefectIds ?? []"
             @zoom-in="onNativeZoom"
             @box-select="onNativeBoxSelect"
             @lasso-select="onNativeLassoSelect"
             @map-context-menu="onNativeMapContextMenu"
             @pointerdown="onNativeMapPointerDown"
             @clear-selection="onNativeClearSelection"
-            @immediate-crosshair-points="onNativeImmediateCrosshair"
             @map-progress="onNativeMapProgress"
             @map-ready="onNativeMapReady"
             @map-error="onNativeMapError"

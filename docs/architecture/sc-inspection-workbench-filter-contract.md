@@ -24,7 +24,7 @@ another:
   recursive tree of stable-ID conditions and `AND`/`OR` groups edited by the
   shared `QueryBuilder`. QueryBuilder edits remain in a modal-local draft;
   only **Apply filters** replaces the active Global Filter. Closing or cancelling
-  the modal discards the draft without reloading any consumer. Map context actions add ordinary `defect_id`
+  the modal discards the draft without reloading any consumer. Map context actions add ordinary `map_id`
   conditions; an excluded set uses `exclude: true`. There is no second applied
   map-filter list.
 - **Transient map selection** is the sorted, unique set of IDs produced by box,
@@ -74,7 +74,7 @@ not as the target product-level filter layers.
 
 None of the local states is copied into the Global Filter. A modal editor draft
 replaces G only after **Apply filters**. The other exception is an explicit map
-commit: the reducer appends one independently removable `defect_id` item and
+commit: the reducer appends one independently removable `map_id` item and
 then clears the transient selection.
 
 ### Stage 2: normalized policy filters
@@ -87,15 +87,14 @@ state into the base query plan:
 | `globalFilters`            | `buildScGlobalDataFilters(Global Filter)`                                                                                                  |
 | `mapFilters`               | `globalFilters`                                                                                                                            |
 | `aggregateFilters`         | `globalFilters`                                                                                                                            |
-| `selectionFilters`         | `globalFilters`                                                                                                                            |
 | `tableFilters`             | `globalFilters AND transient map selection AND active sampling cohort AND review predicate`                                                |
 | `galleryBaseFilters`       | `globalFilters AND transient map selection AND active sampling cohort AND review predicate`                                                |
 | Sampling candidate filters | Global Filter `AND` optional recursive Extra filter `AND` exactly one candidate scope (`all`, transient map selection, or table selection) |
 
 The normalized `ScDataFilterExpression` is either an execution-neutral tuple
-such as `["defect_id", "in", [3, 9]]` or a recursive `{ combinator, items }`
+such as `["map_id", "in", [3, 9]]` or a recursive `{ combinator, items }`
 group. A negative set becomes
-`["defect_id", "not in or null", [3, 9]]`.
+`["map_id", "not in or null", [3, 9]]`.
 
 Naming is intentionally strict: `tableFilters` (plural) is the policy-produced
 base filter array, while `tableFilter` (singular) is the user-edited
@@ -110,7 +109,7 @@ The SQL datasource adds only filters owned by the target surface:
 | ------------------------------ | -------------------------- | --------------------------------------------------------------------------------------------------- |
 | Map                            | `mapFilters`               | Reticle projection, legend column, and client-side legend visibility mask                           |
 | Group distribution             | `aggregateFilters`         | Requested group field; no local filter                                                              |
-| Map selection resolution query | `selectionFilters`         | Active legend visibility mask plus current geometric, legend, or group constraint; never previous T |
+| Map Arrow selection resolution | `mapFilters` snapshot      | Worker-local visibility mask plus the current geometric, legend, ID-set, prune, or invert operation |
 | Table                          | `tableFilters`             | Table-column filter; table sort changes ordering only                                               |
 | Gallery                        | `galleryBaseFilters`       | Table-column filter, table row selection, and table sort; mode changes projection/rendering only    |
 | Sampling count/groups/IDs      | Sampling candidate filters | Requested aggregate field or sampling program/seed                                                  |
@@ -155,7 +154,7 @@ flowchart LR
   subgraph L3["AS-IS stage 3 · query consumers"]
     MAP["Map = Global"]
     AGG["Distribution = Global"]
-    SEL["Map selection resolution query = Vmap + gesture/group constraint"]
+    SEL["Map Arrow worker selection = Vmap + current operation"]
     TABLE["Table = Global + transient + cohort + review + table filter"]
     GALLERY["Gallery = Global + transient + cohort + review + table filter + row selection"]
     SAMPLE["Sampling = Global + optional Extra filter + one candidate scope"]
@@ -277,7 +276,7 @@ The effective predicates are:
 Map                     = G
 Group distribution      = G
 Map-visible universe Vmap = G-filtered Map rows AND active legend visibility mask
-Map selection resolution query = Vmap AND current gesture/group constraint
+Map Arrow worker selection = G-scoped Arrow snapshot AND Vmap AND current operation
 Transient map selection S is always a subset of Vmap
 Table                   = G AND T
 Gallery                 = G AND T AND Y
@@ -504,7 +503,7 @@ flowchart LR
   subgraph CONSUMERS["Derived consumers"]
     MAP["Map / distribution = G"]
     VMAP["Vmap = G-filtered Map rows + visible legend values"]
-    SEL["Map selection resolution query = Vmap + gesture/group constraint"]
+    SEL["Map Arrow worker selection = Vmap + current operation"]
     TABLE["Table = G + T"]
     GALLERY["Gallery = G + T + Y"]
     TRAIN["Direct Train & Predict = structured G"]
@@ -535,29 +534,48 @@ independently removable `defect_id` item to G, then clears only the transient
 selection in T. Applying random sampling stores the resulting fixed cohort in
 T. Table row selection remains in Y.
 
-The Map selection resolution query returns the authoritative transient
-`defect_id[]` set stored in T. That set is the input to **Exclude selected**,
+The Map Arrow worker returns the authoritative transient `map_id[]` set stored
+in T. That set is the input to **Exclude selected**,
 **Include only / Exclude all others**, invert, and copy-ID context-menu
 operations. Map cross marks are presentation derived from the selection; they
 are not the selection contract or a source of IDs:
 
-- every resolver path (box, lasso, legend, distribution, select-all, and
-  invert) resolves against `Vmap`, so hidden legend values cannot be added;
+- the Arrow snapshot already contains the complete G-scoped raw Map rows;
+- every resolver path (box, lasso, legend, distribution, select-all, prune, and
+  invert) runs inside the Map Arrow worker against `Vmap`, so it does not issue
+  a server selection query and hidden legend values cannot be added;
 - when the active legend source or its hidden-key set changes, the workbench
   serially replaces `S` with `S ∩ Vmap` before a context-menu operation may
   read it; each queued visibility change reads S only after the prior prune;
-- if S changes while a visibility query is running, that prune re-resolves the
-  latest S instead of overwriting a newer selection with its stale snapshot;
+- stale worker results are rejected by the workbench selection version and
+  cannot overwrite a newer replace, clear, or scope transition;
 - unhiding a legend value does not restore previously pruned IDs; the user must
   select them again;
 
-- black immediate cross marks visualize the transient Map selection when the
-  current rendering path can do so;
-- the renderer may omit ID-based cross marks above its explicit highlight
-  limit, and area gestures may draw projected points before asynchronous ID
-  resolution finishes;
+- the same worker operation that updates S also returns a binned black
+  selection overlay; there is no separate gesture-preview/ID-resolution chain;
+- projection responses include the current selection overlay for every
+  selection size; the old 9,999-ID omission does not apply to Map selection;
+- pan and zoom change only the viewport projection. They must not clear S or
+  its overlay; the previous overlay remains visible until the new projection
+  arrives;
 - purple cross marks visualize Table/Gallery highlight selection and belong to
   separate non-filter UI state.
+
+```mermaid
+flowchart LR
+    SNAP["G-scoped raw Map Arrow snapshot"] --> WORKER["Map Arrow selection worker"]
+    OP["Box / Lasso / Legend / Prune / Invert"] --> WORKER
+    VMAP["Visible legend mask Vmap"] --> WORKER
+    WORKER --> IDS["Authoritative S: map_id[]"]
+    WORKER --> BLACK["Binned black selection overlay"]
+    IDS --> TABLE["Table and Gallery filters"]
+    IDS --> MENU["Map context-menu operations"]
+    VIEW["Pan / Zoom / Map mode"] --> PROJ["Worker projection"]
+    IDS --> PROJ
+    PROJ --> BLACK
+    UI["Table / Gallery visual selection"] --> PURPLE["Purple highlight overlay"]
+```
 
 Consequently, context-menu behavior and query filtering must always read T,
 never reconstruct IDs from visible cross marks. Clearing T after a successful
@@ -578,11 +596,10 @@ must not be forced into a fourth layer:
   range lookup is `G minus the edited item ID`, so other items for the same
   field remain active.
   Neither query inherits T or Y.
-- **Map selection resolution** uses `Vmap` plus its geometric, legend, or group
-  constraint to resolve IDs. The visibility and gesture constraints are
-  ephemeral; only the resulting authoritative transient ID set is stored in T.
-  Context-menu operations read the visibility-pruned set, while Map cross marks
-  remain a best-effort derived visualization.
+- **Map selection resolution** is a frontend Map Arrow worker operation over
+  the G-scoped raw snapshot. `Vmap` plus its geometric, legend, ID, prune, or
+  invert constraint produces both authoritative IDs and a binned overlay.
+  Context-menu operations read the visibility-pruned IDs, never canvas pixels.
 - **SSE invalidation** triggers reloading but does not change filter ownership.
   Every reload must use the consumer's current effective layers.
 - **Workbench scope changes and explicit clears** are lifecycle operations.
@@ -596,35 +613,35 @@ must not be forced into a fourth layer:
 
 ## Feature preservation audit
 
-| Feature / behavior                         | AS-IS behavior                                                                                                                   | TO-BE placement                 | Preservation requirement or remaining gap                                                                                       |
-| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| Global Filter representation               | Recursive stable-ID `ScGlobalFilter` expression tree with explicit `AND`/`OR` groups                                             | G                               | Implemented across frontend state, OpenAPI DTOs, SQL, and workflow validation                                                   |
-| Repeated property predicates               | Multiple conditions for the same property compile independently                                                                  | G and independently T/Y         | Preserve; never overwrite or deduplicate by property                                                                            |
-| Global Filter QueryBuilder UI              | Conditions/groups support combinators, nesting, sibling reorder, and exact Delete                                                | G editor                        | Count complete conditions only; incomplete rules and empty groups remain non-effective                                          |
-| Global set/range/missing predicates        | Structured Global Filter is normalized for interactive SQL                                                                       | G                               | Preserve all operators, missing-value behavior, and numeric `defect_id` canonicalization                                        |
-| Negative and empty-set semantics           | Negative sets retain missing values; empty include matches none; empty exclude is removed                                        | G                               | Preserve exactly                                                                                                                |
-| Committed map include/exclude              | Promotion AND-composes one Global `defect_id` condition and clears transient selection                                           | Promotion from T to G           | Wrap an OR root before adding the condition; never broaden the cohort or create a hidden map-filter list                        |
-| Independently removable map commits        | Repeated map commits remain separate stable-ID conditions                                                                        | G expression tree               | Preserve; deleting one condition cancels only that action                                                                       |
-| Post-commit transient cleanup              | Successful commit clears selected IDs and map selection highlights                                                               | T lifecycle                     | Apply G append and transient cleanup as one logical transition; preserve unrelated state and retain selection when commit fails |
-| Legend visibility and Map selection        | Hidden legend keys mask rendering and are added to every Map selection resolver; changing visibility prunes existing T selection | Map-local `Vmap` constraint     | Preserve `S ⊆ Vmap`; invert uses `Vmap \ S`; unhide never restores IDs; hidden keys never become G/T/Y predicates               |
-| Box/lasso selection                        | Appends resolved IDs to transient selection                                                                                      | T                               | Preserve append and unique/sorted semantics                                                                                     |
-| Legend/distribution selection              | Replaces transient selection with resolved IDs                                                                                   | T                               | Preserve replace semantics                                                                                                      |
-| Review                                     | T supplies `images > 0` exactly once to table and gallery; gallery mode controls projection only                                 | T                               | Preserve exactly-once compilation                                                                                               |
-| Active random-sampling cohort              | Fixed ID set narrows table and gallery                                                                                           | T                               | Preserve; never promote to G or Train & Predict                                                                                 |
-| Table-column filter                        | Datasource adds structured table filter to table and gallery                                                                     | T                               | Preserve datasource allowed-column validation; do not prematurely flatten or duplicate it                                       |
-| Table sort                                 | Orders table and gallery                                                                                                         | T-adjacent modifier             | Preserve shared order; never treat it as membership filtering                                                                   |
-| Table row selection                        | Explicit IDs or select-all exclusions narrow gallery only                                                                        | Y                               | Preserve symbolic select-all exclusions and gallery-only scope                                                                  |
-| Gallery annotation/highlight selection     | Visual/annotation UI state                                                                                                       | Outside layers                  | Preserve as non-filter state                                                                                                    |
-| Sampling candidate count/groups/IDs        | Optional G, Review, and transient selection feed an on-demand sampler                                                            | Auxiliary branch                | Preserve independent options; cohort result enters T, but algorithm parameters do not                                           |
-| Global distinct-value options              | Query currently uses no workbench filters                                                                                        | Auxiliary G editor query        | Preserve current scope unless a separate product decision changes it; never inherit T/Y accidentally                            |
-| Global numeric range                       | Query uses G with only the edited item ID removed                                                                                | Auxiliary G editor query        | Preserve other same-property items and isolation from T/Y                                                                       |
-| Map, aggregate, and ordinary map selection | Map/aggregate use G; selection resolver uses `Vmap` plus current gesture                                                         | G plus ephemeral Map constraint | Preserve map independence from T/Y while enforcing `S ⊆ Vmap`                                                                   |
-| Reticle projection                         | Alters map spatial query/drawing context                                                                                         | Orthogonal context              | Preserve; it is not a filter layer                                                                                              |
-| Legend grouping and hidden keys            | Group field affects query shape; hidden keys are visual                                                                          | Orthogonal context              | Preserve; hidden keys must not become predicates                                                                                |
-| Direct-dataset Train & Predict             | Sends only the recursive Global Filter expression as `sample_filter`                                                             | G                               | Preserve group boundaries, combinators, repeated properties, and exclusion of every T/Y source                                  |
-| Collection-revision Train & Predict        | `sample_filter` is unsupported and omitted                                                                                       | Separate contract boundary      | Keep unsupported until an explicit collection-filter runtime contract exists                                                    |
-| SSE invalidation                           | Reloads affected consumers                                                                                                       | Lifecycle trigger               | Preserve each consumer's effective G/T/Y scope during reload                                                                    |
-| Scope reset and explicit clears            | Reset owned states according to current workbench lifecycle                                                                      | Lifecycle                       | Preserve independent clears; no implicit cross-layer mutation                                                                   |
+| Feature / behavior                         | AS-IS behavior                                                                                                        | TO-BE placement                 | Preservation requirement or remaining gap                                                                                       |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Global Filter representation               | Recursive stable-ID `ScGlobalFilter` expression tree with explicit `AND`/`OR` groups                                  | G                               | Implemented across frontend state, OpenAPI DTOs, SQL, and workflow validation                                                   |
+| Repeated property predicates               | Multiple conditions for the same property compile independently                                                       | G and independently T/Y         | Preserve; never overwrite or deduplicate by property                                                                            |
+| Global Filter QueryBuilder UI              | Conditions/groups support combinators, nesting, sibling reorder, and exact Delete                                     | G editor                        | Count complete conditions only; incomplete rules and empty groups remain non-effective                                          |
+| Global set/range/missing predicates        | Structured Global Filter is normalized for interactive SQL                                                            | G                               | Preserve all operators, missing-value behavior, and numeric `defect_id` canonicalization                                        |
+| Negative and empty-set semantics           | Negative sets retain missing values; empty include matches none; empty exclude is removed                             | G                               | Preserve exactly                                                                                                                |
+| Committed map include/exclude              | Promotion AND-composes one Global `map_id` condition and clears transient selection                                   | Promotion from T to G           | Wrap an OR root before adding the condition; never broaden the cohort or create a hidden map-filter list                        |
+| Independently removable map commits        | Repeated map commits remain separate stable-ID conditions                                                             | G expression tree               | Preserve; deleting one condition cancels only that action                                                                       |
+| Post-commit transient cleanup              | Successful commit clears selected IDs and map selection highlights                                                    | T lifecycle                     | Apply G append and transient cleanup as one logical transition; preserve unrelated state and retain selection when commit fails |
+| Legend visibility and Map selection        | Worker masks hidden legend keys and prunes existing T selection                                                       | Map-local `Vmap` constraint     | Preserve `S ⊆ Vmap`; invert uses `Vmap \ S`; unhide never restores IDs; hidden keys never become G/T/Y predicates               |
+| Box/lasso selection                        | Worker appends exact raw-row IDs and returns the binned overlay in one operation                                      | T                               | Preserve append and unique/sorted semantics; never select from canvas bins                                                      |
+| Legend/distribution selection              | Worker replaces transient IDs and overlay in one operation                                                            | T                               | Preserve replace semantics                                                                                                      |
+| Review                                     | T supplies `images > 0` exactly once to table and gallery; gallery mode controls projection only                      | T                               | Preserve exactly-once compilation                                                                                               |
+| Active random-sampling cohort              | Fixed ID set narrows table and gallery                                                                                | T                               | Preserve; never promote to G or Train & Predict                                                                                 |
+| Table-column filter                        | Datasource adds structured table filter to table and gallery                                                          | T                               | Preserve datasource allowed-column validation; do not prematurely flatten or duplicate it                                       |
+| Table sort                                 | Orders table and gallery                                                                                              | T-adjacent modifier             | Preserve shared order; never treat it as membership filtering                                                                   |
+| Table row selection                        | Explicit IDs or select-all exclusions narrow gallery only                                                             | Y                               | Preserve symbolic select-all exclusions and gallery-only scope                                                                  |
+| Gallery annotation/highlight selection     | Visual/annotation UI state                                                                                            | Outside layers                  | Preserve as non-filter state                                                                                                    |
+| Sampling candidate count/groups/IDs        | Optional G, Review, and transient selection feed an on-demand sampler                                                 | Auxiliary branch                | Preserve independent options; cohort result enters T, but algorithm parameters do not                                           |
+| Global distinct-value options              | Query currently uses no workbench filters                                                                             | Auxiliary G editor query        | Preserve current scope unless a separate product decision changes it; never inherit T/Y accidentally                            |
+| Global numeric range                       | Query uses G with only the edited item ID removed                                                                     | Auxiliary G editor query        | Preserve other same-property items and isolation from T/Y                                                                       |
+| Map, aggregate, and ordinary map selection | Map/aggregate use G; Arrow worker resolves selection from the same G snapshot using `Vmap` plus the current operation | G plus ephemeral Map constraint | Preserve map independence from T/Y while enforcing `S ⊆ Vmap`; do not add a server selection round trip                         |
+| Reticle projection                         | Alters map spatial query/drawing context                                                                              | Orthogonal context              | Preserve; it is not a filter layer                                                                                              |
+| Legend grouping and hidden keys            | Group field affects query shape; hidden keys are visual                                                               | Orthogonal context              | Preserve; hidden keys must not become predicates                                                                                |
+| Direct-dataset Train & Predict             | Sends only the recursive Global Filter expression as `sample_filter`                                                  | G                               | Preserve group boundaries, combinators, repeated properties, and exclusion of every T/Y source                                  |
+| Collection-revision Train & Predict        | `sample_filter` is unsupported and omitted                                                                            | Separate contract boundary      | Keep unsupported until an explicit collection-filter runtime contract exists                                                    |
+| SSE invalidation                           | Reloads affected consumers                                                                                            | Lifecycle trigger               | Preserve each consumer's effective G/T/Y scope during reload                                                                    |
+| Scope reset and explicit clears            | Reset owned states according to current workbench lifecycle                                                           | Lifecycle                       | Preserve independent clears; no implicit cross-layer mutation                                                                   |
 
 The audit finds no current user-facing behavior that requires a fourth
 persisted filter layer. The recursive G schema and the single T ownership of
@@ -634,18 +651,18 @@ stay explicit.
 
 ## Query scope matrix: invariant before and after refactor
 
-| State / operation                      | Map                        | Group distribution | Map selection resolution query | Table         | Gallery       | Sampling candidates                     | Direct Train & Predict |
-| -------------------------------------- | -------------------------- | ------------------ | ------------------------------ | ------------- | ------------- | --------------------------------------- | ---------------------- |
-| Global Filter fields                   | Yes                        | Yes                | Yes                            | Yes           | Yes           | When enabled                            | Yes                    |
-| Committed map include/exclude          | Yes, through Global Filter | Yes                | Yes                            | Yes           | Yes           | When Global Filter is enabled           | Yes                    |
-| Legend visibility mask                 | Yes, rendering mask        | No                 | Yes, bounds `Vmap`             | No            | No            | No                                      | No                     |
-| Transient map selection                | No                         | No                 | No                             | Yes           | Yes           | When “current map selection” is enabled | No                     |
-| Review membership predicate            | No                         | No                 | No                             | Yes           | Yes           | When “review candidates” is enabled     | No                     |
-| Active sampling cohort                 | No                         | No                 | No                             | Yes           | Yes           | No                                      | No                     |
-| Table-column filter                    | No                         | No                 | No                             | Yes           | Yes           | No                                      | No                     |
-| Table sort                             | No                         | No                 | No                             | Ordering only | Ordering only | No                                      | No                     |
-| Table row selection                    | No                         | No                 | No                             | No            | Yes           | No                                      | No                     |
-| Gallery annotation/highlight selection | No                         | No                 | No                             | No            | No            | No                                      | No                     |
+| State / operation                      | Map                        | Group distribution | Map Arrow selection worker | Table         | Gallery       | Sampling candidates                     | Direct Train & Predict |
+| -------------------------------------- | -------------------------- | ------------------ | -------------------------- | ------------- | ------------- | --------------------------------------- | ---------------------- |
+| Global Filter fields                   | Yes                        | Yes                | Yes                        | Yes           | Yes           | When enabled                            | Yes                    |
+| Committed map include/exclude          | Yes, through Global Filter | Yes                | Yes                        | Yes           | Yes           | When Global Filter is enabled           | Yes                    |
+| Legend visibility mask                 | Yes, rendering mask        | No                 | Yes, bounds `Vmap`         | No            | No            | No                                      | No                     |
+| Transient map selection                | No                         | No                 | No                         | Yes           | Yes           | When “current map selection” is enabled | No                     |
+| Review membership predicate            | No                         | No                 | No                         | Yes           | Yes           | When “review candidates” is enabled     | No                     |
+| Active sampling cohort                 | No                         | No                 | No                         | Yes           | Yes           | No                                      | No                     |
+| Table-column filter                    | No                         | No                 | No                         | Yes           | Yes           | No                                      | No                     |
+| Table sort                             | No                         | No                 | No                         | Ordering only | Ordering only | No                                      | No                     |
+| Table row selection                    | No                         | No                 | No                         | No            | Yes           | No                                      | No                     |
+| Gallery annotation/highlight selection | No                         | No                 | No                         | No            | No            | No                                      | No                     |
 
 In the AS-IS implementation, T supplies the Review predicate exactly once to
 both table and gallery. Gallery mode controls projection and rendering only.
@@ -665,12 +682,12 @@ collection row keys as physical dataset IDs.
    selections replace IDs. Every path resolves candidates against `Vmap`, not
    all rows in G.
 2. A non-empty transient selection immediately adds
-   `defect_id IN (<selected IDs>)` to table and gallery queries.
+   `map_id IN (<selected IDs>)` to table and gallery queries.
 3. Changing the active legend source or its hidden values prunes the current
    selection to `S ∩ Vmap`, clears stale selection visuals, and supersedes
    pending area-selection queries. Unhiding values does not re-add IDs.
-4. **Exclude selected** AND-composes one negative-set `defect_id` condition with G.
-5. **Exclude all others** AND-composes one positive-set `defect_id` condition with G.
+4. **Exclude selected** AND-composes one negative-set `map_id` condition with G.
+5. **Exclude all others** AND-composes one positive-set `map_id` condition with G.
 6. A committed map action waits for visibility pruning, then clears the
    transient selection and its owned black
    cross marks. The map then reloads from the complete updated G expression.
@@ -685,8 +702,8 @@ collection row keys as physical dataset IDs.
 1. Box/lasso append and legend/group-distribution replace behavior remains
    unchanged. Candidate IDs are limited to `Vmap`, and the resolved IDs are
    stored as transient selection in T.
-2. **Exclude selected** adds one visible G condition with field `defect_id` and
-   negative-set semantics. It does not rewrite an existing `defect_id`
+2. **Exclude selected** adds one visible G condition with field `map_id` and
+   negative-set semantics. It does not rewrite an existing `map_id`
    condition. If the root is OR, it is wrapped so the result is
    `previousG AND excludedCondition`.
 3. **Include only** / **Exclude all others** adds one visible G condition with
@@ -708,7 +725,7 @@ collection row keys as physical dataset IDs.
 An empty included-set condition is a valid match-none condition. An empty
 excluded set has no effect and is not committed as a complete condition.
 
-`defect_id` is an integer identity even when a transport model represents JSON
+`map_id` is an integer identity even when a transport model represents JSON
 numbers as floating-point values. SQL and workflow execution adapters must
 therefore compare integral values canonically: `1` and `1.0` identify the same
 defect. Negative filters preserve rows whose filtered field is missing.

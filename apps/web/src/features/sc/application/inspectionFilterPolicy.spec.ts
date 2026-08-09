@@ -32,7 +32,6 @@ describe("SC inspection filter policy", () => {
     };
     expect(plan.mapFilters).toEqual([globalExpression]);
     expect(plan.aggregateFilters).toEqual(plan.mapFilters);
-    expect(plan.selectionFilters).toEqual(plan.mapFilters);
     expect(plan.tableFilters).toEqual([
       globalExpression,
       ["map_id", "in", [3, 9]],

@@ -8,7 +8,6 @@ import {
   buildSamplingCandidateFilters,
   type ScSamplingFilterOptions,
 } from "@/features/sc/application/inspectionFilterPolicy";
-import { isScMissingFilterValue } from "@/features/sc/domain/missingFilterValue";
 import type { ReticleMapOptions } from "@/features/sc/application/reticleMapOptions";
 import type { ScSampleTableFilter, ScSampleTableSort } from "@/features/sc/domain/sampleTable";
 import type { ScGlobalFilter } from "@/features/sc/domain/globalFilter";
@@ -27,7 +26,6 @@ import type {
   ScLegendSource,
   ScSampleTableDataSource,
 } from "@/features/sc/domain/workbenchInteraction";
-import type { ScMapLassoSelection } from "@platform/sc-map-element";
 
 interface IdSelectionState {
   ids: number[];
@@ -49,16 +47,6 @@ function legendColumn(source: ScLegendSource | null | undefined): string {
   if (source === "prediction") return "prediction_label";
   if (source === "final_class") return "final_class";
   return "class_number";
-}
-
-function hiddenLegendValue(field: string, key: string): string | number | null {
-  if (isScMissingFilterValue(field, key) || key === "__unlabeled__") return null;
-  if (field !== "class_number" && field !== "rough_bin") return key;
-  const value = Number(key);
-  if (!Number.isFinite(value)) {
-    throw new Error(`Invalid hidden legend key "${key}" for numeric field "${field}"`);
-  }
-  return value;
 }
 
 function transferableBuffer(value: Uint8Array): ArrayBuffer {
@@ -101,17 +89,6 @@ export function useSqlInspectionModel(args: {
       samplingIds: args.galleryRandomSamplingDefectIds.value,
     }),
   );
-  function mapSelectionFilters(hiddenLegendKeys: readonly string[]): ScDataFilterExpression[] {
-    if (hiddenLegendKeys.length === 0) return filterPlan.value.selectionFilters;
-    const field = requestedMapLegendColumn.value;
-    const hiddenValues = [...new Set(hiddenLegendKeys.map((key) => hiddenLegendValue(field, key)))];
-    const excludesMissing = hiddenValues.includes(null);
-    const concreteValues = hiddenValues.filter((value): value is string | number => value !== null);
-    return [
-      ...filterPlan.value.selectionFilters,
-      [field, excludesMissing ? "not in and not null" : "not in or null", concreteValues],
-    ];
-  }
   function samplingCandidateFilters(options: ScSamplingCandidateOptions): ScDataFilterExpression[] {
     return buildSamplingCandidateFilters({
       baseFilter: args.globalFilter.value,
@@ -231,58 +208,6 @@ export function useSqlInspectionModel(args: {
     unsubscribe?.();
   });
 
-  async function queryBoxSelection(
-    mode: "wafer" | "die" | "reticle",
-    region: { x: number; y: number; w: number; h: number },
-    hiddenLegendKeys: readonly string[] = [],
-  ): Promise<number[]> {
-    const source = args.dataSource.value;
-    if (!source) return [];
-    return source.resolveSelection({
-      filters: mapSelectionFilters(hiddenLegendKeys),
-      reticle: args.reticle.value,
-      constraint: {
-        kind: "rectangle",
-        mode,
-        x: region.x,
-        y: region.y,
-        width: region.w,
-        height: region.h,
-      },
-    });
-  }
-
-  async function queryLassoSelection(
-    mode: "wafer" | "die" | "reticle",
-    selection: ScMapLassoSelection,
-    hiddenLegendKeys: readonly string[] = [],
-  ): Promise<number[]> {
-    const source = args.dataSource.value;
-    if (!source) return [];
-    return source.resolveSelection({
-      filters: mapSelectionFilters(hiddenLegendKeys),
-      reticle: args.reticle.value,
-      constraint: { kind: "polygon", mode, selection },
-    });
-  }
-
-  async function queryLegendSelection(
-    key: string | number,
-    hiddenLegendKeys: readonly string[] = [],
-  ): Promise<number[]> {
-    const source = args.dataSource.value;
-    if (!source) return [];
-    return source.resolveSelection({
-      filters: mapSelectionFilters(hiddenLegendKeys),
-      reticle: args.reticle.value,
-      constraint: {
-        kind: "legend",
-        field: requestedMapLegendColumn.value,
-        value: isScMissingFilterValue(requestedMapLegendColumn.value, key) ? null : key,
-      },
-    });
-  }
-
   async function querySamplingCandidateCount(options: ScSamplingCandidateOptions): Promise<number> {
     const source = args.dataSource.value;
     if (!source) throw new Error("SC data source is not ready");
@@ -362,29 +287,6 @@ export function useSqlInspectionModel(args: {
     });
   }
 
-  async function queryAllMapSelection(hiddenLegendKeys: readonly string[] = []): Promise<number[]> {
-    const source = args.dataSource.value;
-    if (!source) return [];
-    return source.resolveSelection({
-      filters: mapSelectionFilters(hiddenLegendKeys),
-      reticle: args.reticle.value,
-      constraint: { kind: "all" },
-    });
-  }
-
-  async function queryVisibleMapSelection(
-    ids: readonly number[],
-    hiddenLegendKeys: readonly string[] = [],
-  ): Promise<number[]> {
-    const source = args.dataSource.value;
-    if (!source || ids.length === 0) return [];
-    return source.resolveSelection({
-      filters: mapSelectionFilters(hiddenLegendKeys),
-      reticle: args.reticle.value,
-      constraint: { kind: "ids", ids: sortedUniqueIds(ids) },
-    });
-  }
-
   function updateMapSelection(ids: readonly number[]): number[] {
     const next = sortedUniqueIds(ids);
     mapSelection.value = { ids: next };
@@ -393,10 +295,6 @@ export function useSqlInspectionModel(args: {
 
   function applyMapSelection(ids: number[]): void {
     updateMapSelection(ids);
-  }
-
-  function appendMapSelection(ids: number[]): number[] {
-    return updateMapSelection([...mapSelection.value.ids, ...ids]);
   }
 
   function clearMapSelection(): void {
@@ -435,16 +333,10 @@ export function useSqlInspectionModel(args: {
     loadFilterNumericRange,
     setTableSelection,
     setReviewMode,
-    queryBoxSelection,
-    queryLassoSelection,
-    queryLegendSelection,
-    queryAllMapSelection,
-    queryVisibleMapSelection,
     querySamplingCandidateCount,
     querySamplingDefectIds,
     querySamplingGroups,
     applyMapSelection,
-    appendMapSelection,
     clearMapSelection,
   };
 }

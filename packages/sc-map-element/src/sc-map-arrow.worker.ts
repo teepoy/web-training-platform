@@ -1,9 +1,15 @@
 /// <reference lib="webworker" />
 
 import { tableFromIPC, type Table, type Vector } from "apache-arrow";
+import type {
+  MapProjectionSpec,
+  MapSelectionCommand,
+  MapSelectionConstraint,
+} from "./map-arrow-client";
 import type { ScMapRegion } from "./types";
 import { encodeLegendKey, normalizeLegendKey } from "./legend-key-codec";
 import { overscanMapRegion } from "./map-projection";
+import { combineMapSelectionIds, pointInPolygon } from "./map-selection";
 
 type MapMode = "wafer" | "die" | "reticle";
 
@@ -29,7 +35,18 @@ interface ResolveHighlightsMessage {
   defectIds: number[];
 }
 
-type WorkerMessage = LoadMessage | ProjectMessage | ResolveHighlightsMessage;
+interface UpdateSelectionMessage {
+  id: number;
+  type: "update-selection";
+  command: MapSelectionCommand;
+  projection: MapProjectionSpec;
+}
+
+type WorkerMessage =
+  | LoadMessage
+  | ProjectMessage
+  | ResolveHighlightsMessage
+  | UpdateSelectionMessage;
 
 const COORDINATE_COLUMNS: Record<MapMode, readonly [string, string]> = {
   wafer: ["wafer_x", "wafer_y"],
@@ -39,6 +56,7 @@ const COORDINATE_COLUMNS: Record<MapMode, readonly [string, string]> = {
 
 let tables: Table[] = [];
 let legendColumnName = "class_number";
+let selectedIds = new Set<number>();
 
 function progress(id: number, value: number, stage: string): void {
   self.postMessage({ id, type: "progress", progress: value, stage });
@@ -53,6 +71,7 @@ function requireColumn(source: Table, name: string): Vector {
 
 function load(message: LoadMessage): void {
   legendColumnName = message.legendCol;
+  selectedIds = new Set();
   tables = message.chunks.map((chunk, index) => {
     progress(
       message.id,
@@ -79,6 +98,120 @@ function load(message: LoadMessage): void {
     progress(message.id, 1, "retained 0 Arrow rows");
   }
   self.postMessage({ id: message.id, type: "loaded", rowCount });
+}
+
+function rowMatchesConstraint(
+  table: Table,
+  rowIndex: number,
+  constraint: MapSelectionConstraint,
+  requestedIds: ReadonlySet<number> | null,
+): boolean {
+  if (constraint.kind === "all") return true;
+  const defectId = Number(requireColumn(table, "defect_id").get(rowIndex));
+  if (constraint.kind === "ids") return requestedIds?.has(defectId) ?? false;
+  if (constraint.kind === "legend") {
+    const legend = requireColumn(table, legendColumnName);
+    return normalizeLegendKey(legendColumnName, legend.get(rowIndex)) === constraint.key;
+  }
+  const [xName, yName] = COORDINATE_COLUMNS[constraint.mode];
+  const x = Number(requireColumn(table, xName).get(rowIndex));
+  const y = Number(requireColumn(table, yName).get(rowIndex));
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
+  const region = constraint.region;
+  if (x < region.x || x > region.x + region.w || y < region.y || y > region.y + region.h) {
+    return false;
+  }
+  return constraint.kind === "rectangle" || pointInPolygon({ x, y }, constraint.points);
+}
+
+function visibleSelectionIds(
+  hiddenLegendKeys: readonly string[],
+  constraint: MapSelectionConstraint,
+): Set<number> {
+  const hidden = new Set(hiddenLegendKeys);
+  const requestedIds =
+    constraint.kind === "ids" ? new Set(constraint.ids.filter(Number.isFinite).map(Number)) : null;
+  const matches = new Set<number>();
+  for (const table of tables) {
+    const defectIds = requireColumn(table, "defect_id");
+    const legend = requireColumn(table, legendColumnName);
+    for (let rowIndex = 0; rowIndex < table.numRows; rowIndex += 1) {
+      const legendKey = normalizeLegendKey(legendColumnName, legend.get(rowIndex));
+      if (hidden.has(legendKey)) continue;
+      if (!rowMatchesConstraint(table, rowIndex, constraint, requestedIds)) continue;
+      const defectId = Number(defectIds.get(rowIndex));
+      if (Number.isFinite(defectId)) matches.add(defectId);
+    }
+  }
+  return matches;
+}
+
+function projectSelectionPoints(spec: MapProjectionSpec): Float32Array {
+  if (!(spec.binSize > 0) || !Number.isFinite(spec.binSize) || selectedIds.size === 0) {
+    return new Float32Array();
+  }
+  const [xName, yName] = COORDINATE_COLUMNS[spec.mode];
+  const hidden = new Set(spec.hiddenLegendKeys);
+  const projectionRegion = spec.zoom ? overscanMapRegion(spec.zoom) : null;
+  const coordinates: number[] = [];
+  const occupiedBins = new Set<string>();
+  for (const table of tables) {
+    const defectIds = requireColumn(table, "defect_id");
+    const xColumn = requireColumn(table, xName);
+    const yColumn = requireColumn(table, yName);
+    const legend = requireColumn(table, legendColumnName);
+    for (let rowIndex = 0; rowIndex < table.numRows; rowIndex += 1) {
+      const defectId = Number(defectIds.get(rowIndex));
+      if (!selectedIds.has(defectId)) continue;
+      const legendKey = normalizeLegendKey(legendColumnName, legend.get(rowIndex));
+      if (hidden.has(legendKey)) continue;
+      const x = Number(xColumn.get(rowIndex));
+      const y = Number(yColumn.get(rowIndex));
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      if (
+        projectionRegion &&
+        (x < projectionRegion.x ||
+          x > projectionRegion.x + projectionRegion.w ||
+          y < projectionRegion.y ||
+          y > projectionRegion.y + projectionRegion.h)
+      ) {
+        continue;
+      }
+      const gx = Math.floor(x / spec.binSize);
+      const gy = Math.floor(y / spec.binSize);
+      const key = `${gx}:${gy}`;
+      if (occupiedBins.has(key)) continue;
+      occupiedBins.add(key);
+      coordinates.push(gx * spec.binSize + spec.binSize / 2, gy * spec.binSize + spec.binSize / 2);
+    }
+  }
+  return Float32Array.from(coordinates);
+}
+
+function updateSelection(message: UpdateSelectionMessage): void {
+  const { command } = message;
+  let candidates = new Set<number>();
+  if (command.operation === "prune" || command.operation === "invert") {
+    candidates = visibleSelectionIds(command.hiddenLegendKeys, { kind: "all" });
+  } else if (command.operation !== "clear") {
+    if (!command.constraint) {
+      throw new Error(`Selection operation "${command.operation}" requires a constraint`);
+    }
+    candidates = visibleSelectionIds(command.hiddenLegendKeys, command.constraint);
+  }
+  selectedIds = combineMapSelectionIds(selectedIds, candidates, command.operation);
+
+  const selectionIds = Int32Array.from([...selectedIds].sort((left, right) => left - right));
+  const selectionPoints = projectSelectionPoints(message.projection);
+  self.postMessage(
+    {
+      id: message.id,
+      type: "selection-updated",
+      selectionIds,
+      selectionPoints,
+    },
+    [selectionIds.buffer, selectionPoints.buffer],
+  );
 }
 
 function findDefectRow(defectIds: Vector, defectId: number): number {
@@ -142,17 +275,21 @@ function project(message: ProjectMessage): void {
   const hidden = new Set(message.hiddenLegendKeys);
   const totalRows = tables.reduce((sum, table) => sum + table.numRows, 0);
   const display = new Float32Array(totalRows * 6);
+  const selectionDisplay = new Float32Array(totalRows * 2);
   const binOffsets = new Map<string, number>();
+  const selectionBins = new Set<string>();
   const legendCodes = new Map<string, number>();
   const legendKeys: string[] = [];
   const interval = Math.max(1, Math.floor(totalRows / 100));
   let displayRows = 0;
+  let selectionRows = 0;
   let processedRows = 0;
   const projectionRegion = message.zoom ? overscanMapRegion(message.zoom) : null;
 
   for (const table of tables) {
     const xColumn = requireColumn(table, xName);
     const yColumn = requireColumn(table, yName);
+    const defectIds = requireColumn(table, "defect_id");
     const legendColumn = requireColumn(table, legendColumnName);
     const imagesColumn = table.getChild("images");
 
@@ -177,6 +314,14 @@ function project(message: ProjectMessage): void {
       const gx = Math.floor(x / message.binSize);
       const gy = Math.floor(y / message.binSize);
       const key = `${gx}:${gy}`;
+      const defectId = Number(defectIds.get(rowIndex));
+      if (selectedIds.has(defectId) && !selectionBins.has(key)) {
+        selectionBins.add(key);
+        const selectionOffset = selectionRows * 2;
+        selectionDisplay[selectionOffset] = gx * message.binSize + message.binSize / 2;
+        selectionDisplay[selectionOffset + 1] = gy * message.binSize + message.binSize / 2;
+        selectionRows += 1;
+      }
       const existingOffset = binOffsets.get(key);
       if (existingOffset !== undefined) {
         display[existingOffset + 2] = legendCode;
@@ -202,15 +347,20 @@ function project(message: ProjectMessage): void {
   }
 
   const points = display.slice(0, displayRows * 6);
+  const selectionPoints = selectionDisplay.slice(0, selectionRows * 2);
   progress(message.id, 1, `${message.mode}: ${displayRows.toLocaleString()} occupied bins`);
-  self.postMessage({ id: message.id, type: "projected", points, legendKeys }, [points.buffer]);
+  self.postMessage({ id: message.id, type: "projected", points, selectionPoints, legendKeys }, [
+    points.buffer,
+    selectionPoints.buffer,
+  ]);
 }
 
 self.onmessage = (event: MessageEvent<WorkerMessage>) => {
   try {
     if (event.data.type === "load") load(event.data);
     else if (event.data.type === "project") project(event.data);
-    else resolveHighlights(event.data);
+    else if (event.data.type === "resolve-highlights") resolveHighlights(event.data);
+    else updateSelection(event.data);
   } catch (error) {
     self.postMessage({
       id: event.data.id,

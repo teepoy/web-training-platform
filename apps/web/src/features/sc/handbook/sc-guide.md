@@ -90,12 +90,13 @@ The same wafer/die/reticle map triad as the preview page, integrated with annota
   table and gallery without changing the map. Right-click the map and choose **Exclude all others**
   or **Exclude selected** to commit the selected IDs into the Global Filter. The transient selection
   is then cleared and the map reloads, so additional regions can be selected and excluded
-  continuously. Each commit remains visible as a separate, removable `defect_id` condition. **Invert
+  continuously. Each commit remains visible as a separate, removable `map_id` condition. **Invert
   selection** replaces the transient selection with its complement inside the currently visible Map
   points; it does not commit a filter. Hidden legend values cannot be selected. Hiding a value removes
   its IDs from the current transient selection, cross marks, context-menu actions, and copied IDs;
   unhiding it does not restore the old selection. The menu can also copy selected defect IDs and switch
-  selection tools.
+  selection tools. Selection IDs and black cross marks are produced together from the frontend Map
+  Arrow snapshot; pan and zoom only reproject them and do not clear the selection.
 - **Legend coloring** — by bin, class number, annotation status, or prediction label.
 - **Custom colors** — label colors accept text labels as well as numeric classes and persist per
   dataset and legend source.

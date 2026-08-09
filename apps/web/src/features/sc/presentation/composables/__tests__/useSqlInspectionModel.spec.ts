@@ -78,8 +78,7 @@ describe("useSqlInspectionModel", () => {
     await vi.waitFor(() => expect(source.loadMap).toHaveBeenCalled());
     vi.mocked(source.resolveSelection).mockClear();
 
-    await model.applyMapSelection([9, 2, 9]);
-    await model.appendMapSelection([7, 2]);
+    model.applyMapSelection([9, 2, 7, 9]);
     model.setTableSelection({ kind: "ids", ids: ["sample-8", "sample-3", "sample-8"] });
 
     expect(model.mapSelectedDefectIds.value).toEqual([2, 7, 9]);
@@ -119,16 +118,16 @@ describe("useSqlInspectionModel", () => {
     const model = mount(source);
     if (!model) throw new Error("model was not created");
 
-    await model.applyMapSelection([9, 3, 9]);
+    model.applyMapSelection([9, 3, 9]);
     expect(model.galleryQuery.value.filters).toEqual([["map_id", "in", [3, 9]]]);
     expect(model.sampleTableDataSource.value?.scopeKey).toContain(
       JSON.stringify([["map_id", "in", [3, 9]]]),
     );
 
-    await model.appendMapSelection([7]);
+    model.applyMapSelection([3, 7, 9]);
     expect(model.galleryQuery.value.filters).toEqual([["map_id", "in", [3, 7, 9]]]);
 
-    await model.clearMapSelection();
+    model.clearMapSelection();
     expect(model.galleryQuery.value.filters).toEqual([]);
   });
 
@@ -149,7 +148,7 @@ describe("useSqlInspectionModel", () => {
     });
     if (!model) throw new Error("model was not created");
 
-    await model.applyMapSelection([9, 3]);
+    model.applyMapSelection([9, 3]);
 
     expect(model.galleryQuery.value.filters).toEqual([
       { combinator: "and", items: [["rough_bin", "in", [4]]] },
@@ -269,46 +268,6 @@ describe("useSqlInspectionModel", () => {
     resolveRoughBin(new Uint8Array([2]));
     await vi.waitFor(() => expect(model.mapLegendColumn.value).toBe("rough_bin"));
     expect([...new Uint8Array(model.mapArrowData.value?.[0] ?? new ArrayBuffer())]).toEqual([2]);
-  });
-
-  it("bounds geometric selection to visible numeric legend values", async () => {
-    const { source } = createDataSource();
-    const model = mount(source);
-    if (!model) throw new Error("model was not created");
-    vi.mocked(source.resolveSelection).mockClear();
-
-    await model.queryBoxSelection("wafer", { x: 1, y: 2, w: 3, h: 4 }, ["7", "9"]);
-
-    expect(source.resolveSelection).toHaveBeenCalledWith(
-      expect.objectContaining({
-        filters: [["class_number", "not in or null", [7, 9]]],
-        constraint: {
-          kind: "rectangle",
-          mode: "wafer",
-          x: 1,
-          y: 2,
-          width: 3,
-          height: 4,
-        },
-      }),
-    );
-  });
-
-  it("resolves existing selection against hidden labels including missing values", async () => {
-    const { source } = createDataSource();
-    const legendGroupBy = ref<ScLegendSource>("annotation");
-    const model = mount(source, { legendGroupBy });
-    if (!model) throw new Error("model was not created");
-    vi.mocked(source.resolveSelection).mockClear();
-
-    await model.queryVisibleMapSelection([9, 3, 9], ["Scratch", "__unlabeled__"]);
-
-    expect(source.resolveSelection).toHaveBeenCalledWith(
-      expect.objectContaining({
-        filters: [["annotation_label", "not in and not null", ["Scratch"]]],
-        constraint: { kind: "ids", ids: [3, 9] },
-      }),
-    );
   });
 
   it("keeps Review filtering scoped to table and gallery", async () => {

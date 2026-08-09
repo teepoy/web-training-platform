@@ -16,7 +16,6 @@ export interface ScInspectionFilterPlan {
   globalFilters: ScDataFilterExpression[];
   mapFilters: ScDataFilterExpression[];
   aggregateFilters: ScDataFilterExpression[];
-  selectionFilters: ScDataFilterExpression[];
   tableFilters: ScDataFilterExpression[];
   galleryBaseFilters: ScDataFilterExpression[];
 }
@@ -95,7 +94,6 @@ export function buildInspectionFilterPlan(args: {
     globalFilters,
     mapFilters: globalFilters,
     aggregateFilters: globalFilters,
-    selectionFilters: globalFilters,
     tableFilters,
     galleryBaseFilters,
   };

@@ -214,7 +214,7 @@ describe("ScMapPanelBinned unified map", () => {
   it("assigns camel-case custom-element properties and switches dropdown interaction mode", async () => {
     const arrowData = [new ArrayBuffer(8), new ArrayBuffer(16)];
     const { wrapper } = await mountWithProviders(ScMapPanelBinned, {
-      props: { arrowData, mapLegendColumn: "rough_bin" },
+      props: { arrowData, mapLegendColumn: "rough_bin", selectionDefectIds: [3, 7] },
     });
     const map = wrapper.find('[data-testid="sc-unified-map"]');
     const element = map.element as HTMLElement & {
@@ -223,6 +223,7 @@ describe("ScMapPanelBinned unified map", () => {
       interactionMode: string;
       showImageMarkers: boolean;
       defectSize: number;
+      selectionDefectIds: number[];
     };
 
     expect(element.arrowData).toHaveLength(2);
@@ -231,6 +232,7 @@ describe("ScMapPanelBinned unified map", () => {
     expect(element.legendColumn).toBe("rough_bin");
     expect(element.showImageMarkers).toBe(true);
     expect(element.defectSize).toBe(2);
+    expect(element.selectionDefectIds).toEqual([3, 7]);
     expect(element.interactionMode).toBe("select");
     wrapper.findComponent(NDropdown).vm.$emit("select", "zoomin");
     await wrapper.vm.$nextTick();
@@ -238,6 +240,9 @@ describe("ScMapPanelBinned unified map", () => {
     wrapper.findComponent(NDropdown).vm.$emit("select", "lasso");
     await wrapper.vm.$nextTick();
     expect(element.interactionMode).toBe("lasso");
+    map.element.dispatchEvent(new CustomEvent("zoom-in", { detail: { x: 1, y: 2, w: 3, h: 4 } }));
+    await wrapper.vm.$nextTick();
+    expect(element.selectionDefectIds).toEqual([3, 7]);
   });
 
   it("keeps custom colors separate by legend source and restores them by scope", async () => {

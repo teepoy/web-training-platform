@@ -8,7 +8,7 @@ import { GridComponent, TooltipComponent } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
 import type { EChartsOption } from "echarts";
 import type { ECElementEvent } from "echarts/core";
-import type { ScMapLassoSelection } from "@platform/sc-map-element";
+import type { ScMapLassoSelection, ScMapSelectionCommand } from "@platform/sc-map-element";
 import ScMapPanelBinned from "@/features/sc/presentation/components/ScMapPanelBinned.vue";
 import ScGlobalFilterModal from "@/features/sc/presentation/components/ScGlobalFilterModal.vue";
 import ScSampleTable from "@/features/sc/presentation/components/ScSampleTable.vue";
@@ -82,6 +82,7 @@ const DEFAULT_RETICLE_DIE_SIZE = 100_000;
 type MapMode = "wafer" | "die" | "reticle";
 type MapViewport = { x: number; y: number; w: number; h: number };
 const quadEl = ref<HTMLElement | null>(null);
+const mapPanel = ref<InstanceType<typeof ScMapPanelBinned> | null>(null);
 const leftPanelEl = ref<HTMLElement | null>(null);
 const rightPanelEl = ref<HTMLElement | null>(null);
 const columnPct = ref(DEFAULT_COLUMN_PCT);
@@ -294,7 +295,6 @@ function handleReticleOptionsChange(options: ReticleMapOptions): void {
 
 function handleLegendGroupByChange(source: ScLegendSource | null): void {
   legendGroupBy.value = source;
-  mapSelectionQueue.prune(activeHiddenLegendKeys.value);
 }
 
 function handleLegendHiddenChange(payload: { source: ScLegendSource; hiddenKeys: string[] }): void {
@@ -318,8 +318,6 @@ async function commitMapSelectionFilter(mode: ScMapSelectionMode): Promise<void>
     globalFilterModel.value = next;
     mapSelectionQueue.clear();
     selectedBarChartKey.value = null;
-    mapImmediateCrosshairDefectIds.value = [];
-    mapImmediateCrosshairVersion.value += 1;
     mapSelectionResetVersion.value += 1;
   } catch (error) {
     reportDataError("Apply map selection to Global Filter failed", error);
@@ -413,23 +411,15 @@ const galleryHighlightDefectIds = computed(() => {
   const ids = [...blinkHighlightIds.value].map(Number).filter(Number.isFinite);
   return ids.length <= HIGHLIGHT_MAX_DEFECTS ? ids : [];
 });
-const mapImmediateCrosshairDefectIds = ref<number[]>([]);
-const mapImmediateCrosshairVersion = ref(0);
 const mapSelectionResetVersion = ref(0);
 const mapSelectionQueue = useMapSelectionQueue();
 
-function refreshImmediateCrosshairFromMapSelection(): void {
-  mapImmediateCrosshairDefectIds.value = [];
-  mapImmediateCrosshairVersion.value += 1;
-  const ids = model.mapSelectedDefectIds.value;
-  if (ids.length === 0 || ids.length > HIGHLIGHT_MAX_DEFECTS) return;
-  mapImmediateCrosshairDefectIds.value = [...ids];
-  mapImmediateCrosshairVersion.value += 1;
-}
-
-watch([activeMapTab, zoom], () => {
-  refreshImmediateCrosshairFromMapSelection();
-});
+watch(
+  () => model.mapLegendColumn.value,
+  (column, previousColumn) => {
+    if (column !== previousColumn) mapSelectionQueue.prune(activeHiddenLegendKeys.value);
+  },
+);
 
 onUnmounted(() => {
   mapSelectionQueue.dispose();
@@ -646,12 +636,10 @@ function onBarResizeEnd(e: PointerEvent): void {
 
 function handleBoxSelect(region: ScMapRegion): void {
   selectedBarChartKey.value = null;
-  mapImmediateCrosshairDefectIds.value = [];
   mapSelectionQueue.append({ kind: "box", mode: activeMapTab.value, region });
 }
 function handleLassoSelect(selection: ScMapLassoSelection): void {
   selectedBarChartKey.value = null;
-  mapImmediateCrosshairDefectIds.value = [];
   mapSelectionQueue.append({
     kind: "lasso",
     mode: activeMapTab.value,
@@ -665,8 +653,6 @@ function handleLegendSelection(key: string | number | null): void {
 }
 function handleClearMapSelection(): void {
   selectedBarChartKey.value = null;
-  mapImmediateCrosshairDefectIds.value = [];
-  mapImmediateCrosshairVersion.value += 1;
   mapSelectionResetVersion.value += 1;
   mapSelectionQueue.clear();
 }
@@ -744,17 +730,32 @@ function useMapSelectionQueue() {
     return queue;
   }
 
+  async function updateSelection(command: ScMapSelectionCommand): Promise<number[]> {
+    const panel = mapPanel.value;
+    if (!panel) throw new Error("Map panel is not ready");
+    return panel.updateMapSelection(command);
+  }
+
   function append(selection: QueuedAreaSelection): void {
     const version = replacementVersion;
     const hiddenLegendKeys = [...activeHiddenLegendKeys.value];
     enqueue(async () => {
       if (version !== replacementVersion) return;
-      const selectedIds =
-        selection.kind === "lasso"
-          ? await model.queryLassoSelection(selection.mode, selection.selection, hiddenLegendKeys)
-          : await model.queryBoxSelection(selection.mode, selection.region, hiddenLegendKeys);
-      if (version !== replacementVersion || selectedIds.length === 0) return;
-      await model.appendMapSelection(selectedIds);
+      const selectedIds = await updateSelection({
+        operation: "append",
+        hiddenLegendKeys,
+        constraint:
+          selection.kind === "lasso"
+            ? {
+                kind: "polygon",
+                mode: selection.mode,
+                points: selection.selection.points,
+                region: selection.region,
+              }
+            : { kind: "rectangle", mode: selection.mode, region: selection.region },
+      });
+      if (version !== replacementVersion) return;
+      model.applyMapSelection(selectedIds);
     }, `${selection.kind} selection failed`);
   }
 
@@ -766,57 +767,47 @@ function useMapSelectionQueue() {
     queue = Promise.resolve();
     enqueue(async () => {
       if (version !== replacementVersion) return;
-      const ids = key === null ? [] : await model.queryLegendSelection(key, hiddenLegendKeys);
-      if (version !== replacementVersion) return;
-      if (key !== null && ids.length <= HIGHLIGHT_MAX_DEFECTS) {
-        mapImmediateCrosshairDefectIds.value = [...ids];
-      } else {
-        mapImmediateCrosshairDefectIds.value = [];
+      if (key === null) {
+        mapPanel.value?.clearMapSelection();
+        model.applyMapSelection([]);
+        return;
       }
+      const ids = await updateSelection({
+        operation: "replace",
+        hiddenLegendKeys,
+        constraint: { kind: "legend", key: String(key) },
+      });
       if (version !== replacementVersion) return;
-      mapImmediateCrosshairVersion.value += 1;
-      await model.applyMapSelection(ids);
+      model.applyMapSelection(ids);
     }, `${source} selection failed`);
   }
 
   function prune(hiddenLegendKeys: readonly string[]): void {
-    replacementVersion += 1;
+    const version = ++replacementVersion;
     const epoch = visibilityEpoch;
     const hiddenKeys = [...hiddenLegendKeys];
     queue = Promise.resolve();
     visibilityQueue = visibilityQueue
       .then(async () => {
         if (disposed || epoch !== visibilityEpoch) return;
-        while (true) {
-          const selectedIds = [...model.mapSelectedDefectIds.value];
-          let visibleIds: number[];
-          try {
-            visibleIds = await model.queryVisibleMapSelection(selectedIds, hiddenKeys);
-          } catch (error) {
-            if (!disposed && epoch === visibilityEpoch) {
-              model.clearMapSelection();
-              mapImmediateCrosshairDefectIds.value = [];
-              mapImmediateCrosshairVersion.value += 1;
-              mapSelectionResetVersion.value += 1;
-            }
-            throw error;
+        let visibleIds: number[];
+        try {
+          visibleIds = await updateSelection({
+            operation: "prune",
+            hiddenLegendKeys: hiddenKeys,
+          });
+        } catch (error) {
+          if (!disposed && epoch === visibilityEpoch) {
+            model.clearMapSelection();
+            mapPanel.value?.clearMapSelection();
+            mapSelectionResetVersion.value += 1;
           }
-          if (disposed || epoch !== visibilityEpoch) return;
-          const currentIds = model.mapSelectedDefectIds.value;
-          if (
-            currentIds.length !== selectedIds.length ||
-            currentIds.some((id, index) => id !== selectedIds[index])
-          ) {
-            continue;
-          }
-          model.applyMapSelection(visibleIds);
-          selectedBarChartKey.value = null;
-          mapImmediateCrosshairDefectIds.value =
-            visibleIds.length <= HIGHLIGHT_MAX_DEFECTS ? [...visibleIds] : [];
-          mapImmediateCrosshairVersion.value += 1;
-          mapSelectionResetVersion.value += 1;
-          break;
+          throw error;
         }
+        if (disposed || epoch !== visibilityEpoch || version !== replacementVersion) return;
+        model.applyMapSelection(visibleIds);
+        selectedBarChartKey.value = null;
+        mapSelectionResetVersion.value += 1;
       })
       .catch((error: unknown) => {
         if (!disposed && epoch === visibilityEpoch) {
@@ -832,15 +823,13 @@ function useMapSelectionQueue() {
       const hiddenLegendKeys = [...activeHiddenLegendKeys.value];
       enqueue(async () => {
         if (version !== replacementVersion) return;
-        const selected = new Set(model.mapSelectedDefectIds.value);
-        const allIds = await model.queryAllMapSelection(hiddenLegendKeys);
+        const inverted = await updateSelection({
+          operation: "invert",
+          hiddenLegendKeys,
+        });
         if (version !== replacementVersion) return;
-        const inverted = allIds.filter((id) => !selected.has(id));
         model.applyMapSelection(inverted);
         selectedBarChartKey.value = null;
-        mapImmediateCrosshairDefectIds.value =
-          inverted.length <= HIGHLIGHT_MAX_DEFECTS ? [...inverted] : [];
-        mapImmediateCrosshairVersion.value += 1;
         mapSelectionResetVersion.value += 1;
       }, "Invert map selection failed");
     });
@@ -852,6 +841,7 @@ function useMapSelectionQueue() {
     queue = Promise.resolve();
     visibilityQueue = Promise.resolve();
     model.clearMapSelection();
+    mapPanel.value?.clearMapSelection();
   }
 
   function dispose(): void {
@@ -921,6 +911,7 @@ function useMapSelectionQueue() {
       </Teleport>
       <div class="iq-wafer">
         <ScMapPanelBinned
+          ref="mapPanel"
           :active-map-tab="activeMapTab"
           :arrow-data="model.mapArrowData.value"
           :map-legend-column="model.mapLegendColumn.value"
@@ -936,8 +927,7 @@ function useMapSelectionQueue() {
           :zoom="zoom"
           :map-selection-count="model.mapSelectedDefectIds.value.length"
           :highlight-defect-ids="galleryHighlightDefectIds"
-          :immediate-crosshair-defect-ids="mapImmediateCrosshairDefectIds"
-          :immediate-crosshair-version="mapImmediateCrosshairVersion"
+          :selection-defect-ids="model.mapSelectedDefectIds.value"
           :selection-reset-version="mapSelectionResetVersion"
           :map-loading="model.activeMapLoading.value || !dataReady"
           :map-error="userFacingMapError"

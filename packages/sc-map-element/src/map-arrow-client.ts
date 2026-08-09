@@ -22,7 +22,31 @@ export interface MapResolvedHighlight {
 
 export interface MapProjectionResult {
   points: Float32Array;
+  selectionPoints: Float32Array;
   legendKeys: string[];
+}
+
+export type MapSelectionConstraint =
+  | { kind: "all" }
+  | { kind: "ids"; ids: readonly number[] }
+  | { kind: "legend"; key: string }
+  | { kind: "rectangle"; mode: MapProjectionMode; region: ScMapRegion }
+  | {
+      kind: "polygon";
+      mode: MapProjectionMode;
+      points: ReadonlyArray<{ x: number; y: number }>;
+      region: ScMapRegion;
+    };
+
+export interface MapSelectionCommand {
+  operation: "append" | "replace" | "invert" | "prune" | "clear";
+  constraint?: MapSelectionConstraint;
+  hiddenLegendKeys: readonly string[];
+}
+
+export interface MapSelectionResult {
+  ids: Int32Array;
+  points: Float32Array;
 }
 
 export interface MapArrowDataset {
@@ -30,6 +54,10 @@ export interface MapArrowDataset {
     spec: MapProjectionSpec,
     onProgress?: (progress: number, stage: string) => void,
   ): Promise<MapProjectionResult>;
+  updateSelection(
+    command: MapSelectionCommand,
+    projection: MapProjectionSpec,
+  ): Promise<MapSelectionResult>;
   resolveHighlights(defectIds: readonly number[]): Promise<MapResolvedHighlight[]>;
   dispose(): void;
 }
@@ -50,7 +78,9 @@ export function copyMapArrowChunksForTransfer(
 }
 
 interface PendingCall {
-  resolve: (value: MapProjectionResult | Float32Array | Float64Array | null) => void;
+  resolve: (
+    value: MapProjectionResult | MapSelectionResult | Float32Array | Float64Array | null,
+  ) => void;
   reject: (error: Error) => void;
   onProgress?: (progress: number, stage: string) => void;
 }
@@ -69,10 +99,18 @@ export async function createMapArrowDataset(
   worker.onmessage = (
     event: MessageEvent<{
       id: number;
-      type: "progress" | "loaded" | "projected" | "highlights-resolved" | "error";
+      type:
+        | "progress"
+        | "loaded"
+        | "projected"
+        | "selection-updated"
+        | "highlights-resolved"
+        | "error";
       progress?: number;
       stage?: string;
       points?: Float32Array;
+      selectionPoints?: Float32Array;
+      selectionIds?: Int32Array;
       legendKeys?: string[];
       highlights?: Float64Array;
       rowCount?: number;
@@ -107,14 +145,22 @@ export async function createMapArrowDataset(
         }),
       );
     }
-    call.resolve(
-      event.data.type === "projected"
-        ? {
-            points: event.data.points ?? new Float32Array(),
-            legendKeys: event.data.legendKeys ?? [],
-          }
-        : (event.data.highlights ?? null),
-    );
+    if (event.data.type === "projected") {
+      call.resolve({
+        points: event.data.points ?? new Float32Array(),
+        selectionPoints: event.data.selectionPoints ?? new Float32Array(),
+        legendKeys: event.data.legendKeys ?? [],
+      });
+      return;
+    }
+    if (event.data.type === "selection-updated") {
+      call.resolve({
+        ids: event.data.selectionIds ?? new Int32Array(),
+        points: event.data.selectionPoints ?? new Float32Array(),
+      });
+      return;
+    }
+    call.resolve(event.data.highlights ?? null);
   };
   worker.onerror = (event) => {
     const location = event.filename ? ` (${event.filename}:${event.lineno}:${event.colno})` : "";
@@ -131,7 +177,7 @@ export async function createMapArrowDataset(
     message: Record<string, unknown>,
     transfer: Transferable[] = [],
     progress?: (value: number, stage: string) => void,
-  ): Promise<MapProjectionResult | Float32Array | Float64Array | null> {
+  ): Promise<MapProjectionResult | MapSelectionResult | Float32Array | Float64Array | null> {
     if (disposed) return Promise.reject(new Error("Arrow map dataset has been disposed"));
     const id = ++requestId;
     return new Promise((resolve, reject) => {
@@ -167,7 +213,44 @@ export async function createMapArrowDataset(
         [],
         progress,
       );
-      return result && "points" in result ? result : { points: new Float32Array(), legendKeys: [] };
+      return result && "legendKeys" in result
+        ? result
+        : { points: new Float32Array(), selectionPoints: new Float32Array(), legendKeys: [] };
+    },
+    async updateSelection(command, projection) {
+      const result = await request({
+        type: "update-selection",
+        command: {
+          ...command,
+          hiddenLegendKeys: [...command.hiddenLegendKeys],
+          ...(command.constraint?.kind === "ids"
+            ? { constraint: { ...command.constraint, ids: [...command.constraint.ids] } }
+            : command.constraint?.kind === "polygon"
+              ? {
+                  constraint: {
+                    ...command.constraint,
+                    points: command.constraint.points.map((point) => ({ ...point })),
+                    region: { ...command.constraint.region },
+                  },
+                }
+              : command.constraint?.kind === "rectangle"
+                ? {
+                    constraint: {
+                      ...command.constraint,
+                      region: { ...command.constraint.region },
+                    },
+                  }
+                : {}),
+        },
+        projection: {
+          ...projection,
+          zoom: projection.zoom ? { ...projection.zoom } : null,
+          hiddenLegendKeys: [...projection.hiddenLegendKeys],
+        },
+      });
+      return result && "ids" in result
+        ? result
+        : { ids: new Int32Array(), points: new Float32Array() };
     },
     async resolveHighlights(defectIds) {
       if (defectIds.length === 0) return [];

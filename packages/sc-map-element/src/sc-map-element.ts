@@ -3,6 +3,7 @@ import {
   createMapArrowDataset,
   type MapArrowDataset,
   type MapProjectionSpec,
+  type MapSelectionCommand,
 } from "./map-arrow-client";
 import ScMapRenderWorker from "./sc-map-render.worker?worker&inline";
 import { encodeLegendColorMap } from "./legend-key-codec";
@@ -156,11 +157,11 @@ export class ScMapElement extends HTMLElement {
   #geometry: ScMapGeometry = { ...DEFAULT_GEOMETRY };
   #highlights: ScMapHighlight[] = [];
   #highlightDefectIds: number[] = [];
-  #immediateDefectIds: number[] = [];
-  #resolvedImmediateHighlights: ScMapHighlight[] = [];
   #highlightResolutionRevision = 0;
   #highlightResolutionScheduled = false;
-  #immediatePoints: Array<{ x: number; y: number }> = [];
+  #selectionIds: number[] = [];
+  #selectionPoints = new Float32Array();
+  #selectionRevision = 0;
   #dragStart: { x: number; y: number } | null = null;
   #dragEnd: { x: number; y: number } | null = null;
   #dragInteractionMode: ScMapInteractionMode | null = null;
@@ -366,17 +367,85 @@ export class ScMapElement extends HTMLElement {
     this.#highlightDefectIds = [...new Set(value.filter(Number.isFinite))];
     this.#scheduleHighlightResolution();
   }
-  set immediateDefectIds(value: number[]) {
-    this.#immediateDefectIds = [...new Set(value.filter(Number.isFinite))];
-    this.#scheduleHighlightResolution();
-  }
-  set immediatePoints(value: Array<{ x: number; y: number }>) {
-    this.#immediatePoints = value.map((point) => ({ ...point }));
-    this.#drawOverlay();
+  set selectionDefectIds(value: number[]) {
+    const next = [...new Set(value.filter(Number.isFinite))].sort((left, right) => left - right);
+    if (
+      next.length === this.#selectionIds.length &&
+      next.every((id, index) => id === this.#selectionIds[index])
+    ) {
+      return;
+    }
+    this.#selectionIds = next;
+    void this.#replaceSelectionIds().catch((error: unknown) => {
+      this.#reportError("Hydrating map selection", error);
+    });
   }
   set dataBounds(value: ScMapBounds | null) {
     this.#dataBounds = value ? { ...value } : null;
     this.#scheduleRender();
+  }
+
+  async updateSelection(command: MapSelectionCommand): Promise<number[]> {
+    const dataset = this.#arrowDataset;
+    if (!dataset) throw new Error("Map Arrow dataset is not ready");
+    const revision = ++this.#selectionRevision;
+    const result = await dataset.updateSelection(command, this.#projectionRequest());
+    const ids = [...result.ids];
+    if (dataset !== this.#arrowDataset || revision !== this.#selectionRevision) return ids;
+    this.#selectionIds = ids;
+    this.#selectionPoints = result.points;
+    this.#drawOverlay();
+    return ids;
+  }
+
+  clearSelection(): void {
+    this.#selectionRevision += 1;
+    this.#selectionIds = [];
+    this.#selectionPoints = new Float32Array();
+    this.#drawOverlay();
+    const dataset = this.#arrowDataset;
+    if (!dataset) return;
+    const revision = this.#selectionRevision;
+    void dataset
+      .updateSelection(
+        {
+          operation: "clear",
+          hiddenLegendKeys: this.#hiddenLegendKeys,
+        },
+        this.#projectionRequest(),
+      )
+      .then((result) => {
+        if (dataset !== this.#arrowDataset || revision !== this.#selectionRevision) return;
+        this.#selectionPoints = result.points;
+        this.#drawOverlay();
+      })
+      .catch((error: unknown) => {
+        if (dataset === this.#arrowDataset && revision === this.#selectionRevision) {
+          this.#reportError("Clearing map selection", error);
+        }
+      });
+  }
+
+  async #replaceSelectionIds(): Promise<void> {
+    const dataset = this.#arrowDataset;
+    if (!dataset) {
+      this.#selectionPoints = new Float32Array();
+      this.#drawOverlay();
+      return;
+    }
+    const revision = ++this.#selectionRevision;
+    const result = await dataset.updateSelection(
+      {
+        operation: "replace",
+        constraint: { kind: "ids", ids: this.#selectionIds },
+        hiddenLegendKeys: this.#hiddenLegendKeys,
+      },
+      this.#projectionRequest(),
+    );
+    if (dataset !== this.#arrowDataset || revision !== this.#selectionRevision) return;
+    this.#selectionIds = [...result.ids];
+    this.#selectionPoints = result.points;
+    this.#drawOverlay();
   }
 
   #modeBounds(): ScMapBounds {
@@ -653,14 +722,20 @@ export class ScMapElement extends HTMLElement {
       }
       context.stroke();
     };
+    const drawFlatCrosshairs = (points: Float32Array, color: string) => {
+      context.beginPath();
+      context.strokeStyle = color;
+      for (let offset = 0; offset < points.length; offset += 2) {
+        const [x, y] = this.#toScreen(transform, points[offset], points[offset + 1]);
+        context.moveTo(x - 3, y);
+        context.lineTo(x + 3, y);
+        context.moveTo(x, y - 3);
+        context.lineTo(x, y + 3);
+      }
+      context.stroke();
+    };
     drawCrosshairs(this.#highlights.map(coordinate), "#A855F7");
-    drawCrosshairs(
-      [
-        ...this.#resolvedImmediateHighlights.map(coordinate),
-        ...this.#immediatePoints.map((point) => [point.x, point.y] as [number, number]),
-      ],
-      "#000000",
-    );
+    drawFlatCrosshairs(this.#selectionPoints, "#000000");
     const dragInteractionMode = this.#dragInteractionMode ?? this.#interactionMode;
     if (dragInteractionMode === "lasso" && this.#lassoPoints.length > 1) {
       context.beginPath();
@@ -736,20 +811,15 @@ export class ScMapElement extends HTMLElement {
     const revision = this.#highlightResolutionRevision;
     if (!dataset) {
       this.#highlights = [];
-      this.#resolvedImmediateHighlights = [];
       this.#drawOverlay();
       return;
     }
-    const ids = [...new Set([...this.#highlightDefectIds, ...this.#immediateDefectIds])];
+    const ids = [...this.#highlightDefectIds];
     try {
       const resolved = await dataset.resolveHighlights(ids);
       if (dataset !== this.#arrowDataset || revision !== this.#highlightResolutionRevision) return;
       const highlightIds = new Set(this.#highlightDefectIds);
-      const immediateIds = new Set(this.#immediateDefectIds);
       this.#highlights = resolved.filter((item) => highlightIds.has(item.defectId));
-      this.#resolvedImmediateHighlights = resolved.filter((item) =>
-        immediateIds.has(item.defectId),
-      );
       this.#drawOverlay();
     } catch (error) {
       if (dataset !== this.#arrowDataset || revision !== this.#highlightResolutionRevision) return;
@@ -764,7 +834,7 @@ export class ScMapElement extends HTMLElement {
     this.#arrowDataset?.dispose();
     this.#arrowDataset = null;
     this.#highlights = [];
-    this.#resolvedImmediateHighlights = [];
+    this.#selectionPoints = new Float32Array();
     this.#points = new Float32Array();
     this.#legendKeys = [];
     this.#postData();
@@ -783,6 +853,27 @@ export class ScMapElement extends HTMLElement {
         return;
       }
       this.#arrowDataset = dataset;
+      if (this.#selectionIds.length > 0) {
+        const selectionRevision = ++this.#selectionRevision;
+        const selection = await dataset.updateSelection(
+          {
+            operation: "replace",
+            constraint: { kind: "ids", ids: this.#selectionIds },
+            hiddenLegendKeys: this.#hiddenLegendKeys,
+          },
+          this.#projectionRequest(),
+        );
+        if (
+          dataset !== this.#arrowDataset ||
+          revision !== this.#datasetRevision ||
+          selectionRevision !== this.#selectionRevision
+        ) {
+          return;
+        }
+        this.#selectionIds = [...selection.ids];
+        this.#selectionPoints = selection.points;
+        this.#drawOverlay();
+      }
       this.#scheduleHighlightResolution();
       this.#scheduleProjection();
     } catch (error) {
@@ -823,6 +914,7 @@ export class ScMapElement extends HTMLElement {
     try {
       while (this.#arrowDataset) {
         const revision = this.#projectionRevision;
+        const selectionRevision = this.#selectionRevision;
         const dataset: MapArrowDataset = this.#arrowDataset;
         const mode = this.#mode;
         this.#emitProgress(0.5, `${mode}: preparing projection`);
@@ -833,6 +925,9 @@ export class ScMapElement extends HTMLElement {
         if (dataset !== this.#arrowDataset) continue;
         if (revision !== this.#projectionRevision) continue;
         this.#points = projection.points;
+        if (selectionRevision === this.#selectionRevision) {
+          this.#selectionPoints = projection.selectionPoints;
+        }
         this.#legendKeys = projection.legendKeys;
         this.#postData();
         this.#renderAll();
@@ -1018,9 +1113,6 @@ export class ScMapElement extends HTMLElement {
         w: Math.max(...xs) - Math.min(...xs),
         h: Math.max(...ys) - Math.min(...ys),
       };
-      this.#appendImmediatePoints(
-        this.#projectedPoints().filter((point) => pointInPolygon(point, points)),
-      );
       this.dispatchEvent(
         new CustomEvent<ScMapLassoSelection>("lasso-select", {
           detail: { points, region },
@@ -1051,15 +1143,6 @@ export class ScMapElement extends HTMLElement {
         if (dragInteractionMode === "zoomin") {
           this.dispatchEvent(new CustomEvent("zoom-in", { detail: region, bubbles: true }));
         } else {
-          this.#appendImmediatePoints(
-            this.#projectedPoints().filter(
-              ({ x, y }) =>
-                x >= region.x &&
-                x <= region.x + region.w &&
-                y >= region.y &&
-                y <= region.y + region.h,
-            ),
-          );
           this.dispatchEvent(new CustomEvent("box-select", { detail: region, bubbles: true }));
         }
       }
@@ -1215,78 +1298,10 @@ export class ScMapElement extends HTMLElement {
   }
 
   #onDoubleClick = (): void => {
-    this.#immediatePoints = [];
-    this.dispatchEvent(
-      new CustomEvent("immediate-crosshair-points", { detail: [], bubbles: true }),
-    );
+    this.clearSelection();
     this.dispatchEvent(new CustomEvent("clear-selection", { bubbles: true }));
     this.#drawOverlay();
   };
-
-  #projectedPoints(): ScMapPoint[] {
-    const result: ScMapPoint[] = [];
-    const count = Math.floor(this.#points.length / 6);
-    for (let index = 0; index < count; index += 1) {
-      const offset = index * 6;
-      result.push({ x: this.#points[offset], y: this.#points[offset + 1] });
-    }
-    return result;
-  }
-
-  #appendImmediatePoints(points: ScMapPoint[]): void {
-    // Area selections are additive by product definition. Preserve points
-    // from earlier drags until the caller explicitly clears selection.
-    const immediatePointKeys = new Set(
-      this.#immediatePoints.map((point) => `${point.x}:${point.y}`),
-    );
-    for (const point of points) {
-      const key = `${point.x}:${point.y}`;
-      if (immediatePointKeys.has(key)) continue;
-      immediatePointKeys.add(key);
-      this.#immediatePoints.push(point);
-    }
-    this.dispatchEvent(
-      new CustomEvent("immediate-crosshair-points", {
-        detail: this.#immediatePoints.map((point) => ({ ...point })),
-        bubbles: true,
-      }),
-    );
-  }
-}
-
-export function pointInPolygon(point: ScMapPoint, polygon: readonly ScMapPoint[]): boolean {
-  let inside = false;
-  for (
-    let current = 0, previous = polygon.length - 1;
-    current < polygon.length;
-    previous = current++
-  ) {
-    const currentPoint = polygon[current];
-    const previousPoint = polygon[previous];
-    const edgeX = currentPoint.x - previousPoint.x;
-    const edgeY = currentPoint.y - previousPoint.y;
-    const pointX = point.x - previousPoint.x;
-    const pointY = point.y - previousPoint.y;
-    const cross = edgeX * pointY - edgeY * pointX;
-    const edgeScale = Math.max(1, Math.abs(edgeX), Math.abs(edgeY));
-    if (
-      Math.abs(cross) <= Number.EPSILON * edgeScale * edgeScale * 8 &&
-      point.x >= Math.min(previousPoint.x, currentPoint.x) &&
-      point.x <= Math.max(previousPoint.x, currentPoint.x) &&
-      point.y >= Math.min(previousPoint.y, currentPoint.y) &&
-      point.y <= Math.max(previousPoint.y, currentPoint.y)
-    ) {
-      return true;
-    }
-    const crosses =
-      currentPoint.y > point.y !== previousPoint.y > point.y &&
-      point.x <
-        ((previousPoint.x - currentPoint.x) * (point.y - currentPoint.y)) /
-          (previousPoint.y - currentPoint.y) +
-          currentPoint.x;
-    if (crosses) inside = !inside;
-  }
-  return inside;
 }
 
 export function defineScMapElement(): void {
