@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, ref, useSlots, watch } from "vue";
 import {
   NAlert,
   NButton,
@@ -50,6 +50,7 @@ const props = withDefaults(
     extraFilterNumericRangeLoading?: Record<string, boolean>;
     extraFilterNumericRangeErrors?: Record<string, boolean>;
     extraFilterResetKey?: string | number;
+    confirmDisabled?: boolean;
     program: ScSamplingProgram;
     scope: ScSamplingCandidateScope;
     loadGroups: (field: string) => Promise<ScSamplingGroupPopulation[]>;
@@ -59,6 +60,7 @@ const props = withDefaults(
     extraFilterNumericRanges: () => ({}),
     extraFilterNumericRangeLoading: () => ({}),
     extraFilterNumericRangeErrors: () => ({}),
+    confirmDisabled: false,
   },
 );
 
@@ -102,8 +104,9 @@ const catalog: RuleCatalogItem[] = [
 
 const message = useMessage();
 const themeVars = useThemeVars();
+const slots = useSlots();
 const draft = ref(cloneScSamplingProgram(props.program));
-const activeTab = ref<"rules" | "extra">("rules");
+const activeTab = ref<"rules" | "extra" | "after">("rules");
 const manageRulesVisible = ref(false);
 const ruleConfigVisible = ref(false);
 const editingRule = ref<ScSamplingRuleId | null>(null);
@@ -163,6 +166,7 @@ function ruleIsEnabled(id: ScSamplingRuleId): boolean {
 const disabledRules = computed(() => catalog.filter((item) => !ruleIsEnabled(item.id)));
 const enabledRules = computed(() => catalog.filter((item) => ruleIsEnabled(item.id)));
 const configuredRules = computed(() => enabledRules.value.filter((item) => item.id !== "extra"));
+const hasAfterSamplingTab = computed(() => Boolean(slots["after-sampling"]));
 const configurationError = computed(() => scSamplingProgramError(draft.value));
 const editingRuleItem = computed(
   () => catalog.find((item) => item.id === editingRule.value) ?? null,
@@ -483,6 +487,10 @@ watch(
           </div>
         </NCard>
       </NTabPane>
+
+      <NTabPane v-if="hasAfterSamplingTab" name="after" tab="After sampling">
+        <slot name="after-sampling" />
+      </NTabPane>
     </NTabs>
 
     <NAlert v-if="configurationError" type="error" :show-icon="false" class="form-error">
@@ -503,7 +511,7 @@ watch(
           <NButton
             type="primary"
             :loading="loading"
-            :disabled="availableCount === 0 || !!configurationError"
+            :disabled="availableCount === 0 || !!configurationError || confirmDisabled"
             @click="handleConfirm"
           >
             Apply sampling

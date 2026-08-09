@@ -112,18 +112,18 @@ The same wafer/die/reticle map triad as the preview page, integrated with annota
 
 ### Sampling
 
-Click **Sampling** to open the sampling modal:
+Click **Random Filter** beside **Global Filter** to open the sampling modal:
 
-- Specify a **sample count** (default: 200).
-- Keep **Review candidates only** enabled to sample defects that have review images.
-- Optionally limit candidates to the **current map selection**.
-- Set a seed to reproduce the same draw from an unchanged candidate set.
-- Optionally choose and assign a draft label. Existing drafts outside the sample are preserved.
+- Choose All, Map Selection, or Table Selection as the candidate scope.
+- Configure the enabled sampling rules and optional Extra filter.
+- In **After sampling**, draft-label assignment is enabled by default and uses the selected label.
+  Disable it when the sampled cohort should not change annotation drafts. Existing drafts outside the
+  sample are preserved.
 
-The active cohort is shown in the Sampling button and narrows only the table and gallery. It
+The active cohort is shown in the Random Filter button and narrows only the table and gallery. It
 composes with Review mode, transient map selection, and table filters; it does not alter the map,
 group distribution, Global Filter, or Train & Predict inputs. Clear or replace the cohort explicitly
-from the Sampling control.
+from the Random Filter control.
 
 ### Train & Predict
 

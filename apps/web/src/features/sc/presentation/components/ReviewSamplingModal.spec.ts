@@ -89,5 +89,60 @@ describe("ReviewSamplingModal", () => {
         (button) => button.textContent?.trim() === "Edit",
       ),
     ).toBe(false);
+    wrapper.unmount();
+  });
+
+  it("renders an optional after-sampling tab and honors its confirmation guard", async () => {
+    const { wrapper } = await mountWithProviders(NMessageProvider, {
+      slots: {
+        default: () =>
+          h(
+            ReviewSamplingModal,
+            {
+              show: true,
+              loading: false,
+              availableCount: 100,
+              mapSelectionCount: 0,
+              tableSelectionAvailable: false,
+              extraFilter: { combinator: "and", items: [] },
+              program: createDefaultScSamplingProgram(),
+              scope: "all",
+              confirmDisabled: true,
+              loadGroups: async () => [],
+            },
+            {
+              "after-sampling": () =>
+                h("div", { "data-testid": "after-sampling-content" }, "Assign draft label"),
+            },
+          ),
+      },
+      global: {
+        stubs: {
+          NModal: {
+            name: "NModal",
+            props: ["show", "title"],
+            emits: ["update:show"],
+            template:
+              '<section v-if="show" :aria-label="title"><slot name="header" /><slot /><slot name="footer" /></section>',
+          },
+        },
+      },
+    });
+    const modal = wrapper.findComponent(ReviewSamplingModal);
+
+    await vi.waitFor(() => expect(document.body.textContent).toContain("After sampling"));
+    const afterSamplingTab = Array.from(
+      document.body.querySelectorAll<HTMLElement>(".n-tabs-tab"),
+    ).find((tab) => tab.textContent?.includes("After sampling"));
+    afterSamplingTab?.click();
+    await nextTick();
+
+    expect(document.body.querySelector('[data-testid="after-sampling-content"]')).not.toBeNull();
+    const applyButton = Array.from(document.body.querySelectorAll("button")).find(
+      (button) => button.textContent?.trim() === "Apply sampling",
+    );
+    expect(applyButton?.disabled).toBe(true);
+    expect(modal.emitted("confirm")).toBeUndefined();
+    wrapper.unmount();
   });
 });

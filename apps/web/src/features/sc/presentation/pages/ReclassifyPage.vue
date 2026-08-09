@@ -7,6 +7,7 @@ import {
   NResult,
   NSelect,
   NButton,
+  NCheckbox,
   NText,
   NModal,
   NTooltip,
@@ -147,6 +148,15 @@ const samplingFilterNumericRangeErrors = computed(
   () => inspectionQuad.value?.filterNumericRangeErrors ?? {},
 );
 const samplingFilterResetKey = computed(() => inspectionQuad.value?.filterResetKey);
+const samplingDraftLabelOptions = computed(() =>
+  page.codeLabels.value.map((label) => ({
+    label: `${label.code} · ${label.name}`,
+    value: label.code,
+  })),
+);
+const samplingDraftLabelMissing = computed(
+  () => page.assignSampledDraftLabel.value && !page.samplingDraftLabel.value,
+);
 
 const containerStyle = computed(() => ({
   "--cv-bg": themeVars.value.bodyColor,
@@ -526,13 +536,42 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
       :extra-filter-numeric-range-loading="samplingFilterNumericRangeLoading"
       :extra-filter-numeric-range-errors="samplingFilterNumericRangeErrors"
       :extra-filter-reset-key="samplingFilterResetKey"
+      :confirm-disabled="samplingDraftLabelMissing"
       :load-groups="loadSamplingGroups"
       @update:extra-filter="updateSamplingExtraFilter"
       @scope-change="handleSamplingScopeChange"
       @search-extra-filter-options="searchSamplingExtraFilterOptions"
       @request-extra-filter-range="requestSamplingExtraFilterRange"
       @confirm="applyRandomSampling"
-    />
+    >
+      <template #after-sampling>
+        <div class="sc-after-sampling">
+          <div>
+            <strong>Draft label</strong>
+            <NText depth="3">
+              Apply one draft label to every sampled defect. Existing drafts outside the sample are
+              preserved.
+            </NText>
+          </div>
+          <NCheckbox
+            v-model:checked="page.assignSampledDraftLabel.value"
+            data-testid="sampling-assign-draft-label"
+          >
+            Assign draft label
+          </NCheckbox>
+          <NSelect
+            v-model:value="page.samplingDraftLabel.value"
+            data-testid="sampling-draft-label"
+            :options="samplingDraftLabelOptions"
+            :disabled="!page.assignSampledDraftLabel.value"
+            placeholder="Select draft label"
+          />
+          <NText v-if="samplingDraftLabelMissing" type="error">
+            Select a draft label before applying sampling.
+          </NText>
+        </div>
+      </template>
+    </ReviewSamplingModal>
     <NModal
       v-model:show="filterConfirmationVisible"
       preset="card"
@@ -771,5 +810,16 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.sc-after-sampling {
+  display: grid;
+  gap: 14px;
+  padding: 8px 2px;
+}
+
+.sc-after-sampling strong,
+.sc-after-sampling .n-text {
+  display: block;
 }
 </style>

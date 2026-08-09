@@ -255,13 +255,24 @@ describe("useReclassifyPage - addLabel", () => {
 });
 
 describe("useReclassifyPage - review sampling", () => {
-  it("keeps annotation drafts unchanged when applying a sampling cohort", async () => {
+  it("assigns the default draft label to sampled defects and preserves other drafts", async () => {
     const { state } = await mountPage("ds-sampling", DEFAULT_DATASET);
     state.annotationDraft.value = { existing: "7" };
 
     state.applySampling(["103", "274", "103"]);
 
     expect([...state.galleryRandomSamplingDefectIds.value]).toEqual(["103", "274"]);
+    expect(state.assignSampledDraftLabel.value).toBe(true);
+    expect(state.annotationDraft.value).toEqual({ existing: "7", "103": "0", "274": "0" });
+  });
+
+  it("can leave annotation drafts unchanged when draft assignment is disabled", async () => {
+    const { state } = await mountPage("ds-sampling-no-draft", DEFAULT_DATASET);
+    state.annotationDraft.value = { existing: "7" };
+    state.assignSampledDraftLabel.value = false;
+
+    state.applySampling(["103", "274"]);
+
     expect(state.annotationDraft.value).toEqual({ existing: "7" });
   });
 

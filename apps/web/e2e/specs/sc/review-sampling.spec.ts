@@ -304,7 +304,12 @@ test("Review Sampling manages rules and applies the SQL pipeline from Reclassify
 
   await expect(page.reviewSamplingDialog.getByText("BASE ELIGIBLE")).toHaveCount(0);
   await expect(page.reviewSamplingDialog.getByText("Random seed")).toHaveCount(0);
-  await expect(page.reviewSamplingDialog.getByText("Assign draft label")).toHaveCount(0);
+  await page.reviewSamplingDialog.getByText("After sampling", { exact: true }).click();
+  await expect(page.reviewSamplingDialog.getByTestId("sampling-assign-draft-label")).toBeChecked();
+  await expect(page.reviewSamplingDialog.getByTestId("sampling-draft-label")).toContainText(
+    "0 · Unclassified",
+  );
+  await page.reviewSamplingDialog.getByText("Enabled rules", { exact: true }).click();
   await expect(page.reviewSamplingDialog.getByRole("radio", { name: "All" })).toBeChecked();
   await expect(
     page.reviewSamplingDialog.getByTestId("sampling-total-limit").locator("input"),

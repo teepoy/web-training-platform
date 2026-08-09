@@ -102,6 +102,8 @@ export interface ReclassifyPageState {
   showSamplingModal: Ref<boolean>;
   samplingProgram: Ref<ScSamplingProgram>;
   samplingScope: Ref<ScSamplingCandidateScope>;
+  assignSampledDraftLabel: Ref<boolean>;
+  samplingDraftLabel: Ref<string | null>;
   applySampling: (defectIds: string[]) => void;
   galleryRandomSamplingDefectIds: Ref<Set<string>>;
   clearGalleryRandomSamplingDefectIds: () => void;
@@ -623,6 +625,14 @@ export function useReclassifyPage(): ReclassifyPageState {
   const showSamplingModal = ref(false);
   const samplingProgram = ref(createDefaultScSamplingProgram());
   const samplingScope = ref<ScSamplingCandidateScope>("all");
+  const assignSampledDraftLabel = ref(true);
+  const samplingDraftLabel = ref<string | null>(effectiveLabels.value[0] ?? null);
+
+  watch(effectiveLabels, (labels) => {
+    if (!samplingDraftLabel.value || !labels.includes(samplingDraftLabel.value)) {
+      samplingDraftLabel.value = labels[0] ?? null;
+    }
+  });
 
   watch(workspaceKey, (id) => {
     galleryRandomSamplingDefectIds.value = new Set(
@@ -641,6 +651,10 @@ export function useReclassifyPage(): ReclassifyPageState {
 
     galleryRandomSamplingDefectIds.value = new Set(sampled);
     reclassifyStore.setSamplingDefectIds(workspaceKey.value, sampled);
+
+    if (assignSampledDraftLabel.value && samplingDraftLabel.value) {
+      setAnnotationDrafts(sampled, samplingDraftLabel.value);
+    }
 
     showSamplingModal.value = false;
   }
@@ -930,6 +944,8 @@ export function useReclassifyPage(): ReclassifyPageState {
     showSamplingModal,
     samplingProgram,
     samplingScope,
+    assignSampledDraftLabel,
+    samplingDraftLabel,
     applySampling,
     galleryRandomSamplingDefectIds,
     clearGalleryRandomSamplingDefectIds,
