@@ -26,7 +26,6 @@ def _make_classification_dataset() -> Dataset:
 
 def test_trainers_register_and_import_without_error() -> None:
     trainer_ids = set(runtime_catalog.list_trainer_ids())
-    assert "resnet50-sc-v1" in trainer_ids
     assert "yolo-sc-v1" in trainer_ids
 
 

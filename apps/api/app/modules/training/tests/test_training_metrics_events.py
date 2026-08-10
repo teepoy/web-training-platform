@@ -18,7 +18,7 @@ def _make_job(job_id: str = "test-job-001") -> TrainingJob:
     return TrainingJob(
         id=job_id,
         dataset_id="ds-001",
-        trainer_id="resnet50-sc-v1",
+        trainer_id="yolo-sc-v1",
         created_by="test",
     )
 
@@ -36,7 +36,7 @@ _MOCK_TRAINING_RESULT = {
         "val/loss": 0.3,
         "val/acc": 0.85,
         "val/f1": 0.82,
-        "architecture": "dual-resnet50",
+        "architecture": "yolov8n-cls",
     },
 }
 

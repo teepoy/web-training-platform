@@ -27,7 +27,7 @@ _DATA_URI = (
     "AAAAC0lEQVR42mP8/x8AAwMCAO+/4gkAAAAASUVORK5CYII="
 )
 
-TRAINER_ID = "resnet50-sc-v1"
+TRAINER_ID = "yolo-sc-v1"
 LABELS = ["cat", "dog"]
 
 
@@ -140,11 +140,11 @@ def _upload_model_for_prediction(client: TestClient, job_id: str) -> str:
         "format": "pytorch",
         "job_id": job_id,
         "template_id": "image-classifier",
-        "profile_id": "resnet50-sc-v1",
+        "profile_id": "yolo-sc-v1",
         "model_spec": {
             "framework": "pytorch",
-            "architecture": "resnet50",
-            "base_model": "torchvision/resnet50",
+            "architecture": "yolov8n-cls",
+            "base_model": "ultralytics/yolov8n-cls",
         },
         "compatibility": {
             "dataset_types": ["image_classification"],
@@ -177,7 +177,7 @@ def _upload_model_for_prediction(client: TestClient, job_id: str) -> str:
 @pytest.mark.skip(
     reason=(
         "Legacy classification E2E expects a classification trainer; "
-        "resnet50-sc-v1 is now an SC patch_image_v1 trainer."
+        "yolo-sc-v1 is an SC patch_image_v1 trainer."
     )
 )
 def test_e2e_training_prediction_pipeline() -> None:

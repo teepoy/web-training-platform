@@ -40,10 +40,30 @@ from app.modules.runtime.catalog import runtime_catalog
 from app.modules.types.capabilities import TrainerMetadata
 from app.shared.api.schemas import CancelJobResponse
 from app.shared.sse.emit import emit_sse
-from app.shared.sse.events import SSEEvent, TrainingStatusEvent
+from app.shared.sse.events import (
+    SSEEvent,
+    TrainingEpochEvent,
+    TrainingMetricEvent,
+    TrainingStatusEvent,
+)
 
 router = APIRouter(prefix="/api/v1", tags=["training"])
 _SSE_EVENT_PAGE_SIZE = 200
+
+
+def _training_sse_event(event: TrainingEvent) -> SSEEvent:
+    event_fields = {
+        "job_id": event.job_id,
+        "ts": event.ts,
+        "level": event.level,
+        "message": event.message,
+        "payload": event.payload,
+    }
+    if event.level == "epoch":
+        return SSEEvent(TrainingEpochEvent(event_type="epoch", **event_fields))
+    if event.level == "metric":
+        return SSEEvent(TrainingMetricEvent(event_type="metric", **event_fields))
+    return SSEEvent(TrainingStatusEvent(event_type="status", **event_fields))
 
 
 @router.get("/trainers")
@@ -208,18 +228,7 @@ async def get_job_events(
                     limit=_SSE_EVENT_PAGE_SIZE,
                 )
                 for ev in events:
-                    yield emit_sse(
-                        SSEEvent(
-                            TrainingStatusEvent(
-                                event_type="status",
-                                job_id=ev.job_id,
-                                ts=ev.ts,
-                                level=ev.level,
-                                message=ev.message,
-                                payload=ev.payload,
-                            )
-                        )
-                    )
+                    yield emit_sse(_training_sse_event(ev))
                 if len(events) < _SSE_EVENT_PAGE_SIZE:
                     break
             await asyncio.sleep(0.5)

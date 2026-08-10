@@ -32,13 +32,13 @@ async def test_single_prediction_uses_direct_deployment_and_command_parameters()
             uri="memory://model",
             kind="model",
             job_id="training-1",
-            trainer_id="resnet50-sc-v1",
+            trainer_id="yolo-sc-v1",
             metadata={
                 "dataset_types": ["image_sc"],
                 "task_types": ["sc"],
                 "prediction_targets": ["image_classification"],
                 "label_space": ["cat", "dog"],
-                "model_contract": "sc.resnet50.model.v1",
+                "model_contract": "sc.yolo.model.v1",
                 "model_schema_version": "1",
             },
         )
@@ -77,5 +77,5 @@ async def test_single_prediction_uses_direct_deployment_and_command_parameters()
     assert await_args.kwargs["deployment_name"] == "predict-job-batch-deployment"
     parameters = await_args.kwargs["parameters"]
     assert parameters["sample_ids"] == ["sample-1"]
-    assert parameters["predictor_id"] == "resnet50-sc-v1"
+    assert parameters["predictor_id"] == "yolo-sc-v1"
     assert "catalog_id" not in parameters

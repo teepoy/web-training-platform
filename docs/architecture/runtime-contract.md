@@ -41,12 +41,12 @@ materializer. Temporary resources are cleaned up by the registered callable
 that created them. For local artifact files, cleanup occurs only after the
 synchronous event consumer has uploaded the yielded `ArtifactOutput`.
 
-API-local runtime modules are algorithm-first: `resnet50` contains its train and
-predict chain, while `ultralytics` contains its own. Each chain owns its temporary
-Parquet/checkpoint directory and passes plain paths and iterators to `libs/ml`;
-neither the full checkpoint nor the full Parquet table becomes one in-memory
-bytes or row-list value. Only platform I/O such as source opening and prediction
-persistence is shared across algorithms.
+API-local runtime modules are algorithm-first. The current SC runtime has one
+`ultralytics` module containing both train and predict; the former ResNet branch
+has been removed. The module owns its temporary Parquet/checkpoint directory and
+passes plain Parquet paths to `libs/ml`; neither the full checkpoint nor the full
+Parquet table becomes one in-memory bytes or row-list value. Only platform I/O
+such as source opening and prediction persistence is shared.
 
 Training emits model artifact payload and metadata with trainer,
 model-contract/version, predictor compatibility, algorithm provenance, label
@@ -54,6 +54,16 @@ space, and source job identity. The platform artifact event sink uploads the
 payload and idempotently records the artifact. Prediction persists
 sample/model/predictor provenance, payload, confidence, counters, and explicit
 errors according to the owning algorithm's failure semantics.
+
+The current SC YOLO callable records one durable `level="epoch"` training event
+after every epoch with `epoch`, `total_epochs`, `loss`, `accuracy`, and normalized
+`progress`. The training SSE endpoint preserves `epoch`, `metric`, and `status`
+as named event types so the frontend can render live progress. Because native
+`EventSource` cannot send custom headers, the frontend must build this URL with
+the shared auth-query helper so both `token` and `org_id` cross the stream
+boundary. The classifier is initialized from the package-local architecture
+YAML with the configured seed; worker startup must not depend on downloading
+pretrained weights.
 
 ## Tasks And Composition
 

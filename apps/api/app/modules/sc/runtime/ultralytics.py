@@ -40,7 +40,8 @@ from app.modules.sc.runtime.prediction_io import (
     load_sc_prediction_model,
     write_sc_predictions,
 )
-from app.shared.api.schemas import JobStatus, PredictionEvent
+from app.modules.training.domain.repository import TrainingRepository
+from app.shared.api.schemas import JobStatus, PredictionEvent, TrainingEvent
 
 logger = logging.getLogger(__name__)
 
@@ -84,13 +85,43 @@ async def yolo_sc_train(ctx: TrainingRuntimeContext) -> RuntimeEventStream:
     import app.registrations  # noqa: F401
     import polars as pl
 
-    from ml_library import train_yolo
-    from ml_library.data_loading import inspect_sc_training_samples
+    from ml_library import inspect_yolo_training_samples, train_yolo
 
     app_context = ctx.app_context
     if app_context.injector is None:
         raise RuntimeError("AppContext injector was not initialized")
     pipeline = app_context.shared.config.sc.pipeline
+    training_repository = app_context.injector.get(TrainingRepository)
+
+    async def report_epoch(
+        epoch: int,
+        total_epochs: int,
+        loss: float,
+        accuracy: float,
+    ) -> None:
+        _runtime_logger().info(
+            "SC YOLO epoch %d/%d loss=%.6f accuracy=%.6f",
+            epoch,
+            total_epochs,
+            loss,
+            accuracy,
+        )
+        await training_repository.add_event(
+            TrainingEvent(
+                job_id=ctx.job_id,
+                ts=datetime.now(UTC),
+                level="epoch",
+                message=f"epoch {epoch}/{total_epochs} completed",
+                payload={
+                    "epoch": epoch,
+                    "total_epochs": total_epochs,
+                    "loss": loss,
+                    "accuracy": accuracy,
+                    "progress": epoch / total_epochs,
+                },
+            )
+        )
+
     async with open_sc_runtime_source(
         ctx,
         with_labels=True,
@@ -135,7 +166,7 @@ async def yolo_sc_train(ctx: TrainingRuntimeContext) -> RuntimeEventStream:
                 prefix=f"sc-ultralytics-training-{ctx.job_id}-"
             ) as temporary_directory:
                 parquet_paths = parquet_paths_from_manifest(materialization.manifest)
-                labels, valid_samples, skipped_samples = inspect_sc_training_samples(
+                labels, valid_samples, skipped_samples = inspect_yolo_training_samples(
                     parquet_paths,
                     source.label_space,
                 )
@@ -149,13 +180,14 @@ async def yolo_sc_train(ctx: TrainingRuntimeContext) -> RuntimeEventStream:
                             "skipped_samples": skipped_samples,
                         },
                     )
-                output = train_yolo(
+                output = await train_yolo(
                     parquet_paths,
                     labels,
                     valid_samples=valid_samples,
                     work_dir=Path(temporary_directory),
                     shuffle_seed=pipeline.training_shuffle_seed,
                     shuffle_buffer_rows=pipeline.training_shuffle_buffer_rows,
+                    on_epoch=report_epoch,
                 )
                 if materialization.errors or skipped_samples:
                     yield RuntimeIssueReported(
@@ -191,7 +223,6 @@ async def yolo_sc_predictor(ctx: PredictionRuntimeContext) -> RuntimeEventStream
     import polars as pl
 
     from ml_library import predict_yolo
-    from ml_library.data_loading import iter_sc_prediction_samples
 
     from app.modules.runtime.catalog import runtime_catalog
 
@@ -303,12 +334,14 @@ async def yolo_sc_predictor(ctx: PredictionRuntimeContext) -> RuntimeEventStream
                         "image errors",
                         len(materialization.errors),
                     )
-                samples = iter_sc_prediction_samples(
-                    parquet_paths_from_manifest(materialization.manifest)
-                )
+                parquet_paths = parquet_paths_from_manifest(materialization.manifest)
 
                 async def prediction_results():
-                    for output in predict_yolo(checkpoint_path, labels, samples):
+                    for output in predict_yolo(
+                        checkpoint_path,
+                        labels,
+                        parquet_paths,
+                    ):
                         result = PredictionResult(
                             sample_id=output.sample_id,
                             predicted_label=output.label,

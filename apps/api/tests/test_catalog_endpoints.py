@@ -23,7 +23,7 @@ def test_trainer_catalog_endpoint_preserves_baseline_shape() -> None:
         assert row["trainable"] is True
 
     trainer_ids = {row["id"] for row in body}
-    assert trainer_ids == {"resnet50-sc-v1", "yolo-sc-v1"}
+    assert trainer_ids == {"yolo-sc-v1"}
 
 
 def test_predictor_catalog_listing_preserves_baseline_shape() -> None:
@@ -46,4 +46,4 @@ def test_predictor_catalog_listing_preserves_baseline_shape() -> None:
         assert isinstance(row["view_type"], str)
 
     predictor_ids = {row["id"] for row in body}
-    assert predictor_ids == {"resnet50-sc-v1", "yolo-sc-v1"}
+    assert predictor_ids == {"yolo-sc-v1"}

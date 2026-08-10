@@ -23,7 +23,7 @@ async def test_train_flow_invokes_registered_runtime_host() -> None:
         result = await train_job_flow.fn(
             job_id="job-1",
             dataset_id="dataset-1",
-            trainer_id="resnet50-sc-v1",
+            trainer_id="yolo-sc-v1",
             created_by="user-1",
         )
 
@@ -50,7 +50,7 @@ async def test_train_flow_passes_collection_revision_source_to_runtime() -> None
             collection_id="collection-1",
             collection_revision_id="revision-1",
             org_id="org-1",
-            trainer_id="resnet50-sc-v1",
+            trainer_id="yolo-sc-v1",
         )
 
     assert execute.await_args is not None

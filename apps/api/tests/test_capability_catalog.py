@@ -195,6 +195,6 @@ def test_data_plane_schema_registry_covers_every_view_contract() -> None:
 
 
 def test_sc_runtime_catalog_is_validated_at_import() -> None:
-    assert runtime_catalog.get_trainer("resnet50-sc-v1").metadata.view_id == (
+    assert runtime_catalog.get_trainer("yolo-sc-v1").metadata.view_id == (
         "patch_image_v1"
     )

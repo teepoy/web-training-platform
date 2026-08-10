@@ -28,7 +28,7 @@ async def test_prediction_runtime_host_only_invokes_registered_predictor() -> No
             dataset_id="dataset-1",
             model_id="model-1",
             org_id="org-1",
-            predictor_id="resnet50-sc-v1",
+            predictor_id="yolo-sc-v1",
             created_by="user-1",
             target="image_classification",
             app_context=context,  # type: ignore[arg-type]
@@ -37,7 +37,7 @@ async def test_prediction_runtime_host_only_invokes_registered_predictor() -> No
     assert result == {"processed": 2}
     assert stream.call_args is not None
     predictor_id, runtime_context = stream.call_args.args
-    assert predictor_id == "resnet50-sc-v1"
+    assert predictor_id == "yolo-sc-v1"
     assert isinstance(runtime_context, PredictionRuntimeContext)
 
 
@@ -59,7 +59,7 @@ async def test_prediction_flow_invokes_runtime_host() -> None:
             dataset_id="dataset-1",
             model_id="model-1",
             org_id="org-1",
-            predictor_id="resnet50-sc-v1",
+            predictor_id="yolo-sc-v1",
         )
 
     assert result == {"processed": 1}
@@ -86,7 +86,7 @@ async def test_prediction_flow_passes_collection_revision_source_to_runtime() ->
             collection_revision_id="revision-1",
             model_id="model-1",
             org_id="org-1",
-            predictor_id="resnet50-sc-v1",
+            predictor_id="yolo-sc-v1",
         )
 
     assert execute.await_args is not None

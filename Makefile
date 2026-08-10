@@ -16,6 +16,7 @@ WEB_PORT    ?= 5173
 COMPOSE_DEV  := infra/compose/docker-compose.yaml -f infra/compose/docker-compose.dev.yaml
 DATA_DIR     := infra/compose/data
 IMAGE_PARSER_GRPC_ADDR_HOST ?= 127.0.0.1:9092
+MINIO_ENDPOINT_HOST ?= localhost:9000
 SC_WAFER_MOCK_DEFECTS ?= 300000
 SC_PATCH_ZIP_BUCKET ?= sc-patch-images
 SC_PATCH_ZIP_S3_ENDPOINT ?= http://localhost:9000
@@ -29,7 +30,7 @@ DEV_API_HOST_ENV := \
 	LABEL_STUDIO_EXTERNAL_URL=http://localhost:8080 \
 	LABEL_STUDIO_API_KEY=ls-smoke-token-for-local-dev \
 	LABEL_STUDIO_DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/labelstudio \
-	MINIO_ENDPOINT=localhost:9000 \
+	MINIO_ENDPOINT=$(MINIO_ENDPOINT_HOST) \
 	MINIO_ACCESS_KEY=minioadmin \
 	MINIO_SECRET_KEY=minioadmin \
 	MINIO_BUCKET=finetune-artifacts \
@@ -37,7 +38,7 @@ DEV_API_HOST_ENV := \
 	REDIS_PORT=6379 \
 	SC_UPSTREAM_ADDR=127.0.0.1:9091 \
 	SC_UPSTREAM_FLIGHT_ADDR=grpc://127.0.0.1:9093 \
-	IMAGE_PARSER_GRPC_ADDR=127.0.0.1:9092
+	IMAGE_PARSER_GRPC_ADDR=$(IMAGE_PARSER_GRPC_ADDR_HOST)
 
 # ──────────────────────────────────────────────
 # Canonical deployed release stack (infra/compose/production/)
@@ -163,9 +164,8 @@ dev-web: ## Start frontend dev server (default: 5173)
 prefect-worker-gpu-host: ## Start a host-side GPU Prefect worker (DO NOT run concurrently with compose --profile gpu)
 	cd apps/api && uv sync --group sc-runtime && \
 	uv run python -m prefect init --profile local --no-prompt && \
-	PREFECT_API_URL=http://localhost:4200/api \
+	$(DEV_API_HOST_ENV) \
 	PLATFORM_API_URL=http://localhost:8000 \
-	IMAGE_PARSER_GRPC_ADDR=$(IMAGE_PARSER_GRPC_ADDR_HOST) \
 	LITELLM_LOCAL_MODEL_COST_MAP="True" uv run python -m prefect worker start --pool default-gpu
 
 # ──────────────────────────────────────────────
@@ -366,7 +366,7 @@ smoke-tests: ## Run all smoke tests (requires: make up-dev)
 # 	uv run python scripts/smoke_dev_training.py $(ARGS)
 # 	uv run python scripts/smoke_dev_prediction.py $(ARGS)
 	uv run python scripts/smoke_wafer_e2e.py $(ARGS)
-#  Config overrides: ARGS="--wafer-db-url /custom/path.db --trainer-id resnet50-sc-v1"
+#  Config overrides: ARGS="--wafer-db-url /custom/path.db --trainer-id yolo-sc-v1"
 
 .PHONY: smoke-wafer-train-predict
 smoke-wafer-train-predict: ## Run seedmaker wafer images through live train -> predict

@@ -541,7 +541,7 @@ def test_sparse_delete_lifecycle() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Sparse SC dataset + resnet50-sc-v1 training — capability+view gate
+# Sparse SC dataset + yolo-sc-v1 training — capability+view gate
 # ---------------------------------------------------------------------------
 
 
@@ -560,7 +560,7 @@ def test_sparse_sc_dataset_readiness_runs_after_submission() -> None:
 
         resp = c.post("/api/v1/training-jobs", json={
             "dataset_id": ds_id,
-            "trainer_id": "resnet50-sc-v1",
+            "trainer_id": "yolo-sc-v1",
         })
         assert resp.status_code == 200
         assert resp.json()["status"] == "queued"
@@ -576,12 +576,12 @@ SC_VIEW_TYPES = ["image_input_v1", "patch_image_v1", "review_image_v1"]
 def test_sparse_sc_prediction_accepts_compatible_predictor() -> None:
     """validate_predictor_for_dataset passes for SC-compatible predictor.
 
-    resnet50-sc-v1 as predictor has view_id=image_input_v1, which is
+    yolo-sc-v1 has an SC-compatible patch image view, which is
     in SC view_types.  storage_mode=file_shard_sparse must NOT block.
     """
     # Should not raise — compatible predictor + sparse storage_mode
     validate_predictor_for_dataset(
-        predictor_id="resnet50-sc-v1",
+        predictor_id="yolo-sc-v1",
         view_types=SC_VIEW_TYPES,
     )
 

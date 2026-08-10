@@ -32,7 +32,7 @@ def test_imagenet_mock_samples_exist(seeded_imagenet_mock: tuple[str, str]) -> N
 @pytest.mark.skip(
     reason=(
         "Legacy seed training expects a classification trainer; "
-        "resnet50-sc-v1 is now an SC patch_image_v1 trainer."
+        "yolo-sc-v1 is an SC patch_image_v1 trainer."
     )
 )
 def test_imagenet_mock_training_completes(seeded_imagenet_mock: tuple[str, str]) -> None:  # noqa: F811

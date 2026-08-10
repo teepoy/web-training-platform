@@ -109,7 +109,7 @@ services:
           "CMD",
           "python",
           "-c",
-          "import urllib.request; urllib.request.urlopen('http://localhost:4200/api/health')",
+          "import base64, os, urllib.request; request = urllib.request.Request('http://localhost:4200/api/health'); request.add_header('Authorization', 'Basic ' + base64.b64encode(os.environ['PREFECT_SERVER_API_AUTH_STRING'].encode()).decode()); urllib.request.urlopen(request)",
         ]
       interval: 10s
       timeout: 5s

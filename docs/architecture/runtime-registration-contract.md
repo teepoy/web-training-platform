@@ -16,17 +16,17 @@ SC_RUNTIME_ROUTER = RuntimeRouter()
 
 
 @SC_RUNTIME_ROUTER.algorithm(
-    id="resnet50-sc-v1",
-    trainer_name="ResNet-50 SC Defect Classifier",
-    predictor_name="ResNet-50 SC Defect Prediction",
+    id="yolo-sc-v1",
+    trainer_name="YOLO SC Defect Classifier",
+    predictor_name="YOLO SC Defect Prediction",
     input_view=SC_PATCH_IMAGE_V1,
-    model=SC_RESNET_MODEL_V1,
-    algo_id="resnet50-sc",
+    model=SC_YOLO_MODEL_V1,
+    algo_id="yolo-sc",
     algo_version="1",
 )
-class ResNetScAlgorithm:
-    train = staticmethod(resnet_sc_train)
-    predict = staticmethod(resnet_sc_predictor)
+class YoloScAlgorithm:
+    train = staticmethod(yolo_sc_train)
+    predict = staticmethod(yolo_sc_predictor)
     train_and_predict = staticmethod(run_sc_train_and_predict)
 ```
 
@@ -157,11 +157,11 @@ Direct async iteration means the consumer finishes the upload before requesting
 the next event, after which the callable may clean the workspace. Large
 checkpoint bytes never enter the event or Prefect terminal result.
 
-Local implementations are grouped by algorithm, not operation. The ResNet module
-contains both ResNet train and predict; the Ultralytics module contains both
-Ultralytics train and predict. A generic callable-parameterized train/predict
-runner or separate `trainers.py` / `predictors.py` implementation modules would
-erase algorithm-owned dataset and error semantics and are not used.
+Local implementations are grouped by algorithm, not operation. The current
+Ultralytics module contains both YOLO train and predict; the former ResNet module
+has been removed. A generic callable-parameterized train/predict runner or
+separate `trainers.py` / `predictors.py` implementation modules would erase
+algorithm-owned dataset and error semantics and are not used.
 
 Recoverable failures are emitted as `RuntimeIssueReported`. A function author
 terminates an expected fatal operation by raising `RuntimeExecutionError` with
@@ -197,8 +197,7 @@ Missing-image behavior belongs to the SC implementations:
 
 - workflow preflight validates annotation labels only, outside the HTTP request path,
   and leaves actual image resolution to runtime;
-- current ResNet and YOLO trainers skip materialization failures and unreadable
-  image pairs;
+- the YOLO trainer skips materialization failures and unreadable image pairs;
 - after filtering, training fails with `RuntimeExecutionError` unless at least
   two effective labels remain;
 - predictors write per-sample failures and continue the batch, then report an

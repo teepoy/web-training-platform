@@ -21,8 +21,8 @@ def test_core_registry_no_longer_owns_executable_registrations() -> None:
 
 
 def test_runtime_catalog_owns_registered_callable_and_metadata() -> None:
-    trainer = runtime_catalog.get_trainer("resnet50-sc-v1")
-    predictor = runtime_catalog.get_predictor("resnet50-sc-v1")
+    trainer = runtime_catalog.get_trainer("yolo-sc-v1")
+    predictor = runtime_catalog.get_predictor("yolo-sc-v1")
     assert trainer.metadata.id == trainer.id
     assert predictor.metadata.id == predictor.id
     assert callable(trainer.callable)

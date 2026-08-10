@@ -3,16 +3,12 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-from ml_library import Prediction, PredictionSample, TrainingSample
+from ml_library import Prediction
 
 
 def test_optional_library_models_are_plain_values() -> None:
-    sample = TrainingSample("sample-1", b"defective", b"reference", "scratch")
-    prediction_sample = PredictionSample("sample-1", None, None)
     prediction = Prediction("sample-1", "", None, error="missing")
 
-    assert sample.label == "scratch"
-    assert prediction_sample.defective_image is None
     assert prediction.error == "missing"
 
 

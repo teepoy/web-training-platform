@@ -45,14 +45,14 @@ async def test_train_and_predict_flow_invokes_registered_workflow() -> None:
         result = await train_and_predict_flow.fn(
             job_id="job-1",
             dataset_id="dataset-1",
-            trainer_id="resnet50-sc-v1",
+            trainer_id="yolo-sc-v1",
             org_id="org-1",
-            predictor_id="resnet50-sc-v1",
+            predictor_id="yolo-sc-v1",
         )
 
     assert result == {"model_id": "model-1"}
     assert stream.call_args is not None
     trainer_id, context = stream.call_args.args
-    assert trainer_id == "resnet50-sc-v1"
+    assert trainer_id == "yolo-sc-v1"
     assert isinstance(context, TrainAndPredictRuntimeContext)
     preflight.ensure_ready.assert_awaited_once()

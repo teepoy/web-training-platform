@@ -219,7 +219,7 @@ class PrefectWorkPoolEngine:
                     if isinstance(metrics.get("epoch_losses"), list)
                     else []
                 )
-                for ep in range(1, int(epochs) + 1):
+                for ep in range(1, int(epochs) + 1) if epoch_losses else ():
                     ep_payload: dict[str, object] = {"epoch": ep}
                     if ep - 1 < len(epoch_losses):
                         ep_payload["val/loss"] = float(epoch_losses[ep - 1])

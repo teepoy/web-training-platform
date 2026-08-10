@@ -17,10 +17,6 @@ SC_REVIEW_IMAGE_V1 = ViewContractRef(
     contract="sc.review_image.v1",
     schema_version="1",
 )
-SC_RESNET_MODEL_V1 = ModelContractRef(
-    contract="sc.resnet50.model.v1",
-    schema_version="1",
-)
 SC_YOLO_MODEL_V1 = ModelContractRef(
     contract="sc.yolo.model.v1",
     schema_version="1",
@@ -59,7 +55,6 @@ SC_CAPABILITIES = CapabilityBundle(
 __all__ = [
     "SC_CAPABILITIES",
     "SC_PATCH_IMAGE_V1",
-    "SC_RESNET_MODEL_V1",
     "SC_REVIEW_IMAGE_V1",
     "SC_YOLO_MODEL_V1",
 ]

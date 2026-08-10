@@ -3,7 +3,7 @@
 Covers:
 - Create image_sc dataset with samples (dual-view: patch_image_v1 + review_image_v1)
 - Generate labels via annotations
-- Trigger training job with resnet50-sc-v1
+- Trigger training job with yolo-sc-v1
 - Verify training completes and checkpoint (model artifact) is generated
 - Verify SC view endpoints work after training
 """
@@ -26,7 +26,7 @@ _SC_TASK_SPEC = {
     "label_space": ["defect", "clean"],
 }
 
-_SC_TRAINER_ID = "resnet50-sc-v1"
+_SC_TRAINER_ID = "yolo-sc-v1"
 
 
 def _make_data_uri() -> str:
@@ -40,51 +40,36 @@ def _make_data_uri() -> str:
 
 
 async def _verify_checkpoint(model_uri: str) -> None:
-    """Load and validate a dual-ResNet-50 checkpoint saved by the SC trainer."""
+    """Load and validate the two-channel YOLO checkpoint."""
     import io as _io
 
     import torch
-    from torchvision import models
+    from ultralytics.nn.tasks import ClassificationModel
 
     from app.main import app
 
     storage = app.state.app_context.shared.artifact_storage
     raw = await storage.get_bytes(model_uri)
-    checkpoint = torch.load(_io.BytesIO(raw), map_location="cpu", weights_only=False)
+    checkpoint = torch.load(_io.BytesIO(raw), map_location="cpu", weights_only=True)
 
     assert "model_state_dict" in checkpoint, (
         f"Checkpoint missing model_state_dict, keys: {list(checkpoint.keys())}"
     )
-    assert "labels" in checkpoint
+    assert "label_space" in checkpoint
     assert "num_classes" in checkpoint
-    assert checkpoint["architecture"] == "dual-resnet50"
-    assert checkpoint["framework"] == "pytorch"
-    assert len(checkpoint["labels"]) >= 2
+    assert checkpoint["architecture"] == "yolov8n-cls"
+    assert checkpoint["input_channels"] == 2
+    assert checkpoint["image_size"] == 128
+    assert len(checkpoint["label_space"]) >= 2
 
     num_classes = checkpoint["num_classes"]
 
-    class DualResNetClassifier(torch.nn.Module):
-        def __init__(self, num_classes: int) -> None:
-            super().__init__()
-            backbone = models.resnet50(weights=None)
-            self.backbone = torch.nn.Sequential(*list(backbone.children())[:-1])
-            self.classifier = torch.nn.Sequential(
-                torch.nn.Linear(2048 * 3, 512),
-                torch.nn.ReLU(),
-                torch.nn.Dropout(0.3),
-                torch.nn.Linear(512, num_classes),
-            )
-
-        def forward(
-            self, defective: torch.Tensor, reference: torch.Tensor
-        ) -> torch.Tensor:
-            feat_d = self.backbone(defective).flatten(1)
-            feat_r = self.backbone(reference).flatten(1)
-            diff = torch.abs(feat_d - feat_r)
-            combined = torch.cat([feat_d, feat_r, diff], dim=1)
-            return self.classifier(combined)
-
-    model = DualResNetClassifier(num_classes=int(num_classes))
+    model = ClassificationModel(
+        "yolov8n-cls.yaml",
+        ch=2,
+        nc=int(num_classes),
+        verbose=False,
+    )
     model.load_state_dict(checkpoint["model_state_dict"])
 
     assert model is not None
@@ -207,7 +192,7 @@ class TestScTrainingE2E:
     @pytest.mark.skip(
         reason=(
             "Legacy SC E2E seeds DB_FULL REST samples without patch_defective/"
-            "patch_template image roles required by resnet50-sc-v1."
+            "patch_template image roles required by yolo-sc-v1."
         )
     )
     def test_sc_training_completes_with_checkpoint(self):
@@ -279,7 +264,7 @@ class TestScTrainingE2E:
     @pytest.mark.skip(
         reason=(
             "Legacy SC E2E seeds DB_FULL REST samples without patch_defective/"
-            "patch_template image roles required by resnet50-sc-v1."
+            "patch_template image roles required by yolo-sc-v1."
         )
     )
     def test_sc_views_work_after_training(self):

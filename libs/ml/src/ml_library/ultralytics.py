@@ -1,40 +1,206 @@
-"""Ultralytics-specific SC training and prediction implementation."""
+"""Ultralytics SC classifier with paired grayscale images."""
 
 from __future__ import annotations
 
-# pyright: reportPrivateImportUsage=false
-
-import csv
-import hashlib
 import io
-from collections.abc import Iterable, Sequence
+from collections.abc import Awaitable, Callable, Iterator, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from PIL import Image
 import torch
+from torch import Tensor, nn
+from torch.nn import functional as F
+from torch.utils.data import DataLoader, IterableDataset
 
-from ml_library.models import (
-    Prediction,
-    PredictionSample,
-    TrainingOutput,
-    TrainingSample,
-)
 from ml_library.data_loading._parquet import ParquetPaths
-from ml_library.data_loading.sc import iter_sc_training_samples
-from ml_library.device import select_torch_device, select_ultralytics_device
+from ml_library.data_loading.streaming import stream_parquet_dataset
+from ml_library.device import select_torch_device
+from ml_library.models import Prediction, TrainingOutput
+
+YOLO_TRAIN_EPOCHS = 50
+YOLO_TRAIN_BATCH_SIZE = 16
+YOLO_PREDICTION_BATCH_SIZE = 256
+YOLO_IMAGE_SIZE = 128
+YOLO_DATALOADER_WORKERS = 4
+YOLO_INPUT_CHANNELS = 2
+
+_TRAINING_COLUMNS = (
+    "sample_id",
+    "label",
+    "patch_defective_bytes",
+    "patch_template_bytes",
+)
+_PREDICTION_COLUMNS = (
+    "sample_id",
+    "patch_defective_bytes",
+    "patch_template_bytes",
+)
 
 
-def _combined_image(sample: TrainingSample | PredictionSample) -> Image.Image:
-    defective = Image.open(io.BytesIO(sample.defective_image or b"")).convert("RGB")
-    reference = Image.open(io.BytesIO(sample.reference_image or b"")).convert("RGB")
-    combined = Image.new("RGB", (defective.width, defective.height * 2))
-    combined.paste(defective, (0, 0))
-    combined.paste(reference, (0, defective.height))
-    return combined.resize((224, 224), Image.Resampling.LANCZOS)
+class _ScYoloTrainingDataset(IterableDataset[dict[str, Tensor]]):
+    def __init__(
+        self,
+        parquet_paths: ParquetPaths,
+        label_to_index: dict[str, int],
+        *,
+        image_size: int,
+        shuffle_seed: int,
+        shuffle_buffer_rows: int,
+    ) -> None:
+        super().__init__()
+        self._rows = stream_parquet_dataset(
+            parquet_paths,
+            columns=_TRAINING_COLUMNS,
+            shuffle=True,
+            seed=shuffle_seed,
+            shuffle_buffer_rows=shuffle_buffer_rows,
+        )
+        self._label_to_index = label_to_index
+        self._image_size = image_size
+
+    def __len__(self) -> int:
+        return len(self._rows)
+
+    def set_epoch(self, epoch: int) -> None:
+        self._rows.set_epoch(epoch)
+
+    def __iter__(self) -> Iterator[dict[str, Tensor]]:
+        for row in self._rows:
+            label = str(row.get("label") or "").strip()
+            class_index = self._label_to_index.get(label)
+            if class_index is None:
+                continue
+            yield {
+                "img": _preprocess_grayscale_pair(row, self._image_size),
+                "cls": torch.tensor(class_index, dtype=torch.long),
+            }
 
 
-def train_yolo(
+class _ScYoloPredictionDataset(IterableDataset[dict[str, object]]):
+    def __init__(
+        self,
+        parquet_paths: ParquetPaths,
+        *,
+        image_size: int,
+    ) -> None:
+        super().__init__()
+        self._rows = stream_parquet_dataset(
+            parquet_paths,
+            columns=_PREDICTION_COLUMNS,
+            shuffle=False,
+            seed=0,
+            shuffle_buffer_rows=1,
+        )
+        self._image_size = image_size
+
+    def __len__(self) -> int:
+        return len(self._rows)
+
+    def __iter__(self) -> Iterator[dict[str, object]]:
+        for row in self._rows:
+            sample_id = str(row.get("sample_id") or "")
+            try:
+                image = _preprocess_grayscale_pair(row, self._image_size)
+            except (OSError, TypeError, ValueError) as exc:
+                yield {
+                    "sample_id": sample_id,
+                    "image": None,
+                    "error": f"image preprocessing failed: {exc}",
+                }
+                continue
+            yield {"sample_id": sample_id, "image": image, "error": None}
+
+
+def _preprocess_grayscale_pair(row: dict[str, Any], image_size: int) -> Tensor:
+    defective = _decode_grayscale(
+        row.get("patch_defective_bytes"),
+        role="patch_defective",
+        image_size=image_size,
+    )
+    reference = _decode_grayscale(
+        row.get("patch_template_bytes"),
+        role="patch_template",
+        image_size=image_size,
+    )
+    return torch.cat((defective, reference), dim=0)
+
+
+def _decode_grayscale(value: object, *, role: str, image_size: int) -> Tensor:
+    image_bytes = _optional_bytes(value)
+    if not image_bytes:
+        raise ValueError(f"missing {role} image bytes")
+    with Image.open(io.BytesIO(image_bytes)) as source:
+        image = source.convert("L").resize(
+            (image_size, image_size),
+            Image.Resampling.BILINEAR,
+        )
+        pixels = torch.frombuffer(bytearray(image.tobytes()), dtype=torch.uint8)
+    tensor = pixels.reshape(1, image_size, image_size).to(dtype=torch.float32)
+    return tensor.div_(255.0).sub_(0.5).div_(0.5)
+
+
+def _optional_bytes(value: object) -> bytes | None:
+    if isinstance(value, memoryview):
+        return value.tobytes()
+    if isinstance(value, bytearray):
+        return bytes(value)
+    return value if isinstance(value, bytes) else None
+
+
+def inspect_yolo_training_samples(
+    parquet_paths: ParquetPaths,
+    label_space: Sequence[str],
+) -> tuple[tuple[str, ...], int, int]:
+    """Return active labels, valid sample count, and unreadable sample count."""
+
+    rows = stream_parquet_dataset(
+        parquet_paths,
+        columns=_TRAINING_COLUMNS,
+        shuffle=False,
+        seed=0,
+        shuffle_buffer_rows=1,
+    )
+    active: set[str] = set()
+    valid_samples = 0
+    unreadable_samples = 0
+    for row in rows:
+        label = str(row.get("label") or "").strip()
+        if not label:
+            continue
+        try:
+            _verify_image(row.get("patch_defective_bytes"))
+            _verify_image(row.get("patch_template_bytes"))
+        except (OSError, TypeError, ValueError):
+            unreadable_samples += 1
+            continue
+        active.add(label)
+        valid_samples += 1
+    declared = [label for label in label_space if label in active]
+    labels = tuple(declared + sorted(active - set(declared)))
+    return labels, valid_samples, unreadable_samples
+
+
+def _verify_image(value: object) -> None:
+    image_bytes = _optional_bytes(value)
+    if not image_bytes:
+        raise ValueError("missing image bytes")
+    with Image.open(io.BytesIO(image_bytes)) as image:
+        image.verify()
+
+
+def _build_yolo_classifier(num_classes: int) -> nn.Module:
+    from ultralytics.nn.tasks import ClassificationModel
+
+    return ClassificationModel(
+        "yolov8n-cls.yaml",
+        ch=YOLO_INPUT_CHANNELS,
+        nc=num_classes,
+        verbose=False,
+    )
+
+
+async def train_yolo(
     parquet_paths: ParquetPaths,
     label_space: Sequence[str],
     *,
@@ -42,86 +208,108 @@ def train_yolo(
     work_dir: Path,
     shuffle_seed: int,
     shuffle_buffer_rows: int,
-    epochs: int = 3,
+    epochs: int = YOLO_TRAIN_EPOCHS,
+    batch_size: int = YOLO_TRAIN_BATCH_SIZE,
+    image_size: int = YOLO_IMAGE_SIZE,
+    workers: int = YOLO_DATALOADER_WORKERS,
+    on_epoch: Callable[[int, int, float, float], Awaitable[None]] | None = None,
 ) -> TrainingOutput:
-    from ultralytics import YOLO
-
     labels = list(label_space)
     if len(labels) < 2:
         raise ValueError(f"need at least 2 active labels for training, got: {labels}")
     if valid_samples == 0:
-        raise ValueError("no valid defective images with labels found")
+        raise ValueError("no valid paired images with labels found")
+    _validate_loader_options(
+        batch_size=batch_size,
+        image_size=image_size,
+        workers=workers,
+    )
 
     work_dir.mkdir(parents=True, exist_ok=True)
-    dataset_root = work_dir / "ultralytics-data"
-    staging_root = dataset_root / "staging"
-    staging_root.mkdir(parents=True)
-    staged_by_label: dict[str, Path] = {}
-    trained_samples = 0
-    samples = iter_sc_training_samples(
+    label_to_index = {label: index for index, label in enumerate(labels)}
+    dataset = _ScYoloTrainingDataset(
         parquet_paths,
-        shuffle=True,
-        seed=shuffle_seed,
+        label_to_index,
+        image_size=image_size,
+        shuffle_seed=shuffle_seed,
         shuffle_buffer_rows=shuffle_buffer_rows,
     )
-    for index, sample in enumerate(samples):
-        label_root = staged_by_label.get(sample.label)
-        if label_root is None:
-            label_token = hashlib.sha256(sample.label.encode("utf-8")).hexdigest()
-            label_root = staging_root / label_token
-            label_root.mkdir()
-            staged_by_label[sample.label] = label_root
-        sample_token = hashlib.sha256(sample.sample_id.encode("utf-8")).hexdigest()[:16]
-        image_path = label_root / f"{index:012d}-{sample_token}.jpg"
-        _combined_image(sample).save(image_path, "JPEG")
-        trained_samples += 1
-    if trained_samples != valid_samples:
-        raise RuntimeError(
-            "SC training sample count changed between inspection and materialization: "
-            f"inspected={valid_samples} materialized={trained_samples}"
-        )
-
-    train_root = dataset_root / "train"
-    train_root.mkdir()
-    label_to_index = {label: index for index, label in enumerate(labels)}
-    for label, index in label_to_index.items():
-        staged_by_label[label].rename(train_root / f"{index:06d}")
-    staging_root.rmdir()
-
-    run_root = work_dir / "runs"
-    model = YOLO("yolov8n-cls.pt")
-    model.train(
-        data=str(dataset_root),
-        epochs=epochs,
-        imgsz=224,
-        device=select_ultralytics_device(torch),
-        project=str(run_root),
-        name="train",
-        exist_ok=True,
+    device = select_torch_device(torch)
+    loader = DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=workers,
+        persistent_workers=False,
+        prefetch_factor=2 if workers else None,
+        pin_memory=device.type == "cuda",
     )
-    checkpoint_path = run_root / "train" / "weights" / "best.pt"
-    if not checkpoint_path.exists():
-        checkpoint_path = run_root / "train" / "weights" / "last.pt"
-    if not checkpoint_path.exists():
-        raise FileNotFoundError("Ultralytics training did not produce a checkpoint")
+    torch.manual_seed(shuffle_seed)
+    model = _build_yolo_classifier(len(labels)).to(device)
+    optimizer = torch.optim.AdamW(
+        model.parameters(),
+        lr=1e-3,
+        weight_decay=5e-4,
+    )
+
+    final_loss = 0.0
+    final_accuracy = 0.0
+    for epoch in range(epochs):
+        dataset.set_epoch(epoch)
+        model.train()
+        total_loss = 0.0
+        correct = 0
+        seen = 0
+        for raw_batch in loader:
+            batch = cast(dict[str, Tensor], raw_batch)
+            images = batch["img"].to(device, non_blocking=device.type == "cuda")
+            targets = batch["cls"].to(device, non_blocking=device.type == "cuda")
+            optimizer.zero_grad(set_to_none=True)
+            logits = _classification_logits(model(images))
+            loss = F.cross_entropy(logits, targets)
+            loss.backward()
+            optimizer.step()
+            sample_count = int(targets.shape[0])
+            total_loss += float(loss.detach().item()) * sample_count
+            correct += int((logits.argmax(dim=1) == targets).sum().item())
+            seen += sample_count
+        if seen != valid_samples:
+            raise RuntimeError(
+                "SC training sample count changed between inspection and DataLoader: "
+                f"inspected={valid_samples} loaded={seen} epoch={epoch}"
+            )
+        final_loss = total_loss / seen
+        final_accuracy = correct / seen
+        if on_epoch is not None:
+            await on_epoch(epoch + 1, epochs, final_loss, final_accuracy)
+
+    checkpoint_path = work_dir / "checkpoint.pt"
+    torch.save(
+        {
+            "model_state_dict": {
+                name: parameter.detach().cpu()
+                for name, parameter in model.state_dict().items()
+            },
+            "architecture": "yolov8n-cls",
+            "label_space": labels,
+            "num_classes": len(labels),
+            "input_channels": YOLO_INPUT_CHANNELS,
+            "image_size": image_size,
+            "training_seed": shuffle_seed,
+        },
+        checkpoint_path,
+    )
     metrics: dict[str, object] = {
-        "num_samples": trained_samples,
+        "num_samples": valid_samples,
         "num_classes": len(labels),
         "epochs": epochs,
+        "batch_size": batch_size,
+        "image_size": image_size,
+        "loss": final_loss,
+        "accuracy": final_accuracy,
         "architecture": "yolov8n-cls",
         "framework": "ultralytics",
     }
-    results_csv = run_root / "train" / "results.csv"
-    if results_csv.exists():
-        with results_csv.open(newline="") as results_file:
-            rows = list(csv.DictReader(results_file))
-        if rows:
-            for key, value in rows[-1].items():
-                normalized_key = key.strip()
-                try:
-                    metrics[normalized_key] = float(value)
-                except (TypeError, ValueError):
-                    metrics[normalized_key] = value
     return TrainingOutput(
         checkpoint_path=checkpoint_path,
         metrics=metrics,
@@ -129,9 +317,13 @@ def train_yolo(
             "runtime": "yolo-sc-v1",
             "framework": "ultralytics",
             "architecture": "yolov8n-cls",
-            "trained_samples": trained_samples,
+            "trained_samples": valid_samples,
             "label_space": labels,
             "label_to_idx": label_to_index,
+            "input_channels": YOLO_INPUT_CHANNELS,
+            "image_roles": ["patch_defective", "patch_template"],
+            "image_size": image_size,
+            "training_seed": shuffle_seed,
         },
     )
 
@@ -139,66 +331,201 @@ def train_yolo(
 def predict_yolo(
     checkpoint_path: Path,
     label_space: Sequence[str],
-    samples: Iterable[PredictionSample],
+    parquet_paths: ParquetPaths,
     *,
-    batch_size: int = 16,
-) -> Iterable[Prediction]:
-    from ultralytics import YOLO
-
+    batch_size: int = YOLO_PREDICTION_BATCH_SIZE,
+    image_size: int = YOLO_IMAGE_SIZE,
+    workers: int = YOLO_DATALOADER_WORKERS,
+) -> Iterator[Prediction]:
     labels = [str(label) for label in label_space]
     if not labels:
         raise ValueError("YOLO model metadata must include compact label_space")
-    model = YOLO(str(checkpoint_path))
-    model.to(select_torch_device(torch))
+    _validate_loader_options(
+        batch_size=batch_size,
+        image_size=image_size,
+        workers=workers,
+    )
+    device = select_torch_device(torch)
+    model = _load_yolo_classifier(
+        checkpoint_path,
+        labels,
+        image_size=image_size,
+        device=device,
+    )
+    dataset = _ScYoloPredictionDataset(parquet_paths, image_size=image_size)
+    loader = DataLoader(
+        dataset,
+        batch_size=None,
+        shuffle=False,
+        num_workers=workers,
+        persistent_workers=False,
+        prefetch_factor=2 if workers else None,
+        pin_memory=device.type == "cuda",
+    )
 
-    pending: list[PredictionSample] = []
-    for sample in samples:
-        if sample.defective_image is None or sample.reference_image is None:
-            yield Prediction(
-                sample_id=sample.sample_id,
-                label="",
-                confidence=None,
-                error="missing materialized image bytes",
+    model.eval()
+    with torch.inference_mode():
+        pending: list[dict[str, object]] = []
+        for raw_sample in loader:
+            pending.append(cast(dict[str, object], raw_sample))
+            if len(pending) == batch_size:
+                yield from _predict_preprocessed_batch(
+                    model,
+                    labels,
+                    pending,
+                    device=device,
+                )
+                pending = []
+        if pending:
+            yield from _predict_preprocessed_batch(
+                model,
+                labels,
+                pending,
+                device=device,
             )
-            continue
-        pending.append(sample)
-        if len(pending) == batch_size:
-            yield from _predict_yolo_batch(model, labels, pending)
-            pending = []
-    if pending:
-        yield from _predict_yolo_batch(model, labels, pending)
 
 
-def _predict_yolo_batch(
-    model: Any,
+def _load_yolo_classifier(
+    checkpoint_path: Path,
     labels: Sequence[str],
-    samples: Sequence[PredictionSample],
-) -> Iterable[Prediction]:
-    results = model([_combined_image(sample) for sample in samples])
-    for index, sample in enumerate(samples):
-        probabilities = results[index].probs
-        if probabilities is None:
-            yield Prediction(
-                sample_id=sample.sample_id,
-                label="",
-                confidence=None,
-                error="no classification output",
+    *,
+    image_size: int,
+    device: Any,
+) -> nn.Module:
+    checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
+    if not isinstance(checkpoint, dict):
+        raise ValueError("YOLO checkpoint must contain a mapping")
+    if checkpoint.get("architecture") != "yolov8n-cls":
+        raise ValueError("YOLO checkpoint architecture must be yolov8n-cls")
+    if checkpoint.get("input_channels") != YOLO_INPUT_CHANNELS:
+        raise ValueError(
+            f"YOLO checkpoint must use {YOLO_INPUT_CHANNELS} grayscale channels"
+        )
+    if checkpoint.get("image_size") != image_size:
+        raise ValueError(
+            "YOLO checkpoint image size does not match prediction image size: "
+            f"checkpoint={checkpoint.get('image_size')} prediction={image_size}"
+        )
+    checkpoint_labels = checkpoint.get("label_space")
+    if checkpoint_labels != list(labels):
+        raise ValueError("YOLO checkpoint label_space does not match model metadata")
+    state_dict = checkpoint.get("model_state_dict")
+    if not isinstance(state_dict, dict):
+        raise ValueError("YOLO checkpoint is missing model_state_dict")
+    model = _build_yolo_classifier(len(labels))
+    model.load_state_dict(state_dict)
+    return model.to(device)
+
+
+def _classification_logits(output: object) -> Tensor:
+    if isinstance(output, tuple):
+        output = output[-1]
+    if not isinstance(output, Tensor):
+        raise TypeError("YOLO classifier must return a tensor or tensor tuple")
+    return output
+
+
+def _predict_preprocessed_batch(
+    model: nn.Module,
+    labels: Sequence[str],
+    samples: list[dict[str, object]],
+    *,
+    device: Any,
+) -> Iterator[Prediction]:
+    batch = _collate_prediction_samples(samples)
+    sample_ids = cast(list[str], batch["sample_ids"])
+    errors = cast(list[str | None], batch["errors"])
+    valid_positions = cast(list[int], batch["valid_positions"])
+    images = cast(Tensor, batch["images"])
+    predictions: dict[int, Prediction] = {}
+    if valid_positions:
+        probabilities = _classification_logits(
+            model(
+                images.to(
+                    device,
+                    non_blocking=device.type == "cuda",
+                )
             )
-            continue
-        output_classes = int(probabilities.data.shape[0])
-        if output_classes != len(labels):
+        ).softmax(dim=1)
+        if int(probabilities.shape[1]) != len(labels):
             raise ValueError(
                 "YOLO prediction output class count does not match model metadata "
-                f"label_space: output={output_classes} labels={len(labels)}"
+                "label_space: "
+                f"output={probabilities.shape[1]} labels={len(labels)}"
             )
-        scores = {
-            label: float(probabilities.data[label_index].item())
-            for label_index, label in enumerate(labels)
-        }
-        best_index = int(probabilities.top1)
-        yield Prediction(
-            sample_id=sample.sample_id,
-            label=labels[best_index],
-            confidence=float(probabilities.top1conf.item()),
-            scores=scores,
-        )
+        for output_index, sample_position in enumerate(valid_positions):
+            scores = {
+                label: float(probabilities[output_index, label_index].item())
+                for label_index, label in enumerate(labels)
+            }
+            confidence, best_index = probabilities[output_index].max(dim=0)
+            predictions[sample_position] = Prediction(
+                sample_id=sample_ids[sample_position],
+                label=labels[int(best_index.item())],
+                confidence=float(confidence.item()),
+                scores=scores,
+            )
+    for position, sample_id in enumerate(sample_ids):
+        error = errors[position]
+        if error is not None:
+            yield Prediction(
+                sample_id=sample_id,
+                label="",
+                confidence=None,
+                error=error,
+            )
+        else:
+            yield predictions[position]
+
+
+def _collate_prediction_samples(
+    samples: list[dict[str, object]],
+) -> dict[str, object]:
+    sample_ids: list[str] = []
+    errors: list[str | None] = []
+    valid_positions: list[int] = []
+    images: list[Tensor] = []
+    for position, sample in enumerate(samples):
+        sample_ids.append(cast(str, sample["sample_id"]))
+        error = cast(str | None, sample["error"])
+        errors.append(error)
+        if error is None:
+            valid_positions.append(position)
+            images.append(cast(Tensor, sample["image"]))
+    return {
+        "sample_ids": sample_ids,
+        "errors": errors,
+        "valid_positions": valid_positions,
+        "images": (
+            torch.stack(images)
+            if images
+            else torch.empty((0, YOLO_INPUT_CHANNELS, 0, 0))
+        ),
+    }
+
+
+def _validate_loader_options(
+    *,
+    batch_size: int,
+    image_size: int,
+    workers: int,
+) -> None:
+    if batch_size <= 0:
+        raise ValueError("batch_size must be greater than zero")
+    if image_size <= 0:
+        raise ValueError("image_size must be greater than zero")
+    if workers < 0:
+        raise ValueError("workers must be non-negative")
+
+
+__all__ = [
+    "YOLO_DATALOADER_WORKERS",
+    "YOLO_IMAGE_SIZE",
+    "YOLO_INPUT_CHANNELS",
+    "YOLO_PREDICTION_BATCH_SIZE",
+    "YOLO_TRAIN_BATCH_SIZE",
+    "YOLO_TRAIN_EPOCHS",
+    "inspect_yolo_training_samples",
+    "predict_yolo",
+    "train_yolo",
+]

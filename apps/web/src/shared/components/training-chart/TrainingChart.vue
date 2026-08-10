@@ -3,11 +3,7 @@ import { computed } from "vue";
 import VChart from "vue-echarts";
 import { use } from "echarts/core";
 import { LineChart } from "echarts/charts";
-import {
-  GridComponent,
-  LegendComponent,
-  TooltipComponent,
-} from "echarts/components";
+import { GridComponent, LegendComponent, TooltipComponent } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
 import type { EChartsOption } from "echarts";
 
@@ -20,6 +16,8 @@ type MetricsArtifact = Record<string, unknown> | null;
 interface TrainingMetric {
   epoch: number;
   loss: number;
+  accuracy?: number;
+  totalEpochs?: number;
 }
 
 const props = defineProps<{
@@ -30,17 +28,42 @@ const props = defineProps<{
 const metrics = computed<TrainingMetric[]>(() =>
   props.events
     .map((event) => {
-      const { epoch, loss } = event.payload;
+      const epoch = event.payload.epoch;
+      const loss = event.payload.loss ?? event.payload["val/loss"];
 
       if (typeof epoch !== "number" || typeof loss !== "number") {
         return null;
       }
 
-      return { epoch, loss };
+      const accuracy = event.payload.accuracy;
+      const totalEpochs = event.payload.total_epochs;
+      return {
+        epoch,
+        loss,
+        ...(typeof accuracy === "number" ? { accuracy } : {}),
+        ...(typeof totalEpochs === "number" ? { totalEpochs } : {}),
+      };
     })
     .filter((metric): metric is TrainingMetric => metric !== null)
     .sort((left, right) => left.epoch - right.epoch),
 );
+
+const latestProgress = computed(() => {
+  const latest = metrics.value.at(-1);
+  if (!latest) return null;
+  const totalEpochs = latest.totalEpochs;
+  return {
+    epoch: latest.epoch,
+    totalEpochs,
+    label: totalEpochs ? `Epoch ${latest.epoch} / ${totalEpochs}` : `Epoch ${latest.epoch}`,
+    loss: latest.loss,
+    accuracy: latest.accuracy,
+    percentage:
+      totalEpochs && totalEpochs > 0
+        ? Math.min(100, Math.round((latest.epoch / totalEpochs) * 100))
+        : null,
+  };
+});
 
 const aggregateStats = computed(() => {
   const metricsArtifact = props.metricsArtifact;
@@ -72,7 +95,9 @@ const labelBreakdown = computed(() => {
     .sort((left, right) => left.label.localeCompare(right.label));
 });
 
-const hasArtifactSummary = computed(() => aggregateStats.value.length > 0 || labelBreakdown.value.length > 0);
+const hasArtifactSummary = computed(
+  () => aggregateStats.value.length > 0 || labelBreakdown.value.length > 0,
+);
 
 const option = computed<EChartsOption>(() => ({
   backgroundColor: "transparent",
@@ -130,7 +155,36 @@ const option = computed<EChartsOption>(() => ({
 
 <template>
   <section class="training-chart">
-    <n-empty v-if="metrics.length === 0 && !hasArtifactSummary" description="No training metrics available yet" />
+    <n-space
+      v-if="latestProgress"
+      class="training-chart__progress"
+      vertical
+      :size="8"
+      data-testid="training-epoch-progress"
+    >
+      <n-space justify="space-between" align="center">
+        <n-text strong>{{ latestProgress.label }}</n-text>
+        <n-text depth="3">
+          loss {{ latestProgress.loss.toFixed(4) }}
+          <template v-if="latestProgress.accuracy !== undefined">
+            · accuracy {{ (latestProgress.accuracy * 100).toFixed(1) }}%
+          </template>
+        </n-text>
+      </n-space>
+      <n-progress
+        v-if="latestProgress.percentage !== null"
+        type="line"
+        :percentage="latestProgress.percentage"
+        :height="18"
+        :border-radius="5"
+        indicator-placement="inside"
+        processing
+      />
+    </n-space>
+    <n-empty
+      v-if="metrics.length === 0 && !hasArtifactSummary"
+      description="No training metrics available yet"
+    />
     <VChart
       v-else-if="metrics.length > 0"
       class="training-chart__plot"
@@ -174,6 +228,11 @@ const option = computed<EChartsOption>(() => ({
 
 .training-chart__plot {
   width: 100%;
-  height: 100%;
+  height: calc(100% - 72px);
+  min-height: 280px;
+}
+
+.training-chart__progress {
+  margin-bottom: 12px;
 }
 </style>

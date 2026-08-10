@@ -163,6 +163,13 @@ SC Train & Predict 对每个有效标注类别最多选择 1,000 个样本进入
 validation/review pool。前端必须在任一类别超过上限时向用户显示该规则，不能把
 1,000 条上限实现为未公开的 runtime 默认值。
 
+SC 当前只注册 `yolo-sc-v1` 算法，不保留 ResNet compatibility 分支。YOLO 输入是
+`patch_defective` 与 `patch_template` 两张灰度图：每张独立 resize 到 `128x128`，
+再按 channel 顺序叠成 `[2, 128, 128]`，禁止在空间维纵向或横向拼图。训练固定
+50 epochs；预测模型 batch 固定 256。Parquet 读取、图片解码、灰度转换、resize
+和 channel stack 属于算法 Dataset preprocess，并由多进程 DataLoader worker
+执行；预测主进程只把 worker 输出的预处理 tensor 聚合为 256 条模型 batch。
+
 完整 capability matrix 和 SC sparse 路径详见 `docs/architecture/dataset-storage-modes.md`。Smoke 验证使用 `make smoke-tests`。
 
 ## 5. Label Studio 与 Prediction

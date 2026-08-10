@@ -11,21 +11,6 @@ from pathlib import Path
 
 
 @dataclass(frozen=True, slots=True)
-class TrainingSample:
-    sample_id: str
-    defective_image: bytes
-    reference_image: bytes
-    label: str
-
-
-@dataclass(frozen=True, slots=True)
-class PredictionSample:
-    sample_id: str
-    defective_image: bytes | None
-    reference_image: bytes | None
-
-
-@dataclass(frozen=True, slots=True)
 class Prediction:
     sample_id: str
     label: str

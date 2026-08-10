@@ -6,11 +6,6 @@ from ml_library.data_loading.in_memory import (
     InMemoryArrowDataset,
     collect_parquet_dataset,
 )
-from ml_library.data_loading.sc import (
-    inspect_sc_training_samples,
-    iter_sc_prediction_samples,
-    iter_sc_training_samples,
-)
 from ml_library.data_loading.streaming import (
     StreamingParquetDataset,
     stream_parquet_dataset,
@@ -21,9 +16,6 @@ __all__ = [
     "InMemoryArrowDataset",
     "StreamingParquetDataset",
     "collect_parquet_dataset",
-    "inspect_sc_training_samples",
-    "iter_sc_prediction_samples",
-    "iter_sc_training_samples",
     "open_hf_arrow_dataset",
     "stream_parquet_dataset",
 ]

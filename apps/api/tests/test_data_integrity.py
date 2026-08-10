@@ -287,7 +287,7 @@ class ApiClient:
         return r.json()
 
     async def upload_model(
-        self, job_id: str, *, trainer_id: str = "resnet50-sc-v1",
+        self, job_id: str, *, trainer_id: str = "yolo-sc-v1",
         org_id: str = DEV_ORG_ID,
     ) -> dict:
         import io as _io2
@@ -299,8 +299,8 @@ class ApiClient:
             "profile_id": "custom",
             "model_spec": {
                 "framework": "pytorch",
-                "architecture": "resnet50",
-                "base_model": "torchvision/resnet50",
+                "architecture": "yolov8n-cls",
+                "base_model": "ultralytics/yolov8n-cls",
             },
             "compatibility": {
                 "dataset_types": ["image_classification"],
@@ -782,7 +782,7 @@ async def run() -> bool:
 
         # ── Step 10: Train job + model + predict ────────────────────────────
         print('\n[10] Create training job + upload model + verify via API')
-        trainer_id = "resnet50-sc-v1"
+        trainer_id = "yolo-sc-v1"
 
         # 10a. Create training job via API
         train_job = await api.create_training_job_api(

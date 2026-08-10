@@ -33,10 +33,10 @@ def _submission(*, deployment_id: str | None = "deployment-1"):
     model_catalog = Mock()
     model_catalog.get_model = AsyncMock(
         return_value=SimpleNamespace(
-            trainer_id="resnet50-sc-v1",
+            trainer_id="yolo-sc-v1",
             trainer_name=None,
             metadata={
-                "model_contract": "sc.resnet50.model.v1",
+                "model_contract": "sc.yolo.model.v1",
                 "model_schema_version": "1",
             },
         )
@@ -86,6 +86,6 @@ async def test_submission_builds_minimal_runtime_parameters() -> None:
     assert parameters["job_id"] == job.id
     assert parameters["sample_ids"] == ["sample-1"]
     assert parameters["prompt"] == "classify"
-    assert parameters["predictor_id"] == "resnet50-sc-v1"
+    assert parameters["predictor_id"] == "yolo-sc-v1"
     assert "output_contract" not in parameters
     assert "resource_profile" not in parameters

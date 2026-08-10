@@ -155,10 +155,11 @@ each batch it resolves only that batch's images, writes the materialized
 Parquet batch, releases the image map, and then advances. The image fetch stream
 has explicit concurrency and byte limits.
 
-`iter_sc_prediction_samples(...)` now projects Parquet row groups lazily. The ML
-implementations accept `Iterable`, so the checkpoint loads once from a local
-path and inference consumes bounded batches without first collecting the full
-Parquet table or building a 300k-element list.
+The YOLO prediction Dataset projects Parquet row groups lazily. Four DataLoader
+workers decode each defective/template pair as grayscale, resize it to
+`128x128`, and stack the two images by channel. The checkpoint loads once in the
+model process, which consumes collated batches of 256 without collecting the
+full Parquet table or building a dataset-sized Python list.
 
 Prediction output is appended to immutable job shards. Replace the in-memory
 “existing + all new frames + unique + BytesIO” merge with one of these explicit

@@ -209,7 +209,7 @@ Model artifacts use two contracts at different layers:
 
 - `model.bundle.v1` is the transport envelope for files and provenance;
 - a versioned algorithm-specific model contract, such as
-  `sc.resnet50.model.v1`, defines trainer/predictor compatibility.
+  `sc.yolo.model.v1`, defines trainer/predictor compatibility.
 
 The training route output contract and persisted model metadata use the
 algorithm-specific contract. A predictor must consume the exact same contract
@@ -220,11 +220,11 @@ Minimum bundle manifest:
 ```json
 {
   "artifact_contract": "model.bundle.v1",
-  "model_contract": "sc.resnet50.model.v1",
+  "model_contract": "sc.yolo.model.v1",
   "model_schema_version": "1",
   "artifact_id": "artifact_123",
   "job_id": "job_123",
-  "algo_id": "sc-resnet",
+  "algo_id": "yolo-sc",
   "algo_version": "1",
   "train_flow_version": "2026.06.18",
   "code_version": "git-sha-or-image-digest",
@@ -233,7 +233,7 @@ Minimum bundle manifest:
     { "role": "labels", "uri": "s3://.../labels.json" },
     { "role": "preprocess", "uri": "s3://.../preprocess.json" }
   ],
-  "predictor_compatibility": ["sc-resnet-predictor"]
+  "predictor_compatibility": ["yolo-sc-v1"]
 }
 ```
 

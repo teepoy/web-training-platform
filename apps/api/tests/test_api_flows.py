@@ -238,7 +238,7 @@ def test_create_prediction_job_async() -> None:
             data={
                 "metadata": '{"name":"uploaded-model","job_id":"'
                 + job_id
-                + '","template_id":"image-classifier","profile_id":"resnet50-sc-v1","format":"pytorch","model_spec":{"framework":"pytorch","architecture":"resnet50","base_model":"torchvision/resnet50"},"compatibility":{"dataset_types":["image_classification"],"task_types":["classification"],"prediction_targets":["image_classification"],"label_space":["a","b"]}}',
+                + '","template_id":"image-classifier","profile_id":"yolo-sc-v1","format":"pytorch","model_spec":{"framework":"pytorch","architecture":"yolov8n-cls","base_model":"ultralytics/yolov8n-cls"},"compatibility":{"dataset_types":["image_classification"],"task_types":["classification"],"prediction_targets":["image_classification"],"label_space":["a","b"]}}',
             },
         )
         assert upload.status_code == 200

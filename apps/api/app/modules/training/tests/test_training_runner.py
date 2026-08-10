@@ -26,7 +26,7 @@ async def test_training_runtime_host_only_builds_context_and_invokes_registratio
         result = await execute_training_runtime(
             job_id="job-1",
             dataset_id="dataset-1",
-            trainer_id="resnet50-sc-v1",
+            trainer_id="yolo-sc-v1",
             created_by="user-1",
             app_context=app_context,
         )
@@ -34,7 +34,7 @@ async def test_training_runtime_host_only_builds_context_and_invokes_registratio
     assert result == {"status": "completed"}
     assert stream.call_args is not None
     trainer_id, context = stream.call_args.args
-    assert trainer_id == "resnet50-sc-v1"
+    assert trainer_id == "yolo-sc-v1"
     assert isinstance(context, TrainingRuntimeContext)
     assert context.app_context is app_context
 
@@ -59,7 +59,7 @@ async def test_training_runtime_host_closes_owned_context() -> None:
         await execute_training_runtime(
             job_id="job-1",
             dataset_id="dataset-1",
-            trainer_id="resnet50-sc-v1",
+            trainer_id="yolo-sc-v1",
             created_by="user-1",
         )
 

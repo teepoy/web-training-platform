@@ -91,7 +91,7 @@ except ImportError:  # pragma: no cover
 #   BDD_MINIO_BUCKET=finetune-artifacts
 #   BDD_SAMPLES=30
 #   BDD_ANNOTATE=8
-#   BDD_TRAINER_ID=resnet50-sc-v1
+#   BDD_TRAINER_ID=yolo-sc-v1
 #   BDD_TRAIN_TIMEOUT=300
 #   BDD_PREDICT_TIMEOUT=600
 # ---------------------------------------------------------------------------
@@ -147,7 +147,7 @@ def num_annotate() -> int:
 
 @pytest.fixture(scope="module")
 def trainer_id() -> str:
-    return _env("BDD_TRAINER_ID", "resnet50-sc-v1")
+    return _env("BDD_TRAINER_ID", "yolo-sc-v1")
 
 
 @pytest.fixture(scope="module")
@@ -1104,7 +1104,7 @@ def test_bdd_full_pipeline_snapshot(
         "total_samples": len(sample_ids),
         "annotated_count": num_annotate,
         "trainer_id": trainer_id,
-        "trainer_label": "resnet50-sc-v1",
+        "trainer_label": "yolo-sc-v1",
         "steps": [],
     }
 

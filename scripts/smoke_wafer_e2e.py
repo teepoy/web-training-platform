@@ -39,7 +39,7 @@ API_URL = "http://localhost:8000"
 SEED_EMAIL = "seed@example.com"
 SEED_PASSWORD = "seed1234"
 DEFAULT_ANNOTATE_COUNT = 100
-DEFAULT_TRAINER_ID = "resnet50-sc-v1"
+DEFAULT_TRAINER_ID = "yolo-sc-v1"
 DEFAULT_IMPORT_TIMEOUT = 180
 DEFAULT_TRAIN_TIMEOUT = 900
 DEFAULT_PREDICT_TIMEOUT = 1_800  # 30 min
@@ -274,7 +274,6 @@ def _start_training(
         json={
             "dataset_id": dataset_id,
             "trainer_id": trainer_id,
-            "created_by": "seed-user",
         },
     )
     r.raise_for_status()
@@ -351,9 +350,10 @@ def _find_model(
         params={"dataset_id": dataset_id},
     )
     r.raise_for_status()
-    models = r.json()
+    payload = r.json()
+    models = payload.get("items") if isinstance(payload, dict) else payload
     if not isinstance(models, list):
-        raise RuntimeError("Model list response was not a list")
+        raise RuntimeError("Model list response did not contain an items list")
     for model in models:
         if str(model.get("job_id", "")) == job_id:
             return model
@@ -717,22 +717,11 @@ def main() -> int:
 
             print(f"  dataset_id={dataset_id}  imported_count={imported_count}")
 
-            # Resolve real dataset_id and imported_count from completed import
-            resolved_dataset_id, resolved_imported_count = (
-                _resolve_dataset_after_import(
-                    client,
-                    headers,
-                    args.api_url,
-                    dataset_name,
-                )
-            )
-            if not resolved_dataset_id:
+            if not dataset_id:
                 raise RuntimeError(
                     "SC import completed but dataset_id is empty "
                     f"(dataset_name={dataset_name})"
                 )
-            dataset_id = resolved_dataset_id
-            imported_count = resolved_imported_count
 
             import_elapsed = time.time() - t0
             _step(

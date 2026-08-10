@@ -213,7 +213,7 @@ def main() -> int:
             "/api/v1/training-jobs/train-and-predict",
             json={
                 "dataset_id": dataset_id,
-                "trainer_id": "resnet50-sc-v1",
+                "trainer_id": "yolo-sc-v1",
             },
         )
         submit_response.raise_for_status()

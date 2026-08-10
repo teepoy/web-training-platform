@@ -71,7 +71,7 @@ class SparseIndexReader:
         table = await asyncio.to_thread(
             pq.read_table,
             path,
-            columns=SPARSE_INDEX_COLUMNS,
+            columns=list(SPARSE_INDEX_COLUMNS),
             filters=[(SPARSE_INDEX_SAMPLE_ID_COLUMN, "in", wanted)],
         )
         result: dict[str, SampleLocator] = {}

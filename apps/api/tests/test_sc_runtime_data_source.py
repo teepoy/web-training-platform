@@ -70,7 +70,7 @@ async def test_dataset_runtime_source_reuses_storage_metadata_without_direct_ses
         app_context=app_context,
         job_id="job-1",
         dataset_id="dataset-1",
-        trainer_id="resnet50-sc-v1",
+        trainer_id="yolo-sc-v1",
         created_by="user-1",
         org_id="org-1",
         sample_ids=["sample-1"],

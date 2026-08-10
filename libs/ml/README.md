@@ -2,10 +2,10 @@
 
 Optional model implementations for SC training and prediction.
 
-This package owns direct imports of Torch, TorchVision, and Ultralytics. It
-accepts private in-process datasets and value models and returns checkpoint
-paths, metrics, and prediction records. It must not import FastAPI application modules, Prefect,
-repositories, ORM models, or dependency-injection containers.
+This package owns direct imports of Torch and Ultralytics. It accepts Parquet
+paths and returns checkpoint paths, metrics, and prediction records. It must not
+import FastAPI application modules, Prefect, repositories, ORM models, or
+dependency-injection containers.
 
 The dataclasses under `ml_library.models` are private, in-process value models—not
 transport contracts. If SC execution moves across a process or language
@@ -35,14 +35,18 @@ factory:
 - `stream_parquet_dataset(...)` returns a Torch `IterableDataset` with
   row-group partitioning and bounded-memory shuffle. Use
   `DataLoader(shuffle=False)`; the dataset performs the shuffle itself.
-- `inspect_sc_training_samples(...)` returns the plain active-label/count tuple;
-  `iter_sc_training_samples(...)` streams valid samples for a requested epoch.
-- `iter_sc_prediction_samples(...)` streams `PredictionSample` values one row at
-  a time. Missing images remain `None` so predictors can record a per-sample
-  failure without aborting the stream.
+- `inspect_yolo_training_samples(...)` returns the active-label/count tuple for
+  the SC YOLO branch.
+- YOLO train and prediction construct algorithm-owned streaming Torch datasets
+  over the Parquet paths. DataLoader workers decode the defective/template pair
+  as grayscale, resize each image to `128x128`, and stack them by channel into a
+  `[2, 128, 128]` tensor. Prediction uses batch size 256 and four workers.
+- Training builds the two-channel classifier from the Ultralytics package YAML
+  with a deterministic seed. It does not download pretrained weights at runtime
+  and does not enable AMP. The optional async epoch callback reports live loss
+  and accuracy without introducing a platform event type into this package.
 
-The SC helpers accept Parquet paths and return ordinary tuples or iterators.
-They do not introduce a shared ResNet/Ultralytics dataset or workspace object.
+The SC helpers do not introduce a cross-algorithm dataset or workspace object.
 
 Both Parquet modes generate `__row_index` from the explicit input path order and
 physical row order. The Arrow mode requires the materializer to persist the same

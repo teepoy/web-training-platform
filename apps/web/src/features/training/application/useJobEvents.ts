@@ -1,6 +1,15 @@
-import { ref, computed, onUnmounted, onMounted, isRef, watch, type Ref, type ComputedRef } from "vue";
-import { useAuthStore } from '@/features/auth/application/store';
-import type { TrainingEvent } from '@/shared/types/components';
+import {
+  ref,
+  computed,
+  onUnmounted,
+  onMounted,
+  isRef,
+  watch,
+  type Ref,
+  type ComputedRef,
+} from "vue";
+import { getAuthToken, withAuthQueryParams } from "@/shared/api/client";
+import type { TrainingEvent } from "@/shared/types/components";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "/api/v1";
 
@@ -92,21 +101,7 @@ export function useJobEvents(jobId: Ref<string> | string): JobEventsReturn {
     closeEs();
     status.value = "connecting";
 
-    let token: string | null = null;
-    try {
-      const authStore = useAuthStore();
-      token = authStore.token;
-    } catch {
-      /* pinia not ready */
-    }
-
-    if (!token) {
-      try {
-        token = localStorage.getItem("auth_token");
-      } catch {
-        /* localStorage not available */
-      }
-    }
+    const token = getAuthToken();
 
     if (!token && authRetries < AUTH_MAX_RETRIES) {
       authRetries++;
@@ -121,10 +116,7 @@ export function useJobEvents(jobId: Ref<string> | string): JobEventsReturn {
 
     authRetries = 0;
 
-    let url = `${API_BASE}/training-jobs/${encodeURIComponent(id)}/events`;
-    if (token) {
-      url += `?token=${encodeURIComponent(token)}`;
-    }
+    const url = withAuthQueryParams(`${API_BASE}/training-jobs/${encodeURIComponent(id)}/events`);
     es = new EventSource(url);
 
     es.onopen = () => {
@@ -136,9 +128,10 @@ export function useJobEvents(jobId: Ref<string> | string): JobEventsReturn {
       backoffMs = BACKOFF_INITIAL_MS;
     };
 
-    es.onmessage = (evt: MessageEvent) => {
+    const receiveEvent = (rawEvent: Event) => {
       if (closed) return;
 
+      const evt = rawEvent as MessageEvent<string>;
       let parsed: TrainingEvent;
       try {
         parsed = JSON.parse(evt.data) as TrainingEvent;
@@ -147,7 +140,15 @@ export function useJobEvents(jobId: Ref<string> | string): JobEventsReturn {
         return;
       }
 
-      if (parsed.ts && events.value.some((e) => e.ts === parsed.ts)) {
+      if (
+        events.value.some(
+          (event) =>
+            event.ts === parsed.ts &&
+            event.level === parsed.level &&
+            event.message === parsed.message &&
+            JSON.stringify(event.payload) === JSON.stringify(parsed.payload),
+        )
+      ) {
         return;
       }
 
@@ -157,6 +158,10 @@ export function useJobEvents(jobId: Ref<string> | string): JobEventsReturn {
         close();
       }
     };
+    es.onmessage = receiveEvent;
+    es.addEventListener("status", receiveEvent);
+    es.addEventListener("epoch", receiveEvent);
+    es.addEventListener("metric", receiveEvent);
 
     es.onerror = () => {
       if (closed) return;

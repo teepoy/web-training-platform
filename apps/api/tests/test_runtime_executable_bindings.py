@@ -5,11 +5,9 @@ from app.modules.runtime.catalog import runtime_catalog
 
 def test_runtime_catalog_is_the_single_trainer_predictor_source() -> None:
     assert set(runtime_catalog.list_trainer_ids()) == {
-        "resnet50-sc-v1",
         "yolo-sc-v1",
     }
     assert set(runtime_catalog.list_predictor_ids()) == {
-        "resnet50-sc-v1",
         "yolo-sc-v1",
     }
 

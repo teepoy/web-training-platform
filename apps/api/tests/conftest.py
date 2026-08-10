@@ -5,10 +5,7 @@ import json as _json
 import os
 import sys
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
-
-import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -45,7 +42,7 @@ DEFAULT_USER_ID = "00000000-0000-0000-0000-000000000002"
 # without going through the full app lifecycle.
 # ---------------------------------------------------------------------------
 
-TRAINER_ID = "resnet50-sc-v1"
+TRAINER_ID = "yolo-sc-v1"
 VIEW_ID = "labeled_image_v1"
 
 
@@ -98,11 +95,11 @@ def upload_model(client, job_id):
         "format": "pytorch",
         "job_id": job_id,
         "template_id": "image-classifier",
-        "profile_id": "resnet50-sc-v1",
+        "profile_id": "yolo-sc-v1",
         "model_spec": {
             "framework": "pytorch",
-            "architecture": "resnet50",
-            "base_model": "torchvision/resnet50",
+            "architecture": "yolov8n-cls",
+            "base_model": "ultralytics/yolov8n-cls",
         },
         "compatibility": {
             "dataset_types": ["image_classification"],
