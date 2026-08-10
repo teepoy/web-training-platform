@@ -192,6 +192,40 @@ describe("ScSampleTableTanStack", () => {
     expect(wrapper.text()).toContain("12.5");
   });
 
+  it("keeps columns when a same-scope data-source wrapper changes during loading", async () => {
+    let resolveColumns!: (columns: ScDataColumn[]) => void;
+    const loadColumns = vi.fn(
+      () => new Promise<ScDataColumn[]>((resolve) => (resolveColumns = resolve)),
+    );
+    const loadRows = vi.fn<ScSampleTableDataSource["loadRows"]>(async () => ({
+      items: [sampleRow("11", 2)],
+      total: 1,
+      nextAnchor: null,
+    }));
+    const firstDataSource: ScSampleTableDataSource = {
+      scopeKey: "dataset:same-scope",
+      loadColumns,
+      loadRows,
+    };
+    const secondDataSource: ScSampleTableDataSource = {
+      scopeKey: "dataset:same-scope",
+      loadColumns,
+      loadRows,
+    };
+    const { wrapper } = await mountWithProviders(ScSampleTableTanStack, {
+      props: { dataSource: firstDataSource, enableSelection: true },
+    });
+
+    await vi.waitFor(() => expect(loadRows).toHaveBeenCalledOnce());
+    await wrapper.setProps({ dataSource: secondDataSource });
+    resolveColumns(defaultColumns);
+
+    await vi.waitFor(() => expect(wrapper.text()).toContain("Images"));
+    expect(wrapper.text()).toContain("11");
+    expect(wrapper.text()).toContain("2");
+    expect(loadColumns).toHaveBeenCalledOnce();
+  });
+
   it("shows the stable row key as Sample ID so duplicate defect IDs stay distinguishable", async () => {
     const loadRows = vi.fn<ScSampleTableDataSource["loadRows"]>(async () => ({
       items: [

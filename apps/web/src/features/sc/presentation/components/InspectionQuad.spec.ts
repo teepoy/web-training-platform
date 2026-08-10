@@ -481,6 +481,19 @@ describe("InspectionQuad state ownership", () => {
     expect(wrapper.emitted("clear-gallery-random-sampling")).toBeUndefined();
   });
 
+  it("ignores unchanged legend visibility during map bootstrap", async () => {
+    const { wrapper } = await mountWithProviders(InspectionQuad, { props: requiredProps });
+    const map = wrapper.findComponent({ name: "ScMapPanelBinned" });
+
+    map.vm.$emit("legend-hidden-change", { source: "class", hiddenKeys: [] });
+    await wrapper.vm.$nextTick();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(mapPanelHarness.updateSelection).not.toHaveBeenCalled();
+    expect(model.applyMapSelection).not.toHaveBeenCalled();
+    expect(model.clearMapSelection).not.toHaveBeenCalled();
+  });
+
   it("prunes transient map selection when legend values are hidden", async () => {
     model.mapSelectedDefectIds.value = [103, 274];
     mapPanelHarness.updateSelection.mockResolvedValueOnce([103]);

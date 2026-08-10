@@ -84,6 +84,7 @@ let requestedStart = 0;
 let loadingRequest: { start: number; version: number } | null = null;
 let loadController: AbortController | null = null;
 let loadTimer: ReturnType<typeof setTimeout> | null = null;
+let sourceColumnsRequestVersion = 0;
 
 const resolvedPageSize = computed(() => props.pageSize ?? PAGE_SIZE);
 const activeColumnDefinitions = computed(() =>
@@ -244,12 +245,16 @@ function defectCellStyle(): CSSProperties {
 }
 
 async function loadSourceColumns(): Promise<void> {
+  const version = ++sourceColumnsRequestVersion;
   const source = props.dataSource;
+  const scopeKey = source.scopeKey;
   try {
     const columns = (await source.loadColumns?.()) ?? null;
-    if (source === props.dataSource) sourceColumns.value = columns;
+    if (version === sourceColumnsRequestVersion && scopeKey === props.dataSource.scopeKey) {
+      sourceColumns.value = columns;
+    }
   } catch (error) {
-    if (source !== props.dataSource) return;
+    if (version !== sourceColumnsRequestVersion || scopeKey !== props.dataSource.scopeKey) return;
     pageError.value = error instanceof Error ? error.message : "Failed to load sample columns";
   }
 }

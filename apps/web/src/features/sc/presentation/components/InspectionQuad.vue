@@ -297,13 +297,27 @@ function handleLegendGroupByChange(source: ScLegendSource | null): void {
   legendGroupBy.value = source;
 }
 
+function normalizeHiddenLegendKeys(keys: readonly string[]): string[] {
+  return [...new Set(keys)].sort();
+}
+
 function handleLegendHiddenChange(payload: { source: ScLegendSource; hiddenKeys: string[] }): void {
+  const previousHiddenKeys = normalizeHiddenLegendKeys(
+    hiddenLegendKeysBySource.value[payload.source] ?? [],
+  );
+  const nextHiddenKeys = normalizeHiddenLegendKeys(payload.hiddenKeys);
+  if (
+    previousHiddenKeys.length === nextHiddenKeys.length &&
+    previousHiddenKeys.every((key, index) => key === nextHiddenKeys[index])
+  ) {
+    return;
+  }
   hiddenLegendKeysBySource.value = {
     ...hiddenLegendKeysBySource.value,
-    [payload.source]: [...payload.hiddenKeys],
+    [payload.source]: nextHiddenKeys,
   };
   if (payload.source === activeLegendSource.value) {
-    mapSelectionQueue.prune(payload.hiddenKeys);
+    mapSelectionQueue.prune(nextHiddenKeys);
   }
 }
 
