@@ -976,7 +976,6 @@ defineExpose({
 <style scoped>
 .sst-tanstack {
   --sst-row-background: var(--cv-card-bg, #1a1a2e);
-  --sst-row-hover-background: color-mix(in srgb, var(--sst-row-background) 94%, currentColor 6%);
   position: relative;
   flex: 1;
   min-height: 0;
@@ -1023,13 +1022,31 @@ defineExpose({
   overflow-y: scroll;
   scrollbar-gutter: stable;
   scrollbar-width: auto;
+  scrollbar-color: rgba(127, 127, 127, 0.68) rgba(127, 127, 127, 0.12);
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .sst-tanstack-scroll::-webkit-scrollbar {
-  display: block;
   width: 14px;
   height: 14px;
+  background: rgba(127, 127, 127, 0.12);
+}
+
+.sst-tanstack-scroll::-webkit-scrollbar-track,
+.sst-tanstack-scroll::-webkit-scrollbar-corner {
+  background: rgba(127, 127, 127, 0.12);
+}
+
+.sst-tanstack-scroll::-webkit-scrollbar-thumb {
+  min-height: 28px;
+  background-color: rgba(127, 127, 127, 0.68);
+  background-clip: content-box;
+  border: 3px solid transparent;
+  border-radius: 999px;
+}
+
+.sst-tanstack-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(127, 127, 127, 0.88);
 }
 
 .sst-tanstack-header {
@@ -1055,7 +1072,9 @@ defineExpose({
 }
 
 .sst-tanstack-row:hover .sst-tanstack-cell {
-  background: var(--sst-row-hover-background);
+  background:
+    linear-gradient(rgba(127, 127, 127, 0.1), rgba(127, 127, 127, 0.1)), var(--sst-row-background);
+  background: color-mix(in srgb, var(--sst-row-background) 94%, currentColor 6%);
 }
 
 .sst-tanstack-row--placeholder {
@@ -1090,7 +1109,9 @@ defineExpose({
 }
 
 .sst-tanstack-row:hover .sst-tanstack-cell--pinned {
-  background: var(--sst-row-hover-background);
+  background:
+    linear-gradient(rgba(127, 127, 127, 0.1), rgba(127, 127, 127, 0.1)), var(--sst-row-background);
+  background: color-mix(in srgb, var(--sst-row-background) 94%, currentColor 6%);
 }
 
 .sst-tanstack-cell--defect {

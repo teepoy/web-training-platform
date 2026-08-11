@@ -167,6 +167,7 @@ See `docs/protocols/agent-display-protocol.md` for the full protocol specificati
 - Views fetch and mutate via Vue Query, then invalidate relevant queries.
 - The UI is classification-first; task/model/result enums are intentionally narrow.
 - Vite dev server is configured for port `5173`.
+- Chrome 108 is the minimum browser target. Keep the Vite legacy, dev transform, dependency optimization, and Lightning CSS targets aligned through `TARGET_CHROME_VERSION`; CSS using runtime custom properties still needs an explicit fallback when it cannot be lowered statically.
 - Auth state is bootstrapped synchronously from `localStorage` in `src/app/main.ts` before route views mount, so refreshes keep the current session until the JWT expires.
 - Frontend auth uses the JWT `exp` claim to treat tokens as valid for their backend-configured lifetime; the default backend expiry is 60 minutes.
 

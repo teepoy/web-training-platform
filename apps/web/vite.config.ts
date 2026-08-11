@@ -7,6 +7,8 @@ import path from "path";
 import legacy from "@vitejs/plugin-legacy";
 
 const API_V1_PROXY_PREFIX = ["/api", "v1"].join("/");
+const TARGET_CHROME_VERSION = 108;
+const TARGET_CHROME = `chrome${TARGET_CHROME_VERSION}`;
 
 export default defineConfig({
   plugins: [
@@ -19,11 +21,22 @@ export default defineConfig({
     }),
     Components({ resolvers: [NaiveUiResolver()] }),
     legacy({
-      modernTargets: ["chrome >= 108"],
+      modernTargets: [`chrome >= ${TARGET_CHROME_VERSION}`],
       modernPolyfills: true,
       renderLegacyChunks: false,
     }),
   ],
+  css: {
+    transformer: "lightningcss",
+    lightningcss: {
+      targets: {
+        chrome: TARGET_CHROME_VERSION << 16,
+      },
+    },
+  },
+  esbuild: {
+    target: TARGET_CHROME,
+  },
   resolve: {
     alias: [
       {
@@ -42,7 +55,7 @@ export default defineConfig({
   },
   optimizeDeps: {
     esbuildOptions: {
-      target: "esnext",
+      target: TARGET_CHROME,
     },
     // Exclude full echarts bundle to prevent double-registration of components
     // (modular echarts/core + echarts/charts etc. are pre-bundled separately;

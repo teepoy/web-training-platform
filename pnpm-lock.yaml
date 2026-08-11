@@ -117,6 +117,9 @@ importers:
       katex:
         specifier: ^0.16.44
         version: 0.16.44
+      lightningcss:
+        specifier: ^1.32.0
+        version: 1.32.0
       msw:
         specifier: ^2.14.6
         version: 2.14.6(@types/node@22.19.15)(typescript@5.7.3)
