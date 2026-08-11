@@ -44,6 +44,8 @@ import { useScReclassifyStore } from "./reclassifyStore";
 import type { ScDatasetInfo, ScAnnotationItem } from "../domain/models";
 import { DEFAULT_RECLASSIFY_CODE_NAMES } from "./reclassifyCodeNames";
 
+const DEFAULT_SAMPLING_DRAFT_LABEL = "60";
+
 interface WaferGeometryView {
   waferRadiusNm: number;
   centerX: number;
@@ -626,11 +628,17 @@ export function useReclassifyPage(): ReclassifyPageState {
   const samplingProgram = ref(createDefaultScSamplingProgram());
   const samplingScope = ref<ScSamplingCandidateScope>("all");
   const assignSampledDraftLabel = ref(true);
-  const samplingDraftLabel = ref<string | null>(effectiveLabels.value[0] ?? null);
+  const samplingDraftLabel = ref<string | null>(
+    effectiveLabels.value.includes(DEFAULT_SAMPLING_DRAFT_LABEL)
+      ? DEFAULT_SAMPLING_DRAFT_LABEL
+      : (effectiveLabels.value[0] ?? null),
+  );
 
   watch(effectiveLabels, (labels) => {
     if (!samplingDraftLabel.value || !labels.includes(samplingDraftLabel.value)) {
-      samplingDraftLabel.value = labels[0] ?? null;
+      samplingDraftLabel.value = labels.includes(DEFAULT_SAMPLING_DRAFT_LABEL)
+        ? DEFAULT_SAMPLING_DRAFT_LABEL
+        : (labels[0] ?? null);
     }
   });
 

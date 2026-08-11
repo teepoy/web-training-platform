@@ -263,7 +263,8 @@ describe("useReclassifyPage - review sampling", () => {
 
     expect([...state.galleryRandomSamplingDefectIds.value]).toEqual(["103", "274"]);
     expect(state.assignSampledDraftLabel.value).toBe(true);
-    expect(state.annotationDraft.value).toEqual({ existing: "7", "103": "0", "274": "0" });
+    expect(state.samplingDraftLabel.value).toBe("60");
+    expect(state.annotationDraft.value).toEqual({ existing: "7", "103": "60", "274": "60" });
   });
 
   it("can leave annotation drafts unchanged when draft assignment is disabled", async () => {
