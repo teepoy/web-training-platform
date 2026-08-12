@@ -22,6 +22,39 @@ test("dataset list renders current table surface @mock", async ({ authedPage }) 
   await expect(authedPage.getByRole("button", { name: "Rename" })).toHaveCount(0);
 });
 
+test("dataset search and creator filters apply before pagination @mock", async ({
+  authedPage,
+  apiMocks,
+}) => {
+  await apiMocks.datasets.mockListDatasets([
+    makeFlowerDataset({
+      id: "dataset-alpha",
+      name: "Alpha Flowers",
+      created_by: "user-alice",
+      creator_name: "Alice",
+    }),
+    makeFlowerDataset({
+      id: "dataset-beta",
+      name: "Beta Flowers",
+      created_by: "user-bob",
+      creator_name: "Bob",
+    }),
+  ]);
+  const listPage = new DatasetListPage(authedPage);
+  await listPage.goto("/datasets");
+  await listPage.waitForLoaded();
+
+  await authedPage.getByPlaceholder("Search datasets").fill("alpha");
+  await expect(authedPage.getByText("Alpha Flowers")).toBeVisible();
+  await expect(authedPage.getByText("Beta Flowers")).toHaveCount(0);
+
+  await authedPage.getByPlaceholder("Search datasets").clear();
+  await authedPage.locator(".dataset-list-creator").click();
+  await authedPage.getByText("Bob", { exact: true }).last().click();
+  await expect(authedPage.getByText("Beta Flowers")).toBeVisible();
+  await expect(authedPage.getByText("Alpha Flowers")).toHaveCount(0);
+});
+
 test("row view button navigates to dataset detail @mock", async ({ authedPage, apiMocks }) => {
   const dataset = makeFlowerDataset();
   const datasetId = dataset.id!;

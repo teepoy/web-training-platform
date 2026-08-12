@@ -101,6 +101,8 @@ test("Predict tab shows Start Prediction button and opens modal with model selec
   const dialog = authedPage.getByRole("dialog");
   await expect(dialog.getByText("Model", { exact: true })).toBeVisible();
   await expect(dialog.getByText("Select a model")).toBeVisible();
+  await dialog.locator(".n-select").click();
+  await expect(authedPage.getByText("Demo Model", { exact: false }).last()).toBeVisible();
 });
 
 test("Predict tab only shows prediction jobs for the current dataset @mock", async ({

@@ -48,6 +48,7 @@ import type {
   CreateSubscriptionRequest,
   CreateTokenRequest,
   CreateTrainingJobRequest,
+  CreatorSummary,
   DashboardResponse,
   Dataset,
   DatasetAnnotationStats,
@@ -651,6 +652,76 @@ export function useListDatasetsApiV1DatasetsGet<TData = Awaited<ReturnType<typeo
   ): UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getListDatasetsApiV1DatasetsGetQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = unref(queryOptions).queryKey as DataTag<QueryKey, TData, TError>;
+
+  return query;
+}
+
+
+
+
+/**
+ * @summary List Dataset Creators
+ */
+export const getListDatasetCreatorsApiV1DatasetsCreatorsGetUrl = () => {
+
+
+  return `/api/v1/datasets/creators`
+}
+
+export const listDatasetCreatorsApiV1DatasetsCreatorsGet = async ( options?: RequestInit): Promise<CreatorSummary[]> => {
+
+  return orvalFetcher<CreatorSummary[]>(getListDatasetCreatorsApiV1DatasetsCreatorsGetUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getListDatasetCreatorsApiV1DatasetsCreatorsGetQueryKey = () => {
+    return ['api','v1','datasets','creators'] as const;
+    }
+
+
+export const getListDatasetCreatorsApiV1DatasetsCreatorsGetQueryOptions = <TData = Awaited<ReturnType<typeof listDatasetCreatorsApiV1DatasetsCreatorsGet>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDatasetCreatorsApiV1DatasetsCreatorsGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  getListDatasetCreatorsApiV1DatasetsCreatorsGetQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listDatasetCreatorsApiV1DatasetsCreatorsGet>>> = ({ signal }) => listDatasetCreatorsApiV1DatasetsCreatorsGet({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listDatasetCreatorsApiV1DatasetsCreatorsGet>>, TError, TData>
+}
+
+export type ListDatasetCreatorsApiV1DatasetsCreatorsGetQueryResult = NonNullable<Awaited<ReturnType<typeof listDatasetCreatorsApiV1DatasetsCreatorsGet>>>
+export type ListDatasetCreatorsApiV1DatasetsCreatorsGetQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List Dataset Creators
+ */
+
+export function useListDatasetCreatorsApiV1DatasetsCreatorsGet<TData = Awaited<ReturnType<typeof listDatasetCreatorsApiV1DatasetsCreatorsGet>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDatasetCreatorsApiV1DatasetsCreatorsGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+
+  ): UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListDatasetCreatorsApiV1DatasetsCreatorsGetQueryOptions(options)
 
   const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
@@ -5374,6 +5445,76 @@ export function useListModelsApiV1ModelsGet<TData = Awaited<ReturnType<typeof li
   ): UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getListModelsApiV1ModelsGetQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = unref(queryOptions).queryKey as DataTag<QueryKey, TData, TError>;
+
+  return query;
+}
+
+
+
+
+/**
+ * @summary List Model Creators
+ */
+export const getListModelCreatorsApiV1ModelsCreatorsGetUrl = () => {
+
+
+  return `/api/v1/models/creators`
+}
+
+export const listModelCreatorsApiV1ModelsCreatorsGet = async ( options?: RequestInit): Promise<CreatorSummary[]> => {
+
+  return orvalFetcher<CreatorSummary[]>(getListModelCreatorsApiV1ModelsCreatorsGetUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getListModelCreatorsApiV1ModelsCreatorsGetQueryKey = () => {
+    return ['api','v1','models','creators'] as const;
+    }
+
+
+export const getListModelCreatorsApiV1ModelsCreatorsGetQueryOptions = <TData = Awaited<ReturnType<typeof listModelCreatorsApiV1ModelsCreatorsGet>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listModelCreatorsApiV1ModelsCreatorsGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  getListModelCreatorsApiV1ModelsCreatorsGetQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listModelCreatorsApiV1ModelsCreatorsGet>>> = ({ signal }) => listModelCreatorsApiV1ModelsCreatorsGet({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listModelCreatorsApiV1ModelsCreatorsGet>>, TError, TData>
+}
+
+export type ListModelCreatorsApiV1ModelsCreatorsGetQueryResult = NonNullable<Awaited<ReturnType<typeof listModelCreatorsApiV1ModelsCreatorsGet>>>
+export type ListModelCreatorsApiV1ModelsCreatorsGetQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List Model Creators
+ */
+
+export function useListModelCreatorsApiV1ModelsCreatorsGet<TData = Awaited<ReturnType<typeof listModelCreatorsApiV1ModelsCreatorsGet>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listModelCreatorsApiV1ModelsCreatorsGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+
+  ): UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListModelCreatorsApiV1ModelsCreatorsGetQueryOptions(options)
 
   const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

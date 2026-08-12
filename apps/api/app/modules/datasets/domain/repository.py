@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from app.shared.api.schemas import ArtifactRef, Dataset
+from app.shared.api.schemas import ArtifactRef, CreatorSummary, Dataset
 
 
 class DatasetRepository(Protocol):
@@ -18,7 +18,14 @@ class DatasetRepository(Protocol):
         *,
         limit: int | None = None,
         offset: int = 0,
+        query: str | None = None,
+        creator_id: str | None = None,
     ) -> list[Dataset]: ...
+
+    async def list_dataset_creators(
+        self,
+        org_id: str | None = None,
+    ) -> list[CreatorSummary]: ...
 
     async def list_dataset_names(
         self,
@@ -26,7 +33,13 @@ class DatasetRepository(Protocol):
         org_id: str | None = None,
     ) -> dict[str, str]: ...
 
-    async def count_datasets(self, org_id: str | None = None) -> int: ...
+    async def count_datasets(
+        self,
+        org_id: str | None = None,
+        *,
+        query: str | None = None,
+        creator_id: str | None = None,
+    ) -> int: ...
 
     async def get_dataset(
         self,

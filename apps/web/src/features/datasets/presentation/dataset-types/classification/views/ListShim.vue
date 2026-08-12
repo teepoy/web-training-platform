@@ -1,7 +1,5 @@
 <template>
   <div data-testid="datasets-shim-classification">
-    <DatasetToolbar />
-
     <DatasetTable
       :datasets="datasets"
       :columns="columns"
@@ -13,7 +11,7 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
-import { DatasetTable, DatasetToolbar } from "@/shared";
+import { DatasetTable } from "@/shared";
 import { buildDatasetColumns } from "@/features/datasets/application/surface";
 import { resolveDatasetTaskType } from "@/features/datasets/presentation/pages/registry";
 import type { DatasetListItem } from "@/shared/datasets/types";

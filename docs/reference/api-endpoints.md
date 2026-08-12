@@ -10,7 +10,8 @@ This is a high-level endpoint index for the current API surface. It is not a sch
 ## Datasets and annotation
 
 - `POST /api/v1/datasets`
-- `GET /api/v1/datasets`
+- `GET /api/v1/datasets` — Paginated list with optional server-side `q` and `creator_id` filters.
+- `GET /api/v1/datasets/creators` — Creators available in the current organization's accessible dataset scope.
 - `GET /api/v1/datasets/{dataset_id}`
 - `POST /api/v1/datasets/{dataset_id}/samples`
 - `POST /api/v1/datasets/{dataset_id}/samples/import` (bulk sample import via Label Studio `import_tasks`; each item may include optional `label`, and `null` means unlabeled task/sample)
@@ -21,6 +22,14 @@ This is a high-level endpoint index for the current API surface. It is not a sch
 - `GET /api/v1/datasets/{dataset_id}/status` (dataset-level training gate: `allow_train`, active/minimum class counts, and a machine-readable disable reason)
 - `POST /api/v1/annotations`
 - `POST /api/v1/datasets/{dataset_id}/annotations/bulk-sc` — Sparse SC bulk annotation using defect IDs and the dataset manifest sample index.
+
+## Models
+
+- `GET /api/v1/models` — Paginated list with optional server-side `q`, `creator_id`, `dataset_id`, and `job_id` filters.
+- `GET /api/v1/models/creators` — Creators available in the current organization's accessible model scope.
+- `GET /api/v1/models/{model_id}`
+- `PATCH /api/v1/models/{model_id}`
+- `DELETE /api/v1/models/{model_id}`
 
 ## SC inspection and image endpoints
 

@@ -86,6 +86,11 @@ class Dataset(BaseModel):
     dataset_meta: dict = Field(default_factory=dict)
 
 
+class CreatorSummary(BaseModel):
+    id: str
+    name: str
+
+
 class Sample(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
     dataset_id: str

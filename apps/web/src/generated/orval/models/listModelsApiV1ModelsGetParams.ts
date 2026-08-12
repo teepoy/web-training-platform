@@ -10,4 +10,6 @@ dataset_id?: string | null;
 job_id?: string | null;
 offset?: number;
 limit?: number;
+q?: string | null;
+creator_id?: string | null;
 };

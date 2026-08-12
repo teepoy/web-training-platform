@@ -220,6 +220,11 @@ class CreateTrainingJobRequest(BaseModel):
     trainer_id: constr(min_length=1) = Field(..., title="Trainer Id")
 
 
+class CreatorSummary(BaseModel):
+    id: str = Field(..., title="Id")
+    name: str = Field(..., title="Name")
+
+
 class DataSourceApi(BaseModel):
     kind: Optional[constr(regex=r"^api$")] = Field("api", title="Kind")
     endpoint: str = Field(..., title="Endpoint")

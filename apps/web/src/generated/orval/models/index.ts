@@ -66,6 +66,7 @@ export * from './createTrainingJobRequest';
 export * from './createTrainingJobRequestCollectionId';
 export * from './createTrainingJobRequestCollectionRevisionId';
 export * from './createTrainingJobRequestDatasetId';
+export * from './creatorSummary';
 export * from './dashboardResponse';
 export * from './dashboardResponseWorkPool';
 export * from './dataSourceApi';

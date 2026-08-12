@@ -64,6 +64,29 @@ def test_list_datasets_validates_page_bounds() -> None:
         assert c.get("/api/v1/datasets?offset=-1").status_code == 422
 
 
+def test_list_datasets_applies_search_and_creator_before_pagination() -> None:
+    with TestClient(app) as c:
+        matching_id = create_dataset(c, name="searchable-alpha")
+        create_dataset(c, name="unrelated-beta")
+
+        searched = c.get("/api/v1/datasets?limit=1&q=searchable")
+        filtered = c.get(
+            "/api/v1/datasets?limit=1&creator_id=creator-who-does-not-exist"
+        )
+        creators = c.get("/api/v1/datasets/creators")
+
+        assert searched.status_code == 200
+        assert searched.json()["total"] == 1
+        assert [item["id"] for item in searched.json()["items"]] == [matching_id]
+        assert filtered.status_code == 200
+        assert filtered.json() == {"items": [], "total": 0}
+        assert creators.status_code == 200
+        assert any(
+            creator["id"] == searched.json()["items"][0]["created_by"]
+            for creator in creators.json()
+        )
+
+
 def test_rename_dataset_requires_creator() -> None:
     with TestClient(app) as c:
         dataset_id = create_dataset(c, name="owner-only-rename")

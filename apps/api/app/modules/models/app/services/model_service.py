@@ -9,7 +9,7 @@ from uuid import uuid4
 from fastapi import HTTPException, UploadFile
 from injector import inject
 
-from app.shared.api.schemas import ArtifactRef, Model
+from app.shared.api.schemas import ArtifactRef, CreatorSummary, Model
 from app.shared.application.compatibility import validate_upload_metadata
 from app.modules.models.domain.repository import ModelRepository
 from app.shared.domain.protocols import ArtifactStorage
@@ -30,11 +30,15 @@ class ModelService:
         org_id: str,
         dataset_id: str | None = None,
         job_id: str | None = None,
+        query: str | None = None,
+        creator_id: str | None = None,
     ) -> list[Model]:
         return await self.repository.list_models(
             org_id=org_id,
             dataset_id=dataset_id,
             job_id=job_id,
+            query=query,
+            creator_id=creator_id,
         )
 
     async def list_models_paginated(
@@ -44,7 +48,9 @@ class ModelService:
         job_id: str | None = None,
         *,
         offset: int = 0,
-        limit: int = 50,
+        limit: int | None = 50,
+        query: str | None = None,
+        creator_id: str | None = None,
     ) -> tuple[list[Model], int]:
         return await self.repository.list_models_paginated(
             org_id=org_id,
@@ -52,7 +58,12 @@ class ModelService:
             job_id=job_id,
             offset=offset,
             limit=limit,
+            query=query,
+            creator_id=creator_id,
         )
+
+    async def list_model_creators(self, org_id: str) -> list[CreatorSummary]:
+        return await self.repository.list_model_creators(org_id)
 
     async def get_model(self, artifact_id: str, org_id: str) -> Model:
         model = await self.repository.get_model(artifact_id, org_id)

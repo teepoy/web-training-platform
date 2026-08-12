@@ -75,6 +75,7 @@ from app.modules.datasets.port.http.schemas import (
 from app.modules.datasets.views.deps import DatasetSessionFactoryDep
 from app.shared.api.schemas import (
     Annotation,
+    CreatorSummary,
     Dataset,
     Organization,
     Sample,
@@ -280,11 +281,32 @@ async def list_datasets(
     repo: DatasetRepository = Depends(get_repository),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
+    q: str | None = Query(default=None, max_length=200),
+    creator_id: str | None = Query(default=None, max_length=255),
 ) -> PaginatedResponse[Dataset]:
-    datasets = await repo.list_datasets(org_id=org.id, limit=limit, offset=offset)
-    total = await repo.count_datasets(org_id=org.id)
+    datasets = await repo.list_datasets(
+        org_id=org.id,
+        limit=limit,
+        offset=offset,
+        query=q,
+        creator_id=creator_id,
+    )
+    total = await repo.count_datasets(
+        org_id=org.id,
+        query=q,
+        creator_id=creator_id,
+    )
     items = [service.to_response(dataset) for dataset in datasets]
     return PaginatedResponse(items=items, total=total)
+
+
+@router.get("/datasets/creators", response_model=list[CreatorSummary])
+async def list_dataset_creators(
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+    repo: DatasetRepository = Depends(get_repository),
+) -> list[CreatorSummary]:
+    return await repo.list_dataset_creators(org_id=org.id)
 
 
 @router.get("/datasets/{dataset_id}", response_model=Dataset)

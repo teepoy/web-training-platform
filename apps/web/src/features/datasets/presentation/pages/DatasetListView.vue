@@ -1,6 +1,27 @@
 <template>
   <div>
     <DatasetPageShell v-bind="surface.pageShellProps.value">
+      <DatasetToolbar :title="activeDatasetType === 'image_sc' ? 'Patch Datasets' : 'Datasets'" />
+
+      <div class="dataset-list-filters">
+        <n-input
+          v-model:value="keyword"
+          size="small"
+          clearable
+          placeholder="Search datasets"
+          class="dataset-list-search"
+        />
+        <n-select
+          v-model:value="creatorFilter"
+          size="small"
+          clearable
+          filterable
+          placeholder="Creator"
+          :options="creatorOptions"
+          class="dataset-list-creator"
+        />
+      </div>
+
       <component
         :is="activeShim"
         :datasets="surface.datasets.value"
@@ -40,12 +61,14 @@
 import { computed, reactive, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useQueryClient } from "@tanstack/vue-query";
-import { useMessage, NModal, NInput, type PaginationProps } from "naive-ui";
-import { DatasetPageShell } from "@/shared";
+import { refDebounced } from "@vueuse/core";
+import { useMessage, NModal, NInput, NSelect, type PaginationProps } from "naive-ui";
+import { DatasetPageShell, DatasetToolbar } from "@/shared";
 import {
   getListDatasetsApiV1DatasetsGetQueryKey,
   useDeleteDatasetApiV1DatasetsDatasetIdDelete,
   useListDatasetsApiV1DatasetsGet,
+  useListDatasetCreatorsApiV1DatasetsCreatorsGet,
   useSetDatasetPublicApiV1DatasetsDatasetIdPublicPatch,
   useUpdateDatasetApiV1DatasetsDatasetIdPatch,
 } from "@/generated/orval/endpoints/api";
@@ -64,6 +87,9 @@ const message = useMessage();
 const qc = useQueryClient();
 const orgStore = useOrgStore();
 const authStore = useAuthStore();
+const keyword = ref("");
+const debouncedKeyword = refDebounced(keyword, 250);
+const creatorFilter = ref<string | null>(null);
 
 const pagination = reactive<PaginationProps>({
   page: 1,
@@ -83,6 +109,8 @@ const pagination = reactive<PaginationProps>({
 const datasetListParams = computed(() => ({
   limit: pagination.pageSize ?? 20,
   offset: ((pagination.page ?? 1) - 1) * (pagination.pageSize ?? 20),
+  q: debouncedKeyword.value.trim() || undefined,
+  creator_id: creatorFilter.value ?? undefined,
 }));
 const datasetListQueryKey = computed(() =>
   orgScopedQueryKey(
@@ -106,6 +134,23 @@ const {
 });
 
 const datasets = computed(() => datasetPage.value?.items ?? []);
+
+const { data: datasetCreators } = useListDatasetCreatorsApiV1DatasetsCreatorsGet({
+  query: {
+    queryKey: computed(() => orgScopedQueryKey(orgStore.currentOrgId, ["datasets", "creators"])),
+    enabled: computed(() => !!orgStore.currentOrgId),
+  },
+});
+const creatorOptions = computed(() =>
+  (datasetCreators.value ?? []).map((creator) => ({
+    label: creator.name,
+    value: creator.id,
+  })),
+);
+
+watch([keyword, creatorFilter], () => {
+  pagination.page = 1;
+});
 
 watch(
   () => datasetPage.value?.total ?? 0,
@@ -213,10 +258,54 @@ const surface = useDatasetListSurface<DatasetListItem, User>({
   onDeleteDataset: handleDeleteDataset,
 });
 
-const activeDatasetType = computed(() => getActiveDatasetType(datasets.value));
-const activeViewTypes = computed(() => getActiveViewTypes(datasets.value));
+const resolvedDatasetType = ref<string>();
+const resolvedViewTypes = ref<string[]>();
+watch(
+  datasets,
+  (items) => {
+    const datasetType = getActiveDatasetType(items);
+    const viewTypes = getActiveViewTypes(items);
+    if (datasetType) resolvedDatasetType.value = datasetType;
+    if (viewTypes) resolvedViewTypes.value = viewTypes;
+  },
+  { immediate: true },
+);
+watch(
+  () => orgStore.currentOrgId,
+  () => {
+    resolvedDatasetType.value = undefined;
+    resolvedViewTypes.value = undefined;
+    keyword.value = "";
+    creatorFilter.value = null;
+    pagination.page = 1;
+  },
+);
+const activeDatasetType = computed(
+  () => getActiveDatasetType(datasets.value) ?? resolvedDatasetType.value,
+);
+const activeViewTypes = computed(
+  () => getActiveViewTypes(datasets.value) ?? resolvedViewTypes.value,
+);
 
 const activeShim = computed(() =>
   resolveDatasetShim(activeDatasetType.value, activeViewTypes.value),
 );
 </script>
+
+<style scoped>
+.dataset-list-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 8px 0 12px;
+}
+
+.dataset-list-search {
+  width: min(320px, 100%);
+}
+
+.dataset-list-creator {
+  width: min(220px, 100%);
+}
+</style>

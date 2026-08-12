@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.sql.elements import ColumnElement
 
-from app.shared.api.schemas import ArtifactRef, Model
+from app.shared.api.schemas import ArtifactRef, CreatorSummary, Model
 from app.shared.db.models.artifacts import ArtifactORM
 from app.shared.db.models.datasets import DatasetORM
 from app.shared.db.models.dataset_collections import DatasetCollectionORM
@@ -24,6 +25,51 @@ def _creator_name(
     return str(user_name or user_email or created_by)
 
 
+def _like_pattern(value: str) -> str:
+    escaped = value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
+
+
+def _model_conditions(
+    org_id: str,
+    *,
+    dataset_id: str | None,
+    job_id: str | None,
+    query: str | None,
+    creator_id: str | None,
+) -> list[ColumnElement[bool]]:
+    conditions: list[ColumnElement[bool]] = [
+        ArtifactORM.kind == "model",
+        or_(TrainingJobORM.org_id == org_id, TrainingJobORM.is_public.is_(True)),
+    ]
+    if dataset_id is not None:
+        conditions.append(TrainingJobORM.dataset_id == dataset_id)
+    if job_id is not None:
+        conditions.append(ArtifactORM.job_id == job_id)
+    if creator_id is not None:
+        conditions.append(TrainingJobORM.created_by == creator_id)
+    normalized_query = query.strip() if query is not None else ""
+    if normalized_query:
+        pattern = _like_pattern(normalized_query)
+        conditions.append(
+            or_(
+                ArtifactORM.name.ilike(pattern, escape="\\"),
+                ArtifactORM.id.ilike(pattern, escape="\\"),
+                ArtifactORM.format.ilike(pattern, escape="\\"),
+                TrainingJobORM.id.ilike(pattern, escape="\\"),
+                TrainingJobORM.trainer_id.ilike(pattern, escape="\\"),
+                TrainingJobORM.created_by.ilike(pattern, escape="\\"),
+                DatasetORM.id.ilike(pattern, escape="\\"),
+                DatasetORM.name.ilike(pattern, escape="\\"),
+                DatasetCollectionORM.id.ilike(pattern, escape="\\"),
+                DatasetCollectionORM.name.ilike(pattern, escape="\\"),
+                UserORM.name.ilike(pattern, escape="\\"),
+                UserORM.email.ilike(pattern, escape="\\"),
+            )
+        )
+    return conditions
+
+
 class ModelArtifactRepository:
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
         self.session_factory = session_factory
@@ -33,6 +79,8 @@ class ModelArtifactRepository:
         org_id: str,
         dataset_id: str | None = None,
         job_id: str | None = None,
+        query: str | None = None,
+        creator_id: str | None = None,
     ) -> list[Model]:
         models, _ = await self.list_models_paginated(
             org_id=org_id,
@@ -40,6 +88,8 @@ class ModelArtifactRepository:
             job_id=job_id,
             offset=0,
             limit=None,
+            query=query,
+            creator_id=creator_id,
         )
         return models
 
@@ -51,24 +101,27 @@ class ModelArtifactRepository:
         *,
         offset: int = 0,
         limit: int | None = 50,
+        query: str | None = None,
+        creator_id: str | None = None,
     ) -> tuple[list[Model], int]:
         async with self.session_factory() as session:
-            conditions = [
-                ArtifactORM.kind == "model",
-                or_(
-                    TrainingJobORM.org_id == org_id,
-                    TrainingJobORM.is_public.is_(True),
-                ),
-            ]
-            if dataset_id is not None:
-                conditions.append(TrainingJobORM.dataset_id == dataset_id)
-            if job_id is not None:
-                conditions.append(ArtifactORM.job_id == job_id)
+            conditions = _model_conditions(
+                org_id,
+                dataset_id=dataset_id,
+                job_id=job_id,
+                query=query,
+                creator_id=creator_id,
+            )
 
             joins = (
                 select(ArtifactORM.id)
                 .join(TrainingJobORM, ArtifactORM.job_id == TrainingJobORM.id)
                 .outerjoin(DatasetORM, TrainingJobORM.dataset_id == DatasetORM.id)
+                .outerjoin(
+                    DatasetCollectionORM,
+                    TrainingJobORM.collection_id == DatasetCollectionORM.id,
+                )
+                .outerjoin(UserORM, UserORM.id == TrainingJobORM.created_by)
                 .where(*conditions)
             )
             total = int(
@@ -128,6 +181,39 @@ class ModelArtifactRepository:
                 )
                 for artifact, job, dataset, collection, user_name, user_email in rows
             ], total
+
+    async def list_model_creators(self, org_id: str) -> list[CreatorSummary]:
+        async with self.session_factory() as session:
+            conditions = _model_conditions(
+                org_id,
+                dataset_id=None,
+                job_id=None,
+                query=None,
+                creator_id=None,
+            )
+            stmt = (
+                select(
+                    TrainingJobORM.created_by,
+                    UserORM.name,
+                    UserORM.email,
+                )
+                .join(ArtifactORM, ArtifactORM.job_id == TrainingJobORM.id)
+                .outerjoin(UserORM, UserORM.id == TrainingJobORM.created_by)
+                .where(*conditions)
+                .distinct()
+            )
+            creators = [
+                CreatorSummary(
+                    id=str(created_by),
+                    name=_creator_name(str(created_by), user_name, user_email),
+                )
+                for created_by, user_name, user_email in (
+                    await session.execute(stmt)
+                ).all()
+            ]
+            return sorted(
+                creators, key=lambda creator: (creator.name.casefold(), creator.id)
+            )
 
     async def get_model(
         self,

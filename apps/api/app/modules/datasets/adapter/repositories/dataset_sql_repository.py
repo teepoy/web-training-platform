@@ -5,6 +5,7 @@ from typing import cast
 
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.shared.db.registry import (
     AnnotationORM,
@@ -21,6 +22,7 @@ from app.shared.db.registry import (
 )
 from app.shared.api.schemas import (
     Annotation,
+    CreatorSummary,
     Dataset,
     Sample,
     TaskSpec,
@@ -35,6 +37,41 @@ def _assert_not_none(value: str | None) -> str:
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _like_pattern(value: str) -> str:
+    escaped = value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
+
+
+def _dataset_conditions(
+    org_id: str | None,
+    *,
+    query: str | None,
+    creator_id: str | None,
+) -> list[ColumnElement[bool]]:
+    conditions: list[ColumnElement[bool]] = []
+    if org_id is not None:
+        conditions.append(
+            or_(DatasetORM.org_id == org_id, DatasetORM.is_public.is_(True))
+        )
+    if creator_id is not None:
+        conditions.append(DatasetORM.created_by == creator_id)
+    normalized_query = query.strip() if query is not None else ""
+    if normalized_query:
+        pattern = _like_pattern(normalized_query)
+        conditions.append(
+            or_(
+                DatasetORM.name.ilike(pattern, escape="\\"),
+                DatasetORM.id.ilike(pattern, escape="\\"),
+                DatasetORM.dataset_type.ilike(pattern, escape="\\"),
+                DatasetORM.created_by.ilike(pattern, escape="\\"),
+                UserORM.name.ilike(pattern, escape="\\"),
+                UserORM.email.ilike(pattern, escape="\\"),
+                OrganizationORM.name.ilike(pattern, escape="\\"),
+            )
+        )
+    return conditions
 
 
 async def _org_name_for(session: AsyncSession, org_id: str | None) -> str:
@@ -96,6 +133,8 @@ class DatasetSqlRepository:
         *,
         limit: int | None = None,
         offset: int = 0,
+        query: str | None = None,
+        creator_id: str | None = None,
     ) -> list[Dataset]:
         async with self.session_factory() as session:
             stmt = (
@@ -104,10 +143,13 @@ class DatasetSqlRepository:
                 .outerjoin(UserORM, UserORM.id == DatasetORM.created_by)
                 .order_by(DatasetORM.created_at.desc(), DatasetORM.id.desc())
             )
-            if org_id is not None:
-                stmt = stmt.where(
-                    or_(DatasetORM.org_id == org_id, DatasetORM.is_public.is_(True))
-                )  # noqa: E712
+            stmt = stmt.where(
+                *_dataset_conditions(
+                    org_id,
+                    query=query,
+                    creator_id=creator_id,
+                )
+            )
             if offset:
                 stmt = stmt.offset(offset)
             if limit is not None:
@@ -134,13 +176,60 @@ class DatasetSqlRepository:
                 for r, org_name, user_name, user_email in rows
             ]
 
-    async def count_datasets(self, org_id: str | None = None) -> int:
+    async def list_dataset_creators(
+        self,
+        org_id: str | None = None,
+    ) -> list[CreatorSummary]:
         async with self.session_factory() as session:
-            stmt = select(func.count(DatasetORM.id))
-            if org_id is not None:
-                stmt = stmt.where(
-                    or_(DatasetORM.org_id == org_id, DatasetORM.is_public.is_(True))
-                )  # noqa: E712
+            stmt = (
+                select(
+                    DatasetORM.created_by,
+                    UserORM.name,
+                    UserORM.email,
+                )
+                .outerjoin(UserORM, UserORM.id == DatasetORM.created_by)
+                .where(
+                    *_dataset_conditions(
+                        org_id,
+                        query=None,
+                        creator_id=None,
+                    )
+                )
+                .distinct()
+            )
+            creators = [
+                CreatorSummary(
+                    id=str(created_by),
+                    name=str(user_name or user_email or created_by),
+                )
+                for created_by, user_name, user_email in (
+                    await session.execute(stmt)
+                ).all()
+            ]
+            return sorted(
+                creators, key=lambda creator: (creator.name.casefold(), creator.id)
+            )
+
+    async def count_datasets(
+        self,
+        org_id: str | None = None,
+        *,
+        query: str | None = None,
+        creator_id: str | None = None,
+    ) -> int:
+        async with self.session_factory() as session:
+            stmt = (
+                select(func.count(DatasetORM.id))
+                .outerjoin(OrganizationORM, OrganizationORM.id == DatasetORM.org_id)
+                .outerjoin(UserORM, UserORM.id == DatasetORM.created_by)
+                .where(
+                    *_dataset_conditions(
+                        org_id,
+                        query=query,
+                        creator_id=creator_id,
+                    )
+                )
+            )
             return int((await session.execute(stmt)).scalar_one())
 
     async def get_dataset(

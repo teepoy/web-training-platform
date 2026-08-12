@@ -185,6 +185,24 @@ paths:
             minimum: 0
             default: 0
             title: Offset
+        - name: q
+          in: query
+          required: false
+          schema:
+            anyOf:
+              - type: string
+                maxLength: 200
+              - type: "null"
+            title: Q
+        - name: creator_id
+          in: query
+          required: false
+          schema:
+            anyOf:
+              - type: string
+                maxLength: 255
+              - type: "null"
+            title: Creator Id
       responses:
         "200":
           description: Successful Response
@@ -198,6 +216,22 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HTTPValidationError"
+  /api/v1/datasets/creators:
+    get:
+      tags:
+        - datasets
+      summary: List Dataset Creators
+      operationId: list_dataset_creators_api_v1_datasets_creators_get
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/CreatorSummary"
+                type: array
+                title: Response List Dataset Creators Api V1 Datasets Creators Get
   /api/v1/datasets/{dataset_id}:
     get:
       tags:
@@ -2159,6 +2193,24 @@ paths:
             minimum: 1
             default: 50
             title: Limit
+        - name: q
+          in: query
+          required: false
+          schema:
+            anyOf:
+              - type: string
+                maxLength: 200
+              - type: "null"
+            title: Q
+        - name: creator_id
+          in: query
+          required: false
+          schema:
+            anyOf:
+              - type: string
+                maxLength: 255
+              - type: "null"
+            title: Creator Id
       responses:
         "200":
           description: Successful Response
@@ -2172,6 +2224,22 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HTTPValidationError"
+  /api/v1/models/creators:
+    get:
+      tags:
+        - models
+      summary: List Model Creators
+      operationId: list_model_creators_api_v1_models_creators_get
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/CreatorSummary"
+                type: array
+                title: Response List Model Creators Api V1 Models Creators Get
   /api/v1/models/{model_id}:
     get:
       tags:
@@ -5961,6 +6029,19 @@ components:
       required:
         - trainer_id
       title: CreateTrainingJobRequest
+    CreatorSummary:
+      properties:
+        id:
+          type: string
+          title: Id
+        name:
+          type: string
+          title: Name
+      type: object
+      required:
+        - id
+        - name
+      title: CreatorSummary
     DashboardResponse:
       properties:
         work_pool:

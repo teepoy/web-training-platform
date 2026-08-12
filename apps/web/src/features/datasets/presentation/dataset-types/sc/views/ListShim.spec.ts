@@ -108,7 +108,7 @@ describe("SC dataset list shim", () => {
     expect(wrapper.text()).not.toContain("37");
   });
 
-  it("shows creator names and filters by keyword", async () => {
+  it("shows every creator returned by the server page", () => {
     const wrapper = mount(ListShim, {
       props: {
         datasets: [
@@ -130,10 +130,7 @@ describe("SC dataset list shim", () => {
     expect(wrapper.text()).toContain("Creator");
     expect(wrapper.text()).toContain("Alice");
     expect(wrapper.text()).toContain("Bob");
-
-    await wrapper.find("input").setValue("alpha");
-
     expect(wrapper.text()).toContain("Patch Alpha");
-    expect(wrapper.text()).not.toContain("Patch Beta");
+    expect(wrapper.text()).toContain("Patch Beta");
   });
 });

@@ -65,11 +65,50 @@ export async function mockRunPrediction(
 
 export async function mockListModels(page: Page, models?: ModelResponse[]): Promise<void> {
   const body = models ?? [makeModel()];
-  await page.route("**/api/v1/models", async (route) => {
+  await page.route("**/api/v1/models**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith("/models/creators")) {
+      const creators = new Map<string, string>();
+      for (const model of body) {
+        if (model.created_by) {
+          creators.set(model.created_by, model.creator_name || model.created_by);
+        }
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([...creators].map(([id, name]) => ({ id, name }))),
+      });
+      return;
+    }
+    const query = url.searchParams.get("q")?.trim().toLocaleLowerCase();
+    const creatorId = url.searchParams.get("creator_id");
+    const filtered = body.filter((model) => {
+      if (creatorId && model.created_by !== creatorId) return false;
+      if (!query) return true;
+      return [
+        model.id,
+        model.name,
+        model.format,
+        model.job_id,
+        model.dataset_id,
+        model.dataset_name,
+        model.trainer_name,
+        model.created_by,
+        model.creator_name,
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLocaleLowerCase().includes(query));
+    });
+    const offset = Number(url.searchParams.get("offset") ?? 0);
+    const limit = Number(url.searchParams.get("limit") ?? filtered.length);
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        items: filtered.slice(offset, offset + limit),
+        total: filtered.length,
+      }),
     });
   });
 }

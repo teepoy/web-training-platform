@@ -70,6 +70,28 @@ def test_get_model_not_found() -> None:
         assert resp.status_code == 404
 
 
+def test_list_models_applies_search_and_creator_before_pagination() -> None:
+    with TestClient(app) as c:
+        _, _, model_id = _setup(c)
+
+        searched = c.get("/api/v1/models?limit=1&q=test-model")
+        missing_creator = c.get(
+            "/api/v1/models?limit=1&creator_id=creator-who-does-not-exist"
+        )
+        creators = c.get("/api/v1/models/creators")
+
+        assert searched.status_code == 200
+        assert searched.json()["total"] == 1
+        assert [item["id"] for item in searched.json()["items"]] == [model_id]
+        assert missing_creator.status_code == 200
+        assert missing_creator.json() == {"items": [], "total": 0}
+        assert creators.status_code == 200
+        assert any(
+            creator["id"] == searched.json()["items"][0]["created_by"]
+            for creator in creators.json()
+        )
+
+
 def test_download_model_not_found() -> None:
     with TestClient(app) as c:
         resp = c.get("/api/v1/models/nonexistent/download")

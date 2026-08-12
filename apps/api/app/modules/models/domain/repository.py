@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from app.shared.api.schemas import ArtifactRef, Model
+from app.shared.api.schemas import ArtifactRef, CreatorSummary, Model
 
 
 class ModelRepository(Protocol):
@@ -11,6 +11,8 @@ class ModelRepository(Protocol):
         org_id: str,
         dataset_id: str | None = None,
         job_id: str | None = None,
+        query: str | None = None,
+        creator_id: str | None = None,
     ) -> list[Model]: ...
 
     async def list_models_paginated(
@@ -20,8 +22,12 @@ class ModelRepository(Protocol):
         job_id: str | None = None,
         *,
         offset: int = 0,
-        limit: int = 50,
+        limit: int | None = 50,
+        query: str | None = None,
+        creator_id: str | None = None,
     ) -> tuple[list[Model], int]: ...
+
+    async def list_model_creators(self, org_id: str) -> list[CreatorSummary]: ...
 
     async def get_model(
         self,

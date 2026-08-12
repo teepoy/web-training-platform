@@ -14,7 +14,7 @@ from fastapi import (
     UploadFile,
 )
 
-from app.shared.api.schemas import Organization, PaginatedResponse, User
+from app.shared.api.schemas import CreatorSummary, Organization, PaginatedResponse, User
 from app.shared.domain.protocols import ArtifactStorage
 from app.modules.auth.port.http.deps import (
     get_current_org,
@@ -74,6 +74,8 @@ async def list_models(
     job_id: str | None = Query(default=None),
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=200),
+    q: str | None = Query(default=None, max_length=200),
+    creator_id: str | None = Query(default=None, max_length=255),
 ) -> PaginatedResponse[ModelResponse]:
     models, total = await model_service.list_models_paginated(
         org_id=org.id,
@@ -81,11 +83,22 @@ async def list_models(
         job_id=job_id,
         offset=offset,
         limit=limit,
+        query=q,
+        creator_id=creator_id,
     )
     return PaginatedResponse(
         items=[_model_to_response(model) for model in models],
         total=total,
     )
+
+
+@router.get("/models/creators", response_model=list[CreatorSummary])
+async def list_model_creators(
+    model_service: ModelServiceDep,
+    current_user: CurrentUserDep,
+    org: CurrentOrgDep,
+) -> list[CreatorSummary]:
+    return await model_service.list_model_creators(org.id)
 
 
 @router.get("/models/{model_id}", response_model=ModelResponse)

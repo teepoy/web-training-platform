@@ -11,15 +11,25 @@
           placeholder="Search models"
           class="models-search"
         />
+        <n-select
+          v-model:value="creatorFilter"
+          size="small"
+          clearable
+          filterable
+          placeholder="Creator"
+          :options="creatorOptions"
+          class="models-creator"
+        />
       </div>
 
       <n-data-table
         :columns="columns"
-        :data="filteredModels"
+        :data="models"
         :bordered="false"
         :pagination="pagination"
         :row-key="(row: ModelResponse) => row.id"
         size="small"
+        remote
       />
     </div>
 
@@ -40,7 +50,8 @@
 
 <script setup lang="ts">
 import { computed, h, reactive, ref, watch } from "vue";
-import { useQuery, useQueryClient } from "@tanstack/vue-query";
+import { useQueryClient } from "@tanstack/vue-query";
+import { refDebounced } from "@vueuse/core";
 import type { DataTableColumns, PaginationProps } from "naive-ui";
 import {
   NButton,
@@ -48,6 +59,7 @@ import {
   NInput,
   NModal,
   NPopconfirm,
+  NSelect,
   NSpace,
   NText,
   useMessage,
@@ -55,9 +67,11 @@ import {
 import type { ModelResponse } from "@/generated/orval/models";
 import {
   useDeleteModelApiV1ModelsModelIdDelete,
+  getListModelsApiV1ModelsGetQueryKey,
+  useListModelCreatorsApiV1ModelsCreatorsGet,
+  useListModelsApiV1ModelsGet,
   useUpdateModelApiV1ModelsModelIdPatch,
 } from "@/generated/orval/endpoints/api";
-import { listModels } from "@/shared/api/models";
 import { orgScopedQueryKey, toUserMessage } from "@/shared/api";
 import { DatasetPageShell, DatasetToolbar } from "@/shared";
 import { useAuthStore } from "@/features/auth/application/store";
@@ -76,6 +90,7 @@ const orgStore = useOrgStore();
 const pagination = reactive<PaginationProps>({
   page: 1,
   pageSize: 20,
+  itemCount: 0,
   showSizePicker: true,
   pageSizes: [10, 20, 50, 100],
   onUpdatePage: (page: number) => {
@@ -87,42 +102,51 @@ const pagination = reactive<PaginationProps>({
   },
 });
 
-const modelsQuery = useQuery({
-  queryKey: computed(() =>
-    orgScopedQueryKey(orgStore.currentOrgId, ["models", "list", "all-pages"]),
+const keyword = ref("");
+const debouncedKeyword = refDebounced(keyword, 250);
+const creatorFilter = ref<string | null>(null);
+const modelListParams = computed(() => ({
+  offset: ((pagination.page ?? 1) - 1) * (pagination.pageSize ?? 20),
+  limit: pagination.pageSize ?? 20,
+  q: debouncedKeyword.value.trim() || undefined,
+  creator_id: creatorFilter.value ?? undefined,
+}));
+const modelListQueryKey = computed(() =>
+  orgScopedQueryKey(
+    orgStore.currentOrgId,
+    getListModelsApiV1ModelsGetQueryKey(modelListParams.value),
   ),
-  queryFn: listModels,
-  enabled: computed(() => !!orgStore.currentOrgId),
-  refetchInterval: 5000,
+);
+const modelsQuery = useListModelsApiV1ModelsGet(modelListParams, {
+  query: {
+    queryKey: modelListQueryKey,
+    enabled: computed(() => !!orgStore.currentOrgId),
+    refetchInterval: 5000,
+  },
 });
-
-const models = computed(() => modelsQuery.data.value ?? []);
+const models = computed<ModelRow[]>(() => (modelsQuery.data.value?.items ?? []) as ModelRow[]);
 const isLoading = computed(() => modelsQuery.isLoading.value);
 const error = computed(() => (modelsQuery.error.value as Error | null) ?? null);
-const keyword = ref("");
-const filteredModels = computed<ModelRow[]>(() => {
-  const query = keyword.value.trim().toLowerCase();
-  const rows = models.value as ModelRow[];
-  if (!query) return rows;
-  return rows.filter((model) =>
-    [
-      modelDisplayName(model),
-      modelCreatorName(model),
-      model.id,
-      model.dataset_name,
-      model.trainer_name,
-      model.format,
-      model.job_id,
-      model.dataset_id,
-    ]
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase()
-      .includes(query),
-  );
-});
 
-watch(keyword, () => {
+watch(
+  () => modelsQuery.data.value?.total ?? 0,
+  (total) => {
+    pagination.itemCount = total;
+  },
+  { immediate: true },
+);
+
+const { data: modelCreators } = useListModelCreatorsApiV1ModelsCreatorsGet({
+  query: {
+    queryKey: computed(() => orgScopedQueryKey(orgStore.currentOrgId, ["models", "creators"])),
+    enabled: computed(() => !!orgStore.currentOrgId),
+  },
+});
+const creatorOptions = computed(() =>
+  (modelCreators.value ?? []).map((creator) => ({ label: creator.name, value: creator.id })),
+);
+
+watch([keyword, creatorFilter], () => {
   pagination.page = 1;
 });
 
@@ -292,6 +316,10 @@ const columns = computed<DataTableColumns<ModelRow>>(() => [
 }
 
 .models-search {
-  width: min(280px, 100%);
+  width: min(320px, 100%);
+}
+
+.models-creator {
+  width: min(220px, 100%);
 }
 </style>

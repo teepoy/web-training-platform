@@ -11,10 +11,46 @@ import { makeFlowerDataset, makeSample, makeSamples } from "../factories";
 export async function mockListDatasets(page: Page, datasets?: Dataset[]): Promise<void> {
   const body = datasets ?? [makeFlowerDataset()];
   await page.route("**/api/v1/datasets**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith("/datasets/creators")) {
+      const creators = new Map<string, string>();
+      for (const dataset of body) {
+        if (dataset.created_by) {
+          creators.set(dataset.created_by, dataset.creator_name || dataset.created_by);
+        }
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([...creators].map(([id, name]) => ({ id, name }))),
+      });
+      return;
+    }
+    const query = url.searchParams.get("q")?.trim().toLocaleLowerCase();
+    const creatorId = url.searchParams.get("creator_id");
+    const filtered = body.filter((dataset) => {
+      if (creatorId && dataset.created_by !== creatorId) return false;
+      if (!query) return true;
+      return [
+        dataset.id,
+        dataset.name,
+        dataset.dataset_type,
+        dataset.created_by,
+        dataset.creator_name,
+        dataset.org_name,
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLocaleLowerCase().includes(query));
+    });
+    const offset = Number(url.searchParams.get("offset") ?? 0);
+    const limit = Number(url.searchParams.get("limit") ?? filtered.length);
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ items: body, total: body.length }),
+      body: JSON.stringify({
+        items: filtered.slice(offset, offset + limit),
+        total: filtered.length,
+      }),
     });
   });
 }

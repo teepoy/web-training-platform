@@ -41,6 +41,8 @@
               :loading="modelsLoading"
               placeholder="Select a model"
               filterable
+              remote
+              @search="modelSearch = $event"
             />
           </n-form-item>
         </template>
@@ -60,6 +62,7 @@
 import { ref, computed, h, provide } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
+import { refDebounced } from "@vueuse/core";
 import type { DataTableColumns, FormInst, FormRules, SelectOption } from "naive-ui";
 import { useMessage, NButton, NTag } from "naive-ui";
 import { useOrgStore } from "@/features/auth/application/org";
@@ -107,13 +110,22 @@ function predictionJobRowKey(row: PredictionJob): string {
   return row.id;
 }
 
-const { data: models, isLoading: modelsLoading } = useListModelsApiV1ModelsGet(
-  computed(() => ({})),
+const modelSearch = ref("");
+const debouncedModelSearch = refDebounced(modelSearch, 250);
+const modelListParams = computed(() => ({
+  limit: 50,
+  q: debouncedModelSearch.value.trim() || undefined,
+}));
+const { data: modelsPage, isLoading: modelsLoading } = useListModelsApiV1ModelsGet(
+  modelListParams,
   {
     query: {
-      select: (response) => response.items,
       queryKey: computed(() =>
-        orgScopedQueryKey(orgStore.currentOrgId, ["models", "prediction-launcher"]),
+        orgScopedQueryKey(orgStore.currentOrgId, [
+          "models",
+          "prediction-launcher",
+          debouncedModelSearch.value.trim(),
+        ]),
       ),
       enabled: computed(() => !!orgStore.currentOrgId),
       refetchInterval: 5000,
@@ -122,8 +134,10 @@ const { data: models, isLoading: modelsLoading } = useListModelsApiV1ModelsGet(
 );
 
 const modelOptions = computed<SelectOption[]>(() =>
-  ((models.value ?? []) as ModelResponse[]).map((model) => ({
-    label: model.name?.trim() || model.id.slice(0, 8),
+  ((modelsPage.value?.items ?? []) as ModelResponse[]).map((model) => ({
+    label: [model.name?.trim() || model.id.slice(0, 8), model.dataset_name, model.creator_name]
+      .filter(Boolean)
+      .join(" · "),
     value: model.id,
   })),
 );
@@ -244,6 +258,7 @@ function onCancel() {
 
 function resetForm() {
   formModel.value = { model_id: null };
+  modelSearch.value = "";
   formRef.value?.restoreValidation();
 }
 
