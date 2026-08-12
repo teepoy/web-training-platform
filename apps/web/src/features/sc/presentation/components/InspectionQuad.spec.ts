@@ -366,6 +366,66 @@ describe("InspectionQuad state ownership", () => {
     expect(harness.options?.globalFilter.value).toEqual({ combinator: "and", items: [] });
   });
 
+  it("clears local filter state when the collection revision changes", async () => {
+    model.reviewMode.value = true;
+    const { wrapper } = await mountWithProviders(InspectionQuad, {
+      props: {
+        ...requiredProps,
+        variant: "reclassify",
+        collectionId: "collection-1",
+        collectionRevisionId: "revision-1",
+      },
+    });
+    wrapper.findComponent({ name: "ScGlobalFilterModal" }).vm.$emit("update:filter", {
+      combinator: "and",
+      items: [
+        {
+          id: "class-filter",
+          field: "class_number",
+          condition: { filterType: "set", values: [7] },
+          source: { kind: "manual" },
+        },
+      ],
+    });
+    await wrapper.vm.$nextTick();
+
+    await wrapper.setProps({ collectionRevisionId: "revision-2" });
+
+    expect(harness.options?.globalFilter.value).toEqual({ combinator: "and", items: [] });
+    expect(model.clearMapSelection).toHaveBeenCalledOnce();
+    expect(model.setReviewMode).toHaveBeenCalledWith(false);
+  });
+
+  it("shows and clears every hidden table constraint", async () => {
+    model.mapSelectedDefectIds.value = [103, 274];
+    model.sampleTableDataSource.value = {
+      scopeKey: "test-scope",
+      loadRows: vi.fn(async () => ({ items: [], total: 0, nextAnchor: null })),
+    };
+    const { wrapper } = await mountWithProviders(InspectionQuad, {
+      props: {
+        ...requiredProps,
+        galleryRandomSamplingDefectIds: new Set(["103", "274", "936"]),
+      },
+    });
+    wrapper.findComponent({ name: "ScSampleTable" }).vm.$emit("filter-change", {
+      rough_bin: { filterType: "set", values: [7] },
+    });
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.get('[data-testid="sc-clear-map-selection-filter"]').text()).toContain("2");
+    expect(wrapper.get('[data-testid="sc-clear-table-filters"]').text()).toContain("1");
+    expect(wrapper.get('[data-testid="sc-clear-sampling-cohort"]').text()).toContain("3");
+
+    await wrapper.get('[data-testid="sc-clear-map-selection-filter"]').trigger("click");
+    await wrapper.get('[data-testid="sc-clear-table-filters"]').trigger("click");
+    await wrapper.get('[data-testid="sc-clear-sampling-cohort"]').trigger("click");
+
+    expect(model.clearMapSelection).toHaveBeenCalledOnce();
+    expect(harness.options?.tableFilter.value).toEqual({});
+    expect(wrapper.emitted("clear-gallery-random-sampling")).toEqual([[]]);
+  });
+
   it("keeps map, reticle, legend, table filter and sort state inside the quad", async () => {
     model.sampleTableDataSource.value = {
       scopeKey: "test-scope",

@@ -73,4 +73,20 @@ describe("SC Global Filter", () => {
     expect(scGlobalFilterConditionCount(filter)).toBe(0);
     expect(toScWorkflowSampleFilter(filter)).toBeNull();
   });
+
+  it("omits empty set conditions from workflow transport", () => {
+    const filter: ScGlobalFilter = {
+      combinator: "and",
+      items: [
+        {
+          id: "empty-set",
+          field: "class_number",
+          condition: { filterType: "set", values: [] },
+          source: { kind: "manual" },
+        },
+      ],
+    };
+
+    expect(toScWorkflowSampleFilter(filter)).toBeNull();
+  });
 });

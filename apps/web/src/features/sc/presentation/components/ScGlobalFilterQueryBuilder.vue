@@ -241,7 +241,7 @@ function applySetFilter(
 ): void {
   const field = rule.value.field;
   if (!field) return;
-  if (exclude && values.length === 0) {
+  if (values.length === 0) {
     remove();
     return;
   }

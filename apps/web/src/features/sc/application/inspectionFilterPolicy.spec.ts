@@ -11,6 +11,25 @@ function globalFilter(items: ScGlobalFilter["items"] = []): ScGlobalFilter {
 }
 
 describe("SC inspection filter policy", () => {
+  it("does not compile an unfinished empty set rule into a match-nothing filter", () => {
+    const plan = buildInspectionFilterPlan({
+      globalFilter: globalFilter([
+        {
+          id: "unfinished",
+          field: "rough_bin",
+          condition: { filterType: "set", values: [] },
+          source: { kind: "manual" },
+        },
+      ]),
+      mapSelectionIds: [],
+      reviewMode: false,
+      samplingIds: undefined,
+    });
+
+    expect(plan.globalFilters).toEqual([]);
+    expect(plan.tableFilters).toEqual([]);
+  });
+
   it("locks the G, G+T, and G+T+Y query scopes", () => {
     const plan = buildInspectionFilterPlan({
       globalFilter: globalFilter([

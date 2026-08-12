@@ -148,6 +148,8 @@ const globalFilterModel = computed<ScGlobalFilter>({
   },
 });
 const globalFilterCount = computed(() => scGlobalFilterConditionCount(globalFilterModel.value));
+const tableFilterCount = computed(() => Object.keys(tableFilter.value).length);
+const samplingCohortCount = computed(() => props.galleryRandomSamplingDefectIds?.size ?? 0);
 const enabledLegendSources = computed<ScLegendSource[]>(() =>
   isReclassify.value
     ? ["class", "bin", "annotation", "prediction", "final_class"]
@@ -358,6 +360,10 @@ function handleTableFilterChange(filter: ScSampleTableFilter): void {
   tableFilter.value = cloneSampleTableFilter(filter);
 }
 
+function clearTableFilters(): void {
+  tableFilter.value = {};
+}
+
 function handleReviewModeChange(mode: "patch" | "review"): void {
   const nextReviewMode = mode === "review";
   model.setReviewMode(nextReviewMode);
@@ -380,7 +386,14 @@ defineExpose({
 });
 
 watch(
-  () => [props.variant ?? "preview", props.datasetId ?? "", props.inspectionTime, props.waferKey],
+  () => [
+    props.variant ?? "preview",
+    props.datasetId ?? "",
+    props.collectionId ?? "",
+    props.collectionRevisionId ?? "",
+    props.inspectionTime,
+    props.waferKey,
+  ],
   (scope, previousScope) => {
     if (!previousScope || scope.every((value, index) => value === previousScope[index])) return;
     if (props.globalFilter === undefined) {
@@ -403,6 +416,7 @@ watch(
     localSelectedDefectIds.value = [];
     mapSelectionQueue.clear();
     model.setTableSelection({ kind: "ids", ids: [] });
+    model.setReviewMode(false);
     clearGalleryRandomSamplingIfActive();
     mapSelectionResetVersion.value += 1;
   },
@@ -921,6 +935,33 @@ function useMapSelectionQueue() {
           >
             Global Filter{{ globalFilterCount > 0 ? ` (${globalFilterCount})` : "" }}
           </NButton>
+          <NButton
+            v-if="model.mapSelectedDefectIds.value.length > 0"
+            data-testid="sc-clear-map-selection-filter"
+            size="small"
+            secondary
+            @click="handleClearMapSelection"
+          >
+            Map selection ({{ model.mapSelectedDefectIds.value.length }}) ×
+          </NButton>
+          <NButton
+            v-if="tableFilterCount > 0"
+            data-testid="sc-clear-table-filters"
+            size="small"
+            secondary
+            @click="clearTableFilters"
+          >
+            Table filters ({{ tableFilterCount }}) ×
+          </NButton>
+          <NButton
+            v-if="samplingCohortCount > 0"
+            data-testid="sc-clear-sampling-cohort"
+            size="small"
+            secondary
+            @click="clearGalleryRandomSamplingIfActive"
+          >
+            Sampling cohort ({{ samplingCohortCount }}) ×
+          </NButton>
         </div>
       </Teleport>
       <div class="iq-wafer">
@@ -1082,6 +1123,8 @@ function useMapSelectionQueue() {
 }
 .iq-global-filter-toolbar {
   display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
   justify-content: flex-start;
   padding: 0 0 8px;
 }

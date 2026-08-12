@@ -42,7 +42,10 @@ another:
 G evaluates its own explicit `AND`/`OR` expression. Independently owned layers
 compose as `G AND T AND Y`; changing one source does not implicitly clear
 another. A workbench scope change resets all local state; the user may
-otherwise clear each state explicitly.
+otherwise clear each state explicitly. The active transient map selection,
+table-column filters, and sampling cohort are displayed beside the Global
+Filter as counted clear actions, so a T-layer constraint cannot silently leave
+the table and gallery blank.
 
 The **Map-visible universe**, written `Vmap`, is the set emitted by the current
 G-filtered Map query and active projection after applying the active legend
@@ -343,8 +346,10 @@ normative:
    removes that subtree. No hidden map filter or merged condition remains.
 5. Opening the modal clones G into a modal-local editor draft. **+ Condition**
    starts an inline rule in its selected group; **+ Group** adds a nested group.
-   Incomplete conditions and empty groups remain editor-local and are absent
-   from the effective draft expression.
+   Incomplete conditions, including a set condition with no selected values,
+   and empty groups remain editor-local and are absent from the effective draft
+   expression. An unfinished empty include must never compile to `FALSE` and
+   blank every workbench result.
 6. Completing, deleting, or reordering conditions changes only the modal-local
    draft. **Apply filters** atomically replaces G once and then closes the modal.
    **Cancel**, the close control, mask close, and Escape discard the draft. None
@@ -603,9 +608,10 @@ must not be forced into a fourth layer:
 - **SSE invalidation** triggers reloading but does not change filter ownership.
   Every reload must use the consumer's current effective layers.
 - **Workbench scope changes and explicit clears** are lifecycle operations.
-  A scope change resets Global Filter and all local state according to the
-  existing workbench lifecycle; it does not introduce a filter layer. Pending
-  visibility prunes and waiting context actions from the old scope are
+  A scope change in variant, dataset, collection, collection revision,
+  inspection time, or wafer resets Global Filter and all local state according
+  to the existing workbench lifecycle; it does not introduce a filter layer.
+  Pending visibility prunes and waiting context actions from the old scope are
   discarded and cannot write into the new scope.
 - **Gallery visual/annotation selection and highlight** are UI state. They must
   not be confused with table row selection and must not become query
@@ -619,7 +625,7 @@ must not be forced into a fourth layer:
 | Repeated property predicates               | Multiple conditions for the same property compile independently                                                       | G and independently T/Y         | Preserve; never overwrite or deduplicate by property                                                                            |
 | Global Filter QueryBuilder UI              | Conditions/groups support combinators, nesting, sibling reorder, and exact Delete                                     | G editor                        | Count complete conditions only; incomplete rules and empty groups remain non-effective                                          |
 | Global set/range/missing predicates        | Structured Global Filter is normalized for interactive SQL                                                            | G                               | Preserve all operators, missing-value behavior, and numeric `defect_id` canonicalization                                        |
-| Negative and empty-set semantics           | Negative sets retain missing values; empty include matches none; empty exclude is removed                             | G                               | Preserve exactly                                                                                                                |
+| Negative and empty-set semantics           | Negative sets retain missing values; an unfinished empty include or exclude is omitted                                | G                               | Never turn an editor draft with no selected values into a match-none predicate                                                  |
 | Committed map include/exclude              | Promotion AND-composes one Global `map_id` condition and clears transient selection                                   | Promotion from T to G           | Wrap an OR root before adding the condition; never broaden the cohort or create a hidden map-filter list                        |
 | Independently removable map commits        | Repeated map commits remain separate stable-ID conditions                                                             | G expression tree               | Preserve; deleting one condition cancels only that action                                                                       |
 | Post-commit transient cleanup              | Successful commit clears selected IDs and map selection highlights                                                    | T lifecycle                     | Apply G append and transient cleanup as one logical transition; preserve unrelated state and retain selection when commit fails |
@@ -641,7 +647,7 @@ must not be forced into a fourth layer:
 | Direct-dataset Train & Predict             | Sends only the recursive Global Filter expression as `sample_filter`                                                  | G                               | Preserve group boundaries, combinators, repeated properties, and exclusion of every T/Y source                                  |
 | Collection-revision Train & Predict        | `sample_filter` is unsupported and omitted                                                                            | Separate contract boundary      | Keep unsupported until an explicit collection-filter runtime contract exists                                                    |
 | SSE invalidation                           | Reloads affected consumers                                                                                            | Lifecycle trigger               | Preserve each consumer's effective G/T/Y scope during reload                                                                    |
-| Scope reset and explicit clears            | Reset owned states according to current workbench lifecycle                                                           | Lifecycle                       | Preserve independent clears; no implicit cross-layer mutation                                                                   |
+| Scope reset and explicit clears            | Scope changes include collection revision; visible actions clear map selection, table filters, or sampling cohort     | Lifecycle                       | Preserve independent clears; no implicit cross-layer mutation                                                                   |
 
 The audit finds no current user-facing behavior that requires a fourth
 persisted filter layer. The recursive G schema and the single T ownership of

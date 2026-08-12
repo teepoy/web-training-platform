@@ -154,6 +154,9 @@ function toScWorkflowSampleFilterNode(
       items,
     };
   }
+  if (node.condition.filterType === "set" && node.condition.values.length === 0) {
+    return null;
+  }
   return {
     kind: "condition",
     field: node.field,

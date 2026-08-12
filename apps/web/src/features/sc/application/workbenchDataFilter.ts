@@ -13,8 +13,8 @@ import { splitScSetFilterValues } from "@/features/sc/domain/missingFilterValue"
 
 function buildScConditionFilters(field: string, condition: ScFilterCondition): ScDataFilter[] {
   if (condition.filterType === "set") {
+    if (condition.values.length === 0) return [];
     const setFilter = splitScSetFilterValues(field, condition.values);
-    if (condition.exclude && condition.values.length === 0) return [];
     const operator = condition.exclude
       ? setFilter.includeMissing
         ? "not in and not null"
