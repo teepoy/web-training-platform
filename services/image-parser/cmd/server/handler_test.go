@@ -17,13 +17,11 @@ func TestApplyEnvironmentParsesCacheConfiguration(t *testing.T) {
 	t.Setenv("CACHE_TTL", "2h")
 	t.Setenv("CACHE_CLEANUP_INTERVAL", "15m")
 	t.Setenv("CACHE_MAX_BYTES", "4096")
-	t.Setenv("S3_MAX_CONNS", "50")
 	cacheDir := "/default"
 	cacheSizeMB := 1
 	cacheTTL := time.Minute
 	cleanupInterval := time.Minute
 	var maxBytes int64
-	maxConns := 1
 
 	err := applyEnvironment(
 		&cacheSizeMB,
@@ -31,21 +29,19 @@ func TestApplyEnvironmentParsesCacheConfiguration(t *testing.T) {
 		&cacheTTL,
 		&cleanupInterval,
 		&maxBytes,
-		&maxConns,
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if cacheSizeMB != 128 || cacheDir != "/cache" || cacheTTL != 2*time.Hour ||
-		cleanupInterval != 15*time.Minute || maxBytes != 4096 || maxConns != 50 {
+		cleanupInterval != 15*time.Minute || maxBytes != 4096 {
 		t.Fatalf(
-			"unexpected config: memory_mb=%d dir=%s ttl=%s cleanup=%s max=%d conns=%d",
+			"unexpected config: memory_mb=%d dir=%s ttl=%s cleanup=%s max=%d",
 			cacheSizeMB,
 			cacheDir,
 			cacheTTL,
 			cleanupInterval,
 			maxBytes,
-			maxConns,
 		)
 	}
 }
@@ -56,7 +52,6 @@ func TestApplyEnvironmentRejectsInvalidValues(t *testing.T) {
 		"CACHE_TTL":              "soon",
 		"CACHE_CLEANUP_INTERVAL": "later",
 		"CACHE_MAX_BYTES":        "large",
-		"S3_MAX_CONNS":           "many",
 	}
 	for name, value := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -66,14 +61,12 @@ func TestApplyEnvironmentRejectsInvalidValues(t *testing.T) {
 			cacheTTL := time.Minute
 			cleanupInterval := time.Minute
 			var maxBytes int64
-			maxConns := 1
 			if err := applyEnvironment(
 				&cacheSizeMB,
 				&cacheDir,
 				&cacheTTL,
 				&cleanupInterval,
 				&maxBytes,
-				&maxConns,
 			); err == nil {
 				t.Fatal("applyEnvironment() error = nil")
 			}

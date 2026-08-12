@@ -5,15 +5,24 @@ file-cache helper as a second cache tier. Local cache files use a SHA-256 digest
 of the S3 bucket/key as their filename; the original object name is not written
 to disk.
 
+## Mock data source
+
+The current service uses the repository's mock SC upstream and MinIO fixture.
+Its upstream address, object-store endpoint, credentials, region, path style,
+and connection-pool size are internal constants in `internal/mocksource`; they
+are deliberately not deployment environment variables. A future production
+data-source adapter must introduce its own connection contract and environment
+variable names instead of reusing the mock fixture's settings.
+
 ## Local file cache
 
-| Environment variable       | Meaning                                                                 |
-| -------------------------- | ----------------------------------------------------------------------- |
-| `CACHE_SIZE_MB`            | Existing in-memory LRU limit in MiB.                                    |
-| `CACHE_DIR`                | Cache directory.                                                        |
-| `CACHE_TTL`                | Expiry duration since the program last successfully read the file.      |
-| `CACHE_CLEANUP_INTERVAL`   | Interval between full directory scans.                                  |
-| `CACHE_MAX_BYTES`          | Optional byte limit. `0` disables capacity eviction.                    |
+| Environment variable     | Meaning                                                            |
+| ------------------------ | ------------------------------------------------------------------ |
+| `CACHE_SIZE_MB`          | Existing in-memory LRU limit in MiB.                               |
+| `CACHE_DIR`              | Cache directory.                                                   |
+| `CACHE_TTL`              | Expiry duration since the program last successfully read the file. |
+| `CACHE_CLEANUP_INTERVAL` | Interval between full directory scans.                             |
+| `CACHE_MAX_BYTES`        | Optional byte limit. `0` disables capacity eviction.               |
 
 Durations use Go duration syntax such as `10m`, `2h`, or `30s`. Invalid values
 fail service startup.

@@ -3,13 +3,13 @@ package client
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	scv1 "image-parser/gen/go/sc/v1"
 	imageloader "image-parser/internal/image_loader"
+	"image-parser/internal/mocksource"
 )
 
 type UpstreamClient struct {
@@ -20,15 +20,10 @@ type UpstreamClient struct {
 var _ imageloader.UpstreamSource = (*UpstreamClient)(nil)
 
 func NewUpstreamClient() (*UpstreamClient, error) {
-	addr := os.Getenv("SC_UPSTREAM_ADDR")
-	if addr == "" {
-		addr = "localhost:9091"
-	}
-
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	conn, err := grpc.DialContext(ctx, addr,
+	conn, err := grpc.DialContext(ctx, mocksource.UpstreamGRPCAddress,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock(),
 	)

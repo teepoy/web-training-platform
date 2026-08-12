@@ -21,13 +21,12 @@ func main() {
 	}
 
 	log.Printf(
-		"HTTP server starting on :%s (memory-cache=%dMB, local-cache-dir=%s, local-cache-ttl=%s, local-cache-max-bytes=%d, s3-conns=%d)",
+		"HTTP server starting on :%s (memory-cache=%dMB, local-cache-dir=%s, local-cache-ttl=%s, local-cache-max-bytes=%d)",
 		port,
 		app.cacheSizeMB,
 		app.cacheDir,
 		app.cacheTTL,
 		app.cacheMaxBytes,
-		app.s3MaxConns,
 	)
 	if err := app.router.Run(":" + port); err != nil {
 		log.Fatalf("HTTP server failed: %v", err)

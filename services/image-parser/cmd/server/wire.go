@@ -27,7 +27,6 @@ type serverApp struct {
 	cacheDir      string
 	cacheTTL      time.Duration
 	cacheMaxBytes int64
-	s3MaxConns    int
 	close         func()
 }
 
@@ -37,7 +36,6 @@ func wire() *serverApp {
 	cacheTTL := flag.Duration("cache-ttl", 10*time.Minute, "cache entry TTL since its last successful read")
 	cacheCleanupInterval := flag.Duration("cache-cleanup-interval", 5*time.Minute, "full cache scan interval")
 	cacheMaxBytes := flag.Int64("cache-max-bytes", 0, "optional cache size limit in bytes; zero disables the limit")
-	s3MaxConns := flag.Int("s3-max-conns", 1000, "S3 HTTP max idle connections")
 	flag.Parse()
 
 	if err := applyEnvironment(
@@ -46,7 +44,6 @@ func wire() *serverApp {
 		cacheTTL,
 		cacheCleanupInterval,
 		cacheMaxBytes,
-		s3MaxConns,
 	); err != nil {
 		log.Fatalf("invalid image-parser configuration: %v", err)
 	}
@@ -63,7 +60,6 @@ func wire() *serverApp {
 		CacheTTL:             *cacheTTL,
 		CacheCleanupInterval: *cacheCleanupInterval,
 		CacheMaxBytes:        *cacheMaxBytes,
-		S3MaxConns:           *s3MaxConns,
 	})
 	if err != nil {
 		_ = upstream.Close()
@@ -107,7 +103,6 @@ func wire() *serverApp {
 		cacheDir:      *cacheDir,
 		cacheTTL:      *cacheTTL,
 		cacheMaxBytes: *cacheMaxBytes,
-		s3MaxConns:    *s3MaxConns,
 		close: func() {
 			grpcServer.GracefulStop()
 			_ = upstream.Close()
@@ -122,7 +117,6 @@ func applyEnvironment(
 	cacheTTL *time.Duration,
 	cacheCleanupInterval *time.Duration,
 	cacheMaxBytes *int64,
-	s3MaxConns *int,
 ) error {
 	if value := os.Getenv("CACHE_SIZE_MB"); value != "" {
 		parsed, err := strconv.Atoi(value)
@@ -154,13 +148,6 @@ func applyEnvironment(
 			return fmt.Errorf("CACHE_MAX_BYTES must be an integer byte count: %w", err)
 		}
 		*cacheMaxBytes = parsed
-	}
-	if value := os.Getenv("S3_MAX_CONNS"); value != "" {
-		parsed, err := strconv.Atoi(value)
-		if err != nil {
-			return fmt.Errorf("S3_MAX_CONNS must be an integer: %w", err)
-		}
-		*s3MaxConns = parsed
 	}
 	return nil
 }

@@ -3,7 +3,6 @@ package image_loader
 import (
 	"context"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	scv1 "image-parser/gen/go/sc/v1"
@@ -49,7 +48,6 @@ type Options struct {
 	CacheTTL             time.Duration
 	CacheCleanupInterval time.Duration
 	CacheMaxBytes        int64
-	S3MaxConns           int
 }
 
 type UpstreamSource interface {
@@ -69,11 +67,6 @@ func Initialize(opts Options) (ImageLoader, func(), error) {
 	if opts.CacheSizeMB <= 0 {
 		opts.CacheSizeMB = 1024
 	}
-	if opts.S3MaxConns <= 0 {
-		opts.S3MaxConns = 1000
-	}
-
-	atomic.StoreInt32(&maxConns, int32(opts.S3MaxConns))
 	_ = getZips()
 	_ = getReview()
 
