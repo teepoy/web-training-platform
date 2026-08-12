@@ -79,6 +79,7 @@ import {
   mockListModels,
   mockTaskTracker,
   // schedules
+  mockScheduleCapabilities,
   mockListSchedules,
   mockGetSchedule,
   mockCreateSchedule,
@@ -222,6 +223,7 @@ export interface ApiMocks {
     mockTaskTracker: (taskId: string) => Promise<void>;
   };
   schedules: {
+    mockScheduleCapabilities: () => Promise<void>;
     mockListSchedules: (schedules?: ScheduleResponse[]) => Promise<void>;
     mockGetSchedule: (scheduleId: string, schedule?: Partial<ScheduleResponse>) => Promise<void>;
     mockCreateSchedule: () => Promise<void>;
@@ -367,6 +369,7 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
         mockTaskTracker: (taskId) => mockTaskTracker(page, taskId),
       },
       schedules: {
+        mockScheduleCapabilities: () => mockScheduleCapabilities(page),
         mockListSchedules: (schedules) => mockListSchedules(page, schedules),
         mockGetSchedule: (scheduleId, schedule) => mockGetSchedule(page, scheduleId, schedule),
         mockCreateSchedule: () => mockCreateSchedule(page),

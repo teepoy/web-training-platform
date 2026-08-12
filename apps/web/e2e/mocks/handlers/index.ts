@@ -27,6 +27,7 @@ export {
   mockTaskTracker,
 } from "./prediction";
 export {
+  mockScheduleCapabilities,
   mockListSchedules,
   mockGetSchedule,
   mockCreateSchedule,

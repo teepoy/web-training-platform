@@ -12,7 +12,7 @@ from sqlalchemy import text
 
 from app.core.config import AppConfig
 from app.modules.auth.app.services.dev_auth_context import prepare_dev_auth_context
-from app.modules.runtime.app.services.deployment_seed import (
+from app.shared.infrastructure.prefect.deployments import (
     platform_prefect_deployment_specs,
     prefect_work_pool_names,
     required_prefect_deployment_names,

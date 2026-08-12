@@ -4,6 +4,8 @@ from typing import Protocol
 
 
 class ScheduleManagementPort(Protocol):
+    def list_capabilities(self) -> list[dict[str, str]]: ...
+
     async def create_schedule(
         self,
         org_id: str,
@@ -11,6 +13,7 @@ class ScheduleManagementPort(Protocol):
         name: str,
         flow_name: str,
         cron: str,
+        timezone: str = "UTC",
         parameters: dict[str, object] | None = None,
         description: str = "",
     ) -> dict[str, object]: ...
@@ -78,7 +81,7 @@ class ScheduleManagementPort(Protocol):
     ) -> dict[str, object]: ...
 
     async def get_run_logs(
-        self, run_id: str, limit: int = 200
+        self, run_id: str, org_id: str, limit: int = 200
     ) -> list[dict[str, object]]: ...
 
 

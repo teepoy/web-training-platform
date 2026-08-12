@@ -6,6 +6,7 @@
  */
 import type { UpdateScheduleRequestName } from './updateScheduleRequestName';
 import type { UpdateScheduleRequestCron } from './updateScheduleRequestCron';
+import type { UpdateScheduleRequestTimezone } from './updateScheduleRequestTimezone';
 import type { UpdateScheduleRequestParameters } from './updateScheduleRequestParameters';
 import type { UpdateScheduleRequestDescription } from './updateScheduleRequestDescription';
 import type { UpdateScheduleRequestIsScheduleActive } from './updateScheduleRequestIsScheduleActive';
@@ -13,6 +14,7 @@ import type { UpdateScheduleRequestIsScheduleActive } from './updateScheduleRequ
 export interface UpdateScheduleRequest {
   name?: UpdateScheduleRequestName;
   cron?: UpdateScheduleRequestCron;
+  timezone?: UpdateScheduleRequestTimezone;
   parameters?: UpdateScheduleRequestParameters;
   description?: UpdateScheduleRequestDescription;
   is_schedule_active?: UpdateScheduleRequestIsScheduleActive;

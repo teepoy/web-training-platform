@@ -34,10 +34,10 @@
             Delete
           </n-button>
           <n-button
-            v-if="schedule?.prefect_deployment_id"
+            v-if="schedule?.prefect_deployment_url"
             size="small"
             tag="a"
-            :href="`http://localhost:4200/deployments/${schedule.prefect_deployment_id}`"
+            :href="schedule.prefect_deployment_url"
             target="_blank"
           >
             View in Prefect ↗
@@ -51,6 +51,7 @@
         <n-descriptions label-placement="left" :column="2" bordered>
           <n-descriptions-item label="Flow Name">{{ schedule.flow_name }}</n-descriptions-item>
           <n-descriptions-item label="Cron">{{ schedule.cron ?? "—" }}</n-descriptions-item>
+          <n-descriptions-item label="Timezone">{{ schedule.timezone }}</n-descriptions-item>
           <n-descriptions-item label="Description">{{
             schedule.description || "—"
           }}</n-descriptions-item>
@@ -97,6 +98,9 @@
     <n-form ref="editFormRef" :model="editForm" label-placement="left" label-width="auto">
       <n-form-item label="Cron">
         <n-input v-model:value="editForm.cron" placeholder="*/5 * * * *" />
+      </n-form-item>
+      <n-form-item label="Timezone">
+        <n-input v-model:value="editForm.timezone" placeholder="UTC or Asia/Shanghai" />
       </n-form-item>
       <n-form-item label="Parameters">
         <n-input
@@ -249,7 +253,7 @@ const deleteMutation = useDeleteScheduleApiV1SchedulesScheduleIdDelete({
 
 const showEditModal = ref(false);
 const editFormRef = ref<FormInst | null>(null);
-const editForm = ref({ cron: "", parameters: "{}", description: "" });
+const editForm = ref({ cron: "", timezone: "UTC", parameters: "{}", description: "" });
 
 watch(
   schedule,
@@ -257,6 +261,7 @@ watch(
     if (s) {
       editForm.value = {
         cron: s.cron ?? "",
+        timezone: s.timezone,
         parameters: JSON.stringify(s.parameters ?? {}, null, 2),
         description: s.description ?? "",
       };
@@ -282,6 +287,10 @@ function onEditSubmit() {
   let parsedParams: Record<string, unknown>;
   try {
     parsedParams = JSON.parse(editForm.value.parameters);
+    if (typeof parsedParams !== "object" || Array.isArray(parsedParams) || parsedParams === null) {
+      message.error("Parameters must be a JSON object");
+      return false;
+    }
   } catch {
     message.error("Parameters must be valid JSON");
     return false;
@@ -290,6 +299,9 @@ function onEditSubmit() {
   const body: UpdateScheduleRequest = {};
   if (editForm.value.cron !== (schedule.value?.cron ?? "")) {
     body.cron = editForm.value.cron;
+  }
+  if (editForm.value.timezone !== schedule.value?.timezone) {
+    body.timezone = editForm.value.timezone;
   }
   if (JSON.stringify(parsedParams) !== JSON.stringify(schedule.value?.parameters ?? {})) {
     body.parameters = parsedParams;

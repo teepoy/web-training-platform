@@ -76,8 +76,35 @@ def test_task_tracker_cancel_surfaces_prefect_failure() -> None:
     assert response.json()["detail"] == "Failed to cancel task: prefect unavailable"
 
 
-def test_task_tracker_lists_schedule_runs() -> None:
+def test_task_tracker_lists_schedule_runs(monkeypatch) -> None:
     with TestClient(app) as client:
+        run = {
+            "id": "schedule-run-1",
+            "name": "tracker-schedule-run",
+            "deployment_id": "schedule-deployment-1",
+            "flow_name": "drain-dataset",
+            "state_type": "COMPLETED",
+            "state_name": "Completed",
+            "start_time": "2026-08-12T01:00:00Z",
+            "end_time": "2026-08-12T01:00:05Z",
+            "parameters": {},
+        }
+        prefect = SimpleNamespace(
+            resolve_existing_flow_id=AsyncMock(return_value="flow-1"),
+            create_deployment=AsyncMock(
+                return_value={"id": "schedule-deployment-1"}
+            ),
+            delete_deployment=AsyncMock(),
+            update_deployment=AsyncMock(),
+            create_flow_run_from_deployment=AsyncMock(return_value=run),
+            count_flow_runs_for_deployments=AsyncMock(return_value=1),
+            filter_flow_runs_for_deployments=AsyncMock(return_value=[run]),
+            get_flow_run=AsyncMock(return_value=run),
+            get_flow_run_logs=AsyncMock(return_value=[]),
+        )
+        scheduler = app.state.app_context.jobs.schedules.scheduler_service
+        monkeypatch.setattr(scheduler, "_prefect", prefect)
+
         create = client.post(
             "/api/v1/schedules",
             json={

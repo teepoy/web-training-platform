@@ -13,6 +13,7 @@ from app.modules.jobs.schedules.port.http.schemas import (
     CreateScheduleRequest,
     RunLogResponse,
     RunResponse,
+    ScheduleCapabilityResponse,
     ScheduleResponse,
     UpdateScheduleRequest,
 )
@@ -28,29 +29,36 @@ def _deployment_to_schedule(raw: dict) -> ScheduleResponse:
             name=raw.get("name", ""),
             flow_name=raw.get("flow_name", ""),
             cron=raw.get("cron"),
+            timezone=raw.get("timezone", "UTC"),
             parameters=raw.get("parameters", {}),
             description=raw.get("description", ""),
             is_schedule_active=raw.get("is_schedule_active", True),
             created=raw.get("created"),
             updated=raw.get("updated"),
-            prefect_deployment_id=raw.get("prefect_deployment_id") or raw.get("id", ""),
+            prefect_deployment_id=raw.get("prefect_deployment_id"),
+            prefect_deployment_url=raw.get("prefect_deployment_url"),
         )
     schedules = raw.get("schedules", [])
     cron: str | None = None
     if schedules:
         cron = schedules[0].get("schedule", {}).get("cron")
+    timezone = (
+        schedules[0].get("schedule", {}).get("timezone", "UTC") if schedules else "UTC"
+    )
     is_active = not raw.get("paused", False)
     return ScheduleResponse(
         id=raw.get("id", ""),
         name=raw.get("name", ""),
         flow_name=raw.get("flow_name", ""),
         cron=cron,
+        timezone=timezone,
         parameters=raw.get("parameters", {}),
         description=raw.get("description", ""),
         is_schedule_active=is_active,
         created=raw.get("created"),
         updated=raw.get("updated"),
         prefect_deployment_id=raw.get("prefect_deployment_id") or raw.get("id", ""),
+        prefect_deployment_url=raw.get("prefect_deployment_url"),
     )
 
 
@@ -92,6 +100,7 @@ async def create_schedule(
         name=payload.name,
         flow_name=payload.flow_name,
         cron=payload.cron,
+        timezone=payload.timezone,
         parameters=payload.parameters,
         description=payload.description,
     )
@@ -117,6 +126,15 @@ async def list_schedules(
     )
 
 
+@router.get("/capabilities", response_model=list[ScheduleCapabilityResponse])
+async def list_schedule_capabilities(
+    current_user: Annotated[User, Depends(get_current_user)],
+    org: Annotated[Organization, Depends(get_current_org)],
+    svc: SchedulerServiceDep,
+) -> list[ScheduleCapabilityResponse]:
+    return [ScheduleCapabilityResponse(**item) for item in svc.list_capabilities()]
+
+
 @router.get("/{schedule_id}", response_model=ScheduleResponse)
 async def get_schedule(
     schedule_id: str,
@@ -137,23 +155,7 @@ async def update_schedule(
     svc: SchedulerServiceDep,
 ) -> ScheduleResponse:
     updates = payload.model_dump(exclude_none=True)
-    prefect_updates: dict = {}
-    if "name" in updates:
-        prefect_updates["name"] = updates["name"]
-    if "description" in updates:
-        prefect_updates["description"] = updates["description"]
-    if "parameters" in updates:
-        prefect_updates["parameters"] = updates["parameters"]
-    if "is_schedule_active" in updates:
-        prefect_updates["paused"] = not updates["is_schedule_active"]
-    if "cron" in updates:
-        prefect_updates["schedules"] = [
-            {
-                "schedule": {"cron": updates["cron"], "timezone": "UTC"},
-                "active": True,
-            }
-        ]
-    raw = await svc.update_schedule(schedule_id, prefect_updates, org.id)
+    raw = await svc.update_schedule(schedule_id, updates, org.id)
     return _deployment_to_schedule(raw)
 
 
@@ -235,5 +237,5 @@ async def get_run_logs(
     svc: SchedulerServiceDep,
     limit: int = Query(default=200, ge=1, le=500),
 ) -> list[RunLogResponse]:
-    raws = await svc.get_run_logs(run_id, limit=limit)
+    raws = await svc.get_run_logs(run_id, org.id, limit=limit)
     return [_log_to_response(r) for r in raws]

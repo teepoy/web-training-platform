@@ -73,6 +73,7 @@ This is a high-level endpoint index for the current API surface. It is not a sch
 ## Schedules and dashboard
 
 - `GET /api/v1/dashboard`
+- `GET /api/v1/schedules/capabilities` — List explicitly registered executable schedule targets
 - `POST /api/v1/schedules`
 - `GET /api/v1/schedules`
 - `GET /api/v1/schedules/{schedule_id}`

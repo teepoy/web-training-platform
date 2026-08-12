@@ -1,9 +1,24 @@
 import type { Page } from "@playwright/test";
-import type { ScheduleResponse } from "@/generated/orval/models";
+import type { ScheduleCapabilityResponse, ScheduleResponse } from "@/generated/orval/models";
+
+export async function mockScheduleCapabilities(
+  page: Page,
+  capabilities: ScheduleCapabilityResponse[] = [
+    { flow_name: "drain-dataset", deployment_name: "drain-dataset" },
+  ],
+): Promise<void> {
+  await page.route("**/api/v1/schedules/capabilities", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(capabilities),
+    });
+  });
+}
 
 export async function mockListSchedules(page: Page, schedules?: ScheduleResponse[]): Promise<void> {
   const body = schedules ?? [];
-  await page.route("**/api/v1/schedules", async (route) => {
+  await page.route("**/api/v1/schedules?*", async (route) => {
     if (route.request().method() !== "GET") {
       await route.continue();
       return;
@@ -11,7 +26,7 @@ export async function mockListSchedules(page: Page, schedules?: ScheduleResponse
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify(body),
+      body: JSON.stringify({ items: body, total: body.length }),
     });
   });
 }
@@ -25,8 +40,10 @@ export async function mockGetSchedule(
     id: scheduleId,
     name: "e2e-schedule",
     flow_name: "training_v1",
+    timezone: "UTC",
     is_schedule_active: true,
     prefect_deployment_id: "deploy-e2e-1",
+    prefect_deployment_url: "http://prefect.example/deployments/deployment/deploy-e2e-1",
     created: "2026-01-01T00:00:00Z",
     updated: "2026-01-01T00:00:00Z",
     ...schedule,
@@ -46,14 +63,16 @@ export async function mockCreateSchedule(page: Page): Promise<void> {
       const body: ScheduleResponse = {
         id: "schedule-new-1",
         name: "new-schedule",
-        flow_name: "training_v1",
+        flow_name: "drain-dataset",
+        timezone: "UTC",
         is_schedule_active: true,
         prefect_deployment_id: "deploy-new-1",
+        prefect_deployment_url: "http://prefect.example/deployments/deployment/deploy-new-1",
         created: "2026-01-01T00:00:00Z",
         updated: "2026-01-01T00:00:00Z",
       };
       await route.fulfill({
-        status: 201,
+        status: 200,
         contentType: "application/json",
         body: JSON.stringify(body),
       });
@@ -78,7 +97,7 @@ export async function mockScheduleRuns(page: Page, scheduleId: string): Promise<
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ items: [], total: 0 }),
+      body: JSON.stringify([]),
     });
   });
 }

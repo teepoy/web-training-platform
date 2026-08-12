@@ -57,6 +57,9 @@
           <n-form-item label="Cron" path="cron">
             <n-input v-model:value="formModel.cron" placeholder="*/5 * * * *" />
           </n-form-item>
+          <n-form-item label="Timezone" path="timezone">
+            <n-input v-model:value="formModel.timezone" placeholder="UTC or Asia/Shanghai" />
+          </n-form-item>
           <n-form-item label="Parameters" path="parameters">
             <n-input
               v-model:value="formModel.parameters"
@@ -82,6 +85,7 @@ import type { DataTableColumns, FormInst, FormRules } from "naive-ui";
 import { useMessage, NTag, NButton, NPopconfirm, NSpace } from "naive-ui";
 import {
   useListSchedulesApiV1SchedulesGet,
+  useListScheduleCapabilitiesApiV1SchedulesCapabilitiesGet,
   useCreateScheduleApiV1SchedulesPost,
   useDeleteScheduleApiV1SchedulesScheduleIdDelete,
   usePauseScheduleApiV1SchedulesScheduleIdPausePost,
@@ -97,6 +101,9 @@ const message = useMessage();
 const qc = useQueryClient();
 const orgStore = useOrgStore();
 const schedulesQueryKey = computed(() => orgScopedQueryKey(orgStore.currentOrgId, ["schedules"]));
+const scheduleCapabilitiesQueryKey = computed(() =>
+  orgScopedQueryKey(orgStore.currentOrgId, ["schedule-capabilities"]),
+);
 
 // ---------------------------------------------------------------------------
 // Query
@@ -112,6 +119,13 @@ const { data: schedules, isLoading } = useListSchedulesApiV1SchedulesGet(
     },
   },
 );
+
+const { data: scheduleCapabilities } = useListScheduleCapabilitiesApiV1SchedulesCapabilitiesGet({
+  query: {
+    queryKey: scheduleCapabilitiesQueryKey,
+    enabled: computed(() => !!orgStore.currentOrgId),
+  },
+});
 
 // ---------------------------------------------------------------------------
 // Mutations
@@ -183,6 +197,11 @@ const columns = computed<DataTableColumns<Schedule>>(() => [
     key: "cron",
     width: 160,
     render: (row) => row.cron ?? "—",
+  },
+  {
+    title: "Timezone",
+    key: "timezone",
+    width: 150,
   },
   {
     title: "Status",
@@ -287,11 +306,17 @@ const formModel = ref({
   name: "",
   flow_name: null as string | null,
   cron: "",
+  timezone: "UTC",
   parameters: "{}",
   description: "",
 });
 
-const flowOptions = [{ label: "drain-dataset", value: "drain-dataset" }];
+const flowOptions = computed(() =>
+  (scheduleCapabilities.value ?? []).map((capability) => ({
+    label: capability.flow_name,
+    value: capability.flow_name,
+  })),
+);
 
 const formRules: FormRules = {
   name: [{ required: true, message: "Name is required", trigger: ["blur", "input"] }],
@@ -308,6 +333,13 @@ const formRules: FormRules = {
         );
       },
       trigger: ["blur"],
+    },
+  ],
+  timezone: [
+    {
+      required: true,
+      message: "IANA timezone is required",
+      trigger: ["blur", "input"],
     },
   ],
 };
@@ -344,6 +376,7 @@ function onSubmit() {
         name: formModel.value.name,
         flow_name: formModel.value.flow_name,
         cron: formModel.value.cron,
+        timezone: formModel.value.timezone,
         parameters: parsedParams,
         description: formModel.value.description || undefined,
       },
@@ -362,6 +395,7 @@ function resetForm() {
     name: "",
     flow_name: null,
     cron: "",
+    timezone: "UTC",
     parameters: "{}",
     description: "",
   };

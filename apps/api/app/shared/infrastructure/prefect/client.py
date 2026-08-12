@@ -443,6 +443,64 @@ class PrefectClient:
             resource_label="deployment",
         )
 
+    async def create_deployment(
+        self,
+        *,
+        name: str,
+        flow_id: str,
+        work_pool_name: str,
+        entrypoint: str,
+        path: str,
+        schedules: list[dict[str, object]],
+        parameters: dict[str, object],
+        description: str,
+        tags: list[str],
+    ) -> dict:
+        """Create a fully executable deployment from an approved descriptor."""
+
+        return await self._request(
+            "POST",
+            "/deployments/",
+            json={
+                "name": name,
+                "flow_id": flow_id,
+                "work_pool_name": work_pool_name,
+                "entrypoint": entrypoint,
+                "path": path,
+                "schedules": schedules,
+                "parameters": parameters,
+                "description": description,
+                "tags": tags,
+                "enforce_parameter_schema": False,
+            },
+            resource_label="deployment",
+        )
+
+    async def update_deployment(
+        self,
+        deployment_id: str,
+        updates: dict[str, object],
+    ) -> None:
+        """Update an existing deployment."""
+
+        await self._request(
+            "PATCH",
+            f"/deployments/{deployment_id}",
+            json=updates,
+            expect_json=False,
+            resource_label="deployment",
+        )
+
+    async def delete_deployment(self, deployment_id: str) -> None:
+        """Delete an existing deployment."""
+
+        await self._request(
+            "DELETE",
+            f"/deployments/{deployment_id}",
+            expect_json=False,
+            resource_label="deployment",
+        )
+
     async def list_work_queues(self, work_pool_name: str | None = None) -> list[dict]:
         """Return work queues, optionally filtered by work pool name."""
         body: dict[str, object] = {"limit": 200}
@@ -710,3 +768,49 @@ class PrefectClient:
             "POST", "/flow_runs/filter", json=body, resource_label="flow runs"
         )
         return result if isinstance(result, list) else []
+
+    async def count_flow_runs_for_deployments(
+        self,
+        deployment_ids: list[str],
+    ) -> int:
+        """Count flow runs owned by the given deployment IDs."""
+
+        result = await self._request(
+            "POST",
+            "/flow_runs/count",
+            json={"deployments": {"id": {"any_": deployment_ids}}},
+            resource_label="flow run count",
+        )
+        if not isinstance(result, int):
+            raise HTTPException(
+                status_code=502,
+                detail="Prefect flow run count returned an invalid response",
+            )
+        return result
+
+    async def filter_flow_runs_for_deployments(
+        self,
+        deployment_ids: list[str],
+        *,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> list[dict]:
+        """List flow runs for a known set of organization-scoped deployments."""
+
+        result = await self._request(
+            "POST",
+            "/flow_runs/filter",
+            json={
+                "deployments": {"id": {"any_": deployment_ids}},
+                "offset": offset,
+                "limit": limit,
+                "sort": "EXPECTED_START_TIME_DESC",
+            },
+            resource_label="flow runs",
+        )
+        if not isinstance(result, list):
+            raise HTTPException(
+                status_code=502,
+                detail="Prefect flow run listing returned an invalid response",
+            )
+        return result

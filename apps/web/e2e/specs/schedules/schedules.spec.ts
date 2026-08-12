@@ -3,6 +3,37 @@ import { SchedulesPage } from "../../pages/schedules/SchedulesPage";
 import { createSchedule, deleteSchedule } from "../../seed";
 import type { CreateScheduleRequest } from "../../../src/generated/orval/models";
 
+test("create schedule uses registered capability and explicit timezone @mock", async ({
+  authedPage,
+  apiMocks,
+}) => {
+  await apiMocks.schedules.mockScheduleCapabilities();
+  await apiMocks.schedules.mockListSchedules();
+  await apiMocks.schedules.mockCreateSchedule();
+
+  const schedulesPage = new SchedulesPage(authedPage);
+  await schedulesPage.goto();
+  await schedulesPage.clickCreateSchedule();
+  await schedulesPage.fillScheduleName("mock-schedule");
+  await schedulesPage.selectFlow("drain-dataset");
+  await schedulesPage.fillCron("0 6 * * 1");
+
+  const requestPromise = authedPage.waitForRequest(
+    (request) =>
+      request.method() === "POST" && new URL(request.url()).pathname === "/api/v1/schedules",
+  );
+  await schedulesPage.clickCreate();
+  const request = await requestPromise;
+
+  expect(request.postDataJSON()).toMatchObject({
+    name: "mock-schedule",
+    flow_name: "drain-dataset",
+    cron: "0 6 * * 1",
+    timezone: "UTC",
+  });
+  await schedulesPage.waitForToast("Schedule created");
+});
+
 test.describe("Schedules", () => {
   let scheduleName: string | undefined;
   let scheduleId: string | undefined;

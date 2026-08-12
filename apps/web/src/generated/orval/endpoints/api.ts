@@ -154,6 +154,7 @@ import type {
   ScInspectionSummaryItem,
   ScSampleTableRowsRequest,
   ScSampleTableRowsResponse,
+  ScheduleCapabilityResponse,
   ScheduleResponse,
   SensorDefinitionResponse,
   SensorEventBatch,
@@ -7644,6 +7645,76 @@ export function useListSchedulesApiV1SchedulesGet<TData = Awaited<ReturnType<typ
   ): UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getListSchedulesApiV1SchedulesGetQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = unref(queryOptions).queryKey as DataTag<QueryKey, TData, TError>;
+
+  return query;
+}
+
+
+
+
+/**
+ * @summary List Schedule Capabilities
+ */
+export const getListScheduleCapabilitiesApiV1SchedulesCapabilitiesGetUrl = () => {
+
+
+  return `/api/v1/schedules/capabilities`
+}
+
+export const listScheduleCapabilitiesApiV1SchedulesCapabilitiesGet = async ( options?: RequestInit): Promise<ScheduleCapabilityResponse[]> => {
+
+  return orvalFetcher<ScheduleCapabilityResponse[]>(getListScheduleCapabilitiesApiV1SchedulesCapabilitiesGetUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getListScheduleCapabilitiesApiV1SchedulesCapabilitiesGetQueryKey = () => {
+    return ['api','v1','schedules','capabilities'] as const;
+    }
+
+
+export const getListScheduleCapabilitiesApiV1SchedulesCapabilitiesGetQueryOptions = <TData = Awaited<ReturnType<typeof listScheduleCapabilitiesApiV1SchedulesCapabilitiesGet>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listScheduleCapabilitiesApiV1SchedulesCapabilitiesGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  getListScheduleCapabilitiesApiV1SchedulesCapabilitiesGetQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listScheduleCapabilitiesApiV1SchedulesCapabilitiesGet>>> = ({ signal }) => listScheduleCapabilitiesApiV1SchedulesCapabilitiesGet({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listScheduleCapabilitiesApiV1SchedulesCapabilitiesGet>>, TError, TData>
+}
+
+export type ListScheduleCapabilitiesApiV1SchedulesCapabilitiesGetQueryResult = NonNullable<Awaited<ReturnType<typeof listScheduleCapabilitiesApiV1SchedulesCapabilitiesGet>>>
+export type ListScheduleCapabilitiesApiV1SchedulesCapabilitiesGetQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List Schedule Capabilities
+ */
+
+export function useListScheduleCapabilitiesApiV1SchedulesCapabilitiesGet<TData = Awaited<ReturnType<typeof listScheduleCapabilitiesApiV1SchedulesCapabilitiesGet>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listScheduleCapabilitiesApiV1SchedulesCapabilitiesGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+
+  ): UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListScheduleCapabilitiesApiV1SchedulesCapabilitiesGetQueryOptions(options)
 
   const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

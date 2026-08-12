@@ -15,6 +15,9 @@ from typing import TYPE_CHECKING, Any
 from app.modules.agent.port.http.schemas import AgentContext, AgentPanelDescriptor
 from app.shared.api.schemas import WaferPoint, WaferPointsResponse  # noqa: F401
 from app.shared.domain.protocols import LabelStudioClient
+from app.shared.infrastructure.prefect.deployments import (
+    schedulable_prefect_deployment_specs,
+)
 from app.shared.infrastructure.surface_store import SurfaceStore
 
 if TYPE_CHECKING:
@@ -28,6 +31,9 @@ if TYPE_CHECKING:
     from app.modules.training.domain.repository import TrainingRepository
 
 _logger = logging.getLogger(__name__)
+_SCHEDULABLE_FLOW_NAMES = [
+    spec.flow_name for spec in schedulable_prefect_deployment_specs()
+]
 
 
 # ---------------------------------------------------------------------------
@@ -207,7 +213,7 @@ WRITE_TOOLS: list[dict[str, Any]] = [
     _fn(
         "create_schedule",
         (
-            "Create a cron-based training schedule. "
+            "Create a cron-based recurring background schedule. "
             "Always confirm with the user before calling."
         ),
         _obj(
@@ -215,11 +221,16 @@ WRITE_TOOLS: list[dict[str, Any]] = [
                 "name": {"type": "string"},
                 "flow_name": {
                     "type": "string",
-                    "description": "Prefect flow name (e.g. 'train-job')",
+                    "enum": _SCHEDULABLE_FLOW_NAMES,
+                    "description": "Registered executable schedule target",
                 },
                 "cron": {
                     "type": "string",
                     "description": "Cron expression (e.g. '0 2 * * *')",
+                },
+                "timezone": {
+                    "type": "string",
+                    "description": "IANA timezone (e.g. 'UTC' or 'Asia/Shanghai')",
                 },
                 "parameters": {"type": "object", "description": "Flow parameters"},
                 "description": {"type": "string"},
@@ -702,6 +713,7 @@ async def execute_create_schedule(
     name: str,
     flow_name: str,
     cron: str,
+    timezone: str | None,
     parameters: dict[str, Any] | None,
     description: str | None,
     scheduler_service: ScheduleManagementPort,
@@ -716,6 +728,7 @@ async def execute_create_schedule(
             name=name,
             flow_name=flow_name,
             cron=cron,
+            timezone=timezone or "UTC",
             parameters=parameters or {},
             description=description or "",
         )

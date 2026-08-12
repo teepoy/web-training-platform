@@ -404,6 +404,7 @@ class GlobalAgent:
                     name=args.get("name", ""),
                     flow_name=args.get("flow_name", ""),
                     cron=args.get("cron", ""),
+                    timezone=args.get("timezone"),
                     parameters=args.get("parameters"),
                     description=args.get("description"),
                     scheduler_service=self._scheduler_service,

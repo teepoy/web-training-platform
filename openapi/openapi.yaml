@@ -3144,6 +3144,23 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HTTPValidationError"
+  /api/v1/schedules/capabilities:
+    get:
+      tags:
+        - schedules
+      summary: List Schedule Capabilities
+      operationId: list_schedule_capabilities_api_v1_schedules_capabilities_get
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/ScheduleCapabilityResponse"
+                type: array
+                title: Response List Schedule Capabilities Api V1 Schedules Capabilities
+                  Get
   /api/v1/schedules/{schedule_id}:
     get:
       tags:
@@ -5953,13 +5970,21 @@ components:
       properties:
         name:
           type: string
+          maxLength: 255
+          minLength: 1
           title: Name
         flow_name:
           type: string
+          maxLength: 255
+          minLength: 1
           title: Flow Name
         cron:
           type: string
           title: Cron
+        timezone:
+          type: string
+          title: Timezone
+          default: UTC
         parameters:
           additionalProperties: true
           type: object
@@ -8474,6 +8499,19 @@ components:
         - field
         - direction
       title: ScSampleTableSort
+    ScheduleCapabilityResponse:
+      properties:
+        flow_name:
+          type: string
+          title: Flow Name
+        deployment_name:
+          type: string
+          title: Deployment Name
+      type: object
+      required:
+        - flow_name
+        - deployment_name
+      title: ScheduleCapabilityResponse
     ScheduleResponse:
       properties:
         id:
@@ -8490,6 +8528,9 @@ components:
             - type: string
             - type: "null"
           title: Cron
+        timezone:
+          type: string
+          title: Timezone
         parameters:
           additionalProperties: true
           type: object
@@ -8513,14 +8554,21 @@ components:
             - type: "null"
           title: Updated
         prefect_deployment_id:
-          type: string
+          anyOf:
+            - type: string
+            - type: "null"
           title: Prefect Deployment Id
+        prefect_deployment_url:
+          anyOf:
+            - type: string
+            - type: "null"
+          title: Prefect Deployment Url
       type: object
       required:
         - id
         - name
         - flow_name
-        - prefect_deployment_id
+        - timezone
       title: ScheduleResponse
     SensorDefinitionResponse:
       properties:
@@ -9686,6 +9734,8 @@ components:
         name:
           anyOf:
             - type: string
+              maxLength: 255
+              minLength: 1
             - type: "null"
           title: Name
         cron:
@@ -9693,6 +9743,11 @@ components:
             - type: string
             - type: "null"
           title: Cron
+        timezone:
+          anyOf:
+            - type: string
+            - type: "null"
+          title: Timezone
         parameters:
           anyOf:
             - additionalProperties: true

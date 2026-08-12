@@ -7,9 +7,18 @@
 import type { CreateScheduleRequestParameters } from './createScheduleRequestParameters';
 
 export interface CreateScheduleRequest {
+  /**
+   * @minLength 1
+   * @maxLength 255
+   */
   name: string;
+  /**
+   * @minLength 1
+   * @maxLength 255
+   */
   flow_name: string;
   cron: string;
+  timezone?: string;
   parameters?: CreateScheduleRequestParameters;
   description?: string;
 }

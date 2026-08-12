@@ -138,6 +138,28 @@ class PrefectClient(Protocol):
         tags: list[str] | None = None,
     ) -> dict[str, Any]: ...
 
+    async def create_deployment(
+        self,
+        *,
+        name: str,
+        flow_id: str,
+        work_pool_name: str,
+        entrypoint: str,
+        path: str,
+        schedules: list[dict[str, object]],
+        parameters: dict[str, object],
+        description: str,
+        tags: list[str],
+    ) -> dict[str, Any]: ...
+
+    async def update_deployment(
+        self,
+        deployment_id: str,
+        updates: dict[str, object],
+    ) -> None: ...
+
+    async def delete_deployment(self, deployment_id: str) -> None: ...
+
     async def resolve_existing_flow_id(self, flow_name: str) -> str | None: ...
 
     async def get_work_pool(self, name: str) -> dict[str, Any]: ...
@@ -190,6 +212,19 @@ class PrefectClient(Protocol):
         work_queue_name: str | None = None,
         deployment_id: str | None = None,
         state_types: list[str] | None = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]: ...
+
+    async def count_flow_runs_for_deployments(
+        self,
+        deployment_ids: list[str],
+    ) -> int: ...
+
+    async def filter_flow_runs_for_deployments(
+        self,
+        deployment_ids: list[str],
+        *,
+        offset: int = 0,
         limit: int = 50,
     ) -> list[dict[str, Any]]: ...
 

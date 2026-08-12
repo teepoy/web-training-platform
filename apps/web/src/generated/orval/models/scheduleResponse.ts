@@ -8,16 +8,20 @@ import type { ScheduleResponseCron } from './scheduleResponseCron';
 import type { ScheduleResponseParameters } from './scheduleResponseParameters';
 import type { ScheduleResponseCreated } from './scheduleResponseCreated';
 import type { ScheduleResponseUpdated } from './scheduleResponseUpdated';
+import type { ScheduleResponsePrefectDeploymentId } from './scheduleResponsePrefectDeploymentId';
+import type { ScheduleResponsePrefectDeploymentUrl } from './scheduleResponsePrefectDeploymentUrl';
 
 export interface ScheduleResponse {
   id: string;
   name: string;
   flow_name: string;
   cron?: ScheduleResponseCron;
+  timezone: string;
   parameters?: ScheduleResponseParameters;
   description?: string;
   is_schedule_active?: boolean;
   created?: ScheduleResponseCreated;
   updated?: ScheduleResponseUpdated;
-  prefect_deployment_id: string;
+  prefect_deployment_id?: ScheduleResponsePrefectDeploymentId;
+  prefect_deployment_url?: ScheduleResponsePrefectDeploymentUrl;
 }

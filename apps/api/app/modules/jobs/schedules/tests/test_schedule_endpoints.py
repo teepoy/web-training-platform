@@ -22,7 +22,12 @@ MOCK_DEPLOYMENT = {
     "name": "test-schedule",
     "flow_id": "flow-uuid-5678",
     "flow_name": "drain-dataset",
-    "schedules": [{"schedule": {"cron": "*/5 * * * *"}, "active": True}],
+    "schedules": [
+        {
+            "schedule": {"cron": "*/5 * * * *", "timezone": "UTC"},
+            "active": True,
+        }
+    ],
     "parameters": {},
     "description": "test description",
     "paused": False,
@@ -60,8 +65,24 @@ MOCK_LOG = {
 class MockSchedulerService:
     """Async-compatible mock that returns fixture data for happy-path tests."""
 
+    def list_capabilities(self) -> list[dict[str, str]]:
+        return [
+            {
+                "flow_name": "drain-dataset",
+                "deployment_name": "drain-dataset",
+            }
+        ]
+
     async def create_schedule(
-        self, org_id, created_by, name, flow_name, cron, parameters=None, description=""
+        self,
+        org_id,
+        created_by,
+        name,
+        flow_name,
+        cron,
+        timezone="UTC",
+        parameters=None,
+        description="",
     ) -> dict:
         return MOCK_DEPLOYMENT
 
@@ -107,7 +128,9 @@ class MockSchedulerService:
     async def get_run(self, run_id: str, org_id: str) -> dict:
         return MOCK_RUN
 
-    async def get_run_logs(self, run_id: str, limit: int = 200) -> list[dict]:
+    async def get_run_logs(
+        self, run_id: str, org_id: str, limit: int = 200
+    ) -> list[dict]:
         return [MOCK_LOG]
 
 
@@ -193,6 +216,31 @@ def test_create_schedule(client: TestClient) -> None:
     assert "is_schedule_active" in body
 
 
+@pytest.mark.parametrize(
+    ("cron", "timezone"),
+    [
+        ("0 0 12 * * *", "UTC"),
+        ("0 12 * * *", "/invalid"),
+    ],
+)
+def test_create_schedule_rejects_unsupported_time_definition(
+    client: TestClient,
+    cron: str,
+    timezone: str,
+) -> None:
+    response = client.post(
+        "/api/v1/schedules",
+        json={
+            "name": "invalid-time",
+            "flow_name": "drain-dataset",
+            "cron": cron,
+            "timezone": timezone,
+        },
+    )
+
+    assert response.status_code == 422
+
+
 # ---------------------------------------------------------------------------
 # GET /api/v1/schedules
 # ---------------------------------------------------------------------------
@@ -205,6 +253,18 @@ def test_list_schedules(client: TestClient) -> None:
     assert body["total"] == 1
     assert len(body["items"]) == 1
     assert body["items"][0]["id"] == "dep-uuid-1234"
+
+
+def test_list_schedule_capabilities(client: TestClient) -> None:
+    response = client.get("/api/v1/schedules/capabilities")
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {
+            "flow_name": "drain-dataset",
+            "deployment_name": "drain-dataset",
+        }
+    ]
 
 
 # ---------------------------------------------------------------------------

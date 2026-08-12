@@ -24,6 +24,7 @@ def init_schedules(shared: SharedInfra) -> SchedulesContext:
     svc = SchedulerService(
         prefect_client=shared.prefect_client,
         repository=schedule_repository,
+        prefect_ui_url=str(shared.config.prefect.ui_url),
     )
     return SchedulesContext(
         schedule_repository=schedule_repository,

@@ -14,6 +14,8 @@ This documentation is organized for site navigation as well as repo browsing.
 ## Start Here
 
 - Read [Architecture Overview](architecture/overview.md) for the platform shape.
+- Read [Schedule Execution](architecture/schedule-execution.md) for recurring-job targets,
+  Prefect deployment identity, time semantics, and organization isolation.
 - Read [Dataset Summary, Collection Stack, and Dynamic Collection](architecture/dataset-summary-and-collections.md)
   for the proposed multi-dataset classify, training, prediction, and refresh model.
 - Read [Extension Guide](guides/extension-guide.md) for the extension model and widget system.

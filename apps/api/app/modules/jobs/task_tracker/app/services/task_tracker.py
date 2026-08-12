@@ -150,10 +150,8 @@ class TaskTrackerService:
         return await self._build_detail(task)
 
     async def cancel_task(self, task_id: str, org_id: str) -> bool:
-        task = await self._resolve_task(task_id, org_id)
-        if task is None:
-            return False
-        if task.task_kind == "training":
+        training = await self._training_repository.get_job(task_id, org_id=org_id)
+        if training is not None:
             ext = await self._training_repository.get_job_external_id(
                 task_id,
                 org_id=org_id,
@@ -165,11 +163,17 @@ class TaskTrackerService:
                 task_id, JobStatus.CANCELLED
             )
             return True
-        if task.task_kind == "schedule_run":
+
+        prediction = await self._prediction_repository.get_prediction_job(
+            task_id,
+            org_id=org_id,
+        )
+        if prediction is None or prediction.external_job_id is None:
             return False
-        if task.external_job_id is None:
-            return False
-        await self._prefect.set_flow_run_state(task.external_job_id, "CANCELLING")
+        await self._prefect.set_flow_run_state(
+            prediction.external_job_id,
+            "CANCELLING",
+        )
         await self._prediction_repository.update_prediction_job_status(
             task_id, JobStatus.CANCELLED
         )

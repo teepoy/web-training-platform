@@ -144,3 +144,125 @@ def test_ensure_deployment_updates_existing_deployment() -> None:
         ]
 
     asyncio.run(run())
+
+
+def test_schedule_deployment_operations_use_explicit_runtime_fields() -> None:
+    async def run() -> None:
+        requests: list[tuple[str, str, dict[str, object] | None]] = []
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            body = (
+                json.loads(request.content.decode("utf-8")) if request.content else None
+            )
+            requests.append((request.method, request.url.path, body))
+            if request.method == "POST" and request.url.path == "/api/deployments/":
+                return httpx.Response(201, json={"id": "deployment-1"})
+            return httpx.Response(204)
+
+        client = PrefectClient("http://prefect.example/api")
+        await client._client.aclose()
+        client._client = httpx.AsyncClient(
+            base_url="http://prefect.example/api",
+            transport=httpx.MockTransport(handler),
+        )
+        try:
+            created = await client.create_deployment(
+                name="platform-schedule-schedule-1",
+                flow_id="flow-1",
+                work_pool_name="default-cpu",
+                entrypoint="module:flow",
+                path="",
+                schedules=[
+                    {
+                        "schedule": {"cron": "0 2 * * *", "timezone": "UTC"},
+                        "active": True,
+                    }
+                ],
+                parameters={"dataset_id": "dataset-1"},
+                description="nightly",
+                tags=["platform-schedule"],
+            )
+            await client.update_deployment("deployment-1", {"paused": True})
+            await client.delete_deployment("deployment-1")
+        finally:
+            await client.close()
+
+        assert created == {"id": "deployment-1"}
+        assert requests == [
+            (
+                "POST",
+                "/api/deployments/",
+                {
+                    "name": "platform-schedule-schedule-1",
+                    "flow_id": "flow-1",
+                    "work_pool_name": "default-cpu",
+                    "entrypoint": "module:flow",
+                    "path": "",
+                    "schedules": [
+                        {
+                            "schedule": {
+                                "cron": "0 2 * * *",
+                                "timezone": "UTC",
+                            },
+                            "active": True,
+                        }
+                    ],
+                    "parameters": {"dataset_id": "dataset-1"},
+                    "description": "nightly",
+                    "tags": ["platform-schedule"],
+                    "enforce_parameter_schema": False,
+                },
+            ),
+            ("PATCH", "/api/deployments/deployment-1", {"paused": True}),
+            ("DELETE", "/api/deployments/deployment-1", None),
+        ]
+
+    asyncio.run(run())
+
+
+def test_schedule_flow_run_queries_are_deployment_scoped() -> None:
+    async def run() -> None:
+        requests: list[tuple[str, dict[str, object]]] = []
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            body = json.loads(request.content.decode("utf-8"))
+            requests.append((request.url.path, body))
+            if request.url.path == "/api/flow_runs/count":
+                return httpx.Response(200, json=3)
+            return httpx.Response(200, json=[{"id": "run-1"}])
+
+        client = PrefectClient("http://prefect.example/api")
+        await client._client.aclose()
+        client._client = httpx.AsyncClient(
+            base_url="http://prefect.example/api",
+            transport=httpx.MockTransport(handler),
+        )
+        try:
+            count = await client.count_flow_runs_for_deployments(["deployment-1"])
+            runs = await client.filter_flow_runs_for_deployments(
+                ["deployment-1"],
+                offset=10,
+                limit=25,
+            )
+        finally:
+            await client.close()
+
+        assert count == 3
+        assert runs == [{"id": "run-1"}]
+        assert requests == [
+            (
+                "/api/flow_runs/count",
+                {"deployments": {"id": {"any_": ["deployment-1"]}}},
+            ),
+            (
+                "/api/flow_runs/filter",
+                {
+                    "deployments": {"id": {"any_": ["deployment-1"]}},
+                    "offset": 10,
+                    "limit": 25,
+                    "sort": "EXPECTED_START_TIME_DESC",
+                },
+            ),
+        ]
+
+    asyncio.run(run())
