@@ -37,6 +37,7 @@ const sampleTableDescriptor = {
 class FakeEventSource {
   static instance: FakeEventSource | null = null;
   private readonly listeners = new Map<string, (event: MessageEvent<string>) => void>();
+  closed = false;
 
   constructor(readonly url: string) {
     FakeEventSource.instance = this;
@@ -47,6 +48,7 @@ class FakeEventSource {
   }
 
   close(): void {
+    this.closed = true;
     this.listeners.clear();
   }
 
@@ -173,6 +175,33 @@ describe("SQL workbench data source", () => {
     expect(FakeEventSource.instance?.url).toContain(
       "/api/v1/sc/data/collections/collection-1/revisions/revision-2/events",
     );
+  });
+
+  it("does not refresh for an unchanged SSE baseline and closes without listeners", () => {
+    vi.stubGlobal("EventSource", FakeEventSource);
+    const source = new SqlWorkbenchDataSource({ kind: "dataset", datasetId: "ds-1" });
+    sources.push(source);
+    const listener = vi.fn();
+
+    const unsubscribe = source.subscribeInvalidations(listener);
+    const eventSource = FakeEventSource.instance;
+    eventSource?.emit(
+      "invalidation",
+      JSON.stringify({ scope: "dataset:ds-1", revision: 0, changed_kinds: [] }),
+    );
+    eventSource?.emit(
+      "invalidation",
+      JSON.stringify({ scope: "dataset:ds-1", revision: 1, changed_kinds: ["annotation"] }),
+    );
+
+    expect(listener).toHaveBeenCalledOnce();
+    expect(listener).toHaveBeenCalledWith({
+      scope: "dataset:ds-1",
+      revision: 1,
+      changedKinds: ["annotation"],
+    });
+    unsubscribe();
+    expect(eventSource?.closed).toBe(true);
   });
 
   it("retries one transient query failure before returning the result", async () => {

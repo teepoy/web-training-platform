@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import AsyncIterator
+from types import SimpleNamespace
 from typing import cast
 
 import pytest
@@ -13,9 +14,11 @@ from app.modules.sc.data_provider.router import (
     _ManagedStreamingResponse,
     _ScQueryClientDisconnected,
     _await_or_disconnect,
+    _event_stream,
     _invalidation_from_message,
     _sse_event,
 )
+from app.modules.sc.data_provider import router as data_provider_router
 from app.modules.sc.data_provider.schemas import ScDataInvalidationEvent
 from app.modules.sc.data_provider.scope import ScDataScope
 from app.shared.infrastructure.redis.event_publisher import PREDICTION_CHANNEL
@@ -82,6 +85,56 @@ async def test_disconnect_cancels_query_before_the_first_arrow_chunk() -> None:
         await _await_or_disconnect(request, query())
 
     assert cancelled
+
+
+@pytest.mark.asyncio
+async def test_event_stream_closes_pubsub_at_connection_deadline(monkeypatch) -> None:
+    closed = False
+    unsubscribed = False
+
+    class PubSub:
+        async def subscribe(self, *channels: str) -> None:
+            pass
+
+        async def get_message(
+            self, *, ignore_subscribe_messages: bool, timeout: int
+        ) -> dict[str, object] | None:
+            await asyncio.Event().wait()
+            return None
+
+        async def unsubscribe(self, *channels: str) -> None:
+            nonlocal unsubscribed
+            unsubscribed = True
+
+        async def aclose(self) -> None:
+            nonlocal closed
+            closed = True
+
+    pubsub = PubSub()
+    runtime = SimpleNamespace(
+        config=SimpleNamespace(
+            sse_max_connection_seconds=0.01,
+            sse_heartbeat_seconds=30,
+        ),
+        materializer=SimpleNamespace(
+            source_dataset_ids=lambda scope: asyncio.sleep(0, result=[])
+        ),
+        revisions=SimpleNamespace(current=lambda scope: asyncio.sleep(0, result=1)),
+        redis=SimpleNamespace(pubsub=lambda: pubsub),
+    )
+    monkeypatch.setattr(data_provider_router, "_runtime", lambda request: runtime)
+    request = SimpleNamespace(is_disconnected=lambda: asyncio.sleep(0, result=False))
+    stream = _event_stream(
+        cast(Request, request),
+        ScDataScope.dataset(dataset_id="ds-1", org_id="org-1"),
+    )
+
+    assert "\"revision\":1" in await anext(stream)
+    with pytest.raises(StopAsyncIteration):
+        await anext(stream)
+
+    assert unsubscribed
+    assert closed
 
 
 def test_dataset_event_maps_atomic_revision_and_changed_kind() -> None:

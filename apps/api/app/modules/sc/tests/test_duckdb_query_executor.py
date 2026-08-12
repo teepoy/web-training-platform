@@ -445,3 +445,70 @@ async def test_recycles_connection_after_stream_when_rss_exceeds_threshold(
         assert pa.ipc.open_stream(payload).read_all().to_pydict() == {"row_count": [3]}
     finally:
         await executor.close()
+
+
+@pytest.mark.asyncio
+async def test_recovers_after_connection_recreation_fails_once(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = load_config(skip_runtime_validation=True).sc.data_provider.model_copy(
+        update={"cache_dir": str(tmp_path)}
+    )
+    executor = DuckDbQueryExecutor(config=config)
+    original_create_connection = executor._create_connection
+    recreation_attempts = 0
+
+    def fail_first_recreation(config):
+        nonlocal recreation_attempts
+        recreation_attempts += 1
+        if recreation_attempts == 1:
+            raise RuntimeError("temporary DuckDB initialization failure")
+        return original_create_connection(config)
+
+    assert executor._connection is not None
+    executor._connection.close()
+    monkeypatch.setattr(executor, "_create_connection", fail_first_recreation)
+
+    with pytest.raises(Exception, match="closed"):
+        await executor.prepare_stream(
+            sql=validate_sc_sql("SELECT count(*) AS row_count FROM samples"),
+            parameters=[],
+            materialized=_materialized(tmp_path),
+        )
+
+    second = await executor.prepare_stream(
+        sql=validate_sc_sql("SELECT count(*) AS row_count FROM samples"),
+        parameters=[],
+        materialized=_materialized(tmp_path),
+    )
+    payload = b"".join([chunk async for chunk in second.body])
+    await executor.close()
+
+    assert recreation_attempts == 2
+    assert pa.ipc.open_stream(payload).read_all().to_pydict() == {"row_count": [3]}
+
+
+@pytest.mark.asyncio
+async def test_interrupting_an_already_closed_connection_does_not_wedge_worker(
+    tmp_path: Path,
+) -> None:
+    config = load_config(skip_runtime_validation=True).sc.data_provider.model_copy(
+        update={"cache_dir": str(tmp_path)}
+    )
+    executor = DuckDbQueryExecutor(config=config)
+    assert executor._connection is not None
+    executor._connection.close()
+
+    executor._interrupt_connection()
+
+    executor._replace_connection()
+    prepared = await executor.prepare_stream(
+        sql=validate_sc_sql("SELECT count(*) AS row_count FROM samples"),
+        parameters=[],
+        materialized=_materialized(tmp_path),
+    )
+    payload = b"".join([chunk async for chunk in prepared.body])
+    await executor.close()
+
+    assert pa.ipc.open_stream(payload).read_all().to_pydict() == {"row_count": [3]}

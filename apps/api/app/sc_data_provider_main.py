@@ -72,6 +72,7 @@ def _validate_data_provider_config(config: ScDataProviderConfig) -> None:
         "stream_queue_capacity",
         "stream_queue_poll_interval_ms",
         "sse_heartbeat_seconds",
+        "sse_max_connection_seconds",
     )
     for field_name in positive_fields:
         if int(getattr(config, field_name)) <= 0:

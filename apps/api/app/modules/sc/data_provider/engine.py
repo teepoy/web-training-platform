@@ -55,7 +55,10 @@ class DuckDbQueryExecutor:
             thread_name_prefix="sc-duckdb-query",
         )
         self._lock = asyncio.Lock()
-        self._connection = self._create_connection(config)
+        self._connection: duckdb.DuckDBPyConnection | None = self._create_connection(
+            config
+        )
+        self._closed = False
 
     def temp_directory_size_bytes(self) -> int:
         return sum(
@@ -68,8 +71,9 @@ class DuckDbQueryExecutor:
         await self._lock.acquire()
         try:
             await asyncio.get_running_loop().run_in_executor(
-                self._executor, self._connection.close
+                self._executor, self._close_connection
             )
+            self._closed = True
         finally:
             self._lock.release()
             await asyncio.to_thread(self._executor.shutdown, wait=True)
@@ -87,6 +91,9 @@ class DuckDbQueryExecutor:
         materialized: MaterializedScScope,
     ) -> PreparedArrowStream:
         await self._lock.acquire()
+        if self._closed:
+            self._lock.release()
+            raise RuntimeError("DuckDB query executor is closed")
         started_at = time.monotonic()
         deadline = started_at + self._config.sql_timeout_seconds
         cancelled = threading.Event()
@@ -109,13 +116,15 @@ class DuckDbQueryExecutor:
             )
         except TimeoutError as exc:
             cancelled.set()
-            self._connection.interrupt()
-            await asyncio.to_thread(_wait_future, future)
-            self._lock.release()
+            self._interrupt_connection()
+            try:
+                await asyncio.to_thread(_wait_future, future)
+            finally:
+                self._lock.release()
             raise ScQueryTimeoutError("DuckDB query timed out") from exc
         except BaseException:
             cancelled.set()
-            self._connection.interrupt()
+            self._interrupt_connection()
             try:
                 await asyncio.to_thread(_wait_future, future)
             finally:
@@ -136,15 +145,17 @@ class DuckDbQueryExecutor:
         close_task: asyncio.Task[None] | None = None
 
         async def cleanup(*, cancel_timeout: bool) -> None:
-            cancelled.set()
-            if not future.done():
-                self._connection.interrupt()
-            if cancel_timeout and timeout_task is not None:
-                timeout_task.cancel()
-                with suppress(asyncio.CancelledError):
-                    await timeout_task
-            await asyncio.to_thread(_wait_future, future)
-            self._lock.release()
+            try:
+                cancelled.set()
+                if not future.done():
+                    self._interrupt_connection()
+                if cancel_timeout and timeout_task is not None:
+                    timeout_task.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await timeout_task
+                await asyncio.to_thread(_wait_future, future)
+            finally:
+                self._lock.release()
 
         def ensure_close_task(*, cancel_timeout: bool) -> asyncio.Task[None]:
             nonlocal close_task
@@ -233,14 +244,16 @@ class DuckDbQueryExecutor:
         parameters: list[ScSqlParameter],
         materialized: MaterializedScScope,
     ) -> None:
+        connection: duckdb.DuckDBPyConnection | None = None
         registered = ["_samples_base", "_review_images"]
         if materialized.annotation_overlay is not None:
             registered.append("_annotation_overlay")
         if materialized.prediction_overlay is not None:
             registered.append("_prediction_overlay")
         try:
-            self._register_scope(materialized)
-            reader = self._connection.execute(sql.sql, parameters).to_arrow_reader(
+            connection = self._ensure_connection()
+            self._register_scope(connection, materialized)
+            reader = connection.execute(sql.sql, parameters).to_arrow_reader(
                 self._config.arrow_batch_rows
             )
             sink = _QueueSink(
@@ -264,15 +277,15 @@ class DuckDbQueryExecutor:
             )
         finally:
             cleanup_failed = cancelled.is_set()
-            if not cleanup_failed:
+            if not cleanup_failed and connection is not None:
                 for view in ("samples", "review_images"):
                     try:
-                        self._connection.execute(f"DROP VIEW IF EXISTS {view}")
+                        connection.execute(f"DROP VIEW IF EXISTS {view}")
                     except Exception:
                         cleanup_failed = True
                 for name in registered:
                     try:
-                        self._connection.unregister(name)
+                        connection.unregister(name)
                     except Exception:
                         cleanup_failed = True
             try:
@@ -300,9 +313,30 @@ class DuckDbQueryExecutor:
         self._replace_connection()
 
     def _replace_connection(self) -> None:
-        with suppress(Exception):
-            self._connection.close()
+        self._close_connection()
         self._connection = self._create_connection(self._config)
+
+    def _ensure_connection(self) -> duckdb.DuckDBPyConnection:
+        if self._connection is None:
+            self._connection = self._create_connection(self._config)
+        return self._connection
+
+    def _close_connection(self) -> None:
+        connection = self._connection
+        self._connection = None
+        if connection is not None:
+            with suppress(Exception):
+                connection.close()
+
+    def _interrupt_connection(self) -> None:
+        # DuckDB documents interrupt as thread-safe, but the query thread may
+        # finish and recycle the connection between the caller's done() check
+        # and this call. A closed-connection error here must never bypass lock
+        # release and wedge this worker's serialized execution queue.
+        connection = self._connection
+        if connection is not None:
+            with suppress(Exception):
+                connection.interrupt()
 
     @staticmethod
     def _current_rss_mb(status_path: Path = Path("/proc/self/status")) -> float:
@@ -314,19 +348,23 @@ class DuckDbQueryExecutor:
             return 0
         return 0
 
-    def _register_scope(self, materialized: MaterializedScScope) -> None:
+    def _register_scope(
+        self,
+        connection: duckdb.DuckDBPyConnection,
+        materialized: MaterializedScScope,
+    ) -> None:
         samples_dataset = ds.dataset(materialized.samples_base.path, format="parquet")
         if "row_key" not in samples_dataset.schema.names:
             raise RuntimeError(
                 "SC samples cache is missing the required physical row_key column; "
                 "rebuild the data-provider cache with the current materializer"
             )
-        self._connection.register(
+        connection.register(
             "_samples_base",
             samples_dataset,
         )
         review_dataset = ds.dataset(materialized.review_images.path, format="parquet")
-        self._connection.register("_review_images", review_dataset)
+        connection.register("_review_images", review_dataset)
         if "row_key" not in review_dataset.schema.names:
             raise RuntimeError(
                 "SC review-image cache is missing the required physical row_key column; "
@@ -335,7 +373,7 @@ class DuckDbQueryExecutor:
         annotation_expression = "NULL::VARCHAR"
         annotation_join = ""
         if materialized.annotation_overlay is not None:
-            self._connection.register(
+            connection.register(
                 "_annotation_overlay",
                 ds.dataset(materialized.annotation_overlay.path, format="parquet"),
             )
@@ -348,7 +386,7 @@ class DuckDbQueryExecutor:
         prediction_confidence_expression = "NULL::DOUBLE"
         prediction_join = ""
         if materialized.prediction_overlay is not None:
-            self._connection.register(
+            connection.register(
                 "_prediction_overlay",
                 ds.dataset(materialized.prediction_overlay.path, format="parquet"),
             )
@@ -357,7 +395,7 @@ class DuckDbQueryExecutor:
             prediction_join = (
                 "LEFT JOIN _prediction_overlay AS prediction USING (row_key)"
             )
-        self._connection.execute(
+        connection.execute(
             f"""
             CREATE TEMP VIEW samples AS
             SELECT
@@ -381,7 +419,7 @@ class DuckDbQueryExecutor:
             {prediction_join}
             """
         )
-        self._connection.execute(
+        connection.execute(
             """
             CREATE TEMP VIEW review_images AS
             SELECT images.*

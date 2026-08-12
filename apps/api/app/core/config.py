@@ -221,6 +221,7 @@ class ScDataProviderConfig(ConfigSection):
     stream_queue_capacity: int
     stream_queue_poll_interval_ms: int
     sse_heartbeat_seconds: int
+    sse_max_connection_seconds: int
 
 
 class ScPipelineConfig(ConfigSection):
@@ -505,6 +506,10 @@ def load_config(skip_runtime_validation: bool = False) -> AppConfig:
             int,
         ),
         "SC_DATA_PROVIDER_SSE_HEARTBEAT_SECONDS": ("sse_heartbeat_seconds", int),
+        "SC_DATA_PROVIDER_SSE_MAX_CONNECTION_SECONDS": (
+            "sse_max_connection_seconds",
+            int,
+        ),
     }
     for environment_name, (field_name, converter) in data_provider_environment.items():
         raw_value = os.getenv(environment_name)

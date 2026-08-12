@@ -337,18 +337,23 @@ async def _wait_for_disconnect(request: Request) -> None:
 
 
 def _events_response(request: Request, scope: ScDataScope) -> StreamingResponse:
+    runtime = _runtime(request)
     return StreamingResponse(
         _event_stream(request, scope),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
             "X-Accel-Buffering": "no",
+            "X-SC-SSE-Max-Connection-Seconds": str(
+                runtime.config.sse_max_connection_seconds
+            ),
         },
     )
 
 
 async def _event_stream(request: Request, scope: ScDataScope) -> AsyncIterator[str]:
     runtime = _runtime(request)
+    deadline = time.monotonic() + runtime.config.sse_max_connection_seconds
     source_dataset_ids = frozenset(await runtime.materializer.source_dataset_ids(scope))
     pubsub = runtime.redis.pubsub()
     await pubsub.subscribe(ANNOTATION_CHANNEL, PREDICTION_CHANNEL)
@@ -361,10 +366,19 @@ async def _event_stream(request: Request, scope: ScDataScope) -> AsyncIterator[s
             )
         )
         while not await request.is_disconnected():
-            message = await pubsub.get_message(
-                ignore_subscribe_messages=True,
-                timeout=runtime.config.sse_heartbeat_seconds,
-            )
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            try:
+                message = await asyncio.wait_for(
+                    pubsub.get_message(
+                        ignore_subscribe_messages=True,
+                        timeout=runtime.config.sse_heartbeat_seconds,
+                    ),
+                    timeout=remaining,
+                )
+            except TimeoutError:
+                break
             if not message:
                 yield ": keepalive\n\n"
                 continue

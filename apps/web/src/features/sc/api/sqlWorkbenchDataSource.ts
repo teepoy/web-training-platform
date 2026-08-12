@@ -881,7 +881,13 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
     if (this.closed) throw new Error("SC workbench data source is closed");
     this.listeners.add(listener);
     this.ensureEventSource();
-    return () => this.listeners.delete(listener);
+    return () => {
+      this.listeners.delete(listener);
+      if (this.listeners.size === 0) {
+        this.eventSource?.close();
+        this.eventSource = null;
+      }
+    };
   }
 
   close(): void {
@@ -1006,7 +1012,9 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
       }
       if (payload.scope !== this.scopeKey) return;
       if (!Number.isSafeInteger(payload.revision) || payload.revision < this.knownRevision) return;
+      const previousRevision = this.knownRevision;
       this.observeRevision(payload.revision);
+      if (payload.changed_kinds.length === 0 && payload.revision === previousRevision) return;
       const invalidation: ScInvalidation = {
         scope: payload.scope,
         revision: payload.revision,

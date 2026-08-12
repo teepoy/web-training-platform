@@ -183,6 +183,7 @@ sc:
     stream_queue_capacity: 8
     stream_queue_poll_interval_ms: 100
     sse_heartbeat_seconds: 15
+    sse_max_connection_seconds: 60
 
 auth:
   enabled: true

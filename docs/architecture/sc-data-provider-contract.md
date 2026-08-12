@@ -54,11 +54,12 @@ The exact ownership, transition, and consumer matrix is defined in
 
 ## HTTP query contract
 
-Two authenticated scopes are available:
+Three authenticated scopes are available:
 
 ```text
 POST /api/v1/sc/data/inspections/{inspection_time}/{wafer_key}/query
 POST /api/v1/sc/data/datasets/{dataset_id}/query
+POST /api/v1/sc/data/collections/{collection_id}/revisions/{revision_id}/query
 ```
 
 The strict request schema is:
@@ -135,6 +136,10 @@ The SQL timeout is 30 seconds and the maximum Arrow response is 256 MiB.
 Execution uses one DuckDB connection and a one-thread queue per worker. Arrow
 batches cross into the async response through an eight-item bounded queue, so a
 slow or disconnected browser cannot create an unbounded response backlog.
+Timeout and disconnect cleanup always releases that worker's query lock, even
+when `interrupt()` races with a connection recycle. A failed recycle leaves no
+closed connection registered as usable; the next request creates a fresh
+connection instead of repeatedly returning `Connection already closed`.
 
 ## Revisions and server-side updates
 
@@ -150,6 +155,7 @@ Clients subscribe at:
 ```text
 GET /api/v1/sc/data/inspections/{inspection_time}/{wafer_key}/events
 GET /api/v1/sc/data/datasets/{dataset_id}/events
+GET /api/v1/sc/data/collections/{collection_id}/revisions/{revision_id}/events
 ```
 
 An SSE invalidation contains `scope`, a monotonic `revision`, and
@@ -157,6 +163,15 @@ An SSE invalidation contains `scope`, a monotonic `revision`, and
 response whose revision is below its latest observed revision. This removes
 worker affinity: an update and the following query may land on different
 workers.
+
+An individual SSE response is capped at 60 seconds and advertises the cap in
+`X-SC-SSE-Max-Connection-Seconds`. Native `EventSource` reconnects while a
+workbench still has invalidation listeners, so rotation preserves live updates
+without keeping one server request open indefinitely. The initial revision
+baseline does not trigger a redundant refetch when it equals the revision the
+client already knows. Removing the last listener closes the browser
+`EventSource` immediately; the provider always unsubscribes and closes its
+Redis Pub/Sub handle when the response expires or the client disconnects.
 
 ## Object cache and cleanup
 
@@ -228,6 +243,7 @@ metadata for files that exist only in another Pod.
 | Cleanup / stale-write interval |   60 s / 300 s |
 | Lease TTL / heartbeat          |    60 s / 20 s |
 | SQL timeout / maximum response | 30 s / 256 MiB |
+| SSE response cap / heartbeat   |    60 s / 15 s |
 
 Development defaults `LOG_LEVEL` to `INFO`; it may be raised to `DEBUG`. Every
 `/health` and `/ready` call logs worker RSS at info level and returns RSS, worker
