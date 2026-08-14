@@ -36,7 +36,9 @@ class DatasetCollectionRepository(Protocol):
         description: str | None,
     ) -> DatasetCollection | None: ...
 
-    async def delete_collection(self, collection_id: str, org_id: str) -> bool: ...
+    async def delete_collection(
+        self, collection_id: str, org_id: str
+    ) -> tuple[str, ...] | None: ...
 
     async def list_active_members(
         self, collection_id: str, org_id: str

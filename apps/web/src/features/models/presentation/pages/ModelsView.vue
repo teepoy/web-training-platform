@@ -26,11 +26,19 @@
         :columns="columns"
         :data="models"
         :bordered="false"
-        :pagination="pagination"
+        :pagination="tablePagination"
         :row-key="(row: ModelResponse) => row.id"
+        :scroll-x="980"
         size="small"
         remote
-      />
+      >
+        <template #empty>
+          <n-empty :description="emptyDescription" />
+        </template>
+      </n-data-table>
+      <n-text v-if="models.length > 0" class="mobile-table-hint" depth="3">
+        Swipe sideways to see model details and management actions.
+      </n-text>
     </div>
 
     <n-modal
@@ -125,6 +133,14 @@ const modelsQuery = useListModelsApiV1ModelsGet(modelListParams, {
   },
 });
 const models = computed<ModelRow[]>(() => (modelsQuery.data.value?.items ?? []) as ModelRow[]);
+const tablePagination = computed(() =>
+  (pagination.itemCount ?? 0) > (pagination.pageSize ?? 20) ? pagination : false,
+);
+const emptyDescription = computed(() =>
+  keyword.value.trim() || creatorFilter.value
+    ? "No models match the current filters"
+    : "No models have been created yet",
+);
 const isLoading = computed(() => modelsQuery.isLoading.value);
 const error = computed(() => (modelsQuery.error.value as Error | null) ?? null);
 
@@ -154,13 +170,21 @@ const renameVisible = ref(false);
 const renameTarget = ref<ModelResponse | null>(null);
 const renameName = ref("");
 
-const modelsQueryKey = computed(() => orgScopedQueryKey(orgStore.currentOrgId, ["models"]));
+const modelsApiQueryKey = computed(() =>
+  orgScopedQueryKey(orgStore.currentOrgId, ["api", "v1", "models"]),
+);
+const modelsUiQueryKey = computed(() => orgScopedQueryKey(orgStore.currentOrgId, ["models"]));
+
+function invalidateModelQueries(): void {
+  void queryClient.invalidateQueries({ queryKey: modelsApiQueryKey.value });
+  void queryClient.invalidateQueries({ queryKey: modelsUiQueryKey.value });
+}
 
 const renameMutation = useUpdateModelApiV1ModelsModelIdPatch({
   mutation: {
     onSuccess: () => {
       message.success("Model renamed");
-      queryClient.invalidateQueries({ queryKey: modelsQueryKey.value });
+      invalidateModelQueries();
       resetRename();
     },
     onError: (error) => {
@@ -173,7 +197,7 @@ const deleteMutation = useDeleteModelApiV1ModelsModelIdDelete({
   mutation: {
     onSuccess: () => {
       message.success("Model deleted");
-      queryClient.invalidateQueries({ queryKey: modelsQueryKey.value });
+      invalidateModelQueries();
     },
     onError: (error) => {
       message.error(toUserMessage(error, "Failed to delete model"));
@@ -217,6 +241,7 @@ const columns = computed<DataTableColumns<ModelRow>>(() => [
   {
     title: "Model Name",
     key: "name",
+    width: 170,
     sorter: "default",
     render: (row) =>
       h(NText, { style: "font-weight: 500" }, { default: () => modelDisplayName(row) }),
@@ -224,17 +249,18 @@ const columns = computed<DataTableColumns<ModelRow>>(() => [
   {
     title: "Dataset",
     key: "dataset_name",
+    width: 210,
     ellipsis: { tooltip: true },
   },
   {
     title: "Trainer",
     key: "trainer_name",
-    width: 160,
+    width: 150,
   },
   {
     title: "Creator",
     key: "creator_name",
-    width: 160,
+    width: 130,
     sorter: (left, right) =>
       modelCreatorName(left).localeCompare(modelCreatorName(right), undefined, {
         numeric: true,
@@ -244,7 +270,7 @@ const columns = computed<DataTableColumns<ModelRow>>(() => [
   {
     title: "Created At",
     key: "created_at",
-    width: 180,
+    width: 170,
     sorter: (left, right) =>
       new Date(left.created_at ?? 0).getTime() - new Date(right.created_at ?? 0).getTime(),
     render: (row) => (row.created_at ? new Date(row.created_at).toLocaleString() : "-"),
@@ -252,7 +278,7 @@ const columns = computed<DataTableColumns<ModelRow>>(() => [
   {
     title: "Actions",
     key: "actions",
-    width: 160,
+    width: 150,
     render: (row) => {
       const isCreator = row.created_by === authStore.user?.id;
       return h(
@@ -321,5 +347,27 @@ const columns = computed<DataTableColumns<ModelRow>>(() => [
 
 .models-creator {
   width: min(220px, 100%);
+}
+
+.mobile-table-hint {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .models-list-filters {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .models-search,
+  .models-creator {
+    width: 100%;
+  }
+
+  .mobile-table-hint {
+    display: block;
+    margin-top: 10px;
+    font-size: 12px;
+  }
 }
 </style>

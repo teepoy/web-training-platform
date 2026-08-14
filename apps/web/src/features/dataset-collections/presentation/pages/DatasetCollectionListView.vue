@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, h, ref, watch } from "vue";
+import { computed, h, reactive, ref, watch } from "vue";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { useRouter } from "vue-router";
 import {
   NButton,
+  NAlert,
   NCard,
   NDataTable,
   NEmpty,
@@ -16,24 +17,43 @@ import {
   NText,
   useMessage,
   type DataTableColumns,
+  type PaginationProps,
 } from "naive-ui";
 import {
-  createCollectionApiV1DatasetCollectionsPost,
-  linkMembersApiV1DatasetCollectionsCollectionIdMembersPost,
   listCollectionsApiV1DatasetCollectionsGet,
   listDatasetsApiV1DatasetsGet,
 } from "@/generated/orval/endpoints/api";
 import type { Dataset, DatasetCollectionResponse } from "@/generated/orval/models";
-import { toUserMessage } from "@/shared/api";
+import {
+  createCollectionWithMembers,
+  haveMatchingOrderedLabelSpaces,
+} from "@/features/dataset-collections/application/createCollectionWithMembers";
+import { useOrgStore } from "@/features/auth/application/org";
+import { orgScopedQueryKey, toUserMessage } from "@/shared/api";
 
 const router = useRouter();
 const queryClient = useQueryClient();
 const message = useMessage();
+const orgStore = useOrgStore();
 const createVisible = ref(false);
 const name = ref("");
 const description = ref("");
 const targetViewId = ref<string | null>(null);
 const selectedDatasetIds = ref<string[]>([]);
+const pagination = reactive<PaginationProps>({
+  page: 1,
+  pageSize: 20,
+  itemCount: 0,
+  showSizePicker: true,
+  pageSizes: [10, 20, 50, 100],
+  onUpdatePage: (page: number) => {
+    pagination.page = page;
+  },
+  onUpdatePageSize: (pageSize: number) => {
+    pagination.pageSize = pageSize;
+    pagination.page = 1;
+  },
+});
 
 async function loadAllDatasets(): Promise<Dataset[]> {
   const datasets: Dataset[] = [];
@@ -45,19 +65,53 @@ async function loadAllDatasets(): Promise<Dataset[]> {
 }
 
 const collectionsQuery = useQuery({
-  queryKey: ["dataset-collections"],
-  queryFn: () => listCollectionsApiV1DatasetCollectionsGet({ offset: 0, limit: 200 }),
+  queryKey: computed(() =>
+    orgScopedQueryKey(orgStore.currentOrgId, [
+      "dataset-collections",
+      pagination.page,
+      pagination.pageSize,
+    ]),
+  ),
+  queryFn: () =>
+    listCollectionsApiV1DatasetCollectionsGet({
+      offset: ((pagination.page ?? 1) - 1) * (pagination.pageSize ?? 20),
+      limit: pagination.pageSize ?? 20,
+    }),
+  enabled: computed(() => !!orgStore.currentOrgId),
 });
-const datasetsQuery = useQuery({ queryKey: ["datasets", "all"], queryFn: loadAllDatasets });
+const datasetsQuery = useQuery({
+  queryKey: computed(() => orgScopedQueryKey(orgStore.currentOrgId, ["datasets", "all"])),
+  queryFn: loadAllDatasets,
+  enabled: computed(() => !!orgStore.currentOrgId),
+});
 const collections = computed(() => collectionsQuery.data.value?.items ?? []);
+const tablePagination = computed(() =>
+  (pagination.itemCount ?? 0) > (pagination.pageSize ?? 20) ? pagination : false,
+);
 const datasets = computed(() => datasetsQuery.data.value ?? []);
+const selectedDatasets = computed(() =>
+  datasets.value.filter((dataset) => selectedDatasetIds.value.includes(String(dataset.id ?? ""))),
+);
+const labelSpacesCompatible = computed(() =>
+  haveMatchingOrderedLabelSpaces(selectedDatasets.value),
+);
+
+watch(
+  () => collectionsQuery.data.value?.total ?? 0,
+  (total) => {
+    pagination.itemCount = total;
+  },
+  { immediate: true },
+);
 
 const targetViewOptions = computed(() => {
-  const selected = datasets.value.filter((dataset) =>
-    selectedDatasetIds.value.includes(String(dataset.id ?? "")),
-  );
-  const source = selected.length > 0 ? selected : datasets.value;
-  const intersection = source.reduce<Set<string> | null>((result, dataset) => {
+  const selected = selectedDatasets.value;
+  if (selected.length === 0) {
+    return [...new Set(datasets.value.flatMap((dataset) => dataset.view_types ?? []))]
+      .sort()
+      .map((view) => ({ label: view, value: view }));
+  }
+  const intersection = selected.reduce<Set<string> | null>((result, dataset) => {
     const views = new Set(dataset.view_types ?? []);
     return result === null ? views : new Set([...result].filter((view) => views.has(view)));
   }, null);
@@ -85,38 +139,27 @@ const datasetOptions = computed(() =>
 );
 
 const createMutation = useMutation({
-  mutationFn: async () => {
-    const collection = await createCollectionApiV1DatasetCollectionsPost({
+  mutationFn: () =>
+    createCollectionWithMembers({
       name: name.value.trim(),
       description: description.value.trim(),
-      target_view_id: targetViewId.value ?? "",
-      duplicate_policy: "keep_all",
-      missing_data_policy: "fail",
-    });
-    if (selectedDatasetIds.value.length > 0) {
-      await linkMembersApiV1DatasetCollectionsCollectionIdMembersPost(collection.id, {
-        expected_definition_version: collection.definition_version,
-        members: selectedDatasetIds.value.map((sourceDatasetId, position) => ({
-          source_dataset_id: sourceDatasetId,
-          position,
-          filter_spec: {},
-          label_mapping: {},
-          sampling_spec: {},
-        })),
-      });
-    }
-    return collection;
-  },
+      targetViewId: targetViewId.value ?? "",
+      sourceDatasetIds: selectedDatasetIds.value,
+    }),
   onSuccess: async (collection) => {
     message.success("Dataset collection created");
     createVisible.value = false;
-    await queryClient.invalidateQueries({ queryKey: ["dataset-collections"] });
+    await queryClient.invalidateQueries({
+      queryKey: orgScopedQueryKey(orgStore.currentOrgId, ["dataset-collections"]),
+    });
     await router.push(`/dataset-collections/${collection.id}`);
   },
   onError: (error) => message.error(toUserMessage(error, "Failed to create collection")),
 });
 
-const canCreate = computed(() => name.value.trim().length > 0 && !!targetViewId.value);
+const canCreate = computed(
+  () => name.value.trim().length > 0 && !!targetViewId.value && labelSpacesCompatible.value,
+);
 
 function openCreate(): void {
   name.value = "";
@@ -126,9 +169,16 @@ function openCreate(): void {
   createVisible.value = true;
 }
 
+function collectionRowProps(row: DatasetCollectionResponse): Record<string, unknown> {
+  return {
+    style: "cursor: pointer",
+    onClick: () => router.push(`/dataset-collections/${row.id}`),
+  };
+}
+
 const columns: DataTableColumns<DatasetCollectionResponse> = [
-  { title: "Name", key: "name" },
-  { title: "Target view", key: "target_view_id" },
+  { title: "Name", key: "name", minWidth: 180 },
+  { title: "Target view", key: "target_view_id", minWidth: 160 },
   {
     title: "Definition",
     key: "definition_version",
@@ -142,15 +192,23 @@ const columns: DataTableColumns<DatasetCollectionResponse> = [
   {
     title: "Updated",
     key: "updated_at",
+    width: 180,
     render: (row) => new Date(row.updated_at).toLocaleString(),
   },
   {
     title: "",
     key: "actions",
+    width: 90,
     render: (row) =>
       h(
         NButton,
-        { size: "small", onClick: () => router.push(`/dataset-collections/${row.id}`) },
+        {
+          size: "small",
+          onClick: (event: Event) => {
+            event.stopPropagation();
+            void router.push(`/dataset-collections/${row.id}`);
+          },
+        },
         { default: () => "Open" },
       ),
   },
@@ -164,29 +222,48 @@ const columns: DataTableColumns<DatasetCollectionResponse> = [
         <h1>Dataset Collections</h1>
         <NText depth="3">Dynamically compose existing datasets without changing them.</NText>
       </div>
-      <NButton type="primary" @click="openCreate">New collection</NButton>
+      <NButton type="primary" :disabled="!orgStore.currentOrgId" @click="openCreate">
+        New collection
+      </NButton>
     </div>
 
     <NCard>
+      <NAlert v-if="collectionsQuery.isError.value" type="error" style="margin-bottom: 12px">
+        {{ toUserMessage(collectionsQuery.error.value, "Failed to load dataset collections") }}
+      </NAlert>
+      <template v-if="!orgStore.currentOrgId">
+        <NEmpty description="Select or join an organization to manage dataset collections" />
+      </template>
       <NDataTable
-        v-if="collections.length > 0"
+        v-else-if="!collectionsQuery.isError.value"
         :columns="columns"
         :data="collections"
         :loading="collectionsQuery.isLoading.value"
+        :pagination="tablePagination"
         :row-key="(row: DatasetCollectionResponse) => row.id"
-      />
-      <NEmpty v-else-if="!collectionsQuery.isLoading.value" description="No collections yet">
-        <template #extra>
-          <NButton @click="openCreate">Create a collection</NButton>
+        :row-props="collectionRowProps"
+        :scroll-x="820"
+        remote
+      >
+        <template #empty>
+          <NEmpty description="No collections yet">
+            <template #extra>
+              <NButton @click="openCreate">Create a collection</NButton>
+            </template>
+          </NEmpty>
         </template>
-      </NEmpty>
+      </NDataTable>
+      <NText v-if="collections.length > 0" class="mobile-table-hint" depth="3">
+        Tap a row to open it. Swipe sideways for more columns.
+      </NText>
     </NCard>
 
     <NModal
       v-model:show="createVisible"
       preset="card"
       title="Create dataset collection"
-      :style="{ width: '620px' }"
+      class="collection-modal"
+      :style="{ width: 'min(620px, calc(100vw - 32px))' }"
     >
       <NFormItem label="Name" required>
         <NInput v-model:value="name" placeholder="Collection name" maxlength="255" />
@@ -205,10 +282,17 @@ const columns: DataTableColumns<DatasetCollectionResponse> = [
           placeholder="Select datasets to link now, or leave empty"
         />
       </NFormItem>
+      <NText class="field-help" depth="3">
+        Pick datasets first to narrow the target views to the ones they all support.
+      </NText>
+      <NAlert v-if="!labelSpacesCompatible" type="error" :show-icon="false">
+        Selected datasets must use the same labels in the same order.
+      </NAlert>
       <NFormItem label="Target view" required>
         <NSelect
           v-model:value="targetViewId"
           :options="targetViewOptions"
+          :disabled="targetViewOptions.length === 0"
           placeholder="Choose a view supported by every selected dataset"
         />
       </NFormItem>
@@ -242,12 +326,40 @@ const columns: DataTableColumns<DatasetCollectionResponse> = [
 
 .collection-list-header {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: space-between;
+  gap: 16px;
 }
 
 h1 {
   margin: 0 0 4px;
   font-size: 24px;
+}
+
+.field-help {
+  display: block;
+  margin: -12px 0 14px;
+  font-size: 12px;
+}
+
+.mobile-table-hint {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .collection-list-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .collection-list-header :deep(.n-button) {
+    width: 100%;
+  }
+
+  .mobile-table-hint {
+    display: block;
+    margin-top: 10px;
+    font-size: 12px;
+  }
 }
 </style>

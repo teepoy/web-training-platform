@@ -191,6 +191,20 @@ algorithm/code version, owner, resource profile, missing-image policy, or output
 contract. The flow entrypoint determines the operation and the selected
 trainer/predictor ID resolves the callable.
 
+## Model Artifact Lifecycle
+
+Every model artifact is attached to one persisted training job. Manual upload
+validates that the job belongs to the active organization and that the caller
+created it before reading or storing the file. The artifact records the exact
+`model_contract`, `model_schema_version`, and trainer ID from that job's
+registered capability; caller-supplied contract values may only confirm, not
+override, those values. If metadata persistence fails after object upload, the
+new object is deleted as compensation.
+
+Deleting a model removes only that artifact row and object. Metrics, logs, and
+other model artifacts from the same training job remain intact so job history
+and sibling model versions are not destroyed.
+
 ## SC Failure Semantics
 
 Missing-image behavior belongs to the SC implementations:

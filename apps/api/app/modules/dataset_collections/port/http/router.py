@@ -118,7 +118,11 @@ async def update_collection(
             name=payload.name,
             description=payload.description,
         )
-    except (DatasetCollectionNotFoundError, DatasetCollectionPermissionError) as exc:
+    except (
+        DatasetCollectionConflictError,
+        DatasetCollectionNotFoundError,
+        DatasetCollectionPermissionError,
+    ) as exc:
         raise _http_error(exc) from exc
     return DatasetCollectionResponse.from_domain(collection)
 
@@ -177,6 +181,7 @@ async def link_members(
     except (
         DatasetCollectionConflictError,
         DatasetCollectionNotFoundError,
+        DatasetCollectionPermissionError,
         DatasetCollectionValidationError,
     ) as exc:
         raise _http_error(exc) from exc
@@ -205,6 +210,7 @@ async def replace_members(
     except (
         DatasetCollectionConflictError,
         DatasetCollectionNotFoundError,
+        DatasetCollectionPermissionError,
         DatasetCollectionValidationError,
     ) as exc:
         raise _http_error(exc) from exc
@@ -231,7 +237,11 @@ async def unlink_member(
             actor_id=current_user.id,
             expected_definition_version=expected_definition_version,
         )
-    except (DatasetCollectionConflictError, DatasetCollectionNotFoundError) as exc:
+    except (
+        DatasetCollectionConflictError,
+        DatasetCollectionNotFoundError,
+        DatasetCollectionPermissionError,
+    ) as exc:
         raise _http_error(exc) from exc
     return DatasetCollectionMembershipResponse.from_domain(collection, members)
 
@@ -259,6 +269,7 @@ async def create_revision(
     except (
         DatasetCollectionConflictError,
         DatasetCollectionNotFoundError,
+        DatasetCollectionPermissionError,
         DatasetCollectionValidationError,
     ) as exc:
         raise _http_error(exc) from exc

@@ -171,6 +171,7 @@ async def upload_model(
         file=file,
         org_id=org.id,
         metadata_json=metadata,
+        current_user_id=current_user.id,
     )
     return _model_to_response(model)
 
@@ -210,8 +211,11 @@ async def list_model_upload_templates(
 async def resolve_image(
     cfg: Annotated[DictConfig, Depends(get_config)],
     storage: Annotated[ArtifactStorage, Depends(get_artifact_storage)],
+    current_user: CurrentUserDep,
+    org: CurrentOrgDep,
     uri: str = Query(...),
 ) -> Response:
+    del current_user, org
     if uri.startswith("http://") or uri.startswith("https://"):
         ls_url = str(cfg.label_studio.url).rstrip("/")
         if not (ls_url and uri.startswith(ls_url)):

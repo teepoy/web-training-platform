@@ -4,7 +4,28 @@ import { makeModel, makePredictionJob } from "../../mocks/factories";
 
 const datasetId = "dataset-tabs-1";
 
-test("Train tab disables Start New Job button when allowTrain=false @mock", async ({
+test("Dataset detail opens on an overview of its persisted contract @mock", async ({
+  authedPage,
+  apiMocks,
+}) => {
+  const page = new DatasetDetailPage(authedPage);
+  await apiMocks.datasets.mockGetDataset(datasetId, {
+    task_spec: { task_type: "classification", label_space: ["rose", "tulip"] },
+    view_types: ["image_input_v1"],
+  });
+
+  await page.gotoDetail(datasetId);
+  await page.waitForLoaded();
+
+  await expect(
+    authedPage.locator(".n-tabs .n-tabs-tab").filter({ hasText: "Overview" }),
+  ).toBeVisible();
+  await expect(authedPage.getByText("Dataset type", { exact: true })).toBeVisible();
+  await expect(authedPage.getByText("Storage mode", { exact: true })).toBeVisible();
+  await expect(authedPage.getByText("rose", { exact: true })).toBeVisible();
+});
+
+test("Train tab does not block on sample-level readiness status @mock", async ({
   authedPage,
   apiMocks,
 }) => {
@@ -30,12 +51,15 @@ test("Train tab disables Start New Job button when allowTrain=false @mock", asyn
   await page.gotoTrainTab();
   await page.waitForTrainTabLoaded();
 
+  await expect(authedPage.getByText("Training runs", { exact: true })).toBeVisible();
+  await expect(authedPage.getByText("Training Jobs", { exact: true })).not.toBeVisible();
+
   const startButton = page.getStartJobButton();
   await expect(startButton).toBeVisible();
-  await expect(startButton).toBeDisabled();
+  await expect(startButton).toBeEnabled();
   await expect(
     authedPage.getByText("Training requires at least 2 active classes; currently 0."),
-  ).toBeVisible();
+  ).not.toBeVisible();
 });
 
 test("Train tab enables Start New Job button when allowTrain=true @mock", async ({
@@ -90,6 +114,9 @@ test("Predict tab shows Start Prediction button and opens modal with model selec
 
   await page.gotoPredictTab();
   await page.waitForPredictTabLoaded();
+
+  await expect(authedPage.getByText("Prediction runs", { exact: true })).toBeVisible();
+  await expect(authedPage.getByText("Prediction Jobs", { exact: true })).not.toBeVisible();
 
   const startButton = page.getStartPredictionButton();
   await expect(startButton).toBeVisible();

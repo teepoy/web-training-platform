@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
@@ -12,7 +13,11 @@ from injector import inject
 from app.shared.api.schemas import ArtifactRef, CreatorSummary, Model
 from app.shared.application.compatibility import validate_upload_metadata
 from app.modules.models.domain.repository import ModelRepository
+from app.modules.runtime.catalog import runtime_catalog
 from app.shared.domain.protocols import ArtifactStorage
+
+
+_logger = logging.getLogger(__name__)
 
 
 class ModelService:
@@ -117,13 +122,17 @@ class ModelService:
                 detail="Only the model creator can delete this model",
             )
 
-        job_artifacts = await self.repository.list_artifact_uris_by_job(model.job_id)
-
-        for _, uri in job_artifacts:
-            await self.artifact_storage.delete(uri)
-
-        artifact_ids = [aid for aid, _ in job_artifacts]
-        await self.repository.delete_artifacts_by_ids(artifact_ids)
+        if not await self.repository.delete_artifact(artifact_id):
+            raise HTTPException(status_code=404, detail="Model not found")
+        try:
+            await self.artifact_storage.delete(model.uri)
+        except Exception:
+            _logger.warning(
+                "Model metadata %s was deleted but artifact cleanup failed for %s",
+                artifact_id,
+                model.uri,
+                exc_info=True,
+            )
 
     async def download_model(self, artifact_id: str, org_id: str) -> tuple[bytes, str]:
         model = await self.repository.get_model(artifact_id, org_id)
@@ -157,8 +166,8 @@ class ModelService:
         file: UploadFile,
         org_id: str,
         metadata_json: str,
+        current_user_id: str,
         job_id: str | None = None,
-        dataset_id: str | None = None,
     ) -> Model:
         try:
             raw_metadata = json.loads(metadata_json)
@@ -178,6 +187,58 @@ class ModelService:
         name = str(upload_metadata.get("name", "")).strip()
         format = str(upload_metadata.get("format", "")).strip()
         job_id = str(upload_metadata.get("job_id", "")).strip() or job_id
+        if not name:
+            raise HTTPException(status_code=400, detail="model name is required")
+        if not format:
+            raise HTTPException(status_code=400, detail="model format is required")
+        if job_id is None:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "job_id is required for model upload "
+                    "(associate with existing training job)"
+                ),
+            )
+
+        job_context = await self.repository.get_training_job_context(job_id, org_id)
+        if job_context is None:
+            raise HTTPException(status_code=404, detail="Training job not found")
+        job_creator_id, trainer_id = job_context
+        if job_creator_id != current_user_id:
+            raise HTTPException(
+                status_code=403,
+                detail="Only the training job creator can upload its model artifacts",
+            )
+        try:
+            trainer = runtime_catalog.get_trainer_meta(trainer_id)
+        except KeyError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Training job references unknown trainer '{trainer_id}'",
+            ) from exc
+        model_contract = trainer.output_model.contract
+        model_schema_version = trainer.output_model.schema_version
+        supplied_contract = upload_metadata.get("model_contract")
+        supplied_schema_version = upload_metadata.get("model_schema_version")
+        if supplied_contract is not None and supplied_contract != model_contract:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"model_contract must match training job output contract "
+                    f"'{model_contract}'"
+                ),
+            )
+        if (
+            supplied_schema_version is not None
+            and supplied_schema_version != model_schema_version
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "model_schema_version must match training job output schema "
+                    f"'{model_schema_version}'"
+                ),
+            )
 
         content = await file.read()
         file_size = len(content)
@@ -190,12 +251,6 @@ class ModelService:
             data=content,
             content_type=file.content_type or "application/octet-stream",
         )
-
-        if job_id is None:
-            raise HTTPException(
-                status_code=400,
-                detail="job_id is required for model upload (associate with existing training job)",
-            )
 
         raw_spec = upload_metadata.get("model_spec", {})
         if not isinstance(raw_spec, dict):
@@ -218,6 +273,9 @@ class ModelService:
                 "original_filename": file.filename,
                 "template_id": upload_metadata.get("template_id"),
                 "profile_id": upload_metadata.get("profile_id"),
+                "trainer_id": trainer_id,
+                "model_contract": model_contract,
+                "model_schema_version": model_schema_version,
                 **compatibility_dict,
                 "model_spec": raw_spec,
                 "framework": str(raw_spec.get("framework", "")),
@@ -226,7 +284,18 @@ class ModelService:
             },
         )
 
-        await self.repository.add_artifacts(job_id, [artifact])
+        try:
+            await self.repository.add_artifacts(job_id, [artifact])
+        except Exception:
+            try:
+                await self.artifact_storage.delete(uri)
+            except Exception:
+                _logger.warning(
+                    "Failed to clean uploaded model artifact %s after persistence error",
+                    uri,
+                    exc_info=True,
+                )
+            raise
 
         return await self.get_model(artifact_id, org_id)
 
@@ -238,6 +307,13 @@ class ModelService:
         format: str,
         org_id: str,
     ) -> ArtifactRef:
+        job_context = await self.repository.get_training_job_context(job_id, org_id)
+        if job_context is None:
+            raise ValueError(
+                f"Training job '{job_id}' not found in organization '{org_id}'"
+            )
+        _, trainer_id = job_context
+        trainer = runtime_catalog.get_trainer_meta(trainer_id)
         file_size = len(model_bytes)
         file_hash = hashlib.sha256(model_bytes).hexdigest()
         artifact_id = str(uuid4())
@@ -266,8 +342,24 @@ class ModelService:
             file_hash=file_hash,
             format=format,
             created_at=datetime.now(UTC),
-            metadata={"source": "training"},
+            metadata={
+                "source": "training",
+                "trainer_id": trainer_id,
+                "model_contract": trainer.output_model.contract,
+                "model_schema_version": trainer.output_model.schema_version,
+            },
         )
 
-        await self.repository.add_artifacts(job_id, [artifact])
+        try:
+            await self.repository.add_artifacts(job_id, [artifact])
+        except Exception:
+            try:
+                await self.artifact_storage.delete(uri)
+            except Exception:
+                _logger.warning(
+                    "Failed to clean trained model artifact %s after persistence error",
+                    uri,
+                    exc_info=True,
+                )
+            raise
         return artifact

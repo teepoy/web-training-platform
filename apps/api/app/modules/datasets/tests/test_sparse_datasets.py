@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from unittest.mock import AsyncMock, MagicMock
+
 from fastapi.testclient import TestClient
 import pytest
 
@@ -33,6 +35,63 @@ def test_create_sparse_dataset() -> None:
         assert body["storage_mode"] == DatasetStorageMode.FILE_SHARD_SPARSE.value
         assert body.get("ls_project_id") == "SPARSE_NO_LS"
         assert body.get("ls_project_url") is None
+
+
+def test_update_sparse_label_space_preserves_metadata_without_calling_ls() -> None:
+    mock_ls = MagicMock()
+    mock_ls.update_project = AsyncMock()
+    app.dependency_overrides[get_label_studio_client] = lambda: mock_ls
+    try:
+        with TestClient(app) as c:
+            created = c.post(
+                "/api/v1/datasets",
+                json={
+                    "name": "sparse-label-update",
+                    "dataset_type": "image_classification",
+                    "task_spec": {
+                        **_TASK_SPEC,
+                        "metadata_schema": {"lot": {"type": "string"}},
+                    },
+                    "storage_mode": "file_shard_sparse",
+                },
+            )
+            assert created.status_code == 200, created.text
+            before = created.json()
+
+            updated = c.patch(
+                f"/api/v1/datasets/{before['id']}/label-space",
+                json={"label_space": ["good", "bad"]},
+            )
+
+        assert updated.status_code == 200, updated.text
+        body = updated.json()
+        assert body["task_spec"]["label_space"] == ["good", "bad"]
+        assert body["task_spec"]["metadata_schema"] == {"lot": {"type": "string"}}
+        assert body["created_by"] == before["created_by"]
+        mock_ls.update_project.assert_not_awaited()
+    finally:
+        app.dependency_overrides.pop(get_label_studio_client, None)
+
+
+def test_update_sparse_label_space_rejects_invalid_empty_classification_labels() -> None:
+    with TestClient(app) as c:
+        created = c.post(
+            "/api/v1/datasets",
+            json={
+                "name": "sparse-empty-label-update",
+                "dataset_type": "image_classification",
+                "task_spec": _TASK_SPEC,
+                "storage_mode": "file_shard_sparse",
+            },
+        )
+        assert created.status_code == 200, created.text
+
+        updated = c.patch(
+            f"/api/v1/datasets/{created.json()['id']}/label-space",
+            json={"label_space": []},
+        )
+
+    assert updated.status_code == 422, updated.text
 
 
 # ---------------------------------------------------------------------------

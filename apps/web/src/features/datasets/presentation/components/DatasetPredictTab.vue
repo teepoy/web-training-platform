@@ -5,5 +5,5 @@ const props = defineProps<{ datasetId: string }>();
 </script>
 
 <template>
-  <ModelsView :datasetId="props.datasetId" />
+  <ModelsView :dataset-id="props.datasetId" embedded />
 </template>

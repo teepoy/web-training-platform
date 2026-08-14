@@ -261,7 +261,19 @@ async def create_dataset(
         ls_project_id=ls_project_id,
         storage_mode=payload.storage_mode,
     )
-    dataset = await repo.create_dataset(dataset)
+    try:
+        dataset = await repo.create_dataset(dataset)
+    except Exception:
+        if ls_project_id and ls_project_id != SPARSE_NO_LS:
+            try:
+                await ls_client.delete_project(int(ls_project_id))
+            except Exception:
+                _logger.warning(
+                    "Failed to clean Label Studio project %s after dataset persistence error",
+                    ls_project_id,
+                    exc_info=True,
+                )
+        raise
     if payload.storage_mode == DatasetStorageMode.FILE_SHARD_SPARSE:
         manifest = DatasetManifest(
             dataset_id=dataset.id,
@@ -269,7 +281,30 @@ async def create_dataset(
             shard_count=0,
             total_rows=0,
         )
-        await DatasetPayloadStore(storage).put_manifest(manifest, org_id=org.id)
+        payload_store = DatasetPayloadStore(storage)
+        try:
+            await payload_store.put_manifest(manifest, org_id=org.id)
+        except Exception as exc:
+            try:
+                await payload_store.delete_dataset_payload(dataset.id, org.id)
+            except Exception:
+                _logger.warning(
+                    "Failed to clean sparse payload for dataset %s after initialization error",
+                    dataset.id,
+                    exc_info=True,
+                )
+            try:
+                await repo.delete_dataset(dataset.id, org_id=org.id)
+            except Exception:
+                _logger.warning(
+                    "Failed to roll back dataset %s after sparse initialization error",
+                    dataset.id,
+                    exc_info=True,
+                )
+            raise HTTPException(
+                status_code=502,
+                detail=f"Failed to initialize sparse dataset storage: {exc}",
+            ) from exc
     return service.to_response(dataset)
 
 
@@ -447,6 +482,7 @@ async def delete_dataset(
 async def update_dataset(
     dataset_id: str,
     payload: UpdateDatasetRequest,
+    service: DatasetServiceDep,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
     repo: DatasetRepository = Depends(get_repository),
@@ -464,7 +500,7 @@ async def update_dataset(
     updated = await repo.rename_dataset(dataset_id, name=payload.name, org_id=org.id)
     if updated is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
-    return updated
+    return service.to_response(updated)
 
 
 @router.patch("/datasets/{dataset_id}/label-space", response_model=Dataset)
@@ -480,9 +516,26 @@ async def update_label_space(
     dataset = await repo.get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
+    if dataset.created_by != current_user.id:
+        raise HTTPException(
+            status_code=403,
+            detail="Only the dataset creator can update its label space",
+        )
+    try:
+        from app.shared.application.compatibility import validate_dataset_contract
+
+        validate_dataset_contract(
+            dataset.dataset_type,
+            dataset.task_spec.task_type,
+            payload.label_space,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     # Update Label Studio project config with new labels
-    if dataset.ls_project_id:
+    label_studio_updated = False
+    ls_project_id = dataset.ls_project_id
+    if ls_project_id and ls_project_id != SPARSE_NO_LS:
         try:
             from app.shared.infrastructure.label_studio.client import (
                 LabelStudioClient as _LSC,
@@ -492,22 +545,44 @@ async def update_label_space(
                 payload.label_space
             )
             await ls_client.update_project(
-                int(dataset.ls_project_id), label_config=label_config
+                int(ls_project_id), label_config=label_config
             )
+            label_studio_updated = True
         except Exception as exc:
             raise HTTPException(
                 status_code=502, detail=f"Failed to update Label Studio project: {exc}"
             )
 
-    new_task_spec = {
-        "task_type": dataset.task_spec.task_type,
-        "label_space": payload.label_space,
-    }
-    updated = await repo.update_dataset_meta(
-        dataset_id,
-        new_task_spec,
-        org_id=org.id,
-    )
+    new_task_spec = dataset.task_spec.model_dump()
+    new_task_spec["label_space"] = payload.label_space
+    try:
+        updated = await repo.update_dataset_meta(
+            dataset_id,
+            new_task_spec,
+            org_id=org.id,
+        )
+    except Exception:
+        if label_studio_updated:
+            try:
+                assert ls_project_id is not None
+                from app.shared.infrastructure.label_studio.client import (
+                    LabelStudioClient as _LSC,
+                )
+
+                previous_config = _LSC.generate_image_classification_config(
+                    dataset.task_spec.label_space
+                )
+                await ls_client.update_project(
+                    int(ls_project_id),
+                    label_config=previous_config,
+                )
+            except Exception:
+                _logger.warning(
+                    "Failed to restore Label Studio labels for dataset %s",
+                    dataset_id,
+                    exc_info=True,
+                )
+        raise
     if updated is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
     return service.to_response(updated)

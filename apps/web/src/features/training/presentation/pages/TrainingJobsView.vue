@@ -6,16 +6,25 @@
       </div>
     </template>
     <template v-else>
-      <n-page-header title="Training Jobs">
+      <n-page-header v-if="!props.embedded" title="Training Jobs">
         <template #extra>
           <n-button type="primary" :disabled="!canTrain" @click="showModal = true"
             >Start New Job</n-button
           >
         </template>
       </n-page-header>
+      <div v-else class="embedded-section-header">
+        <div>
+          <n-h3 class="embedded-section-title">Training runs</n-h3>
+          <n-text depth="3">Train this dataset and review its recent runs.</n-text>
+        </div>
+        <n-button type="primary" :disabled="!canTrain" @click="showModal = true">
+          Start New Job
+        </n-button>
+      </div>
 
-      <n-alert v-if="!canTrain && props.trainDisabledReason" type="warning">
-        {{ props.trainDisabledReason }}
+      <n-alert v-if="!canTrain && effectiveTrainDisabledReason" type="warning">
+        {{ effectiveTrainDisabledReason }}
       </n-alert>
 
       <n-spin :show="isLoading">
@@ -26,7 +35,16 @@
           :bordered="true"
           :striped="true"
           :loading="isLoading"
-        />
+          :scroll-x="props.embedded ? 820 : 980"
+        >
+          <template #empty>
+            <n-empty
+              :description="
+                props.datasetId ? 'No training runs for this dataset yet' : 'No training runs yet'
+              "
+            />
+          </template>
+        </n-data-table>
       </n-spin>
 
       <n-modal
@@ -114,10 +132,10 @@ const props = withDefaults(
     allowTrain?: boolean;
     trainDisabledReason?: string | null;
     compatibleViewTypes?: string[] | null;
+    embedded?: boolean;
   }>(),
-  { allowTrain: true },
+  { allowTrain: true, embedded: false },
 );
-const canTrain = computed(() => props.allowTrain);
 const jobsQueryPrefix = computed(() => orgScopedQueryKey(orgStore.currentOrgId, ["jobs"]));
 provide(
   TASK_INSIGHT_ORG_ID_KEY,
@@ -152,19 +170,22 @@ const jobsItems = computed(() =>
 const jobsTotal = computed(() =>
   jobsPage.value && "total" in jobsPage.value ? jobsPage.value.total : 0,
 );
-const jobsPagination = computed(() => ({
-  page: jobsPageNumber.value,
-  pageSize: jobsPageSize,
-  itemCount: jobsTotal.value,
-  onUpdatePage: (page: number) => {
-    jobsPageNumber.value = page;
-  },
-}));
+const jobsPagination = computed(() => {
+  if (jobsTotal.value <= jobsPageSize) return false;
+  return {
+    page: jobsPageNumber.value,
+    pageSize: jobsPageSize,
+    itemCount: jobsTotal.value,
+    onUpdatePage: (page: number) => {
+      jobsPageNumber.value = page;
+    },
+  };
+});
 
 const { data: datasets, isLoading: datasetsLoading } = useQuery({
   queryKey: computed(() => orgScopedQueryKey(orgStore.currentOrgId, ["datasets", "all-pages"])),
   queryFn: listDatasets,
-  enabled: computed(() => !!orgStore.currentOrgId),
+  enabled: computed(() => !!orgStore.currentOrgId && !props.datasetId),
 });
 
 const { data: trainers, isLoading: trainersLoading } = useListTrainersRouteApiV1TrainersGet({
@@ -207,6 +228,9 @@ const trainerOptions = computed<SelectOption[]>(() =>
     .map((t) => ({ label: t.name, value: t.id })),
 );
 
+const canTrain = computed(() => props.allowTrain);
+const effectiveTrainDisabledReason = computed(() => props.trainDisabledReason ?? null);
+
 function hasTrainerViewType(trainer: Trainer): trainer is Trainer & { view_type: string } {
   return typeof (trainer as { view_type?: unknown }).view_type === "string";
 }
@@ -224,99 +248,104 @@ function statusType(status: JobStatus): TagType {
   return map[status] ?? "default";
 }
 
-const columns = computed<DataTableColumns<TrainingJob>>(() => [
-  {
-    title: "ID",
-    key: "id",
-    width: 120,
-    render: (row) => (row.id ?? "").slice(0, 8) + "…",
-  },
-  {
-    title: "Status",
-    key: "status",
-    width: 130,
-    render: (row) =>
-      h(
-        NTag,
-        { type: statusType(row.status!), size: "small", round: true },
-        { default: () => row.status },
-      ),
-  },
-  {
-    title: "Public",
-    key: "is_public",
-    width: 160,
-    render: (row) => {
-      const nodes = [];
-      if (row.is_public) {
-        nodes.push(h(NTag, { type: "info", size: "small" }, { default: () => "Public" }));
-      }
-      if (row.is_public && row.org_id !== orgStore.currentOrgId) {
-        nodes.push(
+const columns = computed<DataTableColumns<TrainingJob>>(() => {
+  const baseColumns: DataTableColumns<TrainingJob> = [
+    {
+      title: "ID",
+      key: "id",
+      width: 120,
+      render: (row) => (row.id ?? "").slice(0, 8) + "…",
+    },
+    {
+      title: "Status",
+      key: "status",
+      width: 130,
+      render: (row) =>
+        h(
+          NTag,
+          { type: statusType(row.status!), size: "small", round: true },
+          { default: () => row.status },
+        ),
+    },
+    {
+      title: "Public",
+      key: "is_public",
+      width: 160,
+      render: (row) => {
+        const nodes = [];
+        if (row.is_public) {
+          nodes.push(h(NTag, { type: "info", size: "small" }, { default: () => "Public" }));
+        }
+        if (row.is_public && row.org_id !== orgStore.currentOrgId) {
+          nodes.push(
+            h(
+              "span",
+              { style: "margin-left: 4px; font-size: 12px; color: #aaa" },
+              `(${row.org_name ?? "Other Org"})`,
+            ),
+          );
+        }
+        return h("span", {}, nodes);
+      },
+    },
+    {
+      title: "Dataset ID",
+      key: "dataset_id",
+      ellipsis: { tooltip: true },
+      render: (row) => (row.dataset_id ? row.dataset_id.slice(0, 8) + "…" : "Deleted dataset"),
+    },
+    {
+      title: "Trainer",
+      key: "trainer_id",
+      ellipsis: { tooltip: true },
+      render: (row) => row.trainer_id,
+    },
+    {
+      title: "Created At",
+      key: "created_at",
+      width: 180,
+      render: (row) => new Date(row.created_at!).toLocaleString(),
+    },
+    {
+      title: "Actions",
+      key: "actions",
+      width: 220,
+      render: (row) => {
+        const nodes = [
           h(
-            "span",
-            { style: "margin-left: 4px; font-size: 12px; color: #aaa" },
-            `(${row.org_name ?? "Other Org"})`,
+            NButton,
+            {
+              size: "small",
+              disabled: !row.id,
+              onClick: (e: Event) => {
+                e.stopPropagation();
+                openJobDetail(row);
+              },
+            },
+            { default: () => "View" },
           ),
-        );
-      }
-      return h("span", {}, nodes);
-    },
-  },
-  {
-    title: "Dataset ID",
-    key: "dataset_id",
-    ellipsis: { tooltip: true },
-    render: (row) => (row.dataset_id ? row.dataset_id.slice(0, 8) + "…" : "Deleted dataset"),
-  },
-  {
-    title: "Trainer",
-    key: "trainer_id",
-    ellipsis: { tooltip: true },
-    render: (row) => row.trainer_id,
-  },
-  {
-    title: "Created At",
-    key: "created_at",
-    width: 180,
-    render: (row) => new Date(row.created_at!).toLocaleString(),
-  },
-  {
-    title: "Actions",
-    key: "actions",
-    width: 220,
-    render: (row) => {
-      const nodes = [
-        h(
-          NButton,
-          {
-            size: "small",
-            disabled: !row.id,
-            onClick: (e: Event) => {
-              e.stopPropagation();
-              openJobDetail(row);
+          h(
+            NButton,
+            {
+              size: "small",
+              tertiary: true,
+              disabled: !row.id,
+              onClick: (e: Event) => {
+                e.stopPropagation();
+                openInsight(row);
+              },
             },
-          },
-          { default: () => "View" },
-        ),
-        h(
-          NButton,
-          {
-            size: "small",
-            tertiary: true,
-            disabled: !row.id,
-            onClick: (e: Event) => {
-              e.stopPropagation();
-              openInsight(row);
-            },
-          },
-          { default: () => "Task Progress" },
-        ),
-      ];
-      return h("span", { style: "display: inline-flex; gap: 8px" }, nodes);
+            { default: () => "Task Progress" },
+          ),
+        ];
+        return h("span", { style: "display: inline-flex; gap: 8px" }, nodes);
+      },
     },
-  },
-]);
+  ];
+  return props.embedded
+    ? baseColumns.filter((column) => !("key" in column) || column.key !== "dataset_id")
+    : baseColumns;
+});
 
 const showModal = ref(false);
 const insightVisible = ref(false);
@@ -327,7 +356,7 @@ const formModel = ref({ dataset_id: null as string | null, trainer_id: null as s
 watch(
   () => props.datasetId,
   (val) => {
-    if (val) formModel.value.dataset_id = val;
+    formModel.value.dataset_id = val ?? null;
   },
   { immediate: true },
 );
@@ -370,7 +399,7 @@ function onCancel() {
 }
 
 function resetForm() {
-  formModel.value = { dataset_id: null, trainer_id: null };
+  formModel.value = { dataset_id: props.datasetId ?? null, trainer_id: null };
   formRef.value?.restoreValidation();
 }
 
@@ -414,3 +443,28 @@ function trainingTaskSummary(row: TrainingJob): TaskTrackerSummary {
   };
 }
 </script>
+
+<style scoped>
+.embedded-section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding-top: 4px;
+}
+
+.embedded-section-title {
+  margin: 0 0 2px;
+}
+
+@media (max-width: 640px) {
+  .embedded-section-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .embedded-section-header :deep(.n-button) {
+    width: 100%;
+  }
+}
+</style>

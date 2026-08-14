@@ -19,17 +19,17 @@
           <template v-else>
             <n-layout has-sider style="height: 100vh">
               <n-layout-sider
-                :collapsed="uiStore.sidebarCollapsed"
+                :collapsed="effectiveSidebarCollapsed"
                 :width="240"
-                :collapsed-width="64"
+                :collapsed-width="isNarrowScreen ? 56 : 64"
                 collapse-mode="width"
                 bordered
-                show-trigger
+                :show-trigger="!isNarrowScreen"
                 @collapse="uiStore.sidebarCollapsed = true"
                 @expand="uiStore.sidebarCollapsed = false"
               >
                 <n-menu
-                  :collapsed="uiStore.sidebarCollapsed"
+                  :collapsed="effectiveSidebarCollapsed"
                   :options="menuOptions"
                   :value="activeRoute"
                   @update:value="(key: string) => router.push(key)"
@@ -132,6 +132,7 @@ import { useRouter, useRoute, RouterView } from "vue-router";
 import { darkTheme, NIcon, type GlobalThemeOverrides, type MenuOption } from "naive-ui";
 import { AlbumsOutline, CubeOutline, ImagesOutline, LayersOutline } from "@vicons/ionicons5";
 import { useQueryClient } from "@tanstack/vue-query";
+import { useMediaQuery } from "@vueuse/core";
 import VxeUI from "vxe-pc-ui";
 import { useUiStore } from "@/features/auth/application/ui";
 import { useAuthStore } from "@/features/auth/application/store";
@@ -146,6 +147,8 @@ const authStore = useAuthStore();
 const orgStore = useOrgStore();
 const queryClient = useQueryClient();
 const globalAgent = useAgentAdapter();
+const isNarrowScreen = useMediaQuery("(max-width: 767px)");
+const effectiveSidebarCollapsed = computed(() => isNarrowScreen.value || uiStore.sidebarCollapsed);
 
 const AUTH_PATHS = ["/login", "/register"];
 const isAuthPage = computed(() => AUTH_PATHS.includes(route.path));
@@ -153,7 +156,12 @@ const isSettingsRoute = computed(() => route.path.startsWith("/settings"));
 const isAdminRoute = computed(() => route.path.startsWith("/admin"));
 const showAppHeader = computed(() => route.meta.hideAppHeader !== true);
 const contentStyle = computed(() => ({
-  padding: typeof route.meta.contentPadding === "string" ? route.meta.contentPadding : "24px",
+  padding:
+    typeof route.meta.contentPadding === "string"
+      ? route.meta.contentPadding
+      : isNarrowScreen.value
+        ? "16px"
+        : "24px",
   overflowY: "auto",
   display: "flex",
   flexDirection: "column",

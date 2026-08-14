@@ -815,6 +815,13 @@ unlink, and reorder transitions in one transaction rather than deleting all
 member rows. All membership mutations return `409` on a definition-version
 conflict, and partial changes never leave a half-valid collection.
 
+Collection metadata, membership, and revision mutations are creator-only and
+return `403` for another organization member instead of surfacing an internal
+error. Deleting a collection first removes its database state, then
+best-effort deletes every retained revision data/provenance artifact. A
+collection pinned by an existing training or prediction job is not deleted and
+returns `409 collection_in_use`, preserving the job's immutable input.
+
 The future collection SSE stream can publish membership changes as:
 
 ```text
@@ -914,6 +921,13 @@ Frontend code lives under:
 apps/web/src/features/dataset-collections/
 ```
 
+The collection creation flows compensate for their two-request
+create-then-link transport: when membership linking fails, they delete the
+newly created empty collection. Existing-dataset creation also validates the
+MVP's identical ordered label-space rule before submission. Historical ready
+revisions remain openable in classify even when the mutable collection head is
+currently empty.
+
 Collection source editors, automation editors, and summary panels are
 registered through descriptors where they are extension points. The app
 registration barrel performs registration; pages do not add dataset-type
@@ -984,6 +998,19 @@ collection routes:
 - add source adapters for event-derived dynamic membership if required.
 
 Do not include Phase 6 behavior implicitly in the static collection phases.
+
+### Management UI behavior
+
+- Dataset Detail opens on the persisted dataset contract. Training and
+  prediction are embedded sections of that page, so they must not render a
+  second page header or refetch the selected dataset merely to label the form.
+- Collection Detail presents the mutable definition and latest ready revision
+  as separate states. When they differ, creating the current revision is the
+  primary action and reviewing the older revision must identify its revision
+  number explicitly.
+- Management tables keep stable column widths and horizontal scrolling on
+  compact screens. Below the application breakpoint, the global navigation
+  collapses to its icon rail so page content retains usable width.
 
 ## 10. Required Verification
 

@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.modules.auth.port.http.deps import get_current_user
+from app.shared.api.schemas import User
 
 
 def _create_sc_dataset(client: TestClient, name: str) -> str:
@@ -37,6 +41,16 @@ def _create_sc_sample(client: TestClient, dataset_id: str) -> None:
         },
     )
     assert response.status_code == 200, response.text
+
+
+def _as_user(user_id: str) -> User:
+    return User(
+        id=user_id,
+        email=f"{user_id}@example.com",
+        name=user_id,
+        is_superadmin=False,
+        created_at=datetime(2024, 1, 1),
+    )
 
 
 def test_collection_members_can_be_linked_and_unlinked_dynamically() -> None:
@@ -135,6 +149,11 @@ def test_collection_revision_is_immutable_and_ready() -> None:
         assert payload["manifest_uri"]
         assert payload["provenance_uri"]
 
+        deleted = client.delete(f"/api/v1/dataset-collections/{collection_id}")
+        assert deleted.status_code == 204, deleted.text
+        missing = client.get(f"/api/v1/dataset-collections/{collection_id}")
+        assert missing.status_code == 404, missing.text
+
 
 def test_collection_rejects_unimplemented_member_transforms() -> None:
     with TestClient(app) as client:
@@ -167,3 +186,69 @@ def test_collection_rejects_unimplemented_member_transforms() -> None:
 
         assert linked.status_code == 422, linked.text
         assert linked.json()["detail"]["code"] == "unsupported_member_transform"
+
+
+def test_collection_membership_and_revision_mutations_require_creator() -> None:
+    with TestClient(app) as client:
+        first_dataset = _create_sc_dataset(client, "creator source one")
+        second_dataset = _create_sc_dataset(client, "creator source two")
+        created = client.post(
+            "/api/v1/dataset-collections",
+            json={
+                "name": "Creator-owned collection",
+                "description": "",
+                "target_view_id": "patch_image_v1",
+                "duplicate_policy": "keep_all",
+                "missing_data_policy": "fail",
+            },
+        )
+        assert created.status_code == 200, created.text
+        collection_id = str(created.json()["id"])
+        linked = client.post(
+            f"/api/v1/dataset-collections/{collection_id}/members",
+            json={
+                "expected_definition_version": 0,
+                "members": [{"source_dataset_id": first_dataset, "position": 0}],
+            },
+        )
+        assert linked.status_code == 200, linked.text
+        member_id = str(linked.json()["members"][0]["id"])
+
+        original_override = app.dependency_overrides.get(get_current_user)
+        app.dependency_overrides[get_current_user] = lambda: _as_user("other-user")
+        try:
+            responses = [
+                client.post(
+                    f"/api/v1/dataset-collections/{collection_id}/members",
+                    json={
+                        "expected_definition_version": 1,
+                        "members": [
+                            {"source_dataset_id": second_dataset, "position": 1}
+                        ],
+                    },
+                ),
+                client.put(
+                    f"/api/v1/dataset-collections/{collection_id}/members",
+                    json={
+                        "expected_definition_version": 1,
+                        "members": [
+                            {"source_dataset_id": first_dataset, "position": 0}
+                        ],
+                    },
+                ),
+                client.delete(
+                    f"/api/v1/dataset-collections/{collection_id}/members/{member_id}",
+                    params={"expected_definition_version": 1},
+                ),
+                client.post(
+                    f"/api/v1/dataset-collections/{collection_id}/revisions",
+                    json={"expected_definition_version": 1},
+                ),
+            ]
+        finally:
+            if original_override is None:
+                app.dependency_overrides.pop(get_current_user, None)
+            else:
+                app.dependency_overrides[get_current_user] = original_override
+
+        assert [response.status_code for response in responses] == [403, 403, 403, 403]

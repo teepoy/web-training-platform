@@ -114,3 +114,21 @@ def test_delete_dataset_requires_creator() -> None:
 
         assert resp.status_code == 403
         assert resp.json()["detail"] == "Only the dataset creator can delete this dataset"
+
+
+def test_update_label_space_requires_creator() -> None:
+    with TestClient(app) as c:
+        dataset_id = create_dataset(c, name="owner-only-label-space")
+        original = _with_current_user(_as_user("other-user"))
+        try:
+            resp = c.patch(
+                f"/api/v1/datasets/{dataset_id}/label-space",
+                json={"label_space": ["cat", "dog", "bird"]},
+            )
+        finally:
+            _restore_current_user(original)
+
+        assert resp.status_code == 403
+        assert resp.json()["detail"] == (
+            "Only the dataset creator can update its label space"
+        )

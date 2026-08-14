@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -336,22 +336,21 @@ class ModelArtifactRepository:
             await session.commit()
             return True
 
-    async def list_artifact_uris_by_job(self, job_id: str) -> list[tuple[str, str]]:
+    async def get_training_job_context(
+        self, job_id: str, org_id: str
+    ) -> tuple[str, str] | None:
         async with self.session_factory() as session:
-            stmt = select(ArtifactORM.id, ArtifactORM.uri).where(
-                ArtifactORM.job_id == job_id
-            )
-            rows = (await session.execute(stmt)).all()
-            return [(row.id, row.uri) for row in rows]
-
-    async def delete_artifacts_by_ids(self, artifact_ids: list[str]) -> None:
-        if not artifact_ids:
-            return
-        async with self.session_factory() as session:
-            await session.execute(
-                delete(ArtifactORM).where(ArtifactORM.id.in_(artifact_ids))
-            )
-            await session.commit()
+            row = (
+                await session.execute(
+                    select(TrainingJobORM.created_by, TrainingJobORM.trainer_id).where(
+                        TrainingJobORM.id == job_id,
+                        TrainingJobORM.org_id == org_id,
+                    )
+                )
+            ).one_or_none()
+            if row is None:
+                return None
+            return str(row.created_by), str(row.trainer_id)
 
     async def add_artifacts(self, job_id: str, artifacts: list[ArtifactRef]) -> None:
         async with self.session_factory() as session:

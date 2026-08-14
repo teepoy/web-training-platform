@@ -7,8 +7,6 @@ import {
   NButton,
   NCard,
   NDataTable,
-  NDescriptions,
-  NDescriptionsItem,
   NEmpty,
   NModal,
   NSelect,
@@ -33,12 +31,16 @@ import type {
   DatasetCollectionMemberResponse,
   DatasetCollectionRevisionResponse,
 } from "@/generated/orval/models";
-import { toUserMessage } from "@/shared/api";
+import { useAuthStore } from "@/features/auth/application/store";
+import { useOrgStore } from "@/features/auth/application/org";
+import { orgScopedQueryKey, toUserMessage } from "@/shared/api";
 
 const route = useRoute();
 const router = useRouter();
 const queryClient = useQueryClient();
 const message = useMessage();
+const authStore = useAuthStore();
+const orgStore = useOrgStore();
 const collectionId = computed(() => String(route.params.collectionId));
 const linkVisible = ref(false);
 const selectedDatasetIds = ref<string[]>([]);
@@ -53,19 +55,53 @@ async function loadAllDatasets(): Promise<Dataset[]> {
 }
 
 const collectionQuery = useQuery({
-  queryKey: computed(() => ["dataset-collections", collectionId.value]),
+  queryKey: computed(() =>
+    orgScopedQueryKey(orgStore.currentOrgId, ["dataset-collections", collectionId.value]),
+  ),
   queryFn: () => getCollectionApiV1DatasetCollectionsCollectionIdGet(collectionId.value),
+  enabled: computed(() => !!orgStore.currentOrgId && !!collectionId.value),
 });
 const membersQuery = useQuery({
-  queryKey: computed(() => ["dataset-collections", collectionId.value, "members"]),
+  queryKey: computed(() =>
+    orgScopedQueryKey(orgStore.currentOrgId, [
+      "dataset-collections",
+      collectionId.value,
+      "members",
+    ]),
+  ),
   queryFn: () => listMembersApiV1DatasetCollectionsCollectionIdMembersGet(collectionId.value),
+  enabled: computed(() => !!orgStore.currentOrgId && !!collectionId.value),
 });
 const revisionsQuery = useQuery({
-  queryKey: computed(() => ["dataset-collections", collectionId.value, "revisions"]),
+  queryKey: computed(() =>
+    orgScopedQueryKey(orgStore.currentOrgId, [
+      "dataset-collections",
+      collectionId.value,
+      "revisions",
+    ]),
+  ),
   queryFn: () => listRevisionsApiV1DatasetCollectionsCollectionIdRevisionsGet(collectionId.value),
+  enabled: computed(() => !!orgStore.currentOrgId && !!collectionId.value),
 });
-const datasetsQuery = useQuery({ queryKey: ["datasets", "all"], queryFn: loadAllDatasets });
+const datasetsQuery = useQuery({
+  queryKey: computed(() => orgScopedQueryKey(orgStore.currentOrgId, ["datasets", "all"])),
+  queryFn: loadAllDatasets,
+  enabled: computed(() => !!orgStore.currentOrgId),
+});
 const collection = computed(() => collectionQuery.data.value);
+const canModify = computed(
+  () => !!collection.value && collection.value.created_by === authStore.user?.id,
+);
+const loadError = computed(
+  () =>
+    collectionQuery.error.value ?? membersQuery.error.value ?? revisionsQuery.error.value ?? null,
+);
+const isLoading = computed(
+  () =>
+    collectionQuery.isLoading.value ||
+    membersQuery.isLoading.value ||
+    revisionsQuery.isLoading.value,
+);
 const members = computed(() =>
   [...(membersQuery.data.value ?? [])].sort((a, b) => a.position - b.position),
 );
@@ -79,18 +115,44 @@ const latestReadyRevision = computed(
       .filter((revision) => revision.status === "ready")
       .sort((a, b) => b.revision_number - a.revision_number)[0],
 );
+const revisionOutdated = computed(
+  () =>
+    !latestReadyRevision.value ||
+    latestReadyRevision.value.definition_version !== collection.value?.definition_version,
+);
 
 async function refreshCollection(): Promise<void> {
+  const key = (...parts: string[]) =>
+    orgScopedQueryKey(orgStore.currentOrgId, ["dataset-collections", collectionId.value, ...parts]);
   await Promise.all([
-    queryClient.invalidateQueries({ queryKey: ["dataset-collections", collectionId.value] }),
-    queryClient.invalidateQueries({
-      queryKey: ["dataset-collections", collectionId.value, "members"],
-    }),
-    queryClient.invalidateQueries({
-      queryKey: ["dataset-collections", collectionId.value, "revisions"],
-    }),
+    queryClient.invalidateQueries({ queryKey: key() }),
+    queryClient.invalidateQueries({ queryKey: key("members") }),
+    queryClient.invalidateQueries({ queryKey: key("revisions") }),
   ]);
 }
+
+function labelSpacesMatch(first: Dataset | undefined, second: Dataset): boolean {
+  if (!first) return true;
+  const expected = first.task_spec?.label_space ?? [];
+  const actual = second.task_spec?.label_space ?? [];
+  return (
+    actual.length === expected.length && actual.every((label, index) => label === expected[index])
+  );
+}
+
+const selectedLinkDatasets = computed(() =>
+  selectedDatasetIds.value
+    .map((datasetId) => datasetById.value.get(datasetId))
+    .filter((dataset): dataset is Dataset => !!dataset),
+);
+const memberLabelBaseline = computed(() => {
+  const firstMember = members.value[0];
+  return firstMember ? datasetById.value.get(firstMember.source_dataset_id) : undefined;
+});
+const selectedLinksCompatible = computed(() => {
+  const baseline = memberLabelBaseline.value ?? selectedLinkDatasets.value[0];
+  return selectedLinkDatasets.value.every((dataset) => labelSpacesMatch(baseline, dataset));
+});
 
 const linkOptions = computed(() => {
   const linked = new Set(members.value.map((member) => member.source_dataset_id));
@@ -100,7 +162,8 @@ const linkOptions = computed(() => {
       (dataset) =>
         !linked.has(String(dataset.id ?? "")) &&
         !!target &&
-        (dataset.view_types ?? []).includes(target),
+        (dataset.view_types ?? []).includes(target) &&
+        labelSpacesMatch(memberLabelBaseline.value ?? selectedLinkDatasets.value[0], dataset),
     )
     .map((dataset) => ({ label: dataset.name, value: String(dataset.id ?? "") }))
     .filter((option) => option.value.length > 0);
@@ -177,6 +240,7 @@ const memberColumns: DataTableColumns<DatasetCollectionMemberResponse> = [
   {
     title: "Dataset",
     key: "source_dataset_id",
+    minWidth: 180,
     render: (row) => datasetById.value.get(row.source_dataset_id)?.name ?? row.source_dataset_id,
   },
   {
@@ -187,6 +251,7 @@ const memberColumns: DataTableColumns<DatasetCollectionMemberResponse> = [
   {
     title: "Actions",
     key: "actions",
+    width: 250,
     render: (row) =>
       h(NSpace, null, {
         default: () => [
@@ -201,6 +266,7 @@ const memberColumns: DataTableColumns<DatasetCollectionMemberResponse> = [
               size: "small",
               type: "error",
               ghost: true,
+              disabled: !canModify.value,
               loading: unlinkMutation.isPending.value,
               onClick: () => unlinkMutation.mutate(row),
             },
@@ -228,6 +294,7 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
   {
     title: "Created",
     key: "created_at",
+    width: 180,
     render: (row) => new Date(row.created_at).toLocaleString(),
   },
 ];
@@ -243,50 +310,83 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
         <h1>{{ collection?.name ?? "Dataset collection" }}</h1>
         <NText depth="3">{{ collection?.description }}</NText>
       </div>
-      <NSpace>
+      <NSpace class="collection-header-actions" :wrap="true">
         <NButton
-          :disabled="members.length === 0"
+          :disabled="members.length === 0 || !canModify"
           :loading="revisionMutation.isPending.value"
+          :type="revisionOutdated ? 'primary' : 'default'"
           @click="revisionMutation.mutate()"
         >
-          Create revision
+          {{ latestReadyRevision ? "Create current revision" : "Create first revision" }}
         </NButton>
         <NButton
-          type="primary"
-          :disabled="!latestReadyRevision || members.length === 0"
+          :type="revisionOutdated ? 'default' : 'primary'"
+          :disabled="!latestReadyRevision"
           @click="openStack"
         >
-          Open collection classify
+          {{
+            latestReadyRevision
+              ? `Review revision r${latestReadyRevision.revision_number}`
+              : "No revision to review"
+          }}
         </NButton>
       </NSpace>
     </div>
 
-    <NSpin v-if="collectionQuery.isLoading.value" />
+    <div v-if="isLoading" class="collection-loading"><NSpin size="large" /></div>
+    <NAlert v-else-if="loadError" type="error">
+      {{ toUserMessage(loadError, "Failed to load dataset collection") }}
+    </NAlert>
     <template v-else-if="collection">
-      <NAlert
-        v-if="latestReadyRevision?.definition_version !== collection.definition_version"
-        type="warning"
-      >
-        Membership has changed since the latest ready revision. Create a new revision before
-        training or predicting the current composition.
+      <NAlert v-if="!canModify" type="info">
+        This collection is read-only for you. Only its creator can change membership or create
+        revisions.
       </NAlert>
-      <NDescriptions bordered :column="3">
-        <NDescriptionsItem label="Target view">{{ collection.target_view_id }}</NDescriptionsItem>
-        <NDescriptionsItem label="Definition"
-          >v{{ collection.definition_version }}</NDescriptionsItem
-        >
-        <NDescriptionsItem label="Members">{{ members.length }}</NDescriptionsItem>
-      </NDescriptions>
+      <NAlert v-if="!latestReadyRevision" type="info">
+        This collection does not have an immutable revision yet. Create one before using it for
+        review, training, or prediction.
+      </NAlert>
+      <NAlert v-else-if="revisionOutdated" type="warning">
+        Membership has changed since the latest ready revision. Create a new revision before using
+        the current composition. The review action still opens r{{
+          latestReadyRevision.revision_number
+        }}.
+      </NAlert>
+      <NCard size="small">
+        <div class="collection-summary-grid">
+          <div class="collection-summary-field">
+            <NText depth="3">Target view</NText>
+            <strong>{{ collection.target_view_id }}</strong>
+          </div>
+          <div class="collection-summary-field">
+            <NText depth="3">Current definition</NText>
+            <strong>v{{ collection.definition_version }}</strong>
+          </div>
+          <div class="collection-summary-field">
+            <NText depth="3">Linked datasets</NText>
+            <strong>{{ members.length }}</strong>
+          </div>
+          <div class="collection-summary-field">
+            <NText depth="3">Ready revision</NText>
+            <strong>{{
+              latestReadyRevision ? `r${latestReadyRevision.revision_number}` : "None"
+            }}</strong>
+          </div>
+        </div>
+      </NCard>
 
       <NCard title="Linked datasets">
         <template #header-extra>
-          <NButton type="primary" size="small" @click="linkVisible = true">Link datasets</NButton>
+          <NButton type="primary" size="small" :disabled="!canModify" @click="linkVisible = true">
+            Link datasets
+          </NButton>
         </template>
         <NDataTable
           v-if="members.length > 0"
           :columns="memberColumns"
           :data="members"
           :row-key="(row: DatasetCollectionMemberResponse) => row.id"
+          :scroll-x="760"
         />
         <NEmpty v-else description="No datasets linked" />
       </NCard>
@@ -297,6 +397,7 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
           :columns="revisionColumns"
           :data="revisionsQuery.data.value ?? []"
           :row-key="(row: DatasetCollectionRevisionResponse) => row.id"
+          :scroll-x="640"
         />
         <NEmpty v-else description="Create a revision to train or predict this composition" />
       </NCard>
@@ -306,21 +407,30 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
       v-model:show="linkVisible"
       preset="card"
       title="Link existing datasets"
-      :style="{ width: '560px' }"
+      :style="{ width: 'min(560px, calc(100vw - 32px))' }"
     >
-      <NSelect
-        v-model:value="selectedDatasetIds"
-        multiple
-        filterable
-        :options="linkOptions"
-        placeholder="Select compatible datasets"
+      <template v-if="linkOptions.length > 0">
+        <NSelect
+          v-model:value="selectedDatasetIds"
+          multiple
+          filterable
+          :options="linkOptions"
+          placeholder="Select compatible datasets"
+        />
+        <NAlert v-if="!selectedLinksCompatible" type="error" :show-icon="false">
+          Selected datasets must use the same labels in the same order.
+        </NAlert>
+      </template>
+      <NEmpty
+        v-else
+        description="No unlinked datasets match this collection's view and label contract"
       />
       <template #footer>
         <NSpace justify="end">
           <NButton @click="linkVisible = false">Cancel</NButton>
           <NButton
             type="primary"
-            :disabled="selectedDatasetIds.length === 0"
+            :disabled="selectedDatasetIds.length === 0 || !selectedLinksCompatible"
             :loading="linkMutation.isPending.value"
             @click="linkMutation.mutate()"
           >
@@ -341,13 +451,94 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
 
 .collection-detail-header {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: space-between;
   gap: 16px;
+}
+
+.collection-detail-header > div:first-child {
+  min-width: 0;
+}
+
+.collection-detail-header h1,
+.collection-detail-header :deep(.n-text) {
+  overflow-wrap: anywhere;
+}
+
+.collection-header-actions {
+  flex: 0 0 auto;
+}
+
+.collection-loading {
+  display: flex;
+  justify-content: center;
+  padding: 56px;
+}
+
+.collection-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+}
+
+.collection-summary-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 20px;
+  border-left: 1px solid var(--n-border-color, #e5e7eb);
+}
+
+.collection-summary-field:first-child {
+  padding-left: 0;
+  border-left: 0;
+}
+
+.collection-summary-field strong {
+  overflow-wrap: anywhere;
+  font-weight: 600;
 }
 
 h1 {
   margin: 6px 0 3px;
   font-size: 24px;
+}
+
+@media (max-width: 840px) {
+  .collection-detail-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .collection-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px 0;
+  }
+
+  .collection-summary-field:nth-child(odd) {
+    padding-left: 0;
+    border-left: 0;
+  }
+}
+
+@media (max-width: 520px) {
+  .collection-header-actions {
+    display: grid !important;
+    grid-template-columns: 1fr;
+  }
+
+  .collection-header-actions :deep(.n-button) {
+    width: 100%;
+  }
+
+  .collection-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .collection-summary-field {
+    padding: 0;
+    border-left: 0;
+  }
 }
 </style>

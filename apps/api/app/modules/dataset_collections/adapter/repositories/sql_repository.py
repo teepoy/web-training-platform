@@ -179,16 +179,38 @@ class DatasetCollectionSqlRepository:
             await session.commit()
             return _collection(row)
 
-    async def delete_collection(self, collection_id: str, org_id: str) -> bool:
+    async def delete_collection(
+        self, collection_id: str, org_id: str
+    ) -> tuple[str, ...] | None:
         async with self._session_factory() as session:
             row = await self._collection_row(
                 session, collection_id, org_id, for_update=True
             )
             if row is None:
-                return False
+                return None
+            revision_artifacts = await session.execute(
+                select(
+                    DatasetCollectionRevisionORM.manifest_uri,
+                    DatasetCollectionRevisionORM.provenance_uri,
+                ).where(DatasetCollectionRevisionORM.collection_id == collection_id)
+            )
+            artifact_uris = tuple(
+                dict.fromkeys(
+                    uri
+                    for revision_row in revision_artifacts
+                    for uri in revision_row
+                    if uri is not None
+                )
+            )
             await session.delete(row)
-            await session.commit()
-            return True
+            try:
+                await session.commit()
+            except IntegrityError as exc:
+                raise DatasetCollectionConflictError(
+                    "collection_in_use",
+                    "Collection is referenced by a training or prediction job",
+                ) from exc
+            return artifact_uris
 
     async def list_active_members(
         self, collection_id: str, org_id: str

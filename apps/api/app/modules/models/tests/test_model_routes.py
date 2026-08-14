@@ -8,6 +8,8 @@ Covers:
 """
 from __future__ import annotations
 
+import io
+import json
 from datetime import datetime
 
 import pytest
@@ -154,3 +156,71 @@ def test_delete_model_requires_creator() -> None:
 
         assert resp.status_code == 403
         assert resp.json()["detail"] == "Only the model creator can delete this model"
+
+
+def test_uploaded_model_persists_runtime_contract() -> None:
+    with TestClient(app) as c:
+        _, _, model_id = _setup(c)
+
+        resp = c.get(f"/api/v1/models/{model_id}")
+
+        assert resp.status_code == 200, resp.text
+        metadata = resp.json()["metadata"]
+        assert metadata["model_contract"]
+        assert metadata["model_schema_version"]
+        assert metadata["trainer_id"]
+
+
+def test_delete_model_preserves_other_artifacts_from_same_training_job() -> None:
+    with TestClient(app) as c:
+        _, job_id, first_model_id = _setup(c)
+        second_model_id = upload_model(c, job_id)
+
+        deleted = c.delete(f"/api/v1/models/{first_model_id}")
+        remaining = c.get(f"/api/v1/models/{second_model_id}")
+        remaining_download = c.get(f"/api/v1/models/{second_model_id}/download")
+
+        assert deleted.status_code == 204, deleted.text
+        assert remaining.status_code == 200, remaining.text
+        assert remaining_download.status_code == 200, remaining_download.text
+
+
+def test_upload_model_requires_training_job_creator() -> None:
+    with TestClient(app) as c:
+        _, job_id, _ = _setup(c)
+        metadata = json.dumps(
+            {
+                "name": "unauthorized-model",
+                "format": "pytorch",
+                "job_id": job_id,
+                "template_id": "image-classifier",
+                "profile_id": "custom",
+                "model_spec": {},
+                "compatibility": {
+                    "dataset_types": ["image_classification"],
+                    "task_types": ["classification"],
+                    "prediction_targets": ["image_classification"],
+                    "label_space": ["defect", "clean"],
+                },
+            }
+        )
+        original = _with_current_user(_as_user("other-user"))
+        try:
+            resp = c.post(
+                "/api/v1/models/upload",
+                data={"metadata": metadata},
+                files={
+                    "file": (
+                        "model.pt",
+                        io.BytesIO(b"not-authorized"),
+                        "application/octet-stream",
+                    )
+                },
+            )
+        finally:
+            _restore_current_user(original)
+
+        assert resp.status_code == 403, resp.text
+        assert resp.json()["detail"] == (
+            "Only the training job creator can upload its model artifacts"
+        )

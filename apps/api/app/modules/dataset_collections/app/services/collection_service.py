@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -31,6 +32,9 @@ from app.modules.storage.port.local import DatasetStorageFactoryPort
 from app.modules.types.catalog import get_view_meta
 from app.shared.api.schemas import Dataset
 from app.shared.domain.protocols import ArtifactStorage
+
+
+_logger = logging.getLogger(__name__)
 
 
 def _utcnow() -> datetime:
@@ -138,8 +142,22 @@ class DatasetCollectionService:
     ) -> None:
         collection = await self.get_collection(collection_id, org_id)
         self._require_owner(collection, actor_id)
-        if not await self._repository.delete_collection(collection_id, org_id):
+        artifact_uris = await self._repository.delete_collection(collection_id, org_id)
+        if artifact_uris is None:
             raise DatasetCollectionNotFoundError("Dataset collection not found")
+        cleanup_results = await asyncio.gather(
+            *(self._artifact_storage.delete(uri) for uri in artifact_uris),
+            return_exceptions=True,
+        )
+        cleanup_failures = sum(
+            isinstance(result, BaseException) for result in cleanup_results
+        )
+        if cleanup_failures:
+            _logger.warning(
+                "Failed to delete %d of %d dataset collection revision artifacts",
+                cleanup_failures,
+                len(artifact_uris),
+            )
 
     async def list_members(
         self, collection_id: str, org_id: str
@@ -497,18 +515,23 @@ class DatasetCollectionService:
                 label_counts = {
                     str(label): int(count) for label, count in counts.iter_rows()
                 }
-            data_uri, provenance_uri = await asyncio.gather(
-                self._artifact_storage.put_file(
-                    f"dataset-collections/{collection.id}/revisions/{revision_id}/data.parquet",
-                    str(data_path),
-                    "application/vnd.apache.parquet",
-                ),
-                self._artifact_storage.put_file(
+            data_uri = await self._artifact_storage.put_file(
+                f"dataset-collections/{collection.id}/revisions/{revision_id}/data.parquet",
+                str(data_path),
+                "application/vnd.apache.parquet",
+            )
+            try:
+                provenance_uri = await self._artifact_storage.put_file(
                     f"dataset-collections/{collection.id}/revisions/{revision_id}/provenance.parquet",
                     str(provenance_path),
                     "application/vnd.apache.parquet",
-                ),
-            )
+                )
+            except Exception:
+                await asyncio.gather(
+                    self._artifact_storage.delete(data_uri),
+                    return_exceptions=True,
+                )
+                raise
         return data_uri, provenance_uri, row_count, label_counts
 
     @staticmethod

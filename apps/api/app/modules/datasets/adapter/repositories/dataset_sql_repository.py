@@ -387,6 +387,8 @@ class DatasetSqlRepository:
                 id=row.id,
                 org_id=row.org_id,
                 org_name=await _org_name_for(session, row.org_id),
+                created_by=row.created_by,
+                creator_name=await _user_name_for(session, row.created_by),
                 name=row.name,
                 dataset_type=row.dataset_type,
                 task_spec=cast(TaskSpec, row.dataset_meta),

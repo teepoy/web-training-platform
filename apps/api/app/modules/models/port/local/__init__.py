@@ -71,6 +71,7 @@ class ModelManagementPort(Protocol):
         file: UploadFile,
         org_id: str,
         metadata_json: str,
+        current_user_id: str,
     ) -> Model: ...
 
     async def create_model_from_training(

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, h, ref } from "vue";
+import { computed, h, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useQueryClient } from "@tanstack/vue-query";
 import { useMessage, NButton } from "naive-ui";
@@ -7,9 +7,11 @@ import { FlowModal, FlowTypeSelector, SampleDetailDrawer, type FlowCard } from "
 import { buildExportDownloadUrl } from "@/shared/api/datasets";
 import {
   getGetDatasetApiV1DatasetsDatasetIdGetQueryKey,
+  getGetSparseSummaryApiV1DatasetsDatasetIdSparseSummaryGetQueryKey,
   useGetDatasetApiV1DatasetsDatasetIdGet,
+  useGetSparseSummaryApiV1DatasetsDatasetIdSparseSummaryGet,
 } from "@/generated/orval/endpoints/api";
-import type { Dataset } from "@/generated/orval/models";
+import type { Dataset, SparseSummaryResponse } from "@/generated/orval/models";
 import { useOrgStore } from "@/features/auth/application/org";
 import { orgScopedQueryKey } from "@/shared/api";
 import ManualImporter from "@/features/datasets/presentation/components/ManualImporter.vue";
@@ -20,6 +22,7 @@ import ParquetExportPlugin from "@/features/datasets/presentation/components/Par
 import PreviewExportPlugin from "@/features/datasets/presentation/components/PreviewExportPlugin.vue";
 import DatasetTrainTab from "@/features/datasets/presentation/components/DatasetTrainTab.vue";
 import DatasetPredictTab from "@/features/datasets/presentation/components/DatasetPredictTab.vue";
+import DatasetSparseSummary from "@/features/datasets/presentation/components/DatasetSparseSummary.vue";
 import DatasetViewPage from "@/features/datasets/presentation/pages/DatasetViewPage.vue";
 import ScDatasetGlobalFilterControl from "@/features/sc/presentation/components/ScDatasetGlobalFilterControl.vue";
 
@@ -30,7 +33,7 @@ const qc = useQueryClient();
 const orgStore = useOrgStore();
 
 const id = computed(() => String(route.params.id));
-const activeTab = ref("train");
+const activeTab = ref("overview");
 const selectedSampleId = ref<string | null>(null);
 const showImportFlow = ref(false);
 const exportStep = ref<"select" | "execute">("select");
@@ -55,6 +58,42 @@ const dataset = computed(
 
 const isSparse = computed(() => dataset.value?.storage_mode === "file_shard_sparse");
 const labelSpace = computed(() => dataset.value?.task_spec?.label_space ?? []);
+const hasSampleBrowser = computed(() =>
+  (dataset.value?.view_types ?? []).includes("image_input_v1"),
+);
+const sparseSummaryQuery = useGetSparseSummaryApiV1DatasetsDatasetIdSparseSummaryGet(id, {
+  query: {
+    queryKey: computed(() =>
+      orgScopedQueryKey(
+        orgStore.currentOrgId,
+        getGetSparseSummaryApiV1DatasetsDatasetIdSparseSummaryGetQueryKey(id.value),
+      ),
+    ),
+    enabled: computed(() => !!orgStore.currentOrgId && !!id.value && isSparse.value),
+    retry: false,
+  },
+});
+const sparseSummary = computed(
+  () => (sparseSummaryQuery.data.value as SparseSummaryResponse | undefined) ?? null,
+);
+
+watch(
+  dataset,
+  (value) => {
+    if (!value) return;
+    const availableTabs = [
+      "overview",
+      ...(hasSampleBrowser.value ? ["samples"] : []),
+      "train",
+      "predict",
+      ...(value.storage_mode !== "file_shard_sparse" ? ["annotate"] : []),
+    ];
+    if (!availableTabs.includes(activeTab.value)) {
+      activeTab.value = availableTabs[0] ?? "train";
+    }
+  },
+  { immediate: true },
+);
 
 const importerFlows: FlowCard[] = [
   {
@@ -163,7 +202,7 @@ function openScClassify() {
 </script>
 
 <template>
-  <div>
+  <div class="dataset-detail-page">
     <n-spin
       v-if="datasetQuery.isLoading.value"
       style="display: flex; justify-content: center; padding: 48px"
@@ -180,50 +219,98 @@ function openScClassify() {
     </n-result>
 
     <template v-else>
-      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 20px">
-        <n-button text @click="router.push('/datasets')"
-          ><template #icon><span>&#8592;</span></template
-          >Back</n-button
-        >
-        <n-divider vertical />
-        <div>
-          <n-h2 style="margin: 0">{{ dataset.name }}</n-h2>
-          <n-text depth="3" style="font-size: 12px">ID: {{ dataset.id }}</n-text>
+      <header class="dataset-detail-header">
+        <div class="dataset-heading">
+          <n-button text class="back-button" @click="router.push('/datasets')">
+            <template #icon><span aria-hidden="true">&#8592;</span></template>
+            Datasets
+          </n-button>
+          <div class="dataset-title-block">
+            <div class="dataset-title-line">
+              <h1>{{ dataset.name }}</h1>
+              <n-tag size="small" :bordered="false">{{ dataset.storage_mode }}</n-tag>
+            </div>
+            <n-text depth="3" class="dataset-id">ID: {{ dataset.id }}</n-text>
+          </div>
         </div>
-        <n-button
-          v-if="dataset.task_spec?.task_type === 'sc'"
-          type="primary"
-          size="small"
-          @click="openScClassify"
-          >Classify</n-button
-        >
-      </div>
+        <n-space class="dataset-header-actions" :wrap="true">
+          <n-button
+            v-if="!isSparse"
+            :type="dataset.task_spec?.task_type === 'sc' ? 'default' : 'primary'"
+            @click="showImportFlow = true"
+          >
+            Add samples
+          </n-button>
+          <n-button
+            v-if="dataset.task_spec?.task_type === 'sc'"
+            type="primary"
+            @click="openScClassify"
+          >
+            Open classify workspace
+          </n-button>
+        </n-space>
+      </header>
 
       <ScDatasetGlobalFilterControl v-if="dataset.task_spec?.task_type === 'sc'" :dataset-id="id" />
 
-      <div style="margin-bottom: 16px; display: flex; align-items: center; gap: 8px">
-        <n-button
-          v-if="!isSparse"
-          size="small"
-          type="primary"
-          style="margin-left: auto"
-          @click="showImportFlow = true"
-          >Add Sample</n-button
-        >
-      </div>
-      <n-tabs v-model:value="activeTab" type="line" animated>
-        <n-tab-pane
-          v-if="dataset.dataset_type === 'image_classification'"
-          name="samples"
-          tab="Samples"
-        >
+      <n-tabs v-model:value="activeTab" type="line" animated class="dataset-tabs">
+        <n-tab-pane name="overview" tab="Overview">
+          <n-card size="small" title="Dataset contract" class="dataset-contract-card">
+            <div class="dataset-contract-grid">
+              <div class="contract-field">
+                <n-text depth="3">Dataset type</n-text>
+                <strong>{{ dataset.dataset_type }}</strong>
+              </div>
+              <div class="contract-field">
+                <n-text depth="3">Storage mode</n-text>
+                <strong>{{ dataset.storage_mode }}</strong>
+              </div>
+              <div class="contract-field">
+                <n-text depth="3">Task type</n-text>
+                <strong>{{ dataset.task_spec?.task_type ?? "—" }}</strong>
+              </div>
+              <div class="contract-field">
+                <n-text depth="3">Creator</n-text>
+                <strong>{{ dataset.creator_name || dataset.created_by }}</strong>
+              </div>
+              <div class="contract-field contract-field-wide">
+                <n-text depth="3">Labels</n-text>
+                <n-space v-if="labelSpace.length" size="small">
+                  <n-tag v-for="label in labelSpace" :key="label" size="small">
+                    {{ label }}
+                  </n-tag>
+                </n-space>
+                <n-text v-else depth="3">No labels configured</n-text>
+              </div>
+              <div class="contract-field contract-field-wide">
+                <n-text depth="3">Available views</n-text>
+                <n-space v-if="(dataset.view_types ?? []).length" size="small">
+                  <n-tag v-for="viewType in dataset.view_types ?? []" :key="viewType" size="small">
+                    {{ viewType }}
+                  </n-tag>
+                </n-space>
+                <n-text v-else depth="3">No registered views</n-text>
+              </div>
+            </div>
+          </n-card>
+          <DatasetSparseSummary
+            v-if="isSparse"
+            :dataset-id="id"
+            :sparse-summary="sparseSummary"
+            :is-loading="sparseSummaryQuery.isLoading.value"
+            @select-sample="selectedSampleId = $event"
+          />
+        </n-tab-pane>
+        <n-tab-pane v-if="hasSampleBrowser" name="samples" tab="Samples">
           <DatasetViewPage
             :dataset-id="id"
             view-type="image_input_v1"
             @select-sample="selectedSampleId = $event"
           />
         </n-tab-pane>
-        <n-tab-pane name="train" tab="Train"><DatasetTrainTab :dataset-id="id" /></n-tab-pane>
+        <n-tab-pane name="train" tab="Train">
+          <DatasetTrainTab :dataset-id="id" :dataset="dataset" />
+        </n-tab-pane>
         <n-tab-pane name="predict" tab="Predict"><DatasetPredictTab :dataset-id="id" /></n-tab-pane>
         <n-tab-pane v-if="false" name="export" tab="Export">
           <n-empty
@@ -250,12 +337,7 @@ function openScClassify() {
           <template v-if="dataset?.ls_project_url"
             ><iframe
               :src="dataset.ls_project_url"
-              style="
-                width: 100%;
-                height: calc(100vh - 200px);
-                border: 1px solid #eee;
-                border-radius: 8px;
-              "
+              class="annotation-frame"
               allow="clipboard-read; clipboard-write"
             />
             <div style="margin-top: 8px; display: flex; align-items: center; gap: 8px">
@@ -299,3 +381,118 @@ function openScClassify() {
     </template>
   </div>
 </template>
+
+<style scoped>
+.dataset-detail-page {
+  min-width: 0;
+}
+
+.dataset-detail-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.dataset-heading {
+  min-width: 0;
+}
+
+.back-button {
+  margin-bottom: 8px;
+}
+
+.dataset-title-block {
+  min-width: 0;
+}
+
+.dataset-title-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.dataset-title-line h1 {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 26px;
+  line-height: 1.25;
+}
+
+.dataset-id {
+  display: block;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+
+.dataset-header-actions {
+  flex: 0 0 auto;
+}
+
+.dataset-tabs {
+  margin-top: 16px;
+}
+
+.dataset-contract-card {
+  margin-top: 4px;
+}
+
+.dataset-contract-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px 28px;
+}
+
+.contract-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.contract-field strong {
+  overflow-wrap: anywhere;
+  font-weight: 600;
+}
+
+.contract-field-wide {
+  grid-column: 1 / -1;
+}
+
+.annotation-frame {
+  width: 100%;
+  height: calc(100vh - 240px);
+  min-height: 520px;
+  border: 1px solid var(--n-border-color, #e5e7eb);
+  border-radius: 8px;
+}
+
+@media (max-width: 720px) {
+  .dataset-detail-header {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .dataset-header-actions :deep(.n-button) {
+    flex: 1 1 auto;
+  }
+
+  .dataset-contract-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .contract-field-wide {
+    grid-column: auto;
+  }
+
+  .annotation-frame {
+    height: calc(100vh - 280px);
+    min-height: 420px;
+  }
+}
+</style>

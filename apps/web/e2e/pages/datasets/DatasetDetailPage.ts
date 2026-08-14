@@ -130,12 +130,12 @@ export class DatasetDetailPage extends BasePage {
 
   /** Wait for the training jobs view to render after switching to Train tab. */
   async waitForTrainTabLoaded(): Promise<void> {
-    await this.page.getByText("Training Jobs").waitFor();
+    await this.page.getByText("Training runs", { exact: true }).waitFor();
   }
 
   /** Wait for the prediction jobs view to render after switching to Predict tab. */
   async waitForPredictTabLoaded(): Promise<void> {
-    await this.page.getByText("Prediction Jobs").waitFor();
+    await this.page.getByText("Prediction runs", { exact: true }).waitFor();
   }
 
   // ── Train tab actions ─────────────────────────────────────────
