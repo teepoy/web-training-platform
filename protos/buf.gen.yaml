@@ -1,18 +1,17 @@
 version: v1
 plugins:
-  - name: python
-    out: ../libs/protos/src/proto_stubs
   - plugin: mypy
     out: ../libs/protos/src/proto_stubs
+    path: ../.venv/bin/protoc-gen-mypy
   - plugin: es
     out: ../apps/web/src/features/sc/generated/proto
     opt: target=ts
-    path: protoc-gen-es
+    path: ../apps/web/node_modules/.bin/protoc-gen-es
   - plugin: go
     out: ../services/image-parser/gen/go
     opt: paths=source_relative
-    path: protoc-gen-go
+    path: ../.cache/protobuf-tools/bin/protoc-gen-go
   - plugin: go-grpc
     out: ../services/image-parser/gen/go
     opt: paths=source_relative
-    path: protoc-gen-go-grpc
+    path: ../.cache/protobuf-tools/bin/protoc-gen-go-grpc
