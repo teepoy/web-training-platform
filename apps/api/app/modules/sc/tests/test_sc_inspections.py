@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
@@ -9,11 +10,13 @@ from types import SimpleNamespace
 from fastapi.testclient import TestClient
 import polars as pl
 import pytest
+from sqlalchemy import event
 
 from app.main import app
 from app.modules.sc.port.http.deps import get_upstream_reader
 from app.modules.sc.port.http.router import _apply_sample_table_sort
 from proto_stubs.sc.v1 import sample_pb2
+from tests.conftest import create_dataset
 
 pytestmark = pytest.mark.integration
 
@@ -80,6 +83,7 @@ def test_list_inspections_returns_items_and_total(
                 and "recipe_id" in it
                 and "defects" in it
                 and "images" in it
+                and "datasets" in it
                 for it in msg["items"]
             )
             # All required fields are present (no defaults)
@@ -91,6 +95,59 @@ def test_list_inspections_returns_items_and_total(
                 assert it["recipe_id"] != ""
                 assert it["defects"] >= 0
                 assert it["images"] >= 0
+    finally:
+        app.dependency_overrides.pop(get_upstream_reader, None)
+
+
+def test_list_inspections_bulk_loads_related_datasets_in_one_select(
+    mock_wafer_db_reader,
+):
+    app.dependency_overrides[get_upstream_reader] = lambda: mock_wafer_db_reader
+    try:
+        with TestClient(app) as client:
+            initial = client.get(
+                "/api/v1/sc/inspections",
+                params={"start_time": SAFE_START, "end_time": SAFE_END},
+            )
+            assert initial.status_code == 200, initial.text
+            inspection = initial.json()["items"][0]
+            repository = app.state.app_context.datasets.dataset_repository
+
+            expected_ids: set[str] = set()
+            for index in range(8):
+                dataset_id = create_dataset(client, name=f"sc-source-dataset-{index}")
+                expected_ids.add(dataset_id)
+                asyncio.run(
+                    repository.update_dataset_meta(
+                        dataset_id,
+                        {
+                            "source_inspection_time": inspection["inspection_time"],
+                            "source_wafer_key": inspection["wafer_key"],
+                        },
+                    )
+                )
+
+            select_count = 0
+
+            def count_selects(_conn, _cursor, statement, *_args) -> None:
+                nonlocal select_count
+                if statement.lstrip().upper().startswith("SELECT"):
+                    select_count += 1
+
+            engine = app.state.app_context.shared.db_engine.sync_engine
+            event.listen(engine, "before_cursor_execute", count_selects)
+            try:
+                response = client.get(
+                    "/api/v1/sc/inspections",
+                    params={"start_time": SAFE_START, "end_time": SAFE_END},
+                )
+            finally:
+                event.remove(engine, "before_cursor_execute", count_selects)
+
+            assert response.status_code == 200, response.text
+            datasets = response.json()["items"][0]["datasets"]
+            assert expected_ids.issubset({dataset["id"] for dataset in datasets})
+            assert select_count == 1
     finally:
         app.dependency_overrides.pop(get_upstream_reader, None)
 

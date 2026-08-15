@@ -4,6 +4,9 @@
       :datasets="datasets"
       :columns="columns"
       :on-row-click="(row) => emit('view', row.id)"
+      :checked-row-keys="checkedRowKeys"
+      :row-checkable="(row) => row.created_by === currentUserId"
+      :on-update-checked-row-keys="(keys) => emit('update:checked-row-keys', keys)"
       :pagination="pagination"
     />
   </div>
@@ -11,6 +14,7 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
+import type { DataTableRowKey } from "naive-ui";
 import { DatasetTable } from "@/shared";
 import { buildDatasetColumns } from "@/features/datasets/application/surface";
 import { resolveDatasetTaskType } from "@/features/datasets/presentation/pages/registry";
@@ -21,6 +25,7 @@ const props = defineProps<{
   currentOrgId: string | null;
   currentUserId?: string | null;
   isSuperadmin: boolean;
+  checkedRowKeys?: DataTableRowKey[];
   pagination?: false | import("naive-ui").PaginationProps;
 }>();
 
@@ -29,6 +34,7 @@ const emit = defineEmits<{
   "toggle-public": [payload: { id: string; isPublic: boolean }];
   rename: [row: DatasetListItem];
   delete: [row: DatasetListItem];
+  "update:checked-row-keys": [keys: DataTableRowKey[]];
 }>();
 
 const columns = computed(() =>

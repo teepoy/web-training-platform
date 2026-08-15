@@ -129,6 +129,7 @@ export interface PreviewPageState {
   importDatasetName: Ref<string>;
   importStorageMode: Ref<"file_shard_sparse">;
   isImporting: Ref<boolean>;
+  importingInspectionKey: Ref<string | null>;
   importProgress: Ref<ScImportProgressEvent>;
   importError: Ref<string>;
   storageModeOptions: { label: string; value: string }[];
@@ -217,7 +218,14 @@ export function usePreviewPage(): PreviewPageState {
     },
   );
 
-  type SummaryFilterKey = "inspection_time" | "lot_id" | "wafer_id" | "layer_id" | "device";
+  type SummaryFilterKey =
+    | "inspection_time"
+    | "lot_id"
+    | "wafer_id"
+    | "layer_id"
+    | "device"
+    | "eqp_id"
+    | "recipe_id";
   type SummaryFilterOptionKey = Exclude<SummaryFilterKey, "inspection_time">;
 
   const SUMMARY_FILTER_OPTION_LIMIT = 500;
@@ -258,6 +266,8 @@ export function usePreviewPage(): PreviewPageState {
       wafer_id: new Set(),
       layer_id: new Set(),
       device: new Set(),
+      eqp_id: new Set(),
+      recipe_id: new Set(),
     };
     const filterKeys = Object.keys(valuesByKey) as SummaryFilterOptionKey[];
     for (const row of summaries.value) {
@@ -274,6 +284,8 @@ export function usePreviewPage(): PreviewPageState {
       wafer_id: [],
       layer_id: [],
       device: [],
+      eqp_id: [],
+      recipe_id: [],
     };
     for (const key of filterKeys) {
       if (valuesByKey[key].size > SUMMARY_FILTER_OPTION_LIMIT) {
@@ -300,6 +312,12 @@ export function usePreviewPage(): PreviewPageState {
     key: SummaryFilterKey,
   ): (value: string | number, row: InspectionSummaryItem) => boolean {
     return (value, row) => String(row[key] ?? "") === String(value);
+  }
+
+  function summaryNumberSorter(
+    key: "defects" | "images",
+  ): (left: InspectionSummaryItem, right: InspectionSummaryItem) => number {
+    return (left, right) => Number(left[key]) - Number(right[key]);
   }
 
   const inspectionColumns = computed<DataTableColumns<InspectionSummaryItem>>(() => [
@@ -348,15 +366,37 @@ export function usePreviewPage(): PreviewPageState {
       filterOptions: summaryFilterOptions("device"),
       filterMultiple: true,
     },
-    { key: "defects", title: "Defects", width: 80 },
+    {
+      key: "defects",
+      title: "Defects",
+      width: 80,
+      sorter: summaryNumberSorter("defects"),
+    },
     {
       key: "images",
       title: "Images",
       width: 120,
       ellipsis: { tooltip: true },
+      sorter: summaryNumberSorter("images"),
     },
-    { key: "eqp_id", title: "Equipment ID", width: 80 },
-    { key: "recipe_id", title: "Recipe ID", width: 80 },
+    {
+      key: "eqp_id",
+      title: "Equipment ID",
+      width: 120,
+      sorter: summaryStringSorter("eqp_id"),
+      filter: summaryStringFilter("eqp_id"),
+      filterOptions: summaryFilterOptions("eqp_id"),
+      filterMultiple: true,
+    },
+    {
+      key: "recipe_id",
+      title: "Recipe ID",
+      width: 120,
+      sorter: summaryStringSorter("recipe_id"),
+      filter: summaryStringFilter("recipe_id"),
+      filterOptions: summaryFilterOptions("recipe_id"),
+      filterMultiple: true,
+    },
   ]);
 
   // ── Tab system ───────────────────────────────────
@@ -702,6 +742,7 @@ export function usePreviewPage(): PreviewPageState {
   const importDatasetName = ref("");
   const importStorageMode = ref<"file_shard_sparse">("file_shard_sparse");
   const isImporting = ref(false);
+  const importingInspectionKey = ref<string | null>(null);
   const importProgress = ref<ScImportProgressEvent>({
     status: "",
     imported_count: 0,
@@ -742,7 +783,9 @@ export function usePreviewPage(): PreviewPageState {
 
   function importedDatasetIdForInspection(item: InspectionSummaryItem): string | null {
     return (
-      importedDatasetIdsByInspection.value[importKey(item.inspection_time, item.wafer_key)] ?? null
+      importedDatasetIdsByInspection.value[importKey(item.inspection_time, item.wafer_key)] ??
+      item.datasets?.[0]?.id ??
+      null
     );
   }
 
@@ -810,15 +853,31 @@ export function usePreviewPage(): PreviewPageState {
   async function importInspection(item: InspectionSummaryItem, notify = true): Promise<string> {
     const existing = importedDatasetIdForInspection(item);
     if (existing) return existing;
-    return runImport(
-      {
-        source_inspection_time: item.inspection_time,
-        source_wafer_key: item.wafer_key,
-        dataset_name: `Patch_${item.lot_id}_${item.wafer_id}_${sanitizeInspectionTime(item.inspection_time)}`,
-        storage_mode: importStorageMode.value,
-      },
-      notify,
-    );
+    const datasetName = `Patch_${item.lot_id}_${item.wafer_id}_${sanitizeInspectionTime(item.inspection_time)}`;
+    const key = rowKey(item);
+    importingInspectionKey.value = key;
+    try {
+      const datasetId = await runImport(
+        {
+          source_inspection_time: item.inspection_time,
+          source_wafer_key: item.wafer_key,
+          dataset_name: datasetName,
+          storage_mode: importStorageMode.value,
+        },
+        notify,
+      );
+      summaries.value = summaries.value.map((summary) =>
+        rowKey(summary) === key
+          ? {
+              ...summary,
+              datasets: [...(summary.datasets ?? []), { id: datasetId, name: datasetName }],
+            }
+          : summary,
+      );
+      return datasetId;
+    } finally {
+      if (importingInspectionKey.value === key) importingInspectionKey.value = null;
+    }
   }
 
   async function handleImport(): Promise<void> {
@@ -884,6 +943,7 @@ export function usePreviewPage(): PreviewPageState {
     importDatasetName,
     importStorageMode,
     isImporting,
+    importingInspectionKey,
     importProgress,
     importError,
     storageModeOptions,

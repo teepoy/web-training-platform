@@ -36,7 +36,12 @@ class DatasetCollectionManagementPort(
     ) -> DatasetCollection: ...
 
     async def list_collections(
-        self, org_id: str, *, offset: int, limit: int
+        self,
+        org_id: str,
+        *,
+        offset: int,
+        limit: int,
+        creator_id: str | None = None,
     ) -> tuple[list[DatasetCollection], int]: ...
 
     async def get_collection(

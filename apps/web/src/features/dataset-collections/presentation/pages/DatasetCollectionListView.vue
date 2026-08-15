@@ -17,9 +17,11 @@ import {
   NText,
   useMessage,
   type DataTableColumns,
+  type DataTableRowKey,
   type PaginationProps,
 } from "naive-ui";
 import {
+  deleteCollectionApiV1DatasetCollectionsCollectionIdDelete,
   listCollectionsApiV1DatasetCollectionsGet,
   listDatasetsApiV1DatasetsGet,
 } from "@/generated/orval/endpoints/api";
@@ -29,17 +31,28 @@ import {
   haveMatchingOrderedLabelSpaces,
 } from "@/features/dataset-collections/application/createCollectionWithMembers";
 import { useOrgStore } from "@/features/auth/application/org";
+import { useAuthStore } from "@/features/auth/application/store";
 import { orgScopedQueryKey, toUserMessage } from "@/shared/api";
+import { useDefaultCreatorFilter } from "@/shared/composables/useDefaultCreatorFilter";
+import BulkSelectionToolbar from "@/shared/components/bulk-selection-toolbar/BulkSelectionToolbar.vue";
+import { runBatchAction } from "@/shared/utils/runBatchAction";
 
 const router = useRouter();
 const queryClient = useQueryClient();
 const message = useMessage();
 const orgStore = useOrgStore();
+const authStore = useAuthStore();
+const { creatorFilter, isReady: creatorFilterReady } = useDefaultCreatorFilter(
+  () => orgStore.currentOrgId,
+  () => authStore.user?.id,
+);
 const createVisible = ref(false);
 const name = ref("");
 const description = ref("");
 const targetViewId = ref<string | null>(null);
 const selectedDatasetIds = ref<string[]>([]);
+const checkedCollectionIds = ref<DataTableRowKey[]>([]);
+const batchDeletePending = ref(false);
 const pagination = reactive<PaginationProps>({
   page: 1,
   pageSize: 20,
@@ -70,14 +83,16 @@ const collectionsQuery = useQuery({
       "dataset-collections",
       pagination.page,
       pagination.pageSize,
+      creatorFilter.value,
     ]),
   ),
   queryFn: () =>
     listCollectionsApiV1DatasetCollectionsGet({
       offset: ((pagination.page ?? 1) - 1) * (pagination.pageSize ?? 20),
       limit: pagination.pageSize ?? 20,
+      creator_id: creatorFilter.value ?? undefined,
     }),
-  enabled: computed(() => !!orgStore.currentOrgId),
+  enabled: computed(() => !!orgStore.currentOrgId && creatorFilterReady.value),
 });
 const datasetsQuery = useQuery({
   queryKey: computed(() => orgScopedQueryKey(orgStore.currentOrgId, ["datasets", "all"])),
@@ -102,6 +117,29 @@ watch(
     pagination.itemCount = total;
   },
   { immediate: true },
+);
+
+watch(creatorFilter, () => {
+  pagination.page = 1;
+  checkedCollectionIds.value = [];
+});
+
+watch(
+  () => [pagination.page, pagination.pageSize, orgStore.currentOrgId],
+  () => {
+    checkedCollectionIds.value = [];
+  },
+);
+
+const creatorOptions = computed(() => {
+  const user = authStore.user;
+  return user ? [{ label: user.name || user.email || user.id, value: user.id }] : [];
+});
+
+const emptyDescription = computed(() =>
+  creatorFilter.value
+    ? "You have not created any dataset collections yet"
+    : "No dataset collections have been created yet",
 );
 
 const targetViewOptions = computed(() => {
@@ -172,17 +210,86 @@ function openCreate(): void {
 function collectionRowProps(row: DatasetCollectionResponse): Record<string, unknown> {
   return {
     style: "cursor: pointer",
-    onClick: () => router.push(`/dataset-collections/${row.id}`),
+    onClick: (event: MouseEvent) => {
+      const target = event.target;
+      if (
+        target instanceof Element &&
+        target.closest("button, a, input, [role='checkbox'], [data-stop-row-click]")
+      ) {
+        return;
+      }
+      void router.push(`/dataset-collections/${row.id}`);
+    },
   };
 }
 
+const selectedCollections = computed(() => {
+  const selectedIds = new Set(checkedCollectionIds.value.map(String));
+  return collections.value.filter(
+    (collection) => selectedIds.has(collection.id) && collection.created_by === authStore.user?.id,
+  );
+});
+
+async function deleteSelectedCollections(): Promise<void> {
+  const selected = [...selectedCollections.value];
+  if (selected.length === 0 || batchDeletePending.value) return;
+  if (
+    !window.confirm(
+      `Delete ${selected.length} selected collection${selected.length === 1 ? "" : "s"}? Their saved snapshots will also be removed; source datasets are not changed.`,
+    )
+  ) {
+    return;
+  }
+
+  batchDeletePending.value = true;
+  try {
+    const result = await runBatchAction(selected, (collection) =>
+      deleteCollectionApiV1DatasetCollectionsCollectionIdDelete(collection.id),
+    );
+    checkedCollectionIds.value = result.failed.map(({ item }) => item.id);
+    if (result.succeeded.length > 0) {
+      await queryClient.invalidateQueries({
+        queryKey: orgScopedQueryKey(orgStore.currentOrgId, ["dataset-collections"]),
+      });
+    }
+    if (result.failed.length === 0) {
+      message.success(
+        `${result.succeeded.length} collection${result.succeeded.length === 1 ? "" : "s"} deleted`,
+      );
+    } else if (result.succeeded.length === 0) {
+      message.error(
+        toUserMessage(result.failed[0]?.error, "Failed to delete selected collections"),
+      );
+    } else {
+      message.warning(
+        `${result.succeeded.length} deleted; ${result.failed.length} could not be deleted and remain selected`,
+      );
+    }
+  } finally {
+    batchDeletePending.value = false;
+  }
+}
+
 const columns: DataTableColumns<DatasetCollectionResponse> = [
+  {
+    type: "selection",
+    disabled: (row) => row.created_by !== authStore.user?.id,
+  },
   { title: "Name", key: "name", minWidth: 180 },
   { title: "Target view", key: "target_view_id", minWidth: 160 },
   {
     title: "Definition",
     key: "definition_version",
     render: (row) => `v${row.definition_version}`,
+  },
+  {
+    title: "Creator",
+    key: "created_by",
+    minWidth: 130,
+    render: (row) =>
+      row.created_by === authStore.user?.id
+        ? authStore.user?.name || authStore.user?.email || "You"
+        : row.created_by,
   },
   {
     title: "Policy",
@@ -228,6 +335,32 @@ const columns: DataTableColumns<DatasetCollectionResponse> = [
     </div>
 
     <NCard>
+      <div class="collection-list-filters">
+        <NSelect
+          v-model:value="creatorFilter"
+          size="small"
+          clearable
+          placeholder="All creators"
+          :options="creatorOptions"
+          class="collection-list-creator"
+        />
+        <NText depth="3">Clear the creator filter to view collections from everyone.</NText>
+      </div>
+      <BulkSelectionToolbar
+        :selected-count="selectedCollections.length"
+        item-label="collection"
+        :loading="batchDeletePending"
+        @clear="checkedCollectionIds = []"
+      >
+        <NButton
+          size="small"
+          type="error"
+          :loading="batchDeletePending"
+          @click="deleteSelectedCollections"
+        >
+          Delete selected
+        </NButton>
+      </BulkSelectionToolbar>
       <NAlert v-if="collectionsQuery.isError.value" type="error" style="margin-bottom: 12px">
         {{ toUserMessage(collectionsQuery.error.value, "Failed to load dataset collections") }}
       </NAlert>
@@ -238,15 +371,17 @@ const columns: DataTableColumns<DatasetCollectionResponse> = [
         v-else-if="!collectionsQuery.isError.value"
         :columns="columns"
         :data="collections"
-        :loading="collectionsQuery.isLoading.value"
+        :loading="collectionsQuery.isLoading.value || !creatorFilterReady"
         :pagination="tablePagination"
         :row-key="(row: DatasetCollectionResponse) => row.id"
         :row-props="collectionRowProps"
+        :checked-row-keys="checkedCollectionIds"
         :scroll-x="820"
         remote
+        @update:checked-row-keys="checkedCollectionIds = $event"
       >
         <template #empty>
-          <NEmpty description="No collections yet">
+          <NEmpty :description="emptyDescription">
             <template #extra>
               <NButton @click="openCreate">Create a collection</NButton>
             </template>
@@ -297,8 +432,8 @@ const columns: DataTableColumns<DatasetCollectionResponse> = [
         />
       </NFormItem>
       <NText depth="3">
-        Linked datasets remain standalone. Membership changes create a new definition version;
-        training and prediction use an immutable revision.
+        Linked datasets remain standalone. Save the current setup as a fixed snapshot before using
+        it for review, training, or prediction.
       </NText>
       <template #footer>
         <NSpace justify="end">
@@ -342,6 +477,17 @@ h1 {
   font-size: 12px;
 }
 
+.collection-list-filters {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.collection-list-creator {
+  width: min(220px, 100%);
+}
+
 .mobile-table-hint {
   display: none;
 }
@@ -353,6 +499,15 @@ h1 {
   }
 
   .collection-list-header :deep(.n-button) {
+    width: 100%;
+  }
+
+  .collection-list-filters {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .collection-list-creator {
     width: 100%;
   }
 

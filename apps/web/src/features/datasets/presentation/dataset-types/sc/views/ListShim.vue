@@ -4,6 +4,7 @@
       :columns="columns"
       :data="datasets"
       :row-key="(row: DatasetListItem) => row.id"
+      :checked-row-keys="checkedRowKeys"
       :bordered="false"
       size="small"
       :pagination="pagination"
@@ -15,7 +16,7 @@
 
 <script setup lang="ts">
 import { computed, h } from "vue";
-import type { DataTableColumns, PaginationProps } from "naive-ui";
+import type { DataTableColumns, DataTableRowKey, PaginationProps } from "naive-ui";
 import { NButton, NDataTable, NTag, NText, NSpace } from "naive-ui";
 import type { DatasetListItem } from "@/shared/datasets/types";
 
@@ -25,10 +26,12 @@ const props = withDefaults(
     currentOrgId: string | null;
     currentUserId?: string | null;
     isSuperadmin: boolean;
+    checkedRowKeys?: DataTableRowKey[];
     pagination?: false | PaginationProps;
   }>(),
   {
     currentUserId: null,
+    checkedRowKeys: () => [],
   },
 );
 
@@ -37,10 +40,11 @@ const emit = defineEmits<{
   "toggle-public": [payload: { id: string; isPublic: boolean }];
   rename: [row: DatasetListItem];
   delete: [row: DatasetListItem];
+  "update:checked-row-keys": [keys: DataTableRowKey[]];
 }>();
 
-function handleCheckedRowKeysChange(_keys: (string | number)[]) {
-  // Reserved for batch operations
+function handleCheckedRowKeysChange(keys: DataTableRowKey[]) {
+  emit("update:checked-row-keys", keys);
 }
 
 function resolveCreator(row: DatasetListItem): string {
@@ -53,6 +57,10 @@ function formatCreateTime(value: string): string {
 }
 
 const columns = computed<DataTableColumns<DatasetListItem>>(() => [
+  {
+    type: "selection",
+    disabled: (row) => row.created_by !== props.currentUserId,
+  },
   {
     title: "Name",
     key: "name",

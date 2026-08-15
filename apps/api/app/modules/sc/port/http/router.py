@@ -54,6 +54,7 @@ from app.modules.sc.schemas import (
     ScBulkAnnotationRequest,
     ScBulkAnnotationResponse,
     ScFilterParams,
+    ScInspectionDatasetItem,
     ScInspectionReviewImagesResponse,
     ScImportRequest,
     ScImportResponse,
@@ -167,6 +168,8 @@ def get_sc_filter_params(
 @router.get("/inspections")
 async def get_inspections(
     upstream_reader: ScUpstreamReaderDep,
+    repo: DatasetRepository = Depends(get_repository),
+    org: Organization = Depends(get_current_org),
     start_time: datetime = Query(),
     end_time: datetime = Query(),
     lot_id: Annotated[str | None, Query()] = None,
@@ -219,6 +222,30 @@ async def get_inspections(
                 device=row["device"],
             )
         )
+
+    datasets = await repo.list_datasets_for_sc_inspections(
+        [item.inspection_time for item in items],
+        org_id=org.id,
+    )
+    datasets_by_source: dict[tuple[str, int], list[ScInspectionDatasetItem]] = {}
+    for dataset in datasets:
+        source_time = dataset.dataset_meta.get("source_inspection_time")
+        source_wafer_key = dataset.dataset_meta.get("source_wafer_key")
+        if not isinstance(source_time, str) or not isinstance(source_wafer_key, int):
+            continue
+        datasets_by_source.setdefault((source_time, source_wafer_key), []).append(
+            ScInspectionDatasetItem(id=dataset.id, name=dataset.name)
+        )
+    items = [
+        item.model_copy(
+            update={
+                "datasets": datasets_by_source.get(
+                    (item.inspection_time, item.wafer_key), []
+                )
+            }
+        )
+        for item in items
+    ]
 
     resp = ScInspectionListResponse(items=items, total=len(items))
     return resp

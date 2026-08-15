@@ -252,3 +252,59 @@ def test_collection_membership_and_revision_mutations_require_creator() -> None:
                 app.dependency_overrides[get_current_user] = original_override
 
         assert [response.status_code for response in responses] == [403, 403, 403, 403]
+
+
+def test_collection_list_can_filter_by_creator() -> None:
+    with TestClient(app) as client:
+        first = client.post(
+            "/api/v1/dataset-collections",
+            json={
+                "name": "First creator collection",
+                "description": "",
+                "target_view_id": "patch_image_v1",
+                "duplicate_policy": "keep_all",
+                "missing_data_policy": "fail",
+            },
+        )
+        assert first.status_code == 200, first.text
+        first_creator = str(first.json()["created_by"])
+
+        original_override = app.dependency_overrides.get(get_current_user)
+        app.dependency_overrides[get_current_user] = lambda: _as_user("second-creator")
+        try:
+            second = client.post(
+                "/api/v1/dataset-collections",
+                json={
+                    "name": "Second creator collection",
+                    "description": "",
+                    "target_view_id": "patch_image_v1",
+                    "duplicate_policy": "keep_all",
+                    "missing_data_policy": "fail",
+                },
+            )
+        finally:
+            if original_override is None:
+                app.dependency_overrides.pop(get_current_user, None)
+            else:
+                app.dependency_overrides[get_current_user] = original_override
+
+        assert second.status_code == 200, second.text
+        filtered = client.get(
+            "/api/v1/dataset-collections",
+            params={"creator_id": "second-creator"},
+        )
+        assert filtered.status_code == 200, filtered.text
+        assert filtered.json()["total"] == 1
+        assert [item["id"] for item in filtered.json()["items"]] == [
+            second.json()["id"]
+        ]
+
+        first_filtered = client.get(
+            "/api/v1/dataset-collections",
+            params={"creator_id": first_creator},
+        )
+        assert first_filtered.status_code == 200, first_filtered.text
+        assert all(
+            item["created_by"] == first_creator
+            for item in first_filtered.json()["items"]
+        )

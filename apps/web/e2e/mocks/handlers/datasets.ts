@@ -12,6 +12,13 @@ export async function mockListDatasets(page: Page, datasets?: Dataset[]): Promis
   const body = datasets ?? [makeFlowerDataset()];
   await page.route("**/api/v1/datasets**", async (route) => {
     const url = new URL(route.request().url());
+    if (route.request().method() === "DELETE") {
+      const datasetId = url.pathname.split("/").pop();
+      const index = body.findIndex((dataset) => dataset.id === datasetId);
+      if (index >= 0) body.splice(index, 1);
+      await route.fulfill({ status: 204, body: "" });
+      return;
+    }
     if (url.pathname.endsWith("/datasets/creators")) {
       const creators = new Map<string, string>();
       for (const dataset of body) {

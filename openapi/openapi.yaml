@@ -1202,6 +1202,15 @@ paths:
             minimum: 1
             default: 50
             title: Limit
+        - name: creator_id
+          in: query
+          required: false
+          schema:
+            anyOf:
+              - type: string
+                maxLength: 255
+              - type: "null"
+            title: Creator Id
       responses:
         "200":
           description: Successful Response
@@ -8121,6 +8130,19 @@ components:
       required:
         - status
       title: ScImportResponse
+    ScInspectionDatasetItem:
+      properties:
+        id:
+          type: string
+          title: Id
+        name:
+          type: string
+          title: Name
+      type: object
+      required:
+        - id
+        - name
+      title: ScInspectionDatasetItem
     ScInspectionListResponse:
       properties:
         items:
@@ -8201,6 +8223,11 @@ components:
         device:
           type: string
           title: Device
+        datasets:
+          items:
+            $ref: "#/components/schemas/ScInspectionDatasetItem"
+          type: array
+          title: Datasets
       type: object
       required:
         - inspection_time

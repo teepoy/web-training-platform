@@ -126,20 +126,24 @@ class DatasetCollectionSqlRepository:
         *,
         offset: int,
         limit: int,
+        creator_id: str | None = None,
     ) -> tuple[list[DatasetCollection], int]:
         async with self._session_factory() as session:
+            conditions = [DatasetCollectionORM.org_id == org_id]
+            if creator_id is not None:
+                conditions.append(DatasetCollectionORM.created_by == creator_id)
             total = int(
                 await session.scalar(
                     select(func.count())
                     .select_from(DatasetCollectionORM)
-                    .where(DatasetCollectionORM.org_id == org_id)
+                    .where(*conditions)
                 )
                 or 0
             )
             rows = (
                 await session.execute(
                     select(DatasetCollectionORM)
-                    .where(DatasetCollectionORM.org_id == org_id)
+                    .where(*conditions)
                     .order_by(
                         DatasetCollectionORM.updated_at.desc(),
                         DatasetCollectionORM.id.desc(),

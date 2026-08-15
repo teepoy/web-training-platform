@@ -63,14 +63,7 @@ test.describe("SC Reclassify warmup and sidebar @mock", () => {
     const globalFilterBox = await globalFilterButton.boundingBox();
     expect(datasetNameBox).not.toBeNull();
     expect(globalFilterBox).not.toBeNull();
-    expect(globalFilterBox!.x).toBeGreaterThan(datasetNameBox!.x + datasetNameBox!.width);
-    expect(
-      Math.abs(
-        globalFilterBox!.y +
-          globalFilterBox!.height / 2 -
-          (datasetNameBox!.y + datasetNameBox!.height / 2),
-      ),
-    ).toBeLessThan(4);
+    expect(globalFilterBox!.y).toBeGreaterThan(datasetNameBox!.y + datasetNameBox!.height);
 
     await globalFilterButton.click();
     await expect(authedPage.getByText("Global Filters", { exact: true })).toBeVisible();
@@ -112,5 +105,24 @@ test.describe("SC Reclassify warmup and sidebar @mock", () => {
     await expect(authedPage.getByTestId("reclassify-code-row-60")).toContainText("Code 60");
 
     await expect(authedPage.getByTestId("reclassify-shortcut-button-60")).toHaveText("-");
+  });
+
+  test("Back always opens the active dataset detail page @mock", async ({ authedPage }) => {
+    await mockScDataset(authedPage, DATASET_ID, {
+      name: "Test SC Dataset",
+      label_space: ["Scratch", "Clean"],
+    });
+    await mockScPlotPoints(authedPage, DATASET_ID, 24);
+    await mockScDefectIds(authedPage, DATASET_ID, 24);
+    await mockScViewSamplesPaged(authedPage, DATASET_ID, "patch_image_v1", 24, 24);
+    await mockScSamplesWithLabels(authedPage, DATASET_ID, 24, 24);
+
+    await authedPage.goto("/sc/handbook");
+
+    const pom = new ReclassifyPagePom(authedPage);
+    await pom.gotoReclassify(DATASET_ID);
+    await authedPage.getByRole("button", { name: /Back$/ }).click();
+
+    await expect(authedPage).toHaveURL(`/datasets/${DATASET_ID}`, { timeout: 2_000 });
   });
 });

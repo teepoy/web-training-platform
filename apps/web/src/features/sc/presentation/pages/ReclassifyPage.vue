@@ -49,6 +49,7 @@ const themeVars = useThemeVars();
 const message = useMessage();
 const router = useRouter();
 const route = useRoute();
+const datasetId = computed(() => route.params.id as string);
 const collectionId = computed(() => {
   const value = route.params.collectionId;
   return typeof value === "string" && value.length > 0 ? value : null;
@@ -80,6 +81,10 @@ const collectionStackQuery = useQuery({
     );
     return { collection, revision, datasets };
   },
+});
+const collectionSnapshotLabel = computed(() => {
+  const revisionNumber = collectionStackQuery.data.value?.revision.revision_number;
+  return revisionNumber === undefined ? "Fixed snapshot" : `Snapshot r${revisionNumber}`;
 });
 const globalFilterTriggerTarget = ref<HTMLElement | null>(null);
 const taskInsightVisible = ref(false);
@@ -172,11 +177,7 @@ const containerStyle = computed(() => ({
 }));
 
 function goBack() {
-  if (collectionId.value) {
-    void router.push(`/dataset-collections/${collectionId.value}`);
-    return;
-  }
-  router.back();
+  void router.push(`/datasets/${datasetId.value}`);
 }
 
 const selectedDraftCount = computed(() => {
@@ -381,24 +382,56 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
       <template v-else>
         <!-- Header -->
         <div class="sc-header">
-          <div class="sc-header-left">
-            <NButton text size="small" @click="goBack">← Back</NButton>
-            <NTag v-if="collectionId" size="small" type="info">
-              {{ collectionStackQuery.data.value?.collection.name ?? "Collection" }}
-            </NTag>
-            <NTag v-if="collectionId" size="small" :bordered="false">
-              {{ collectionStackQuery.data.value?.datasets.length ?? 0 }} datasets combined
-            </NTag>
-            <div class="sc-dataset-title" data-testid="sc-dataset-name">
-              <NTooltip>
-                <template #trigger>
-                  <NText depth="2" class="sc-dataset-name">
-                    {{ page.dataset.value?.name ?? "Reclassify" }}
+          <div class="sc-context-row">
+            <div class="sc-context-primary">
+              <NButton text size="small" @click="goBack"> ← Back </NButton>
+              <div class="sc-context-copy">
+                <div class="sc-context-title-row">
+                  <NText
+                    class="sc-context-title"
+                    :data-testid="collectionId ? undefined : 'sc-dataset-name'"
+                  >
+                    {{
+                      collectionId
+                        ? (collectionStackQuery.data.value?.collection.name ?? "Collection")
+                        : (page.dataset.value?.name ?? "Reclassify")
+                    }}
                   </NText>
-                </template>
-                {{ page.dataset.value?.name ?? "Reclassify" }}
-              </NTooltip>
+                  <NTag v-if="collectionId" size="small" type="info">
+                    {{ collectionSnapshotLabel }}
+                  </NTag>
+                  <NTag v-if="collectionId" size="small" :bordered="false">
+                    {{ collectionStackQuery.data.value?.datasets.length ?? 0 }} datasets
+                  </NTag>
+                </div>
+                <div v-if="collectionId" class="sc-dataset-title" data-testid="sc-dataset-name">
+                  <NTooltip>
+                    <template #trigger>
+                      <NText depth="3" class="sc-dataset-name">
+                        Active dataset · {{ page.dataset.value?.name ?? "Reclassify" }}
+                      </NText>
+                    </template>
+                    {{ page.dataset.value?.name ?? "Reclassify" }}
+                  </NTooltip>
+                </div>
+              </div>
             </div>
+            <div class="sc-utility-actions">
+              <NButton
+                v-if="page.trainPredictTaskId.value"
+                size="small"
+                quaternary
+                @click="taskInsightVisible = true"
+              >
+                View Task
+              </NButton>
+              <NButton size="small" quaternary @click="router.push('/sc/handbook')">
+                Handbook
+              </NButton>
+            </div>
+          </div>
+
+          <div class="sc-action-row">
             <div class="sc-reclassify-filter-actions" data-testid="sc-filter-actions">
               <div
                 ref="globalFilterTriggerTarget"
@@ -430,51 +463,45 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
                 </NButton>
               </div>
             </div>
+            <div class="sc-training-actions">
+              <NSelect
+                v-model:value="page.selectedTrainerId.value"
+                data-testid="sc-trainer-select"
+                :options="page.trainerOptions.value"
+                placeholder="Select trainer"
+                size="small"
+                class="sc-trainer-select"
+              />
+              <NButton
+                data-testid="sc-train-predict"
+                size="small"
+                type="primary"
+                :disabled="!page.canTrainAndPredict.value"
+                :loading="page.isTrainPredictRunning.value || isPreparingFilteredWorkflow"
+                @click="handleTrainAndPredictClick"
+              >
+                Train &amp; Predict
+              </NButton>
+            </div>
           </div>
-          <div class="sc-header-right">
-            <NSelect
-              v-model:value="page.selectedTrainerId.value"
-              data-testid="sc-trainer-select"
-              :options="page.trainerOptions.value"
-              placeholder="Select trainer"
-              size="small"
-              :style="{ width: '160px' }"
-            />
-            <NButton
-              data-testid="sc-train-predict"
-              size="small"
-              type="primary"
-              :disabled="!page.canTrainAndPredict.value"
-              :loading="page.isTrainPredictRunning.value || isPreparingFilteredWorkflow"
-              @click="handleTrainAndPredictClick"
-            >
-              Train &amp; Predict
-            </NButton>
+
+          <div
+            v-if="page.trainPredictStatusMessage.value || page.trainingSampleLimitNotice.value"
+            class="sc-workflow-status"
+          >
             <NText
               v-if="page.trainPredictStatusMessage.value"
               data-testid="sc-train-predict-status"
               depth="3"
-              style="font-size: 11px"
             >
               {{ page.trainPredictStatusMessage.value }}
             </NText>
             <NTooltip v-if="page.trainingSampleLimitNotice.value" trigger="hover">
               <template #trigger>
-                <NText type="warning" style="font-size: 11px">1,000/class limit</NText>
+                <NText type="warning">Training uses at most 1,000 samples per class</NText>
               </template>
               {{ page.trainingSampleLimitNotice.value }}
             </NTooltip>
-            <NButton
-              v-if="page.trainPredictTaskId.value"
-              size="small"
-              quaternary
-              @click="taskInsightVisible = true"
-            >
-              View Task
-            </NButton>
-            <NButton size="small" quaternary @click="router.push('/sc/handbook')">
-              Handbook
-            </NButton>
           </div>
         </div>
 
@@ -637,20 +664,53 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
 
 /* ── Header ────────────────────────────────────────── */
 .sc-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 6px 0 10px;
+  display: grid;
+  gap: 8px;
+  padding: 4px 0 10px;
   border-bottom: 1px solid var(--cv-border, rgba(255, 255, 255, 0.1));
   flex-shrink: 0;
 }
 
-.sc-header-left {
+.sc-context-row,
+.sc-context-primary,
+.sc-context-title-row,
+.sc-utility-actions,
+.sc-action-row,
+.sc-training-actions,
+.sc-workflow-status {
   display: flex;
-  flex: 1 1 auto;
   align-items: center;
+}
+
+.sc-context-row,
+.sc-action-row {
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.sc-context-primary {
+  flex: 1 1 auto;
   gap: 12px;
   min-width: 0;
+}
+
+.sc-context-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.sc-context-title-row {
+  min-width: 0;
+  gap: 8px;
+}
+
+.sc-context-title {
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .sc-dataset-title {
@@ -676,11 +736,27 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
   flex: 0 0 auto;
 }
 
-.sc-header-right {
-  display: flex;
-  align-items: center;
+.sc-action-row {
+  padding: 8px 10px;
+  background: var(--cv-hover, rgba(255, 255, 255, 0.04));
+  border-radius: 8px;
+}
+
+.sc-training-actions,
+.sc-utility-actions,
+.sc-workflow-status {
   gap: 8px;
   flex-shrink: 0;
+}
+
+.sc-trainer-select {
+  width: 180px;
+}
+
+.sc-workflow-status {
+  justify-content: flex-end;
+  min-height: 18px;
+  font-size: 11px;
 }
 
 .sc-dataset-name {
@@ -694,21 +770,12 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
 }
 
 @media (max-width: 960px) {
-  .sc-header {
-    flex-wrap: wrap;
-    gap: 8px;
+  .sc-action-row {
+    align-items: stretch;
+    flex-direction: column;
   }
 
-  .sc-header-left,
-  .sc-header-right {
-    width: 100%;
-  }
-
-  .sc-header-left {
-    flex-basis: 100%;
-  }
-
-  .sc-header-right {
+  .sc-training-actions {
     flex-wrap: wrap;
     justify-content: flex-end;
   }
@@ -719,6 +786,57 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
 
   .sc-dataset-name {
     max-width: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .sc-context-row {
+    align-items: flex-start;
+  }
+
+  .sc-context-primary,
+  .sc-training-actions {
+    flex-direction: column;
+  }
+
+  .sc-context-primary {
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .sc-context-copy {
+    width: 100%;
+  }
+
+  .sc-training-actions {
+    align-items: stretch;
+  }
+
+  .sc-context-title-row {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .sc-context-title {
+    flex-basis: 100%;
+  }
+
+  .sc-utility-actions {
+    flex-direction: column;
+  }
+
+  .sc-reclassify-filter-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .sc-trainer-select {
+    width: 100%;
+  }
+
+  .sc-workflow-status {
+    align-items: flex-end;
+    flex-direction: column;
   }
 }
 

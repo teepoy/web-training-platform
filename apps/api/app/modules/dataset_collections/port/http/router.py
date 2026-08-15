@@ -76,10 +76,13 @@ async def list_collections(
     service: DatasetCollectionServiceDep,
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=200),
+    creator_id: str | None = Query(default=None, max_length=255),
 ) -> PaginatedResponse[DatasetCollectionResponse]:
-    del current_user
     collections, total = await service.list_collections(
-        org.id, offset=offset, limit=limit
+        org.id,
+        offset=offset,
+        limit=limit,
+        creator_id=creator_id,
     )
     return PaginatedResponse(
         items=[DatasetCollectionResponse.from_domain(item) for item in collections],

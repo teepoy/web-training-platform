@@ -66,6 +66,18 @@ function openInspectionInNewTab(row: InspectionSummaryItem): void {
   window.open(target.href, "_blank", "noopener");
 }
 
+function openDataset(datasetId: string): void {
+  void router.push(`/datasets/${datasetId}`);
+}
+
+async function createDataset(row: InspectionSummaryItem): Promise<void> {
+  try {
+    await page.importInspection(row);
+  } catch {
+    // importInspection already records and surfaces the transport error.
+  }
+}
+
 function openCollectionModal(): void {
   if (selectedInspections.value.length === 0) return;
   const first = selectedInspections.value[0];
@@ -154,6 +166,7 @@ async function buildCollection(): Promise<void> {
             :layer-id-filter="page.layerIdFilter.value"
             :device-filter="page.deviceFilter.value"
             :selected-row-keys="selectedInspectionKeys"
+            :importing-inspection-key="page.importingInspectionKey.value"
             @update:date-range="page.dateRange.value = $event"
             @update:lot-id-filter="page.lotIdFilter.value = $event"
             @update:eqp-id-filter="page.eqpIdFilter.value = $event"
@@ -162,6 +175,8 @@ async function buildCollection(): Promise<void> {
             @update:selected-row-keys="selectedInspectionKeys = $event"
             @search="page.searchInspections()"
             @row-click="openInspectionInNewTab"
+            @open-dataset="openDataset"
+            @create-dataset="createDataset"
           />
         </div>
       </div>

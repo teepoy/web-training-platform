@@ -58,6 +58,8 @@ export function makeModel(overrides?: Partial<ModelResponse>): ModelResponse {
     dataset_id: "dataset-e2e-1",
     dataset_name: "flowers-dataset",
     trainer_name: "resnet50-cls-v1",
+    created_by: "user-e2e-1",
+    creator_name: "E2E User",
     ...overrides,
   };
 }

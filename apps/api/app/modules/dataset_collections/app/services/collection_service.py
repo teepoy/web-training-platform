@@ -102,10 +102,15 @@ class DatasetCollectionService:
         )
 
     async def list_collections(
-        self, org_id: str, *, offset: int, limit: int
+        self,
+        org_id: str,
+        *,
+        offset: int,
+        limit: int,
+        creator_id: str | None = None,
     ) -> tuple[list[DatasetCollection], int]:
         return await self._repository.list_collections(
-            org_id, offset=offset, limit=limit
+            org_id, offset=offset, limit=limit, creator_id=creator_id
         )
 
     async def get_collection(

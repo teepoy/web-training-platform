@@ -8,32 +8,17 @@
  *  - provide/inject for ClassifyView sidebar integration
  */
 
-import {
-  ref,
-  computed,
-  watch,
-  provide,
-  type InjectionKey,
-  type Ref,
-} from "vue";
+import { ref, computed, watch, provide, type InjectionKey, type Ref } from "vue";
 import { useRoute } from "vue-router";
-import {
-  useAgentCore,
-  type UseAgentCoreReturn,
-  type UseAgentCoreOptions,
-} from "./useAgentCore";
+import { useAgentCore, type UseAgentCoreReturn, type UseAgentCoreOptions } from "./useAgentCore";
 import { streamGlobalAgentChat } from "@/shared/api/sse";
-import type {
-  AgentContext,
-  AgentPanelDescriptor,
-} from '@/generated/orval/models';
-import { useAuthStore } from '@/features/auth/application/store';
+import type { AgentContext, AgentPanelDescriptor } from "@/generated/orval/models";
+import { useAuthStore } from "@/features/auth/application/store";
 import { GLOBAL_AGENT_PANELS_KEY } from "@/shared/keys";
 
 /** Injection key so child views know the global agent send function. */
-export const GLOBAL_AGENT_SEND_KEY: InjectionKey<
-  (message: string) => Promise<void>
-> = Symbol("globalAgentSend");
+export const GLOBAL_AGENT_SEND_KEY: InjectionKey<(message: string) => Promise<void>> =
+  Symbol("globalAgentSend");
 
 export interface UseAgentAdapterReturn extends UseAgentCoreReturn {
   agentPanels: Ref<AgentPanelDescriptor[]>;
@@ -46,9 +31,7 @@ export function useAgentAdapter(): UseAgentAdapterReturn {
   const agentPanels = ref<AgentPanelDescriptor[]>([]);
 
   // Derive a stable session ID from the user
-  const sessionId = computed(
-    () => `global-${authStore.user?.id ?? "anon"}`,
-  );
+  const sessionId = computed(() => `global-${authStore.user?.id ?? "anon"}`);
 
   // Build context from the current route
   function buildContext(): AgentContext {
@@ -65,7 +48,7 @@ export function useAgentAdapter(): UseAgentAdapterReturn {
     if (path.includes("/jobs/") && params.id) {
       ctx.job_id = String(params.id);
     }
-    if (path.includes("/schedules/") && params.id) {
+    if ((path.includes("/automations/schedules/") || path.includes("/schedules/")) && params.id) {
       ctx.schedule_id = String(params.id);
     }
 
@@ -83,10 +66,7 @@ export function useAgentAdapter(): UseAgentAdapterReturn {
   );
 
   // Stream factory: bridges route/auth context into the transport
-  const streamFn: UseAgentCoreOptions["stream"] = async function* (
-    message,
-    signal,
-  ) {
+  const streamFn: UseAgentCoreOptions["stream"] = async function* (message, signal) {
     const request = {
       message,
       context: buildContext(),

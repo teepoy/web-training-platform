@@ -67,6 +67,13 @@ export async function mockListModels(page: Page, models?: ModelResponse[]): Prom
   const body = models ?? [makeModel()];
   await page.route("**/api/v1/models**", async (route) => {
     const url = new URL(route.request().url());
+    if (route.request().method() === "DELETE") {
+      const modelId = url.pathname.split("/").pop();
+      const index = body.findIndex((model) => model.id === modelId);
+      if (index >= 0) body.splice(index, 1);
+      await route.fulfill({ status: 204, body: "" });
+      return;
+    }
     if (url.pathname.endsWith("/models/creators")) {
       const creators = new Map<string, string>();
       for (const model of body) {

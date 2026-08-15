@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Protocol
 
 from app.shared.api.schemas import ArtifactRef, CreatorSummary, Dataset
@@ -32,6 +33,12 @@ class DatasetRepository(Protocol):
         dataset_ids: list[str],
         org_id: str | None = None,
     ) -> dict[str, str]: ...
+
+    async def list_datasets_for_sc_inspections(
+        self,
+        inspection_times: Sequence[str],
+        org_id: str | None = None,
+    ) -> list[Dataset]: ...
 
     async def count_datasets(
         self,

@@ -298,6 +298,7 @@ export * from './scImportRequest';
 export * from './scImportRequestMaxRows';
 export * from './scImportResponse';
 export * from './scImportResponseError';
+export * from './scInspectionDatasetItem';
 export * from './scInspectionListResponse';
 export * from './scInspectionReviewImagesResponse';
 export * from './scInspectionSummaryItem';

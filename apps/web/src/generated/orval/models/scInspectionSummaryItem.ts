@@ -4,6 +4,7 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
+import type { ScInspectionDatasetItem } from './scInspectionDatasetItem';
 
 export interface ScInspectionSummaryItem {
   inspection_time: string;
@@ -22,4 +23,5 @@ export interface ScInspectionSummaryItem {
   defects: number;
   images: number;
   device: string;
+  datasets?: ScInspectionDatasetItem[];
 }

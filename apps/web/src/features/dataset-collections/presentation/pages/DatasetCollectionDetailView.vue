@@ -14,6 +14,7 @@ import {
   NSpin,
   NTag,
   NText,
+  NTooltip,
   useMessage,
   type DataTableColumns,
 } from "naive-ui";
@@ -219,10 +220,10 @@ const revisionMutation = useMutation({
     });
   },
   onSuccess: async () => {
-    message.success("Immutable collection revision created");
+    message.success("Fixed snapshot created");
     await refreshCollection();
   },
-  onError: (error) => message.error(toUserMessage(error, "Failed to create revision")),
+  onError: (error) => message.error(toUserMessage(error, "Failed to create snapshot")),
 });
 
 function openStack(): void {
@@ -278,8 +279,16 @@ const memberColumns: DataTableColumns<DatasetCollectionMemberResponse> = [
 ];
 
 const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
-  { title: "Revision", key: "revision_number", render: (row) => `r${row.revision_number}` },
-  { title: "Definition", key: "definition_version", render: (row) => `v${row.definition_version}` },
+  {
+    title: "Snapshot",
+    key: "revision_number",
+    render: (row) => `r${row.revision_number}`,
+  },
+  {
+    title: "Saved from setup",
+    key: "definition_version",
+    render: (row) => `v${row.definition_version}`,
+  },
   {
     title: "Status",
     key: "status",
@@ -287,7 +296,7 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
       h(
         NTag,
         { type: row.status === "ready" ? "success" : "error" },
-        { default: () => row.status },
+        { default: () => (row.status === "ready" ? "Ready to use" : "Failed") },
       ),
   },
   { title: "Rows", key: "row_count", render: (row) => row.row_count?.toLocaleString() ?? "—" },
@@ -317,7 +326,7 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
           :type="revisionOutdated ? 'primary' : 'default'"
           @click="revisionMutation.mutate()"
         >
-          {{ latestReadyRevision ? "Create current revision" : "Create first revision" }}
+          {{ latestReadyRevision ? "Save current setup as snapshot" : "Save first snapshot" }}
         </NButton>
         <NButton
           :type="revisionOutdated ? 'default' : 'primary'"
@@ -326,8 +335,8 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
         >
           {{
             latestReadyRevision
-              ? `Review revision r${latestReadyRevision.revision_number}`
-              : "No revision to review"
+              ? `Review snapshot r${latestReadyRevision.revision_number}`
+              : "No snapshot to review"
           }}
         </NButton>
       </NSpace>
@@ -340,17 +349,21 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
     <template v-else-if="collection">
       <NAlert v-if="!canModify" type="info">
         This collection is read-only for you. Only its creator can change membership or create
-        revisions.
+        snapshots.
+      </NAlert>
+      <NAlert type="info" :show-icon="false" class="snapshot-explainer">
+        <strong>What is a revision?</strong>
+        A revision is a fixed snapshot of the linked datasets and rules at one point in time.
+        Review, training, and prediction use that snapshot so their input stays reproducible even if
+        you change the collection later.
       </NAlert>
       <NAlert v-if="!latestReadyRevision" type="info">
-        This collection does not have an immutable revision yet. Create one before using it for
-        review, training, or prediction.
+        This collection does not have a saved snapshot yet. Save one before using it for review,
+        training, or prediction.
       </NAlert>
       <NAlert v-else-if="revisionOutdated" type="warning">
-        Membership has changed since the latest ready revision. Create a new revision before using
-        the current composition. The review action still opens r{{
-          latestReadyRevision.revision_number
-        }}.
+        The collection setup has changed since the latest snapshot. Save a new snapshot to use the
+        current setup. Review still opens snapshot r{{ latestReadyRevision.revision_number }}.
       </NAlert>
       <NCard size="small">
         <div class="collection-summary-grid">
@@ -359,7 +372,12 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
             <strong>{{ collection.target_view_id }}</strong>
           </div>
           <div class="collection-summary-field">
-            <NText depth="3">Current definition</NText>
+            <NTooltip>
+              <template #trigger>
+                <NText depth="3" class="help-label">Current setup version</NText>
+              </template>
+              Increases whenever linked datasets or their rules change.
+            </NTooltip>
             <strong>v{{ collection.definition_version }}</strong>
           </div>
           <div class="collection-summary-field">
@@ -367,7 +385,12 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
             <strong>{{ members.length }}</strong>
           </div>
           <div class="collection-summary-field">
-            <NText depth="3">Ready revision</NText>
+            <NTooltip>
+              <template #trigger>
+                <NText depth="3" class="help-label">Latest fixed snapshot</NText>
+              </template>
+              The reproducible input used by review, training, and prediction.
+            </NTooltip>
             <strong>{{
               latestReadyRevision ? `r${latestReadyRevision.revision_number}` : "None"
             }}</strong>
@@ -391,7 +414,7 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
         <NEmpty v-else description="No datasets linked" />
       </NCard>
 
-      <NCard title="Immutable revisions">
+      <NCard title="Saved snapshots (revisions)">
         <NDataTable
           v-if="(revisionsQuery.data.value ?? []).length > 0"
           :columns="revisionColumns"
@@ -399,7 +422,7 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
           :row-key="(row: DatasetCollectionRevisionResponse) => row.id"
           :scroll-x="640"
         />
-        <NEmpty v-else description="Create a revision to train or predict this composition" />
+        <NEmpty v-else description="Save a snapshot to train or predict this collection" />
       </NCard>
     </template>
 
@@ -473,6 +496,16 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
   display: flex;
   justify-content: center;
   padding: 56px;
+}
+
+.snapshot-explainer strong {
+  margin-right: 6px;
+}
+
+.help-label {
+  cursor: help;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
 }
 
 .collection-summary-grid {

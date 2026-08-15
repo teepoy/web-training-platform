@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive } from "vue";
+import { computed, h, reactive } from "vue";
 import {
   NButton,
   NDataTable,
@@ -7,10 +7,12 @@ import {
   NInput,
   NSpace,
   NText,
+  NTooltip,
   type DataTableColumns,
   type PaginationProps,
 } from "naive-ui";
 import type { InspectionSummaryItem } from "@/features/sc/domain/models";
+import { shouldIgnoreSummaryRowClick } from "./summaryTableInteraction";
 
 const props = defineProps<{
   dateRange: [number, number] | null;
@@ -26,6 +28,7 @@ const props = defineProps<{
   layerIdFilter: string;
   deviceFilter: string;
   selectedRowKeys: string[];
+  importingInspectionKey: string | null;
 }>();
 
 const emit = defineEmits<{
@@ -36,6 +39,8 @@ const emit = defineEmits<{
   (e: "update:deviceFilter", value: string): void;
   (e: "search"): void;
   (e: "rowClick", row: InspectionSummaryItem): void;
+  (e: "openDataset", datasetId: string): void;
+  (e: "createDataset", row: InspectionSummaryItem): void;
   (e: "update:selectedRowKeys", value: string[]): void;
 }>();
 
@@ -46,6 +51,59 @@ function rowKey(row: InspectionSummaryItem): string {
 const selectableColumns = computed<DataTableColumns<InspectionSummaryItem>>(() => [
   { type: "selection", multiple: true, width: 42 },
   ...props.inspectionColumns,
+  {
+    key: "datasets",
+    title: "Dataset",
+    width: 220,
+    fixed: "right",
+    render: (row) => {
+      const datasets = row.datasets ?? [];
+      if (datasets.length === 0) {
+        return h(
+          NButton,
+          {
+            size: "tiny",
+            type: "primary",
+            secondary: true,
+            loading: props.importingInspectionKey === rowKey(row),
+            disabled:
+              props.importingInspectionKey !== null && props.importingInspectionKey !== rowKey(row),
+            "data-row-click-stop": true,
+            "data-testid": `create-dataset-${rowKey(row)}`,
+            onClick: (event: MouseEvent) => {
+              event.stopPropagation();
+              emit("createDataset", row);
+            },
+          },
+          { default: () => "Create Dataset" },
+        );
+      }
+      return h(
+        NSpace,
+        { size: 6, wrap: true },
+        {
+          default: () =>
+            datasets.map((dataset) =>
+              h(
+                NButton,
+                {
+                  size: "tiny",
+                  text: true,
+                  type: "primary",
+                  "data-row-click-stop": true,
+                  "data-testid": `open-dataset-${dataset.id}`,
+                  onClick: (event: MouseEvent) => {
+                    event.stopPropagation();
+                    emit("openDataset", dataset.id);
+                  },
+                },
+                { default: () => dataset.name },
+              ),
+            ),
+        },
+      );
+    },
+  },
 ]);
 
 const clickableRowStyle = { cursor: "pointer" };
@@ -68,7 +126,11 @@ function rowProps(row: InspectionSummaryItem): Record<string, unknown> {
   return {
     class: isLastOpened ? "sc-summary-row--last-opened" : "",
     style: clickableRowStyle,
-    onClick: () => emit("rowClick", row),
+    "data-testid": `inspection-row-${rowKey(row)}`,
+    onClick: (event: MouseEvent) => {
+      if (shouldIgnoreSummaryRowClick(event.target)) return;
+      emit("rowClick", row);
+    },
   };
 }
 </script>
@@ -77,6 +139,20 @@ function rowProps(row: InspectionSummaryItem): Record<string, unknown> {
   <div class="sc-preview-tabsummary">
     <div class="sc-preview-search-bar">
       <NSpace align="center" :wrap="true" :size="8">
+        <NTooltip trigger="hover">
+          <template #trigger>
+            <NButton
+              text
+              size="tiny"
+              aria-label="Inspection filter help"
+              data-testid="inspection-filter-help"
+            >
+              Filter help
+            </NButton>
+          </template>
+          Separate multiple values with commas. Use * as a wildcard (for example, LOT-*); a single *
+          or a blank field includes all values.
+        </NTooltip>
         <NDatePicker
           :value="dateRange"
           type="daterange"
@@ -87,7 +163,7 @@ function rowProps(row: InspectionSummaryItem): Record<string, unknown> {
         />
         <NInput
           :value="deviceFilter"
-          placeholder="Device (*, a,b)"
+          placeholder="Device"
           size="small"
           style="width: 140px"
           clearable
@@ -95,7 +171,7 @@ function rowProps(row: InspectionSummaryItem): Record<string, unknown> {
         />
         <NInput
           :value="layerIdFilter"
-          placeholder="Layer ID (*, a,b)"
+          placeholder="Layer ID"
           size="small"
           style="width: 140px"
           clearable
@@ -103,7 +179,7 @@ function rowProps(row: InspectionSummaryItem): Record<string, unknown> {
         />
         <NInput
           :value="lotIdFilter"
-          placeholder="Lot ID (*, a,b)"
+          placeholder="Lot ID"
           size="small"
           style="width: 140px"
           clearable
@@ -111,7 +187,7 @@ function rowProps(row: InspectionSummaryItem): Record<string, unknown> {
         />
         <NInput
           :value="eqpIdFilter"
-          placeholder="Equipment ID (*, a,b)"
+          placeholder="Equipment ID"
           size="small"
           style="width: 160px"
           clearable

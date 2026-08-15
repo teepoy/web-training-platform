@@ -8,4 +8,5 @@
 export type ListCollectionsApiV1DatasetCollectionsGetParams = {
 offset?: number;
 limit?: number;
+creator_id?: string | null;
 };

@@ -21,6 +21,7 @@ class DatasetCollectionRepository(Protocol):
         *,
         offset: int,
         limit: int,
+        creator_id: str | None = None,
     ) -> tuple[list[DatasetCollection], int]: ...
 
     async def get_collection(

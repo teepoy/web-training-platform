@@ -149,23 +149,6 @@ test("map selection filters the table and continuously accumulates exclusions @m
   await mockScViewSamplesPaged(authedPage, DATASET_ID, "patch_image_v1", 20, 20);
   await mockScSamplesWithLabels(authedPage, DATASET_ID, 20, 20);
 
-  let areaSelectionCount = 0;
-  await authedPage.route(`**/api/v1/sc/data/datasets/${DATASET_ID}/query`, async (route) => {
-    const body = route.request().postDataJSON() as { description?: string } | null;
-    if (body?.description !== "sc-workbench.selection.rectangle") {
-      await route.fallback();
-      return;
-    }
-    areaSelectionCount += 1;
-    const defectIds = areaSelectionCount === 1 ? [1, 2] : [3, 4];
-    await route.fulfill({
-      status: 200,
-      contentType: "application/vnd.apache.arrow.stream",
-      headers: { "X-SC-Data-Revision": "0" },
-      body: Buffer.from(tableToIPC(tableFromArrays({ defect_id: defectIds }))),
-    });
-  });
-
   const tableRequests: Array<{ sql: string; parameters: unknown[] }> = [];
   const mapRequests: Array<{ sql: string; parameters: unknown[] }> = [];
   authedPage.on("request", (request) => {
@@ -182,7 +165,26 @@ test("map selection filters the table and continuously accumulates exclusions @m
   const page = new ReclassifyPagePom(authedPage);
   await page.gotoReclassify(DATASET_ID);
   const map = authedPage.getByTestId("sc-unified-map");
+  await expect.poll(() => tableRequests.length).toBeGreaterThan(0);
+  tableRequests.length = 0;
+  await map.evaluate((element) => {
+    let areaSelectionCount = 0;
+    const mapElement = element as HTMLElement & {
+      updateSelection: (command: { operation: string }) => Promise<number[]>;
+    };
+    mapElement.updateSelection = async (command) => {
+      if (command.operation !== "append") return [];
+      areaSelectionCount += 1;
+      return areaSelectionCount === 1 ? [1, 2] : [3, 4];
+    };
+  });
+  const markMapReady = async () => {
+    await map.evaluate((element) => {
+      element.dispatchEvent(new CustomEvent("map-ready", { bubbles: true }));
+    });
+  };
   const emitBoxSelection = async () => {
+    await markMapReady();
     await map.evaluate((element) => {
       element.dispatchEvent(
         new CustomEvent("box-select", {
@@ -307,7 +309,7 @@ test("Review Sampling manages rules and applies the SQL pipeline from Reclassify
   await page.reviewSamplingDialog.getByText("After sampling", { exact: true }).click();
   await expect(page.reviewSamplingDialog.getByTestId("sampling-assign-draft-label")).toBeChecked();
   await expect(page.reviewSamplingDialog.getByTestId("sampling-draft-label")).toContainText(
-    "0 · Unclassified",
+    "60 · Code 60",
   );
   await page.reviewSamplingDialog.getByText("Enabled rules", { exact: true }).click();
   await expect(page.reviewSamplingDialog.getByRole("radio", { name: "All" })).toBeChecked();

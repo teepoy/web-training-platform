@@ -18,8 +18,8 @@ test("dataset list renders current table surface @mock", async ({ authedPage }) 
   await expect(authedPage.getByRole("button", { name: "View", exact: true })).toBeVisible();
   await expect(authedPage.getByRole("button", { name: "Import Dataset" })).toHaveCount(0);
   await expect(authedPage.getByRole("button", { name: "Preview Dataset" })).toHaveCount(0);
-  await expect(authedPage.getByRole("button", { name: "Delete" })).toHaveCount(0);
-  await expect(authedPage.getByRole("button", { name: "Rename" })).toHaveCount(0);
+  await expect(authedPage.getByRole("button", { name: "Delete" })).toBeVisible();
+  await expect(authedPage.getByRole("button", { name: "Rename" })).toBeVisible();
 });
 
 test("dataset search and creator filters apply before pagination @mock", async ({
@@ -30,8 +30,8 @@ test("dataset search and creator filters apply before pagination @mock", async (
     makeFlowerDataset({
       id: "dataset-alpha",
       name: "Alpha Flowers",
-      created_by: "user-alice",
-      creator_name: "Alice",
+      created_by: "user-e2e-1",
+      creator_name: "E2E User",
     }),
     makeFlowerDataset({
       id: "dataset-beta",
@@ -71,15 +71,48 @@ test("row view button navigates to dataset detail @mock", async ({ authedPage, a
 });
 
 test("non-creator hides owner-only row actions @mock", async ({ authedPage, apiMocks }) => {
-  await apiMocks.auth.mockAuthMe({ is_superadmin: true });
+  await apiMocks.auth.mockAuthMe({
+    id: "user-admin-other",
+    name: "Other Admin",
+    email: "other-admin@example.com",
+    is_superadmin: true,
+  });
 
   const listPage = new DatasetListPage(authedPage);
   await listPage.goto("/datasets");
   await listPage.waitForLoaded();
+  await authedPage.locator(".dataset-list-creator .n-base-clear").click();
+  await listPage.expectDatasetVisible("flowers-dataset");
 
   await listPage.expectPublicControlsHidden();
   await expect(authedPage.getByRole("button", { name: "Delete" })).toHaveCount(0);
   await expect(authedPage.getByRole("button", { name: "Rename" })).toHaveCount(0);
+});
+
+test("selects and deletes multiple owned datasets without opening a row @mock", async ({
+  authedPage,
+  apiMocks,
+}) => {
+  await apiMocks.datasets.mockListDatasets([
+    makeFlowerDataset({ id: "dataset-bulk-1", name: "Bulk Flowers One" }),
+    makeFlowerDataset({ id: "dataset-bulk-2", name: "Bulk Flowers Two" }),
+  ]);
+  const listPage = new DatasetListPage(authedPage);
+  await listPage.goto("/datasets");
+  await listPage.waitForLoaded();
+
+  const rowCheckboxes = authedPage.getByRole("checkbox");
+  await rowCheckboxes.nth(1).check();
+  await rowCheckboxes.nth(2).check();
+  await expect(authedPage).toHaveURL(/\/datasets$/);
+  await expect(authedPage.getByText("2 datasets selected")).toBeVisible();
+
+  authedPage.once("dialog", (dialog) => dialog.accept());
+  await authedPage.getByRole("button", { name: "Delete selected" }).click();
+
+  await expect(authedPage.getByText("Bulk Flowers One")).toHaveCount(0);
+  await expect(authedPage.getByText("Bulk Flowers Two")).toHaveCount(0);
+  await expect(authedPage.getByTestId("bulk-selection-toolbar")).toHaveCount(0);
 });
 
 // ═══════════════════════════════════════════════════════════════════

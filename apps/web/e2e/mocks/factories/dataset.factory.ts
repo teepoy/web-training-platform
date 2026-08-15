@@ -16,6 +16,8 @@ export function makeFlowerDataset(overrides?: Partial<Dataset>): Dataset {
     created_at: "2026-01-01T00:00:00Z",
     org_id: "org-e2e-1",
     org_name: "E2E Org",
+    created_by: "user-e2e-1",
+    creator_name: "E2E User",
     is_public: false,
     ...overrides,
   };
@@ -36,6 +38,8 @@ export function makeImageDataset(overrides?: Partial<Dataset>): Dataset {
     created_at: "2026-01-01T00:00:00Z",
     org_id: "org-e2e-1",
     org_name: "E2E Org",
+    created_by: "user-e2e-1",
+    creator_name: "E2E User",
     is_public: false,
     ...overrides,
   };
@@ -53,6 +57,8 @@ export function makeDataset(dataset_type: string, overrides?: Partial<Dataset>):
     created_at: "2026-01-01T00:00:00Z",
     org_id: "org-e2e-1",
     org_name: "E2E Org",
+    created_by: "user-e2e-1",
+    creator_name: "E2E User",
     is_public: false,
     ...overrides,
   };

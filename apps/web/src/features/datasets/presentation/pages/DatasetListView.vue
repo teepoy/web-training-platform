@@ -22,17 +22,35 @@
         />
       </div>
 
+      <BulkSelectionToolbar
+        :selected-count="selectedDatasets.length"
+        item-label="dataset"
+        :loading="batchDeletePending"
+        @clear="checkedDatasetIds = []"
+      >
+        <NButton
+          size="small"
+          type="error"
+          :loading="batchDeletePending"
+          @click="deleteSelectedDatasets"
+        >
+          Delete selected
+        </NButton>
+      </BulkSelectionToolbar>
+
       <component
         :is="activeShim"
         :datasets="surface.datasets.value"
         :current-org-id="orgStore.currentOrgId"
         :current-user-id="authStore.user?.id ?? null"
         :is-superadmin="authStore.user?.is_superadmin ?? false"
+        :checked-row-keys="checkedDatasetIds"
         :pagination="pagination"
         @view="handleViewDataset"
         @toggle-public="handleTogglePublic"
         @delete="handleDeleteDataset"
         @rename="handleRenameDataset"
+        @update:checked-row-keys="checkedDatasetIds = $event"
       />
     </DatasetPageShell>
 
@@ -62,9 +80,18 @@ import { computed, reactive, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useQueryClient } from "@tanstack/vue-query";
 import { refDebounced } from "@vueuse/core";
-import { useMessage, NModal, NInput, NSelect, type PaginationProps } from "naive-ui";
+import {
+  useMessage,
+  NButton,
+  NModal,
+  NInput,
+  NSelect,
+  type DataTableRowKey,
+  type PaginationProps,
+} from "naive-ui";
 import { DatasetPageShell, DatasetToolbar } from "@/shared";
 import {
+  deleteDatasetApiV1DatasetsDatasetIdDelete,
   getListDatasetsApiV1DatasetsGetQueryKey,
   useDeleteDatasetApiV1DatasetsDatasetIdDelete,
   useListDatasetsApiV1DatasetsGet,
@@ -76,6 +103,9 @@ import { orgScopedQueryKey, toUserMessage } from "@/shared/api";
 import { useOrgStore } from "@/features/auth/application/org";
 import { useAuthStore } from "@/features/auth/application/store";
 import { useDatasetListSurface } from "@/features/datasets/application/surface";
+import { useDefaultCreatorFilter } from "@/shared/composables/useDefaultCreatorFilter";
+import BulkSelectionToolbar from "@/shared/components/bulk-selection-toolbar/BulkSelectionToolbar.vue";
+import { runBatchAction } from "@/shared/utils/runBatchAction";
 import { resolveDatasetShim } from "./schema-registry";
 import { resolveDatasetTaskType } from "./registry";
 import { getActiveDatasetType, getActiveViewTypes } from "./selection";
@@ -88,8 +118,13 @@ const qc = useQueryClient();
 const orgStore = useOrgStore();
 const authStore = useAuthStore();
 const keyword = ref("");
+const checkedDatasetIds = ref<DataTableRowKey[]>([]);
+const batchDeletePending = ref(false);
 const debouncedKeyword = refDebounced(keyword, 250);
-const creatorFilter = ref<string | null>(null);
+const { creatorFilter, isReady: creatorFilterReady } = useDefaultCreatorFilter(
+  () => orgStore.currentOrgId,
+  () => authStore.user?.id,
+);
 
 const pagination = reactive<PaginationProps>({
   page: 1,
@@ -124,14 +159,17 @@ const datasetListQueryPrefix = computed(() =>
 
 const {
   data: datasetPage,
-  isLoading,
+  isLoading: datasetQueryLoading,
   error,
 } = useListDatasetsApiV1DatasetsGet(datasetListParams, {
   query: {
     queryKey: datasetListQueryKey,
-    enabled: computed(() => !!orgStore.currentOrgId),
+    enabled: computed(() => !!orgStore.currentOrgId && creatorFilterReady.value),
   },
 });
+const isLoading = computed(
+  () => (!!orgStore.currentOrgId && !creatorFilterReady.value) || datasetQueryLoading.value,
+);
 
 const datasets = computed(() => datasetPage.value?.items ?? []);
 
@@ -141,16 +179,29 @@ const { data: datasetCreators } = useListDatasetCreatorsApiV1DatasetsCreatorsGet
     enabled: computed(() => !!orgStore.currentOrgId),
   },
 });
-const creatorOptions = computed(() =>
-  (datasetCreators.value ?? []).map((creator) => ({
+const creatorOptions = computed(() => {
+  const options = (datasetCreators.value ?? []).map((creator) => ({
     label: creator.name,
     value: creator.id,
-  })),
-);
+  }));
+  const user = authStore.user;
+  if (user && !options.some((option) => option.value === user.id)) {
+    options.unshift({ label: user.name || user.email || user.id, value: user.id });
+  }
+  return options;
+});
 
 watch([keyword, creatorFilter], () => {
   pagination.page = 1;
+  checkedDatasetIds.value = [];
 });
+
+watch(
+  () => [pagination.page, pagination.pageSize],
+  () => {
+    checkedDatasetIds.value = [];
+  },
+);
 
 watch(
   () => datasetPage.value?.total ?? 0,
@@ -258,6 +309,49 @@ const surface = useDatasetListSurface<DatasetListItem, User>({
   onDeleteDataset: handleDeleteDataset,
 });
 
+const selectedDatasets = computed(() => {
+  const selectedIds = new Set(checkedDatasetIds.value.map(String));
+  return surface.datasets.value.filter(
+    (dataset) => selectedIds.has(dataset.id) && dataset.created_by === (authStore.user?.id ?? null),
+  );
+});
+
+async function deleteSelectedDatasets(): Promise<void> {
+  const selected = [...selectedDatasets.value];
+  if (selected.length === 0 || batchDeletePending.value) return;
+  if (
+    !window.confirm(
+      `Delete ${selected.length} selected dataset${selected.length === 1 ? "" : "s"}? This removes their local jobs, samples, models, and Label Studio projects.`,
+    )
+  ) {
+    return;
+  }
+
+  batchDeletePending.value = true;
+  try {
+    const result = await runBatchAction(selected, (dataset) =>
+      deleteDatasetApiV1DatasetsDatasetIdDelete(dataset.id),
+    );
+    checkedDatasetIds.value = result.failed.map(({ item }) => item.id);
+    if (result.succeeded.length > 0) {
+      await qc.invalidateQueries({ queryKey: datasetListQueryPrefix.value });
+    }
+    if (result.failed.length === 0) {
+      message.success(
+        `${result.succeeded.length} dataset${result.succeeded.length === 1 ? "" : "s"} deleted`,
+      );
+    } else if (result.succeeded.length === 0) {
+      message.error(toUserMessage(result.failed[0]?.error, "Failed to delete selected datasets"));
+    } else {
+      message.warning(
+        `${result.succeeded.length} deleted; ${result.failed.length} could not be deleted and remain selected`,
+      );
+    }
+  } finally {
+    batchDeletePending.value = false;
+  }
+}
+
 const resolvedDatasetType = ref<string>();
 const resolvedViewTypes = ref<string[]>();
 watch(
@@ -276,8 +370,8 @@ watch(
     resolvedDatasetType.value = undefined;
     resolvedViewTypes.value = undefined;
     keyword.value = "";
-    creatorFilter.value = null;
     pagination.page = 1;
+    checkedDatasetIds.value = [];
   },
 );
 const activeDatasetType = computed(

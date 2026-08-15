@@ -5,6 +5,11 @@ from typing import Literal
 from pydantic import BaseModel, Field, model_validator
 
 
+class ScInspectionDatasetItem(BaseModel):
+    id: str
+    name: str
+
+
 class ScInspectionSummaryItem(BaseModel):
     inspection_time: str
     wafer_key: int
@@ -22,6 +27,7 @@ class ScInspectionSummaryItem(BaseModel):
     defects: int
     images: int
     device: str
+    datasets: list[ScInspectionDatasetItem] = Field(default_factory=list)
 
 
 class ScInspectionListResponse(BaseModel):
