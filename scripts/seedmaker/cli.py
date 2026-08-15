@@ -44,6 +44,11 @@ def main() -> int:
     parser.add_argument("--images-per-sample", type=int, default=None)
     parser.add_argument("--batch-size", type=int, default=None)
     parser.add_argument("--batch-report", type=int, default=None)
+    parser.add_argument("--classification-samples", type=int, default=180)
+    parser.add_argument("--review-samples", type=int, default=96)
+    parser.add_argument("--sc-samples", type=int, default=2500)
+    parser.add_argument("--sc-annotations", type=int, default=96)
+    parser.add_argument("--sc-inspection-time", default=None)
     parser.add_argument("--zip-samples", type=int, default=500)
     parser.add_argument("--reset", action="store_true")
     parser.add_argument("--s3-bucket", default="finetune-preview")
@@ -101,6 +106,7 @@ def main() -> int:
         config.org_name = args.org_name
     if args.org_slug:
         config.org_slug = args.org_slug
+    config.compose_file = args.compose_file
 
     from seedmaker import SeedRunner
 

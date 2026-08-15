@@ -6,7 +6,8 @@ import os
 import random
 from datetime import datetime, timedelta
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, func, inspect
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
 from .models import (
@@ -236,6 +237,7 @@ def seed_single_summary_mass(
     imaged_defects: int = 100,
     images_per_defect: int = 5,
     commit_batch: int = 10_000,
+    inspection_time: datetime | None = None,
 ) -> None:
     die_size_x = 8_000_000
     die_size_y = 5_000_000
@@ -245,11 +247,13 @@ def seed_single_summary_mass(
     wafer_key = 1
     lot_id = "A123456"
     wafer_id = "24"
-    now = datetime.now().astimezone()
-    inspection_time = now.replace(hour=4, minute=0, second=0, microsecond=0)
-    if now < inspection_time:
-        inspection_time -= timedelta(days=1)
-    total_images = imaged_defects * images_per_defect
+    if inspection_time is None:
+        now = datetime.now().astimezone()
+        inspection_time = now.replace(hour=4, minute=0, second=0, microsecond=0)
+        if now < inspection_time:
+            inspection_time -= timedelta(days=1)
+    imaged_count = min(total_defects, imaged_defects)
+    total_images = imaged_count * images_per_defect
 
     summary = _make_summary(
         wafer_key=wafer_key,
@@ -274,7 +278,7 @@ def seed_single_summary_mass(
     for start in range(1, total_defects + 1, commit_batch):
         end = min(start + commit_batch, total_defects + 1)
         for defect_id in range(start, end):
-            images = images_per_defect if defect_id <= imaged_defects else 0
+            images = images_per_defect if defect_id <= imaged_count else 0
             session.add(
                 _make_defect(
                     wafer_key,
@@ -288,7 +292,7 @@ def seed_single_summary_mass(
                 )
             )
 
-            if defect_id <= imaged_defects:
+            if defect_id <= imaged_count:
                 for img_id in range(1, images_per_defect + 1):
                     ts = inspection_time.strftime("%Y%m%d_%H%M%S")
                     filespec = f"s3://{DEFAULT_REVIEW_BUCKET}/{ts}/{wafer_key}/{defect_id:07d}_{img_id}.jpg"
@@ -302,7 +306,55 @@ def seed_single_summary_mass(
         print(f"  committed defects {start:,}–{end - 1:,}")
 
     print(
-        f"Seed complete: 1 summary, {total_defects:,} defects, {total_images:,} images (on {imaged_defects} defects)"
+        f"Seed complete: 1 summary, {total_defects:,} defects, "
+        f"{total_images:,} images (on {imaged_count} defects)"
+    )
+
+
+def mass_fixture_matches(
+    engine: Engine,
+    *,
+    total_defects: int,
+    imaged_defects: int,
+    images_per_defect: int,
+    inspection_time: datetime | None = None,
+) -> bool:
+    """Return whether the existing database is the requested mass fixture."""
+
+    table_names = {
+        InspWaferSummaryORM.__tablename__,
+        InspectDefectORM.__tablename__,
+        InspectImageORM.__tablename__,
+    }
+    inspector = inspect(engine)
+    if any(not inspector.has_table(table_name) for table_name in table_names):
+        return False
+
+    with Session(engine) as session:
+        summaries = session.query(InspWaferSummaryORM).all()
+        if len(summaries) != 1:
+            return False
+        summary = summaries[0]
+        defect_stats = session.query(
+            func.count(InspectDefectORM.defect_id),
+            func.count(func.distinct(InspectDefectORM.defect_id)),
+            func.min(InspectDefectORM.defect_id),
+            func.max(InspectDefectORM.defect_id),
+        ).one()
+        image_count = int(session.query(func.count(InspectImageORM.image_id)).scalar())
+
+    expected_images = min(total_defects, imaged_defects) * images_per_defect
+    return (
+        int(summary.defects) == total_defects
+        and int(summary.images) == expected_images
+        and (
+            inspection_time is None
+            or summary.inspection_time.replace(tzinfo=None)
+            == inspection_time.replace(tzinfo=None)
+        )
+        and tuple(int(value or 0) for value in defect_stats)
+        == (total_defects, total_defects, 1, total_defects)
+        and image_count == expected_images
     )
 
 
@@ -325,7 +377,18 @@ def main(argv: list[str] | None = None) -> None:
     )
     mass.add_argument("--batch", type=int, default=10_000, help="Commit batch size")
     mass.add_argument(
+        "--inspection-time",
+        type=datetime.fromisoformat,
+        default=None,
+        help="Fixed ISO inspection time for a repeatable fixture",
+    )
+    mass.add_argument(
         "--reset", action="store_true", help="Drop and recreate all tables"
+    )
+    mass.add_argument(
+        "--reuse-matching",
+        action="store_true",
+        help=("Reuse an existing mass fixture when counts match; otherwise replace it"),
     )
 
     rep = sub.add_parser("representative", help="Multi-lot/wafer representative data")
@@ -348,7 +411,27 @@ def main(argv: list[str] | None = None) -> None:
 
     engine = create_engine(args.db_url, echo=False)
 
-    if args.reset:
+    if args.command == "mass" and args.reset and args.reuse_matching:
+        parser.error("--reset and --reuse-matching are mutually exclusive")
+
+    if args.command == "mass" and args.reuse_matching:
+        if mass_fixture_matches(
+            engine,
+            total_defects=args.defects,
+            imaged_defects=args.imaged,
+            images_per_defect=args.images_per,
+            inspection_time=args.inspection_time,
+        ):
+            print(
+                "Reusing matching mass fixture: "
+                f"defects={args.defects:,}, "
+                f"images={min(args.defects, args.imaged) * args.images_per:,}"
+            )
+            print("Done.")
+            return
+        print("Existing mass fixture is missing or differs; replacing it.")
+
+    if args.reset or (args.command == "mass" and args.reuse_matching):
         Base.metadata.drop_all(engine)
         BaseZips.metadata.drop_all(engine)
 
@@ -366,6 +449,7 @@ def main(argv: list[str] | None = None) -> None:
                 imaged_defects=args.imaged,
                 images_per_defect=args.images_per,
                 commit_batch=args.batch,
+                inspection_time=args.inspection_time,
             )
 
     print("Done.")

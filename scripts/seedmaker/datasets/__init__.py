@@ -8,3 +8,4 @@ from seedmaker.datasets import imagenet_100_rchannel  # noqa: F401
 from seedmaker.datasets import imagenet_mock  # noqa: F401
 from seedmaker.datasets import imagenet_real  # noqa: F401
 from seedmaker.datasets import image_detection  # noqa: F401
+from seedmaker.datasets import dev_showcase  # noqa: F401

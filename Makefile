@@ -17,7 +17,11 @@ COMPOSE_DEV  := infra/compose/docker-compose.yaml -f infra/compose/docker-compos
 DATA_DIR     := infra/compose/data
 IMAGE_PARSER_GRPC_ADDR_HOST ?= 127.0.0.1:9092
 MINIO_ENDPOINT_HOST ?= localhost:9000
-SC_WAFER_MOCK_DEFECTS ?= 300000
+SC_WAFER_MOCK_DEFECTS ?= 2500
+SC_WAFER_MOCK_INSPECTION_TIME ?= 2026-08-01T04:00:00
+DEV_SEED_CLASSIFICATION_SAMPLES ?= 180
+DEV_SEED_REVIEW_SAMPLES ?= 96
+DEV_SEED_SC_ANNOTATIONS ?= 96
 SC_PATCH_ZIP_BUCKET ?= sc-patch-images
 SC_PATCH_ZIP_S3_ENDPOINT ?= http://localhost:9000
 
@@ -333,14 +337,15 @@ seed: ## Run unified seed CLI (usage: make seed ARGS="mock-multi-image --max-sam
 	uv run scripts/seed.py --api-url $(API_URL) --compose-file $(COMPOSE) $(ARGS)
 
 .PHONY: seed-dev
-seed-dev: seed-wafer-mock seed-wafer-patch-zips ## Seed dev demo data (wafer-demo + mock SQLite/S3, dev-no-auth org)
-	$(MAKE) seed ARGS="wafer-demo --no-promote --org-slug dev-no-auth --org-name 'Dev No Auth'"
+seed-dev: seed-wafer-mock seed-wafer-patch-zips ## Seed moderate, repeatable data for dataset/model/job/schedule/sensor pages
+	$(DEV_API_HOST_ENV) $(MAKE) seed ARGS="dev-showcase --no-promote --org-slug dev-no-auth --org-name 'Dev No Auth' --classification-samples $(DEV_SEED_CLASSIFICATION_SAMPLES) --review-samples $(DEV_SEED_REVIEW_SAMPLES) --sc-samples $(SC_WAFER_MOCK_DEFECTS) --sc-annotations $(DEV_SEED_SC_ANNOTATIONS) --sc-inspection-time $(SC_WAFER_MOCK_INSPECTION_TIME)"
 
 .PHONY: seed-wafer-mock
 seed-wafer-mock: ## Seed mock wafer inspection SQLite database
 	cd services/sc-upstream && uv run python -m sc_upstream.seed mass \
 		--db-url "sqlite:///$(CURDIR)/$(DATA_DIR)/wafer_inspection.db" \
-		--defects "$(SC_WAFER_MOCK_DEFECTS)" --imaged 100 --images-per 5 --reset
+		--defects "$(SC_WAFER_MOCK_DEFECTS)" --imaged 100 --images-per 5 \
+		--inspection-time "$(SC_WAFER_MOCK_INSPECTION_TIME)" --reuse-matching
 
 .PHONY: seed-wafer-patch-zips
 seed-wafer-patch-zips: ## Seed mock SC patch zips into MinIO and inspection_zips.db
