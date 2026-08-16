@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+from concurrent.futures import Executor, Future, ThreadPoolExecutor
 import io
 from pathlib import Path
+import threading
 
 from PIL import Image
 import pyarrow as pa
 import pyarrow.parquet as pq
+import pytest
 import torch
 from torch import Tensor, nn
 
@@ -37,6 +40,8 @@ def test_yolo_runtime_defaults() -> None:
     assert ultralytics.YOLO_PREDICTION_BATCH_SIZE == 256
     assert ultralytics.YOLO_IMAGE_SIZE == 128
     assert ultralytics.YOLO_DATALOADER_WORKERS == 4
+    assert ultralytics.YOLO_PREDICTION_PREPROCESS_TASK_SIZE == 64
+    assert ultralytics.YOLO_PREDICTION_PREFETCH_TASKS == 8
     assert ultralytics.YOLO_INPUT_CHANNELS == 2
 
 
@@ -249,3 +254,235 @@ def test_yolo_prediction_reports_image_preprocess_errors(
     assert predictions[0].error is None
     assert predictions[1].sample_id == "missing"
     assert "missing patch_defective" in (predictions[1].error or "")
+
+
+def test_yolo_stream_prediction_processes_every_sample_and_final_partial_batch(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    row_count = 257
+    observed_batches: list[tuple[int, ...]] = []
+    checkpoint_path = _write_checkpoint(tmp_path)
+    monkeypatch.setattr(
+        ultralytics,
+        "_build_yolo_classifier",
+        lambda _classes: _TinyClassifier(observed_batches),
+    )
+    monkeypatch.setattr(
+        ultralytics,
+        "select_torch_device",
+        lambda _torch: torch.device("cpu"),
+    )
+
+    async def samples():
+        defective = _image_bytes(0)
+        template = _image_bytes(255)
+        for index in range(row_count):
+            yield {
+                "sample_id": f"sample-{index}",
+                "patch_defective_bytes": defective,
+                "patch_template_bytes": template,
+            }
+
+    async def collect_predictions():
+        return [
+            prediction
+            async for prediction in ultralytics.predict_yolo_stream(
+                checkpoint_path,
+                ["a", "c"],
+                samples(),
+                workers=0,
+            )
+        ]
+
+    predictions = asyncio.run(collect_predictions())
+
+    assert [prediction.sample_id for prediction in predictions] == [
+        f"sample-{index}" for index in range(row_count)
+    ]
+    assert observed_batches == [(256, 2, 128, 128), (1, 2, 128, 128)]
+
+
+def test_yolo_stream_prediction_preserves_source_item_errors(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    checkpoint_path = _write_checkpoint(tmp_path)
+    monkeypatch.setattr(
+        ultralytics,
+        "_build_yolo_classifier",
+        lambda _classes: _TinyClassifier(),
+    )
+    monkeypatch.setattr(
+        ultralytics,
+        "select_torch_device",
+        lambda _torch: torch.device("cpu"),
+    )
+
+    async def samples():
+        yield {"sample_id": "missing", "error": "archive missing"}
+        yield {
+            "sample_id": "valid",
+            "patch_defective_bytes": _image_bytes(0),
+            "patch_template_bytes": _image_bytes(255),
+        }
+
+    async def collect_predictions():
+        return [
+            prediction
+            async for prediction in ultralytics.predict_yolo_stream(
+                checkpoint_path,
+                ["a", "c"],
+                samples(),
+                workers=0,
+            )
+        ]
+
+    predictions = asyncio.run(collect_predictions())
+    assert [prediction.sample_id for prediction in predictions] == ["missing", "valid"]
+    assert predictions[0].error == "archive missing"
+    assert predictions[1].error is None
+
+
+def test_preprocess_stream_bounds_prefetch_and_cleans_up_worker_failure(
+    monkeypatch,
+) -> None:
+    executors: list[_TrackingExecutor] = []
+
+    def executor_factory(*, max_workers: int, mp_context: object):
+        del mp_context
+        executor = _TrackingExecutor(max_workers=max_workers)
+        executors.append(executor)
+        return executor
+
+    def fail_task(_rows: list[dict[str, object]], _image_size: int):
+        raise RuntimeError("worker failed")
+
+    monkeypatch.setattr(ultralytics, "ProcessPoolExecutor", executor_factory)
+    monkeypatch.setattr(ultralytics, "_preprocess_prediction_task", fail_task)
+
+    async def samples():
+        for index in range(20):
+            yield {"sample_id": str(index)}
+
+    async def consume() -> None:
+        async for _ in ultralytics._preprocess_prediction_stream(
+            samples(),
+            image_size=128,
+            workers=2,
+            task_size=2,
+            prefetch_tasks=3,
+        ):
+            pass
+
+    with pytest.raises(RuntimeError, match="worker failed"):
+        asyncio.run(consume())
+    assert len(executors) == 1
+    assert executors[0].submitted <= 3
+    assert executors[0].shutdown_called
+
+
+def test_preprocess_stream_cancellation_cancels_pending_and_does_not_block_loop(
+    monkeypatch,
+) -> None:
+    executor = _ManualShutdownExecutor()
+    monkeypatch.setattr(
+        ultralytics,
+        "ProcessPoolExecutor",
+        lambda **_kwargs: executor,
+    )
+    monkeypatch.setattr(
+        ultralytics,
+        "_preprocess_prediction_task",
+        lambda rows, _image_size: rows,
+    )
+
+    async def samples():
+        yield {"sample_id": "first"}
+        yield {"sample_id": "pending"}
+
+    async def exercise() -> None:
+        stream = ultralytics._preprocess_prediction_stream(
+            samples(),
+            image_size=128,
+            workers=1,
+            task_size=1,
+            prefetch_tasks=2,
+        )
+        assert (await anext(stream))["sample_id"] == "first"
+
+        close_task = asyncio.create_task(stream.aclose())
+        while not executor.shutdown_entered.is_set():
+            await asyncio.sleep(0)
+
+        loop_was_responsive = False
+
+        def mark_responsive() -> None:
+            nonlocal loop_was_responsive
+            loop_was_responsive = True
+
+        asyncio.get_running_loop().call_soon(mark_responsive)
+        await asyncio.sleep(0)
+        assert loop_was_responsive
+
+        executor.allow_shutdown.set()
+        await asyncio.wait_for(close_task, timeout=1)
+
+    asyncio.run(exercise())
+    assert executor.shutdown_called
+    assert len(executor.futures) == 2
+    assert executor.futures[1].cancelled()
+
+
+class _TrackingExecutor(ThreadPoolExecutor):
+    def __init__(self, *, max_workers: int) -> None:
+        super().__init__(max_workers=max_workers)
+        self.submitted = 0
+        self.shutdown_called = False
+
+    def submit(self, fn, /, *args, **kwargs):
+        self.submitted += 1
+        return super().submit(fn, *args, **kwargs)
+
+    def shutdown(self, wait: bool = True, *, cancel_futures: bool = False) -> None:
+        self.shutdown_called = True
+        super().shutdown(wait=wait, cancel_futures=cancel_futures)
+
+
+class _ManualShutdownExecutor(Executor):
+    def __init__(self) -> None:
+        self.futures: list[Future[list[dict[str, object]]]] = []
+        self.shutdown_called = False
+        self.shutdown_entered = threading.Event()
+        self.allow_shutdown = threading.Event()
+
+    def submit(self, fn, /, *args, **kwargs):
+        future: Future[list[dict[str, object]]] = Future()
+        if not self.futures:
+            future.set_result(fn(*args, **kwargs))
+        self.futures.append(future)
+        return future
+
+    def shutdown(self, wait: bool = True, *, cancel_futures: bool = False) -> None:
+        del wait, cancel_futures
+        self.shutdown_called = True
+        self.shutdown_entered.set()
+        if not self.allow_shutdown.wait(timeout=1):
+            raise TimeoutError("test did not release executor shutdown")
+
+
+def _write_checkpoint(tmp_path: Path) -> Path:
+    model = _TinyClassifier()
+    checkpoint_path = tmp_path / "stream-checkpoint.pt"
+    torch.save(
+        {
+            "model_state_dict": model.state_dict(),
+            "architecture": "yolov8n-cls",
+            "label_space": ["a", "c"],
+            "num_classes": 2,
+            "input_channels": 2,
+            "image_size": 128,
+        },
+        checkpoint_path,
+    )
+    return checkpoint_path

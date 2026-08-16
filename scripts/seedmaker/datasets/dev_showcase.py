@@ -627,7 +627,10 @@ def _ensure_source_membership_rule(
         f"/api/v1/source-connectors/{connector['id']}/import-profiles",
         json={
             "name": "Dev SC inspection import",
-            "settings": {"label_space": list(SC_LABELS)},
+            "settings": {
+                "label_space": list(SC_LABELS),
+                "image_source_profile": "sc_upstream",
+            },
             "max_records_per_run": 10,
             "max_rows_per_dataset": 2500,
         },

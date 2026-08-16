@@ -11,6 +11,7 @@ import type { DatasetLsProjectId } from './datasetLsProjectId';
 import type { DatasetLsProjectUrl } from './datasetLsProjectUrl';
 import type { DatasetStorageMode } from './datasetStorageMode';
 import type { DatasetDatasetMeta } from './datasetDatasetMeta';
+import type { DatasetImageSource } from './datasetImageSource';
 
 export interface Dataset {
   id?: string;
@@ -29,4 +30,5 @@ export interface Dataset {
   ls_project_url?: DatasetLsProjectUrl;
   storage_mode?: DatasetStorageMode;
   dataset_meta?: DatasetDatasetMeta;
+  image_source?: DatasetImageSource;
 }

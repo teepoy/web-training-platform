@@ -89,6 +89,10 @@ def test_sc_runtime_and_prediction_storage_accept_environment_overrides(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("APP_CONFIG_PROFILE", "test")
+    monkeypatch.setenv("SC_UPSTREAM_IMAGE_SOURCE_PROFILE", "direct-upstream")
+    monkeypatch.setenv(
+        "SC_TRAINING_IMAGE_PARSER_BINARY", "/opt/finetune/image-parser-batch"
+    )
     monkeypatch.setenv("SC_PIPELINE_IMPORT_BATCH_ROWS", "4096")
     monkeypatch.setenv("SC_PIPELINE_TRAINING_MAX_ROWS", "12345")
     monkeypatch.setenv("SC_PIPELINE_TRAINING_SHUFFLE_SEED", "91")
@@ -99,6 +103,10 @@ def test_sc_runtime_and_prediction_storage_accept_environment_overrides(
 
     cfg = load_config(skip_runtime_validation=True)
 
+    assert cfg.sc.upstream_image_source_profile == "direct-upstream"
+    assert (
+        cfg.sc.training_image_parser_binary == "/opt/finetune/image-parser-batch"
+    )
     assert cfg.sc.pipeline.import_batch_rows == 4096
     assert cfg.sc.pipeline.training_max_rows == 12345
     assert cfg.sc.pipeline.training_shuffle_seed == 91

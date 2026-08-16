@@ -4,6 +4,7 @@ import type { ScSampleTableDataSource } from "@/features/sc/domain/workbenchInte
 
 export interface ScSampleTableBaseProps {
   loading?: boolean;
+  exportFileName?: string;
   selection?: ScTableSelectionConstraint;
   filter?: ScSampleTableFilter;
   sort?: ScSampleTableSort | null;

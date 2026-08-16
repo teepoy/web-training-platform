@@ -7645,6 +7645,10 @@ components:
           additionalProperties: true
           type: object
           title: Dataset Meta
+        image_source:
+          anyOf:
+            - $ref: "#/components/schemas/ImageSourceBinding"
+            - type: "null"
       type: object
       required:
         - name
@@ -8325,6 +8329,29 @@ components:
           title: Detail
       type: object
       title: HTTPValidationError
+    ImageSourceBinding:
+      properties:
+        contract:
+          type: string
+          minLength: 1
+          title: Contract
+        profile:
+          type: string
+          minLength: 1
+          title: Profile
+      type: object
+      required:
+        - contract
+        - profile
+      title: ImageSourceBinding
+      description: "Deployment-owned image resolver contract selected by a Dataset.
+
+
+        The profile is an opaque registry key.  Filesystem roots, network
+
+        credentials, and other provider configuration never belong in Dataset
+
+        metadata."
     ImportProfileVersionResponse:
       properties:
         id:

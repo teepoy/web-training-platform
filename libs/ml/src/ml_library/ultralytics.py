@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 import io
-from collections.abc import Awaitable, Callable, Iterator, Sequence
+import asyncio
+from collections import deque
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Sequence
+from concurrent.futures import ProcessPoolExecutor
+import multiprocessing
 from pathlib import Path
 from typing import Any, cast
 
@@ -24,6 +28,8 @@ YOLO_PREDICTION_BATCH_SIZE = 256
 YOLO_IMAGE_SIZE = 128
 YOLO_DATALOADER_WORKERS = 4
 YOLO_INPUT_CHANNELS = 2
+YOLO_PREDICTION_PREPROCESS_TASK_SIZE = 64
+YOLO_PREDICTION_PREFETCH_TASKS = 8
 
 _TRAINING_COLUMNS = (
     "sample_id",
@@ -383,6 +389,171 @@ def predict_yolo(
                 pending,
                 device=device,
             )
+
+
+async def predict_yolo_stream(
+    checkpoint_path: Path,
+    label_space: Sequence[str],
+    samples: AsyncIterator[dict[str, object]],
+    *,
+    batch_size: int = YOLO_PREDICTION_BATCH_SIZE,
+    image_size: int = YOLO_IMAGE_SIZE,
+    workers: int = YOLO_DATALOADER_WORKERS,
+    preprocess_task_size: int = YOLO_PREDICTION_PREPROCESS_TASK_SIZE,
+    prefetch_tasks: int = YOLO_PREDICTION_PREFETCH_TASKS,
+) -> AsyncIterator[Prediction]:
+    """Predict a bounded async stream without materializing image Parquet.
+
+    At most ``prefetch_tasks`` process-pool tasks, each containing at most
+    ``preprocess_task_size`` samples, are in flight.  The pool always uses the
+    ``spawn`` context so Torch state is not inherited through ``fork``.
+    """
+
+    labels = [str(label) for label in label_space]
+    if not labels:
+        raise ValueError("YOLO model metadata must include compact label_space")
+    _validate_loader_options(
+        batch_size=batch_size,
+        image_size=image_size,
+        workers=workers,
+    )
+    if preprocess_task_size <= 0:
+        raise ValueError("preprocess_task_size must be greater than zero")
+    if prefetch_tasks <= 0:
+        raise ValueError("prefetch_tasks must be greater than zero")
+
+    device = select_torch_device(torch)
+    model = _load_yolo_classifier(
+        checkpoint_path,
+        labels,
+        image_size=image_size,
+        device=device,
+    )
+    model.eval()
+    pending_batch: list[dict[str, object]] = []
+    with torch.inference_mode():
+        async for sample in _preprocess_prediction_stream(
+            samples,
+            image_size=image_size,
+            workers=workers,
+            task_size=preprocess_task_size,
+            prefetch_tasks=prefetch_tasks,
+        ):
+            pending_batch.append(sample)
+            if len(pending_batch) == batch_size:
+                for prediction in _predict_preprocessed_batch(
+                    model,
+                    labels,
+                    pending_batch,
+                    device=device,
+                ):
+                    yield prediction
+                pending_batch = []
+        if pending_batch:
+            for prediction in _predict_preprocessed_batch(
+                model,
+                labels,
+                pending_batch,
+                device=device,
+            ):
+                yield prediction
+
+
+async def _preprocess_prediction_stream(
+    samples: AsyncIterator[dict[str, object]],
+    *,
+    image_size: int,
+    workers: int,
+    task_size: int,
+    prefetch_tasks: int,
+) -> AsyncIterator[dict[str, object]]:
+    if workers == 0:
+        task: list[dict[str, object]] = []
+        async for sample in samples:
+            task.append(sample)
+            if len(task) == task_size:
+                for item in _preprocess_prediction_task(task, image_size):
+                    yield item
+                task = []
+        if task:
+            for item in _preprocess_prediction_task(task, image_size):
+                yield item
+        return
+
+    loop = asyncio.get_running_loop()
+    executor = ProcessPoolExecutor(
+        max_workers=workers,
+        mp_context=multiprocessing.get_context("spawn"),
+    )
+    pending: deque[asyncio.Future[list[dict[str, object]]]] = deque()
+
+    async def drain_one() -> AsyncIterator[dict[str, object]]:
+        completed = await pending.popleft()
+        for item in completed:
+            yield item
+
+    try:
+        task = []
+        async for sample in samples:
+            task.append(sample)
+            if len(task) < task_size:
+                continue
+            pending.append(
+                loop.run_in_executor(
+                    executor,
+                    _preprocess_prediction_task,
+                    task,
+                    image_size,
+                )
+            )
+            task = []
+            if len(pending) >= prefetch_tasks:
+                async for item in drain_one():
+                    yield item
+        if task:
+            pending.append(
+                loop.run_in_executor(
+                    executor,
+                    _preprocess_prediction_task,
+                    task,
+                    image_size,
+                )
+            )
+        while pending:
+            async for item in drain_one():
+                yield item
+    finally:
+        for future in pending:
+            future.cancel()
+        await asyncio.to_thread(executor.shutdown, wait=True, cancel_futures=True)
+
+
+def _preprocess_prediction_task(
+    rows: list[dict[str, object]],
+    image_size: int,
+) -> list[dict[str, object]]:
+    output: list[dict[str, object]] = []
+    for row in rows:
+        sample_id = str(row.get("sample_id") or "")
+        source_error = row.get("error")
+        if isinstance(source_error, str) and source_error:
+            output.append(
+                {"sample_id": sample_id, "image": None, "error": source_error}
+            )
+            continue
+        try:
+            image = _preprocess_grayscale_pair(row, image_size)
+        except (OSError, TypeError, ValueError) as exc:
+            output.append(
+                {
+                    "sample_id": sample_id,
+                    "image": None,
+                    "error": f"image preprocessing failed: {exc}",
+                }
+            )
+            continue
+        output.append({"sample_id": sample_id, "image": image, "error": None})
+    return output
 
 
 def _load_yolo_classifier(

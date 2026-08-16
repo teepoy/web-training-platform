@@ -6,7 +6,10 @@ from pathlib import Path
 
 def normalize_file(path: Path) -> bool:
     original = path.read_text(encoding="utf-8")
-    normalized = original.rstrip("\r\n") + "\n"
+    normalized = (
+        "\n".join(line.rstrip(" \t") for line in original.splitlines()).rstrip("\n")
+        + "\n"
+    )
     if normalized == original:
         return False
     path.write_text(normalized, encoding="utf-8")

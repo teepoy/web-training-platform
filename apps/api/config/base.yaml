@@ -135,12 +135,17 @@ startup_checks:
   dependency_timeout_seconds: 5
 
 sc:
+  upstream_image_source_profile: sc_upstream
+  training_image_parser_binary: /usr/local/bin/image-parser-batch
   pipeline:
     import_batch_rows: 25000
     index_row_group_rows: 65536
     materialization_batch_rows: 512
     materialization_max_error_records: 1000
-    prediction_max_materialized_bytes: 17179869184
+    prediction_input_batch_rows: 512
+    prediction_preprocess_task_rows: 64
+    prediction_preprocess_workers: 4
+    prediction_preprocess_prefetch_tasks: 8
     prediction_progress_flush_rows: 5000
     prediction_progress_flush_seconds: 5.0
     prediction_write_batch_rows: 5000

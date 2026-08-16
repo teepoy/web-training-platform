@@ -22,11 +22,11 @@ func BenchmarkStreamCore300KDefects(b *testing.B) {
 	defer zipCache.Close()
 
 	zipCount := benchmarkDefects / defectsPerZip
-	zips := make([]cacheZipRef, 0, zipCount)
+	zips := make(map[int]PatchArchive, zipCount)
 	for i := range zipCount {
 		ref := cacheZipRef{Bucket: "bench", Key: fmt.Sprintf("patch-%04d.zip", i)}
-		zips = append(zips, ref)
-		zipBytes := makeBenchmarkZip(b, i*defectsPerZip, defectsPerZip)
+		zips[i] = PatchArchive{CacheKey: cache.CacheKey(ref.Bucket, ref.Key), Bucket: ref.Bucket, Key: ref.Key}
+		zipBytes := makeBenchmarkZip(b, i*defectsPerZip+1, defectsPerZip)
 		if err := zipCache.Set(cache.CacheKey(ref.Bucket, ref.Key), zipBytes); err != nil {
 			b.Fatal(err)
 		}
@@ -34,7 +34,8 @@ func BenchmarkStreamCore300KDefects(b *testing.B) {
 
 	lookups := make([]patchImageLookup, 0, benchmarkDefects*benchmarkImagesPerDefect)
 	idx := 0
-	for defectID := range benchmarkDefects {
+	for offset := range benchmarkDefects {
+		defectID := offset + 1
 		for _, imageType := range []string{"Reference", "Defective"} {
 			lookups = append(lookups, patchImageLookup{
 				Index:     idx,
@@ -50,7 +51,7 @@ func BenchmarkStreamCore300KDefects(b *testing.B) {
 	b.SetBytes(int64(len(lookups)))
 	b.ResetTimer()
 	for range b.N {
-		results := resolver.getPatchImageBytesBatchFromZips(context.Background(), zips, lookups)
+		results := resolver.getPatchImageBytesBatchFromZips(context.Background(), benchmarkPatchProvider{}, zips, lookups)
 		if len(results) != len(lookups) {
 			b.Fatalf("result count mismatch: got %d want %d", len(results), len(lookups))
 		}
@@ -60,6 +61,16 @@ func BenchmarkStreamCore300KDefects(b *testing.B) {
 			}
 		}
 	}
+}
+
+type benchmarkPatchProvider struct{}
+
+func (benchmarkPatchProvider) ResolveArchives(context.Context, InspectionKey, []int) (map[int]PatchArchive, error) {
+	panic("benchmark archives are pre-resolved")
+}
+
+func (benchmarkPatchProvider) LoadArchive(context.Context, PatchArchive) ([]byte, error) {
+	panic("benchmark archives are pre-cached")
 }
 
 func makeBenchmarkZip(b *testing.B, startDefectID int, defects int) []byte {

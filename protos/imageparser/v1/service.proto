@@ -12,6 +12,7 @@ service ImageParser {
   rpc GetScImage(GetScImageRequest) returns (GetScImageResponse);
   rpc BatchGetScImage(BatchGetScImageRequest) returns (BatchGetScImageResponse);
   rpc StreamScInspectionImages(StreamScInspectionImagesRequest) returns (stream ScImageResult);
+  rpc ResolvePatchImages(ResolvePatchImagesRequest) returns (stream ResolvePatchImageResult);
   rpc WarmScCache(WarmScCacheRequest) returns (WarmScCacheResponse);
 }
 
@@ -104,6 +105,39 @@ message StreamScInspectionImagesRequest {
   int32 wafer_key = 2;
   repeated int32 defect_ids = 3;
   repeated string image_types = 4;
+}
+
+message ResolvePatchImagesRequest {
+  string source_profile = 1;
+  repeated string roles = 2;
+  repeated ResolvePatchImageItem items = 3;
+}
+
+message ResolvePatchImageItem {
+  string request_id = 1;
+  string sample_id = 2;
+  string inspection_time = 3;
+  int32 wafer_key = 4;
+  string defect_id = 5;
+}
+
+message ResolvePatchImageResult {
+  string request_id = 1;
+  string sample_id = 2;
+  string inspection_time = 3;
+  int32 wafer_key = 4;
+  string defect_id = 5;
+  string role = 6;
+  bytes image_data = 7;
+  string content_type = 8;
+  string error = 9;
+}
+
+// One ordered response frame used by the offline stdin/stdout batch parser.
+// It is deliberately not an RPC response: Training launches the parser locally
+// and never consumes the online ImageParser service.
+message ResolvePatchImagesBatchResponse {
+  repeated ResolvePatchImageResult results = 1;
 }
 
 message WarmScCacheRequest {

@@ -134,7 +134,11 @@ export interface PreviewPageState {
   importError: Ref<string>;
   storageModeOptions: { label: string; value: string }[];
   handleImport: () => Promise<void>;
-  importInspection: (item: InspectionSummaryItem, notify?: boolean) => Promise<string>;
+  importInspection: (
+    item: InspectionSummaryItem,
+    notify?: boolean,
+    forceNew?: boolean,
+  ) => Promise<string>;
   openImportForInspection: (item: InspectionSummaryItem) => void;
   startImportDirectly: (item: InspectionSummaryItem) => void;
   importedDatasetIdForInspection: (item: InspectionSummaryItem) => string | null;
@@ -832,10 +836,19 @@ export function usePreviewPage(): PreviewPageState {
     }
   }
 
-  async function importInspection(item: InspectionSummaryItem, notify = true): Promise<string> {
-    const existing = importedDatasetIdForInspection(item);
+  async function importInspection(
+    item: InspectionSummaryItem,
+    notify = true,
+    forceNew = false,
+  ): Promise<string> {
+    const existing = forceNew ? null : importedDatasetIdForInspection(item);
     if (existing) return existing;
-    const datasetName = `Patch_${item.lot_id}_${item.wafer_id}_${sanitizeInspectionTime(item.inspection_time)}`;
+    const baseDatasetName = `Patch_${item.lot_id}_${item.wafer_id}_${sanitizeInspectionTime(item.inspection_time)}`;
+    const existingDatasetCount = item.datasets?.length ?? 0;
+    const datasetName =
+      forceNew && existingDatasetCount > 0
+        ? `${baseDatasetName}_${existingDatasetCount + 1}`
+        : baseDatasetName;
     const key = rowKey(item);
     importingInspectionKey.value = key;
     try {

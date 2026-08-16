@@ -21,6 +21,8 @@ def fix_file(path: Path, package_prefix: str) -> bool:
         ),
         original,
     )
+    if "import warnings\n" in updated and "warnings." not in updated:
+        updated = updated.replace("import warnings\n", "")
     if updated == original:
         return False
     path.write_text(updated, encoding="utf-8")

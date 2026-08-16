@@ -11,8 +11,11 @@ from app.modules.source_discovery.domain.models import (
     FilterGroup,
     FilterOperator,
     FilterPredicate,
+    ImportProfileVersion,
     SourceConnector,
+    SourceRecord,
 )
+from app.modules.sc.domain.entities.sc_import import ScImportStatus
 
 
 class _Upstream:
@@ -47,6 +50,20 @@ class _Upstream:
 class _Importer:
     async def submit_import(self, *args: object, **kwargs: object) -> object:
         raise AssertionError("Import is not used by this test")
+
+
+class _CapturingImporter:
+    def __init__(self) -> None:
+        self.kwargs: dict[str, object] = {}
+
+    async def submit_import(self, **kwargs: object) -> ScImportStatus:
+        self.kwargs = kwargs
+        return ScImportStatus(
+            status="completed",
+            dataset_id="dataset-1",
+            dataset_name="Imported wafer",
+            imported_count=10,
+        )
 
 
 @pytest.mark.asyncio
@@ -88,3 +105,55 @@ async def test_sc_discovery_uses_local_wall_clock_and_utc_half_open_range() -> N
     assert [record.record_key for record in batch.records] == [
         "2026-08-15T08:59:00+08:00::3"
     ]
+
+
+@pytest.mark.asyncio
+async def test_sc_discovery_import_binds_explicit_image_source_profile() -> None:
+    importer = _CapturingImporter()
+    provider = ScSourceRecordProvider(_Upstream(), importer)  # type: ignore[arg-type]
+    now = datetime.now(UTC)
+    connector = SourceConnector(
+        id="connector",
+        org_id="org",
+        provider_id="sc",
+        name="SC",
+        config={},
+        enabled=True,
+        created_by="user",
+        created_at=now,
+        updated_at=now,
+    )
+    profile = ImportProfileVersion(
+        id="profile-v1",
+        profile_key="profile",
+        version=1,
+        org_id="org",
+        connector_id="connector",
+        name="SC import",
+        settings={"image_source_profile": "mounted-archive"},
+        max_records_per_run=100,
+        max_rows_per_dataset=1_000,
+        created_by="user",
+        created_at=now,
+    )
+    record = SourceRecord(
+        record_key="record",
+        source_version=None,
+        observed_at=now,
+        display_name="Imported wafer",
+        attributes={
+            "inspection_time": "2026-08-15T08:59:00+08:00",
+            "wafer_key": 3,
+        },
+    )
+
+    result = await provider.import_record(
+        connector=connector,
+        profile=profile,
+        record=record,
+        org_id="org",
+        actor_id="user",
+    )
+
+    assert result.dataset_id == "dataset-1"
+    assert importer.kwargs["image_source_profile"] == "mounted-archive"

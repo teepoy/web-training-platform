@@ -73,7 +73,7 @@ function openDataset(datasetId: string): void {
 
 async function createDataset(row: InspectionSummaryItem): Promise<void> {
   try {
-    await page.importInspection(row);
+    await page.importInspection(row, true, true);
   } catch {
     // importInspection already records and surfaces the transport error.
   }

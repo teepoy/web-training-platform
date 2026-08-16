@@ -42,6 +42,7 @@ defineExpose({
     :defect-ids="defectIds"
     :page-size="pageSize"
     :loading="loading"
+    :export-file-name="exportFileName"
     :selection="selection"
     :filter="filter"
     :sort="sort"

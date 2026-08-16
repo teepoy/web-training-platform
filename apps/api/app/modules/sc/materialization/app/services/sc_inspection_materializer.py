@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import os
 import tempfile
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from contextlib import ExitStack
 from typing import Any
 
@@ -19,6 +19,10 @@ from app.modules.storage.domain.data_plane import (
 from app.modules.sc.materialization.domain.sc_inspection import (
     DEFAULT_PATCH_IMAGE_TYPES,
     ScInspectionMaterialization,
+)
+from app.modules.sc.materialization.domain.training_image_source import (
+    ScPatchImageBatchResolver,
+    ScTrainingImageSourceFactory,
 )
 from app.modules.sc.domain.models import parse_inspection_time
 from app.modules.sc.schema import find_images_by_role
@@ -36,8 +40,8 @@ class ScMaterializationCapacityError(RuntimeError):
 class ScInspectionMaterializer:
     def __init__(
         self,
-        image_source: Any,
         *,
+        image_source_factory: ScTrainingImageSourceFactory,
         schema_registry: DataPlaneSchemaRegistry,
         batch_rows: int,
         max_error_records: int,
@@ -47,7 +51,7 @@ class ScInspectionMaterializer:
             raise ValueError("batch_rows must be greater than zero")
         if max_error_records <= 0:
             raise ValueError("max_error_records must be greater than zero")
-        self._image_source = image_source
+        self._image_source_factory = image_source_factory
         self._schema_registry = schema_registry
         self._batch_rows = batch_rows
         self._max_error_records = max_error_records
@@ -57,6 +61,8 @@ class ScInspectionMaterializer:
         self,
         *,
         rows_lazyframe: Any,
+        image_source_profiles: Mapping[str, str],
+        direct_dataset_id: str | None,
         dataset_id: str = "",
         job_id: str = "",
         image_types: list[str] | None = None,
@@ -95,41 +101,45 @@ class ScInspectionMaterializer:
                 maintain_order=True,
                 engine="streaming",
             )
-            try:
-                while True:
-                    batch = await asyncio.to_thread(_next_batch, batches)
-                    if batch is None:
-                        break
-                    rows = [
-                        normalize_sc_training_row(dict(raw_row))
-                        for raw_row in batch.iter_rows(named=True)
-                    ]
-                    table = await self._materialize_batch(
-                        rows,
-                        requested_roles=requested_roles,
-                        image_types=image_types,
-                        columns=columns,
-                        errors=errors,
-                        schema=schema,
-                    )
-                    logical_output_bytes += table.nbytes
-                    if logical_output_bytes > max_output_bytes:
-                        raise ScMaterializationCapacityError(
-                            "SC materialization exceeded configured output budget: "
-                            f"{logical_output_bytes} > {max_output_bytes} bytes"
+            async with self._image_source_factory.open() as image_source:
+                try:
+                    while True:
+                        batch = await asyncio.to_thread(_next_batch, batches)
+                        if batch is None:
+                            break
+                        rows = [
+                            normalize_sc_training_row(dict(raw_row))
+                            for raw_row in batch.iter_rows(named=True)
+                        ]
+                        table = await self._materialize_batch(
+                            rows,
+                            image_source=image_source,
+                            image_source_profiles=image_source_profiles,
+                            direct_dataset_id=direct_dataset_id,
+                            requested_roles=requested_roles,
+                            image_types=image_types,
+                            columns=columns,
+                            errors=errors,
+                            schema=schema,
                         )
-                    if writer is None:
-                        writer = pq.ParquetWriter(handle.name, schema)
-                    await asyncio.to_thread(writer.write_table, table)
-                    row_count += table.num_rows
-                    if os.path.getsize(handle.name) > max_output_bytes:
-                        raise ScMaterializationCapacityError(
-                            "SC materialization Parquet exceeded configured output "
-                            f"budget of {max_output_bytes} bytes"
-                        )
-            finally:
-                if writer is not None:
-                    await asyncio.to_thread(writer.close)
+                        logical_output_bytes += table.nbytes
+                        if logical_output_bytes > max_output_bytes:
+                            raise ScMaterializationCapacityError(
+                                "SC materialization exceeded configured output budget: "
+                                f"{logical_output_bytes} > {max_output_bytes} bytes"
+                            )
+                        if writer is None:
+                            writer = pq.ParquetWriter(handle.name, schema)
+                        await asyncio.to_thread(writer.write_table, table)
+                        row_count += table.num_rows
+                        if os.path.getsize(handle.name) > max_output_bytes:
+                            raise ScMaterializationCapacityError(
+                                "SC materialization Parquet exceeded configured output "
+                                f"budget of {max_output_bytes} bytes"
+                            )
+                finally:
+                    if writer is not None:
+                        await asyncio.to_thread(writer.close)
             if writer is None:
                 await asyncio.to_thread(
                     pq.write_table,
@@ -187,34 +197,53 @@ class ScInspectionMaterializer:
         self,
         rows: list[dict[str, Any]],
         *,
+        image_source: ScPatchImageBatchResolver,
+        image_source_profiles: Mapping[str, str],
+        direct_dataset_id: str | None,
         requested_roles: dict[str, str],
         image_types: list[str],
         columns: list[str],
         errors: list[dict[str, str]],
         schema: pa.Schema,
     ) -> pa.Table:
-        image_bytes: dict[tuple[str, int, str, str], bytes] = {}
-        missing_by_inspection: dict[tuple[str, int], set[int]] = {}
-        for row in rows:
+        image_bytes: dict[tuple[int, str], bytes] = {}
+        missing_by_profile: dict[str, list[dict[str, object]]] = {}
+        requested_by_id: dict[str, set[str]] = {}
+        for row_index, row in enumerate(rows):
             inspection_time = str(row.get("inspection_time") or "")
             wafer_key = int(row.get("wafer_key", 0) or 0)
             defect_id = str(row.get("defect_id") or "")
+            sample_id = str(row.get("sample_id") or "")
+            source_dataset_id = str(
+                row.get("source_dataset_id") or direct_dataset_id or ""
+            )
+            if not source_dataset_id:
+                raise ValueError(
+                    f"SC sample '{sample_id}' has no source Dataset identity"
+                )
+            try:
+                profile = image_source_profiles[source_dataset_id]
+            except KeyError as exc:
+                raise ValueError(
+                    f"SC source Dataset '{source_dataset_id}' has no image source "
+                    "profile"
+                ) from exc
             images = row.get("images")
             if not isinstance(images, list):
                 images = []
-            missing_role = False
+            missing_roles: list[str] = []
             for column, role in requested_roles.items():
                 refs = find_images_by_role(images, role)
                 raw = refs[0].get("bytes") if refs else None
                 readable = readable_image_bytes(raw)
                 if readable is None:
-                    missing_role = True
+                    missing_roles.append(role)
                     continue
-                image_bytes[(inspection_time, wafer_key, defect_id, column)] = readable
-            if not missing_role:
+                image_bytes[(row_index, column)] = readable
+            if not missing_roles:
                 continue
             try:
-                numeric_defect_id = int(defect_id)
+                int(defect_id)
             except ValueError:
                 self._append_error(
                     errors,
@@ -228,19 +257,49 @@ class ScInspectionMaterializer:
                     },
                 )
                 continue
-            missing_by_inspection.setdefault((inspection_time, wafer_key), set()).add(
-                numeric_defect_id
+            request_id = str(row_index)
+            requested_by_id[request_id] = set(missing_roles)
+            missing_by_profile.setdefault(profile, []).append(
+                {
+                    "request_id": request_id,
+                    "sample_id": sample_id,
+                    "inspection_time": inspection_time,
+                    "wafer_key": wafer_key,
+                    "defect_id": defect_id,
+                }
             )
 
-        for (inspection_time, wafer_key), defect_ids in missing_by_inspection.items():
-            async for item in self._image_source.stream_inspection_images(
-                inspection_time=inspection_time,
-                wafer_key=wafer_key,
-                defect_ids=sorted(defect_ids),
-                image_types=image_types,
+        received: dict[str, set[str]] = {
+            request_id: set() for request_id in requested_by_id
+        }
+        for profile, requests in missing_by_profile.items():
+            async for item in image_source.resolve_patch_images(
+                source_profile=profile,
+                roles=image_types,
+                items=requests,
             ):
-                defect_id = str(item.get("defect_id", ""))
-                image_type = _materialized_column_name(str(item.get("image_type", "")))
+                request_id = str(item.get("request_id") or "")
+                role = str(item.get("role") or "")
+                if request_id not in requested_by_id:
+                    raise RuntimeError(
+                        f"Image parser returned unknown request_id {request_id!r}"
+                    )
+                if role not in requested_by_id[request_id]:
+                    # Inline bytes may have satisfied this role before the RPC.
+                    continue
+                if role in received[request_id]:
+                    raise RuntimeError(
+                        f"Image parser returned duplicate role {role!r} for "
+                        f"request_id {request_id!r}"
+                    )
+                received[request_id].add(role)
+                request = next(
+                    request
+                    for request in requests
+                    if request["request_id"] == request_id
+                )
+                defect_id = str(request["defect_id"])
+                image_type = _materialized_column_name(role)
                 error = str(item.get("error", "") or "")
                 if error:
                     self._append_error(
@@ -252,14 +311,29 @@ class ScInspectionMaterializer:
                         },
                     )
                     continue
-                image_bytes[(inspection_time, wafer_key, defect_id, image_type)] = (
-                    bytes(item.get("image_data", b""))
+                raw_image_data = item.get("image_data", b"")
+                if not isinstance(raw_image_data, (bytes, bytearray, memoryview)):
+                    raise RuntimeError(
+                        "Image parser returned non-bytes image_data for "
+                        f"request_id {request_id!r} role {role!r}"
+                    )
+                image_bytes[(int(request_id), image_type)] = bytes(raw_image_data)
+
+        for request_id, expected_roles in requested_by_id.items():
+            missing_roles = sorted(expected_roles.difference(received[request_id]))
+            for role in missing_roles:
+                self._append_error(
+                    errors,
+                    {
+                        "defect_id": str(rows[int(request_id)].get("defect_id") or ""),
+                        "image_type": role,
+                        "error": "image parser stream ended before resolving role",
+                    },
                 )
 
         materialized_rows: list[dict[str, Any]] = []
-        for row in rows:
+        for row_index, row in enumerate(rows):
             defect_id = str(row.get("defect_id", ""))
-            inspection_time = str(row.get("inspection_time") or "")
             wafer_key = int(row.get("wafer_key", 0) or 0)
             out = {
                 "sample_id": str(row.get("sample_id", "")),
@@ -280,9 +354,7 @@ class ScInspectionMaterializer:
                 "confidence": _optional_float(row.get("confidence")),
             }
             for column in columns:
-                out[column] = image_bytes.get(
-                    (inspection_time, wafer_key, defect_id, column)
-                )
+                out[column] = image_bytes.get((row_index, column))
             materialized_rows.append(out)
         return _rows_to_table(materialized_rows, schema=schema)
 

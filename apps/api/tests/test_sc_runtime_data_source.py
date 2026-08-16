@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from typing import Any, cast
-from datetime import datetime, timezone
 
 import polars as pl
 import pytest
@@ -19,7 +19,7 @@ from app.modules.datasets.domain.entities import (
 from app.modules.datasets.port.local import DatasetRevisionReaderPort
 from app.modules.sc.runtime.data_source import open_sc_runtime_source
 from app.modules.storage.port.local import DatasetStorageFactoryPort
-from app.shared.api.schemas import Dataset, TaskSpec
+from app.shared.api.schemas import Dataset, ImageSourceBinding, TaskSpec
 
 
 @pytest.mark.asyncio
@@ -33,6 +33,10 @@ async def test_dataset_runtime_source_reuses_storage_metadata_without_direct_ses
         dataset_type="image_sc",
         task_spec=TaskSpec(label_space=["scratch", "particle"]),
         view_types=["sc.patch_image.v1"],
+        image_source=ImageSourceBinding(
+            contract="sc.patch_archive.v1",
+            profile="sc_upstream",
+        ),
     )
     calls: list[tuple[str, object]] = []
 
@@ -97,6 +101,7 @@ async def test_dataset_runtime_source_reuses_storage_metadata_without_direct_ses
         assert source.dataset_type == "image_sc"
         assert source.view_types == ("sc.patch_image.v1",)
         assert source.label_space == ("scratch", "particle")
+        assert source.image_source_profiles == {"dataset-1": "sc_upstream"}
         assert source.rows.collect().to_dicts() == [
             {
                 "sample_id": "sample-1",
@@ -156,6 +161,20 @@ async def test_observed_collection_runtime_resolves_current_member_data() -> Non
     )
 
     class Storage:
+        async def get_dataset_metadata(self) -> Dataset:
+            return Dataset(
+                id="dataset-1",
+                org_id="org-1",
+                name="SC dataset",
+                dataset_type="image_sc",
+                task_spec=TaskSpec(label_space=["scratch", "particle"]),
+                view_types=["sc.patch_image.v1"],
+                image_source=ImageSourceBinding(
+                    contract="sc.patch_archive.v1",
+                    profile="member-folder",
+                ),
+            )
+
         async def list_samples(self, **_kwargs: object) -> pl.LazyFrame:
             return pl.LazyFrame(
                 {
@@ -249,3 +268,4 @@ async def test_observed_collection_runtime_resolves_current_member_data() -> Non
             }
         ]
         assert source.resolved_dataset_revision_ids == ("dataset-revision-at-launch",)
+        assert source.image_source_profiles == {"dataset-1": "member-folder"}

@@ -10,7 +10,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file imageparser/v1/service.proto.
  */
 export const file_imageparser_v1_service: GenFile = /*@__PURE__*/
-  fileDesc("ChxpbWFnZXBhcnNlci92MS9zZXJ2aWNlLnByb3RvEg5pbWFnZXBhcnNlci52MSIPCg1IZWFsdGhSZXF1ZXN0IiAKDkhlYWx0aFJlc3BvbnNlEg4KBnN0YXR1cxgBIAEoCSJNCg9HZXRJbWFnZVJlcXVlc3QSDgoGYnVja2V0GAEgASgJEgsKA2tleRgCIAEoCRIOCgZwcmVmaXgYAyABKAkSDQoFY2FjaGUYBCABKAgiVwoQR2V0SW1hZ2VSZXNwb25zZRISCgppbWFnZV9kYXRhGAEgASgMEhAKCGZpbGVuYW1lGAIgASgJEg0KBXdpZHRoGAMgASgFEg4KBmhlaWdodBgEIAEoBSJbCg1TcHJpdGVSZXF1ZXN0Eg4KBmJ1Y2tldBgBIAEoCRILCgNrZXkYAiABKAkSEAoIcHJlZml4ZXMYAyADKAkSDAoEc2l6ZRgEIAEoBRINCgVjYWNoZRgFIAEoCCJDCg5TcHJpdGVSZXNwb25zZRISCgppbWFnZV9kYXRhGAEgASgMEg0KBXdpZHRoGAIgASgFEg4KBmhlaWdodBgDIAEoBSJOCg9WMlNwcml0ZVJlcXVlc3QSDgoGYnVja2V0GAEgASgJEg4KBnJlY29yZBgCIAEoCRINCgVpdGVtcxgDIAMoCRIMCgRzaXplGAQgASgFIkUKEFYyU3ByaXRlUmVzcG9uc2USEgoKaW1hZ2VfZGF0YRgBIAEoDBINCgV3aWR0aBgCIAEoBRIOCgZoZWlnaHQYAyABKAUifwoRR2V0U2NJbWFnZVJlcXVlc3QSFwoPaW5zcGVjdGlvbl90aW1lGAEgASgJEhEKCXdhZmVyX2tleRgCIAEoBRIRCglkZWZlY3RfaWQYAyABKAkSEgoKaW1hZ2VfdHlwZRgEIAEoCRIXCg9yZXZpZXdfaW1hZ2VfaWQYBSABKAUiPgoSR2V0U2NJbWFnZVJlc3BvbnNlEhIKCmltYWdlX2RhdGEYASABKAwSFAoMY29udGVudF90eXBlGAIgASgJIkwKClNjSW1hZ2VSZWYSEQoJZGVmZWN0X2lkGAEgASgJEhIKCmltYWdlX3R5cGUYAiABKAkSFwoPcmV2aWV3X2ltYWdlX2lkGAMgASgFInAKFkJhdGNoR2V0U2NJbWFnZVJlcXVlc3QSFwoPaW5zcGVjdGlvbl90aW1lGAEgASgJEhEKCXdhZmVyX2tleRgCIAEoBRIqCgZpbWFnZXMYAyADKAsyGi5pbWFnZXBhcnNlci52MS5TY0ltYWdlUmVmIm8KDVNjSW1hZ2VSZXN1bHQSEQoJZGVmZWN0X2lkGAEgASgJEhIKCmltYWdlX3R5cGUYAiABKAkSEgoKaW1hZ2VfZGF0YRgDIAEoDBIUCgxjb250ZW50X3R5cGUYBCABKAkSDQoFZXJyb3IYBSABKAkiSQoXQmF0Y2hHZXRTY0ltYWdlUmVzcG9uc2USLgoHcmVzdWx0cxgBIAMoCzIdLmltYWdlcGFyc2VyLnYxLlNjSW1hZ2VSZXN1bHQidgofU3RyZWFtU2NJbnNwZWN0aW9uSW1hZ2VzUmVxdWVzdBIXCg9pbnNwZWN0aW9uX3RpbWUYASABKAkSEQoJd2FmZXJfa2V5GAIgASgFEhIKCmRlZmVjdF9pZHMYAyADKAUSEwoLaW1hZ2VfdHlwZXMYBCADKAkiVAoSV2FybVNjQ2FjaGVSZXF1ZXN0EhcKD2luc3BlY3Rpb25fdGltZRgBIAEoCRIRCgl3YWZlcl9rZXkYAiABKAUSEgoKZGVmZWN0X2lkcxgDIAMoBSI6ChNXYXJtU2NDYWNoZVJlc3BvbnNlEg4KBnN0YXR1cxgBIAEoCRITCgt6aXBzX3dhcm1lZBgCIAEoBTK8BQoLSW1hZ2VQYXJzZXISRwoGSGVhbHRoEh0uaW1hZ2VwYXJzZXIudjEuSGVhbHRoUmVxdWVzdBoeLmltYWdlcGFyc2VyLnYxLkhlYWx0aFJlc3BvbnNlEk0KCEdldEltYWdlEh8uaW1hZ2VwYXJzZXIudjEuR2V0SW1hZ2VSZXF1ZXN0GiAuaW1hZ2VwYXJzZXIudjEuR2V0SW1hZ2VSZXNwb25zZRJHCgZTcHJpdGUSHS5pbWFnZXBhcnNlci52MS5TcHJpdGVSZXF1ZXN0Gh4uaW1hZ2VwYXJzZXIudjEuU3ByaXRlUmVzcG9uc2USTQoIVjJTcHJpdGUSHy5pbWFnZXBhcnNlci52MS5WMlNwcml0ZVJlcXVlc3QaIC5pbWFnZXBhcnNlci52MS5WMlNwcml0ZVJlc3BvbnNlElMKCkdldFNjSW1hZ2USIS5pbWFnZXBhcnNlci52MS5HZXRTY0ltYWdlUmVxdWVzdBoiLmltYWdlcGFyc2VyLnYxLkdldFNjSW1hZ2VSZXNwb25zZRJiCg9CYXRjaEdldFNjSW1hZ2USJi5pbWFnZXBhcnNlci52MS5CYXRjaEdldFNjSW1hZ2VSZXF1ZXN0GicuaW1hZ2VwYXJzZXIudjEuQmF0Y2hHZXRTY0ltYWdlUmVzcG9uc2USbAoYU3RyZWFtU2NJbnNwZWN0aW9uSW1hZ2VzEi8uaW1hZ2VwYXJzZXIudjEuU3RyZWFtU2NJbnNwZWN0aW9uSW1hZ2VzUmVxdWVzdBodLmltYWdlcGFyc2VyLnYxLlNjSW1hZ2VSZXN1bHQwARJWCgtXYXJtU2NDYWNoZRIiLmltYWdlcGFyc2VyLnYxLldhcm1TY0NhY2hlUmVxdWVzdBojLmltYWdlcGFyc2VyLnYxLldhcm1TY0NhY2hlUmVzcG9uc2VCOFo2ZnQtcGxhdGZvcm0vcHJvdG9zL2dlbi9nby9pbWFnZXBhcnNlci92MTtpbWFnZXBhcnNlcnYxYgZwcm90bzM");
+  fileDesc("ChxpbWFnZXBhcnNlci92MS9zZXJ2aWNlLnByb3RvEg5pbWFnZXBhcnNlci52MSIPCg1IZWFsdGhSZXF1ZXN0IiAKDkhlYWx0aFJlc3BvbnNlEg4KBnN0YXR1cxgBIAEoCSJNCg9HZXRJbWFnZVJlcXVlc3QSDgoGYnVja2V0GAEgASgJEgsKA2tleRgCIAEoCRIOCgZwcmVmaXgYAyABKAkSDQoFY2FjaGUYBCABKAgiVwoQR2V0SW1hZ2VSZXNwb25zZRISCgppbWFnZV9kYXRhGAEgASgMEhAKCGZpbGVuYW1lGAIgASgJEg0KBXdpZHRoGAMgASgFEg4KBmhlaWdodBgEIAEoBSJbCg1TcHJpdGVSZXF1ZXN0Eg4KBmJ1Y2tldBgBIAEoCRILCgNrZXkYAiABKAkSEAoIcHJlZml4ZXMYAyADKAkSDAoEc2l6ZRgEIAEoBRINCgVjYWNoZRgFIAEoCCJDCg5TcHJpdGVSZXNwb25zZRISCgppbWFnZV9kYXRhGAEgASgMEg0KBXdpZHRoGAIgASgFEg4KBmhlaWdodBgDIAEoBSJOCg9WMlNwcml0ZVJlcXVlc3QSDgoGYnVja2V0GAEgASgJEg4KBnJlY29yZBgCIAEoCRINCgVpdGVtcxgDIAMoCRIMCgRzaXplGAQgASgFIkUKEFYyU3ByaXRlUmVzcG9uc2USEgoKaW1hZ2VfZGF0YRgBIAEoDBINCgV3aWR0aBgCIAEoBRIOCgZoZWlnaHQYAyABKAUifwoRR2V0U2NJbWFnZVJlcXVlc3QSFwoPaW5zcGVjdGlvbl90aW1lGAEgASgJEhEKCXdhZmVyX2tleRgCIAEoBRIRCglkZWZlY3RfaWQYAyABKAkSEgoKaW1hZ2VfdHlwZRgEIAEoCRIXCg9yZXZpZXdfaW1hZ2VfaWQYBSABKAUiPgoSR2V0U2NJbWFnZVJlc3BvbnNlEhIKCmltYWdlX2RhdGEYASABKAwSFAoMY29udGVudF90eXBlGAIgASgJIkwKClNjSW1hZ2VSZWYSEQoJZGVmZWN0X2lkGAEgASgJEhIKCmltYWdlX3R5cGUYAiABKAkSFwoPcmV2aWV3X2ltYWdlX2lkGAMgASgFInAKFkJhdGNoR2V0U2NJbWFnZVJlcXVlc3QSFwoPaW5zcGVjdGlvbl90aW1lGAEgASgJEhEKCXdhZmVyX2tleRgCIAEoBRIqCgZpbWFnZXMYAyADKAsyGi5pbWFnZXBhcnNlci52MS5TY0ltYWdlUmVmIm8KDVNjSW1hZ2VSZXN1bHQSEQoJZGVmZWN0X2lkGAEgASgJEhIKCmltYWdlX3R5cGUYAiABKAkSEgoKaW1hZ2VfZGF0YRgDIAEoDBIUCgxjb250ZW50X3R5cGUYBCABKAkSDQoFZXJyb3IYBSABKAkiSQoXQmF0Y2hHZXRTY0ltYWdlUmVzcG9uc2USLgoHcmVzdWx0cxgBIAMoCzIdLmltYWdlcGFyc2VyLnYxLlNjSW1hZ2VSZXN1bHQidgofU3RyZWFtU2NJbnNwZWN0aW9uSW1hZ2VzUmVxdWVzdBIXCg9pbnNwZWN0aW9uX3RpbWUYASABKAkSEQoJd2FmZXJfa2V5GAIgASgFEhIKCmRlZmVjdF9pZHMYAyADKAUSEwoLaW1hZ2VfdHlwZXMYBCADKAkieAoZUmVzb2x2ZVBhdGNoSW1hZ2VzUmVxdWVzdBIWCg5zb3VyY2VfcHJvZmlsZRgBIAEoCRINCgVyb2xlcxgCIAMoCRI0CgVpdGVtcxgDIAMoCzIlLmltYWdlcGFyc2VyLnYxLlJlc29sdmVQYXRjaEltYWdlSXRlbSJ9ChVSZXNvbHZlUGF0Y2hJbWFnZUl0ZW0SEgoKcmVxdWVzdF9pZBgBIAEoCRIRCglzYW1wbGVfaWQYAiABKAkSFwoPaW5zcGVjdGlvbl90aW1lGAMgASgJEhEKCXdhZmVyX2tleRgEIAEoBRIRCglkZWZlY3RfaWQYBSABKAkixgEKF1Jlc29sdmVQYXRjaEltYWdlUmVzdWx0EhIKCnJlcXVlc3RfaWQYASABKAkSEQoJc2FtcGxlX2lkGAIgASgJEhcKD2luc3BlY3Rpb25fdGltZRgDIAEoCRIRCgl3YWZlcl9rZXkYBCABKAUSEQoJZGVmZWN0X2lkGAUgASgJEgwKBHJvbGUYBiABKAkSEgoKaW1hZ2VfZGF0YRgHIAEoDBIUCgxjb250ZW50X3R5cGUYCCABKAkSDQoFZXJyb3IYCSABKAkiWwofUmVzb2x2ZVBhdGNoSW1hZ2VzQmF0Y2hSZXNwb25zZRI4CgdyZXN1bHRzGAEgAygLMicuaW1hZ2VwYXJzZXIudjEuUmVzb2x2ZVBhdGNoSW1hZ2VSZXN1bHQiVAoSV2FybVNjQ2FjaGVSZXF1ZXN0EhcKD2luc3BlY3Rpb25fdGltZRgBIAEoCRIRCgl3YWZlcl9rZXkYAiABKAUSEgoKZGVmZWN0X2lkcxgDIAMoBSI6ChNXYXJtU2NDYWNoZVJlc3BvbnNlEg4KBnN0YXR1cxgBIAEoCRITCgt6aXBzX3dhcm1lZBgCIAEoBTKoBgoLSW1hZ2VQYXJzZXISRwoGSGVhbHRoEh0uaW1hZ2VwYXJzZXIudjEuSGVhbHRoUmVxdWVzdBoeLmltYWdlcGFyc2VyLnYxLkhlYWx0aFJlc3BvbnNlEk0KCEdldEltYWdlEh8uaW1hZ2VwYXJzZXIudjEuR2V0SW1hZ2VSZXF1ZXN0GiAuaW1hZ2VwYXJzZXIudjEuR2V0SW1hZ2VSZXNwb25zZRJHCgZTcHJpdGUSHS5pbWFnZXBhcnNlci52MS5TcHJpdGVSZXF1ZXN0Gh4uaW1hZ2VwYXJzZXIudjEuU3ByaXRlUmVzcG9uc2USTQoIVjJTcHJpdGUSHy5pbWFnZXBhcnNlci52MS5WMlNwcml0ZVJlcXVlc3QaIC5pbWFnZXBhcnNlci52MS5WMlNwcml0ZVJlc3BvbnNlElMKCkdldFNjSW1hZ2USIS5pbWFnZXBhcnNlci52MS5HZXRTY0ltYWdlUmVxdWVzdBoiLmltYWdlcGFyc2VyLnYxLkdldFNjSW1hZ2VSZXNwb25zZRJiCg9CYXRjaEdldFNjSW1hZ2USJi5pbWFnZXBhcnNlci52MS5CYXRjaEdldFNjSW1hZ2VSZXF1ZXN0GicuaW1hZ2VwYXJzZXIudjEuQmF0Y2hHZXRTY0ltYWdlUmVzcG9uc2USbAoYU3RyZWFtU2NJbnNwZWN0aW9uSW1hZ2VzEi8uaW1hZ2VwYXJzZXIudjEuU3RyZWFtU2NJbnNwZWN0aW9uSW1hZ2VzUmVxdWVzdBodLmltYWdlcGFyc2VyLnYxLlNjSW1hZ2VSZXN1bHQwARJqChJSZXNvbHZlUGF0Y2hJbWFnZXMSKS5pbWFnZXBhcnNlci52MS5SZXNvbHZlUGF0Y2hJbWFnZXNSZXF1ZXN0GicuaW1hZ2VwYXJzZXIudjEuUmVzb2x2ZVBhdGNoSW1hZ2VSZXN1bHQwARJWCgtXYXJtU2NDYWNoZRIiLmltYWdlcGFyc2VyLnYxLldhcm1TY0NhY2hlUmVxdWVzdBojLmltYWdlcGFyc2VyLnYxLldhcm1TY0NhY2hlUmVzcG9uc2VCOFo2ZnQtcGxhdGZvcm0vcHJvdG9zL2dlbi9nby9pbWFnZXBhcnNlci92MTtpbWFnZXBhcnNlcnYxYgZwcm90bzM");
 
 /**
  * @generated from message imageparser.v1.HealthRequest
@@ -429,6 +429,148 @@ export const StreamScInspectionImagesRequestSchema: GenMessage<StreamScInspectio
   messageDesc(file_imageparser_v1_service, 14);
 
 /**
+ * @generated from message imageparser.v1.ResolvePatchImagesRequest
+ */
+export type ResolvePatchImagesRequest = Message<"imageparser.v1.ResolvePatchImagesRequest"> & {
+  /**
+   * @generated from field: string source_profile = 1;
+   */
+  sourceProfile: string;
+
+  /**
+   * @generated from field: repeated string roles = 2;
+   */
+  roles: string[];
+
+  /**
+   * @generated from field: repeated imageparser.v1.ResolvePatchImageItem items = 3;
+   */
+  items: ResolvePatchImageItem[];
+};
+
+/**
+ * Describes the message imageparser.v1.ResolvePatchImagesRequest.
+ * Use `create(ResolvePatchImagesRequestSchema)` to create a new message.
+ */
+export const ResolvePatchImagesRequestSchema: GenMessage<ResolvePatchImagesRequest> = /*@__PURE__*/
+  messageDesc(file_imageparser_v1_service, 15);
+
+/**
+ * @generated from message imageparser.v1.ResolvePatchImageItem
+ */
+export type ResolvePatchImageItem = Message<"imageparser.v1.ResolvePatchImageItem"> & {
+  /**
+   * @generated from field: string request_id = 1;
+   */
+  requestId: string;
+
+  /**
+   * @generated from field: string sample_id = 2;
+   */
+  sampleId: string;
+
+  /**
+   * @generated from field: string inspection_time = 3;
+   */
+  inspectionTime: string;
+
+  /**
+   * @generated from field: int32 wafer_key = 4;
+   */
+  waferKey: number;
+
+  /**
+   * @generated from field: string defect_id = 5;
+   */
+  defectId: string;
+};
+
+/**
+ * Describes the message imageparser.v1.ResolvePatchImageItem.
+ * Use `create(ResolvePatchImageItemSchema)` to create a new message.
+ */
+export const ResolvePatchImageItemSchema: GenMessage<ResolvePatchImageItem> = /*@__PURE__*/
+  messageDesc(file_imageparser_v1_service, 16);
+
+/**
+ * @generated from message imageparser.v1.ResolvePatchImageResult
+ */
+export type ResolvePatchImageResult = Message<"imageparser.v1.ResolvePatchImageResult"> & {
+  /**
+   * @generated from field: string request_id = 1;
+   */
+  requestId: string;
+
+  /**
+   * @generated from field: string sample_id = 2;
+   */
+  sampleId: string;
+
+  /**
+   * @generated from field: string inspection_time = 3;
+   */
+  inspectionTime: string;
+
+  /**
+   * @generated from field: int32 wafer_key = 4;
+   */
+  waferKey: number;
+
+  /**
+   * @generated from field: string defect_id = 5;
+   */
+  defectId: string;
+
+  /**
+   * @generated from field: string role = 6;
+   */
+  role: string;
+
+  /**
+   * @generated from field: bytes image_data = 7;
+   */
+  imageData: Uint8Array;
+
+  /**
+   * @generated from field: string content_type = 8;
+   */
+  contentType: string;
+
+  /**
+   * @generated from field: string error = 9;
+   */
+  error: string;
+};
+
+/**
+ * Describes the message imageparser.v1.ResolvePatchImageResult.
+ * Use `create(ResolvePatchImageResultSchema)` to create a new message.
+ */
+export const ResolvePatchImageResultSchema: GenMessage<ResolvePatchImageResult> = /*@__PURE__*/
+  messageDesc(file_imageparser_v1_service, 17);
+
+/**
+ * One ordered response frame used by the offline stdin/stdout batch parser.
+ * It is deliberately not an RPC response: Training launches the parser locally
+ * and never consumes the online ImageParser service.
+ *
+ * @generated from message imageparser.v1.ResolvePatchImagesBatchResponse
+ */
+export type ResolvePatchImagesBatchResponse = Message<"imageparser.v1.ResolvePatchImagesBatchResponse"> & {
+  /**
+   * @generated from field: repeated imageparser.v1.ResolvePatchImageResult results = 1;
+   */
+  results: ResolvePatchImageResult[];
+};
+
+/**
+ * Describes the message imageparser.v1.ResolvePatchImagesBatchResponse.
+ * Use `create(ResolvePatchImagesBatchResponseSchema)` to create a new message.
+ */
+export const ResolvePatchImagesBatchResponseSchema: GenMessage<ResolvePatchImagesBatchResponse> = /*@__PURE__*/
+  messageDesc(file_imageparser_v1_service, 18);
+
+/**
  * @generated from message imageparser.v1.WarmScCacheRequest
  */
 export type WarmScCacheRequest = Message<"imageparser.v1.WarmScCacheRequest"> & {
@@ -453,7 +595,7 @@ export type WarmScCacheRequest = Message<"imageparser.v1.WarmScCacheRequest"> & 
  * Use `create(WarmScCacheRequestSchema)` to create a new message.
  */
 export const WarmScCacheRequestSchema: GenMessage<WarmScCacheRequest> = /*@__PURE__*/
-  messageDesc(file_imageparser_v1_service, 15);
+  messageDesc(file_imageparser_v1_service, 19);
 
 /**
  * @generated from message imageparser.v1.WarmScCacheResponse
@@ -475,7 +617,7 @@ export type WarmScCacheResponse = Message<"imageparser.v1.WarmScCacheResponse"> 
  * Use `create(WarmScCacheResponseSchema)` to create a new message.
  */
 export const WarmScCacheResponseSchema: GenMessage<WarmScCacheResponse> = /*@__PURE__*/
-  messageDesc(file_imageparser_v1_service, 16);
+  messageDesc(file_imageparser_v1_service, 20);
 
 /**
  * @generated from service imageparser.v1.ImageParser
@@ -536,6 +678,14 @@ export const ImageParser: GenService<{
     methodKind: "server_streaming";
     input: typeof StreamScInspectionImagesRequestSchema;
     output: typeof ScImageResultSchema;
+  },
+  /**
+   * @generated from rpc imageparser.v1.ImageParser.ResolvePatchImages
+   */
+  resolvePatchImages: {
+    methodKind: "server_streaming";
+    input: typeof ResolvePatchImagesRequestSchema;
+    output: typeof ResolvePatchImageResultSchema;
   },
   /**
    * @generated from rpc imageparser.v1.ImageParser.WarmScCache

@@ -14,13 +14,13 @@ import polars as pl
 from app.modules.dataset_collections.port.local import (
     DatasetCollectionRevisionReaderPort,
 )
-from app.modules.datasets.port.local import DatasetRevisionReaderPort
 from app.modules.runtime.domain.context import (
     PredictionRuntimeContext,
     TrainingRuntimeContext,
 )
 from app.modules.storage.port.local import DatasetStorageFactoryPort
 from app.modules.storage.domain.storage_agg import DatasetStorageAgg
+from app.modules.sc.domain.image_source import require_sc_patch_archive_profile
 from app.shared.api.schemas import Dataset
 
 
@@ -38,6 +38,7 @@ class ScRuntimeSource:
     collection_id: str | None
     collection_revision_id: str | None
     source_dataset_ids: tuple[str, ...]
+    image_source_profiles: dict[str, str]
     resolved_dataset_revision_ids: tuple[str, ...] = ()
 
 
@@ -60,6 +61,7 @@ async def open_sc_runtime_source(
             org_id=getattr(runtime_ctx, "org_id", ""),
         )
         dataset = cast(Dataset, await storage.get_dataset_metadata())
+        image_source_profile = require_sc_patch_archive_profile(dataset)
         rows = cast(
             pl.LazyFrame,
             await storage.list_samples(
@@ -80,6 +82,7 @@ async def open_sc_runtime_source(
             collection_id=source.collection_id,
             collection_revision_id=source.collection_revision_id,
             source_dataset_ids=(source.dataset_id,),
+            image_source_profiles={source.dataset_id: image_source_profile},
         )
         return
 
@@ -109,6 +112,10 @@ async def open_sc_runtime_source(
         else ()
     )
     if revision.source_resolution == "observed":
+        # Import lazily so dataset compatibility registration cannot recurse
+        # through the SC runtime router while this module is initializing.
+        from app.modules.datasets.port.local import DatasetRevisionReaderPort
+
         storage_factory = app_context.injector.get(DatasetStorageFactoryPort)
         storages = await asyncio.gather(
             *(
@@ -133,6 +140,17 @@ async def open_sc_runtime_source(
                 )
             )
         )
+        member_datasets = await asyncio.gather(
+            *(storage.get_dataset_metadata() for storage in storages)
+        )
+        image_source_profiles = {
+            dataset_id: require_sc_patch_archive_profile(cast(Dataset, dataset))
+            for dataset_id, dataset in zip(
+                source_dataset_ids,
+                member_datasets,
+                strict=True,
+            )
+        }
         dataset_revision_reader = app_context.injector.get(DatasetRevisionReaderPort)
         launch_revisions = await asyncio.gather(
             *(
@@ -164,6 +182,7 @@ async def open_sc_runtime_source(
             collection_id=source.collection_id,
             collection_revision_id=revision.id,
             source_dataset_ids=source_dataset_ids,
+            image_source_profiles=image_source_profiles,
             resolved_dataset_revision_ids=resolved_revision_ids,
         )
         return
@@ -177,6 +196,9 @@ async def open_sc_runtime_source(
         rows = pl.scan_parquet(data_path)
         if runtime_ctx.sample_ids is not None:
             rows = rows.filter(pl.col("sample_id").is_in(runtime_ctx.sample_ids))
+        image_source_profiles = _snapshot_image_source_profiles(
+            revision.source_snapshot
+        )
         yield ScRuntimeSource(
             rows=rows,
             source_identity=source.identity,
@@ -187,7 +209,37 @@ async def open_sc_runtime_source(
             collection_id=source.collection_id,
             collection_revision_id=revision.id,
             source_dataset_ids=source_dataset_ids,
+            image_source_profiles=image_source_profiles,
         )
+
+
+def _snapshot_image_source_profiles(
+    source_snapshot: tuple[dict[str, object], ...],
+) -> dict[str, str]:
+    profiles: dict[str, str] = {}
+    for item in source_snapshot:
+        dataset_id = item.get("source_dataset_id")
+        image_source = item.get("image_source")
+        if not isinstance(dataset_id, str) or not dataset_id:
+            raise ValueError("Collection source snapshot is missing source_dataset_id")
+        if not isinstance(image_source, dict):
+            raise ValueError(
+                f"Collection member Dataset '{dataset_id}' has no observed image "
+                "source binding"
+            )
+        contract = image_source.get("contract")
+        profile = image_source.get("profile")
+        if (
+            contract != "sc.patch_archive.v1"
+            or not isinstance(profile, str)
+            or not profile.strip()
+        ):
+            raise ValueError(
+                f"Collection member Dataset '{dataset_id}' has an incompatible "
+                "image source binding"
+            )
+        profiles[dataset_id] = profile
+    return profiles
 
 
 async def _observed_member_rows(

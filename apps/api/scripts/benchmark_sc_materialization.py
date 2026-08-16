@@ -9,6 +9,7 @@ import random
 import tempfile
 import time
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Any
 
 import polars as pl
@@ -22,12 +23,18 @@ from app.modules.storage.domain.data_plane import DataPlaneSchemaRegistry
 
 
 class _InlineOnlyImageSource:
-    async def stream_inspection_images(
+    async def resolve_patch_images(
         self,
         **_kwargs: Any,
     ) -> AsyncIterator[dict[str, Any]]:
         raise AssertionError("benchmark rows must contain inline images")
         yield {}
+
+
+class _InlineOnlyImageSourceFactory:
+    @asynccontextmanager
+    async def open(self) -> AsyncIterator[_InlineOnlyImageSource]:
+        yield _InlineOnlyImageSource()
 
 
 def _images(*, count: int, image_size: int, seed: int) -> list[bytes]:
@@ -74,7 +81,7 @@ async def _benchmark(args: argparse.Namespace) -> dict[str, float | int]:
 
     with tempfile.TemporaryDirectory() as temp_dir:
         materializer = ScInspectionMaterializer(
-            _InlineOnlyImageSource(),
+            image_source_factory=_InlineOnlyImageSourceFactory(),
             schema_registry=DataPlaneSchemaRegistry.default(),
             batch_rows=args.batch_rows,
             max_error_records=1_000,
@@ -83,6 +90,8 @@ async def _benchmark(args: argparse.Namespace) -> dict[str, float | int]:
         started = time.perf_counter()
         result = await materializer.materialize(
             rows_lazyframe=lazyframe,
+            image_source_profiles={"benchmark": "inline-only"},
+            direct_dataset_id="benchmark",
             dataset_id="benchmark",
             job_id="benchmark",
             image_types=["patch_template", "patch_defective"],

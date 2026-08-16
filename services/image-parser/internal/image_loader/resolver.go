@@ -15,31 +15,54 @@ const defectsPerZip = 500
 const patchZipWorkerLimit = 8
 
 type Resolver struct {
-	upstream UpstreamSource
-	loader   objectLoader
-	zipCache *cache.ZipCache
-	warmer   *cache.Warmer
+	upstream            UpstreamSource
+	loader              objectLoader
+	providers           *PatchArchiveProviderRegistry
+	defaultPatchProfile string
+	zipCache            *cache.ZipCache
+	warmer              *cache.Warmer
 }
 
 func newResolver(upstream UpstreamSource, loader objectLoader, zipCache *cache.ZipCache, warmer *cache.Warmer) *Resolver {
+	registry, err := NewPatchArchiveProviderRegistry(map[string]PatchArchiveProvider{
+		PatchProviderScUpstream: newUpstreamPatchArchiveProvider(upstream, loader),
+	})
+	if err != nil {
+		panic(err)
+	}
+	return newResolverWithProfiles(upstream, loader, registry, PatchProviderScUpstream, zipCache, warmer)
+}
+
+func newResolverWithProfiles(upstream UpstreamSource, loader objectLoader, providers *PatchArchiveProviderRegistry, defaultPatchProfile string, zipCache *cache.ZipCache, warmer *cache.Warmer) *Resolver {
 	return &Resolver{
-		upstream: upstream,
-		loader:   loader,
-		zipCache: zipCache,
-		warmer:   warmer,
+		upstream:            upstream,
+		loader:              loader,
+		providers:           providers,
+		defaultPatchProfile: defaultPatchProfile,
+		zipCache:            zipCache,
+		warmer:              warmer,
 	}
 }
 
 func (r *Resolver) GetImageBytes(ctx context.Context, keys []ImageKey) []ImageBytes {
 	results := make([]ImageBytes, len(keys))
-	patchLookupsByInspection := map[InspectionKey][]patchImageLookup{}
+	type patchBatchKey struct {
+		Profile string
+		InspectionKey
+	}
+	patchLookupsByInspection := map[patchBatchKey][]patchImageLookup{}
 
 	for i, key := range keys {
 		results[i] = ImageBytes{Key: key}
 		switch key.Kind {
 		case ImageKindPatch:
-			patchLookupsByInspection[key.InspectionKey] = append(
-				patchLookupsByInspection[key.InspectionKey],
+			profile := strings.TrimSpace(key.SourceProfile)
+			if profile == "" {
+				profile = r.defaultPatchProfile
+			}
+			patchKey := patchBatchKey{Profile: profile, InspectionKey: key.InspectionKey}
+			patchLookupsByInspection[patchKey] = append(
+				patchLookupsByInspection[patchKey],
 				patchImageLookup{Index: i, DefectID: key.DefectID, ImageType: key.ImageType},
 			)
 		case ImageKindReview:
@@ -52,8 +75,11 @@ func (r *Resolver) GetImageBytes(ctx context.Context, keys []ImageKey) []ImageBy
 		}
 	}
 
-	for inspection, lookups := range patchLookupsByInspection {
-		resolved := r.loadPatchImages(ctx, inspection, lookups)
+	for batchKey, lookups := range patchLookupsByInspection {
+		resolved, err := r.resolvePatchImages(ctx, batchKey.Profile, batchKey.InspectionKey, lookups)
+		if err != nil {
+			resolved = failedPatchLookups(lookups, err)
+		}
 		for _, item := range resolved {
 			results[item.Index].Data = item.Data
 			results[item.Index].ContentType = "image/png"
@@ -61,6 +87,39 @@ func (r *Resolver) GetImageBytes(ctx context.Context, keys []ImageKey) []ImageBy
 		}
 	}
 	return results
+}
+
+func (r *Resolver) ResolvePatchImageBytes(ctx context.Context, profile string, keys []ImageKey) ([]ImageBytes, error) {
+	if _, err := r.providers.Get(profile); err != nil {
+		return nil, err
+	}
+	type patchBatchKey struct {
+		InspectionKey
+	}
+	grouped := make(map[patchBatchKey][]patchImageLookup)
+	results := make([]ImageBytes, len(keys))
+	for index, key := range keys {
+		results[index] = ImageBytes{Key: key}
+		if key.Kind != ImageKindPatch {
+			return nil, fmt.Errorf("ResolvePatchImageBytes only accepts patch image keys")
+		}
+		grouped[patchBatchKey{InspectionKey: key.InspectionKey}] = append(
+			grouped[patchBatchKey{InspectionKey: key.InspectionKey}],
+			patchImageLookup{Index: index, DefectID: key.DefectID, ImageType: key.ImageType},
+		)
+	}
+	for batchKey, lookups := range grouped {
+		resolved, err := r.resolvePatchImages(ctx, profile, batchKey.InspectionKey, lookups)
+		if err != nil {
+			return nil, err
+		}
+		for _, item := range resolved {
+			results[item.Index].Data = item.Data
+			results[item.Index].ContentType = "image/png"
+			results[item.Index].Err = item.Err
+		}
+	}
+	return results, nil
 }
 
 func parseDefectID(defectID string) (int, error) {
@@ -113,12 +172,13 @@ type patchImageLookupResult struct {
 	Err       error
 }
 
-func locateZipForDefect(zips []cacheZipRef, defectID int) (*cacheZipRef, error) {
+func locateZipForDefect(zips map[int]PatchArchive, defectID int) (*PatchArchive, error) {
 	zipIdx := zipIndexForDefect(defectID)
-	if zipIdx >= len(zips) {
-		return nil, fmt.Errorf("defect %d out of range (zip_idx=%d, total_zips=%d)", defectID, zipIdx, len(zips))
+	archive, ok := zips[zipIdx]
+	if !ok {
+		return nil, fmt.Errorf("defect %d has no patch archive at index %d", defectID, zipIdx)
 	}
-	return &zips[zipIdx], nil
+	return &archive, nil
 }
 
 func patchImagePrefix(defectID int, imageType string) (string, bool) {
@@ -163,7 +223,7 @@ func (r *Resolver) getMetaAndZips(ctx context.Context, inspectionTime string, wa
 	return m.LotId, m.WaferId, m.Device, m.LayerId, zips, nil
 }
 
-func (r *Resolver) getPatchImageBytesBatchFromZips(ctx context.Context, zips []cacheZipRef, lookups []patchImageLookup) []patchImageLookupResult {
+func (r *Resolver) getPatchImageBytesBatchFromZips(ctx context.Context, provider PatchArchiveProvider, zips map[int]PatchArchive, lookups []patchImageLookup) []patchImageLookupResult {
 	results := make([]patchImageLookupResult, len(lookups))
 	type zipLookup struct {
 		resultIdx int
@@ -171,7 +231,7 @@ func (r *Resolver) getPatchImageBytesBatchFromZips(ctx context.Context, zips []c
 		legacy    bool
 	}
 	grouped := map[string][]zipLookup{}
-	refs := map[string]cacheZipRef{}
+	refs := map[string]PatchArchive{}
 
 	for i, lookup := range lookups {
 		results[i] = patchImageLookupResult{
@@ -193,7 +253,7 @@ func (r *Resolver) getPatchImageBytesBatchFromZips(ctx context.Context, zips []c
 			results[i].Err = fmt.Errorf("locate zip: %w", err)
 			continue
 		}
-		key := cache.CacheKey(ref.Bucket, ref.Key)
+		key := ref.CacheKey
 		refs[key] = *ref
 		prefix, ok := patchImagePrefix(did, lookup.ImageType)
 		legacy := false
@@ -225,7 +285,7 @@ func (r *Resolver) getPatchImageBytesBatchFromZips(ctx context.Context, zips []c
 
 			ref := refs[key]
 			zipData, err := r.zipCache.GetOrLoad(key, func() ([]byte, error) {
-				return r.loader.LoadPatchZip(ctx, ref.Bucket, ref.Key)
+				return provider.LoadArchive(ctx, ref)
 			})
 			if err != nil {
 				for _, item := range items {
@@ -256,21 +316,33 @@ func (r *Resolver) getPatchImageBytesBatchFromZips(ctx context.Context, zips []c
 	return results
 }
 
-func (r *Resolver) loadPatchImages(ctx context.Context, inspection InspectionKey, lookups []patchImageLookup) []patchImageLookupResult {
-	_, _, _, _, zips, err := r.getMetaAndZips(ctx, inspection.InspectionTime, inspection.WaferKey)
+func (r *Resolver) resolvePatchImages(ctx context.Context, profile string, inspection InspectionKey, lookups []patchImageLookup) ([]patchImageLookupResult, error) {
+	provider, err := r.providers.Get(profile)
 	if err != nil {
-		results := make([]patchImageLookupResult, len(lookups))
-		for i, lookup := range lookups {
-			results[i] = patchImageLookupResult{
-				Index:     lookup.Index,
-				DefectID:  lookup.DefectID,
-				ImageType: lookup.ImageType,
-				Err:       err,
-			}
-		}
-		return results
+		return nil, err
 	}
-	return r.getPatchImageBytesBatchFromZips(ctx, zips, lookups)
+	zipIndexes := make([]int, 0, len(lookups))
+	for _, lookup := range lookups {
+		defectID, parseErr := parseDefectID(lookup.DefectID)
+		if parseErr == nil {
+			zipIndexes = append(zipIndexes, zipIndexForDefect(defectID))
+		}
+	}
+	zips, err := provider.ResolveArchives(ctx, inspection, zipIndexes)
+	if err != nil {
+		return nil, err
+	}
+	return r.getPatchImageBytesBatchFromZips(ctx, provider, zips, lookups), nil
+}
+
+func failedPatchLookups(lookups []patchImageLookup, err error) []patchImageLookupResult {
+	results := make([]patchImageLookupResult, len(lookups))
+	for i, lookup := range lookups {
+		results[i] = patchImageLookupResult{
+			Index: lookup.Index, DefectID: lookup.DefectID, ImageType: lookup.ImageType, Err: err,
+		}
+	}
+	return results
 }
 
 func matchedImageType(name string) string {

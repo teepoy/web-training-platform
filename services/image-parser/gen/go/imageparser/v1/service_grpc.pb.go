@@ -26,6 +26,7 @@ const (
 	ImageParser_GetScImage_FullMethodName               = "/imageparser.v1.ImageParser/GetScImage"
 	ImageParser_BatchGetScImage_FullMethodName          = "/imageparser.v1.ImageParser/BatchGetScImage"
 	ImageParser_StreamScInspectionImages_FullMethodName = "/imageparser.v1.ImageParser/StreamScInspectionImages"
+	ImageParser_ResolvePatchImages_FullMethodName       = "/imageparser.v1.ImageParser/ResolvePatchImages"
 	ImageParser_WarmScCache_FullMethodName              = "/imageparser.v1.ImageParser/WarmScCache"
 )
 
@@ -40,6 +41,7 @@ type ImageParserClient interface {
 	GetScImage(ctx context.Context, in *GetScImageRequest, opts ...grpc.CallOption) (*GetScImageResponse, error)
 	BatchGetScImage(ctx context.Context, in *BatchGetScImageRequest, opts ...grpc.CallOption) (*BatchGetScImageResponse, error)
 	StreamScInspectionImages(ctx context.Context, in *StreamScInspectionImagesRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ScImageResult], error)
+	ResolvePatchImages(ctx context.Context, in *ResolvePatchImagesRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ResolvePatchImageResult], error)
 	WarmScCache(ctx context.Context, in *WarmScCacheRequest, opts ...grpc.CallOption) (*WarmScCacheResponse, error)
 }
 
@@ -130,6 +132,25 @@ func (c *imageParserClient) StreamScInspectionImages(ctx context.Context, in *St
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type ImageParser_StreamScInspectionImagesClient = grpc.ServerStreamingClient[ScImageResult]
 
+func (c *imageParserClient) ResolvePatchImages(ctx context.Context, in *ResolvePatchImagesRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ResolvePatchImageResult], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &ImageParser_ServiceDesc.Streams[1], ImageParser_ResolvePatchImages_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[ResolvePatchImagesRequest, ResolvePatchImageResult]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type ImageParser_ResolvePatchImagesClient = grpc.ServerStreamingClient[ResolvePatchImageResult]
+
 func (c *imageParserClient) WarmScCache(ctx context.Context, in *WarmScCacheRequest, opts ...grpc.CallOption) (*WarmScCacheResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(WarmScCacheResponse)
@@ -151,6 +172,7 @@ type ImageParserServer interface {
 	GetScImage(context.Context, *GetScImageRequest) (*GetScImageResponse, error)
 	BatchGetScImage(context.Context, *BatchGetScImageRequest) (*BatchGetScImageResponse, error)
 	StreamScInspectionImages(*StreamScInspectionImagesRequest, grpc.ServerStreamingServer[ScImageResult]) error
+	ResolvePatchImages(*ResolvePatchImagesRequest, grpc.ServerStreamingServer[ResolvePatchImageResult]) error
 	WarmScCache(context.Context, *WarmScCacheRequest) (*WarmScCacheResponse, error)
 	mustEmbedUnimplementedImageParserServer()
 }
@@ -182,6 +204,9 @@ func (UnimplementedImageParserServer) BatchGetScImage(context.Context, *BatchGet
 }
 func (UnimplementedImageParserServer) StreamScInspectionImages(*StreamScInspectionImagesRequest, grpc.ServerStreamingServer[ScImageResult]) error {
 	return status.Error(codes.Unimplemented, "method StreamScInspectionImages not implemented")
+}
+func (UnimplementedImageParserServer) ResolvePatchImages(*ResolvePatchImagesRequest, grpc.ServerStreamingServer[ResolvePatchImageResult]) error {
+	return status.Error(codes.Unimplemented, "method ResolvePatchImages not implemented")
 }
 func (UnimplementedImageParserServer) WarmScCache(context.Context, *WarmScCacheRequest) (*WarmScCacheResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method WarmScCache not implemented")
@@ -326,6 +351,17 @@ func _ImageParser_StreamScInspectionImages_Handler(srv interface{}, stream grpc.
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type ImageParser_StreamScInspectionImagesServer = grpc.ServerStreamingServer[ScImageResult]
 
+func _ImageParser_ResolvePatchImages_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(ResolvePatchImagesRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(ImageParserServer).ResolvePatchImages(m, &grpc.GenericServerStream[ResolvePatchImagesRequest, ResolvePatchImageResult]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type ImageParser_ResolvePatchImagesServer = grpc.ServerStreamingServer[ResolvePatchImageResult]
+
 func _ImageParser_WarmScCache_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(WarmScCacheRequest)
 	if err := dec(in); err != nil {
@@ -384,6 +420,11 @@ var ImageParser_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "StreamScInspectionImages",
 			Handler:       _ImageParser_StreamScInspectionImages_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "ResolvePatchImages",
+			Handler:       _ImageParser_ResolvePatchImages_Handler,
 			ServerStreams: true,
 		},
 	},

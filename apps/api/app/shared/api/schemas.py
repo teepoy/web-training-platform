@@ -67,6 +67,18 @@ class TaskSpec(BaseModel):
     metadata_schema: dict[str, dict[str, str]] = Field(default_factory=dict)
 
 
+class ImageSourceBinding(BaseModel):
+    """Deployment-owned image resolver contract selected by a Dataset.
+
+    The profile is an opaque registry key.  Filesystem roots, network
+    credentials, and other provider configuration never belong in Dataset
+    metadata.
+    """
+
+    contract: str = Field(min_length=1)
+    profile: str = Field(min_length=1)
+
+
 class Dataset(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
     name: str
@@ -84,6 +96,7 @@ class Dataset(BaseModel):
     ls_project_url: str | None = None
     storage_mode: DatasetStorageMode = DatasetStorageMode.DB_FULL
     dataset_meta: dict = Field(default_factory=dict)
+    image_source: ImageSourceBinding | None = None
 
 
 class CreatorSummary(BaseModel):

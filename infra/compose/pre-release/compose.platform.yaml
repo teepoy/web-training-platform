@@ -29,6 +29,7 @@ services:
   prefect-worker-gpu:
     volumes:
       - platform-data:/mnt
+      - image-parser-data:/data:ro
 
   sc-upstream:
     ports:

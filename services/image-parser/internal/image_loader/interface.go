@@ -2,6 +2,7 @@ package image_loader
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -24,6 +25,7 @@ type InspectionKey struct {
 type ImageKey struct {
 	Kind ImageKind
 	InspectionKey
+	SourceProfile string
 	DefectID      string
 	ImageType     string
 	ReviewImageID int
@@ -48,6 +50,13 @@ type Options struct {
 	CacheTTL             time.Duration
 	CacheCleanupInterval time.Duration
 	CacheMaxBytes        int64
+	PatchSourceProfiles  map[string]PatchSourceProfileConfig
+	DefaultPatchProfile  string
+}
+
+type PatchSourceProfileConfig struct {
+	Provider string `json:"provider"`
+	Root     string `json:"root,omitempty"`
 }
 
 type UpstreamSource interface {
@@ -90,11 +99,37 @@ func Initialize(opts Options) (ImageLoader, func(), error) {
 	}
 
 	loader := s3ImageLoader{}
+	profiles := make(map[string]PatchArchiveProvider, len(opts.PatchSourceProfiles))
+	for profile, config := range opts.PatchSourceProfiles {
+		switch config.Provider {
+		case PatchProviderScUpstream:
+			profiles[profile] = newUpstreamPatchArchiveProvider(opts.Upstream, loader)
+		case PatchProviderScZipFolder:
+			provider, err := NewFolderPatchArchiveProvider(config.Root)
+			if err != nil {
+				_ = zipCache.Close()
+				return nil, nil, fmt.Errorf("configure image source profile %q: %w", profile, err)
+			}
+			profiles[profile] = provider
+		default:
+			_ = zipCache.Close()
+			return nil, nil, fmt.Errorf("image source profile %q has unknown provider %q", profile, config.Provider)
+		}
+	}
+	registry, err := NewPatchArchiveProviderRegistry(profiles)
+	if err != nil {
+		_ = zipCache.Close()
+		return nil, nil, err
+	}
+	if _, err := registry.Get(opts.DefaultPatchProfile); err != nil {
+		_ = zipCache.Close()
+		return nil, nil, fmt.Errorf("default patch source profile: %w", err)
+	}
 	warmer := cache.NewWarmer(zipCache, func(bucket, key string) ([]byte, error) {
 		return loader.LoadPatchZip(context.Background(), bucket, key)
 	})
 
-	return newResolver(opts.Upstream, loader, zipCache, warmer), func() {
+	return newResolverWithProfiles(opts.Upstream, loader, registry, opts.DefaultPatchProfile, zipCache, warmer), func() {
 		_ = zipCache.Close()
 	}, nil
 }

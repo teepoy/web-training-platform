@@ -405,6 +405,132 @@ class StreamScInspectionImagesRequest(_message.Message):
 Global___StreamScInspectionImagesRequest: _TypeAlias = StreamScInspectionImagesRequest  # noqa: Y015
 
 @_typing.final
+class ResolvePatchImagesRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    SOURCE_PROFILE_FIELD_NUMBER: _builtins.int
+    ROLES_FIELD_NUMBER: _builtins.int
+    ITEMS_FIELD_NUMBER: _builtins.int
+    source_profile: _builtins.str
+    @_builtins.property
+    def roles(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]: ...
+    @_builtins.property
+    def items(self) -> _containers.RepeatedCompositeFieldContainer[Global___ResolvePatchImageItem]: ...
+    def __init__(
+        self,
+        *,
+        source_profile: _builtins.str = ...,
+        roles: _abc.Iterable[_builtins.str] | None = ...,
+        items: _abc.Iterable[Global___ResolvePatchImageItem] | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["items", b"items", "roles", b"roles", "source_profile", b"source_profile"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___ResolvePatchImagesRequest: _TypeAlias = ResolvePatchImagesRequest  # noqa: Y015
+
+@_typing.final
+class ResolvePatchImageItem(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    REQUEST_ID_FIELD_NUMBER: _builtins.int
+    SAMPLE_ID_FIELD_NUMBER: _builtins.int
+    INSPECTION_TIME_FIELD_NUMBER: _builtins.int
+    WAFER_KEY_FIELD_NUMBER: _builtins.int
+    DEFECT_ID_FIELD_NUMBER: _builtins.int
+    request_id: _builtins.str
+    sample_id: _builtins.str
+    inspection_time: _builtins.str
+    wafer_key: _builtins.int
+    defect_id: _builtins.str
+    def __init__(
+        self,
+        *,
+        request_id: _builtins.str = ...,
+        sample_id: _builtins.str = ...,
+        inspection_time: _builtins.str = ...,
+        wafer_key: _builtins.int = ...,
+        defect_id: _builtins.str = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["defect_id", b"defect_id", "inspection_time", b"inspection_time", "request_id", b"request_id", "sample_id", b"sample_id", "wafer_key", b"wafer_key"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___ResolvePatchImageItem: _TypeAlias = ResolvePatchImageItem  # noqa: Y015
+
+@_typing.final
+class ResolvePatchImageResult(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    REQUEST_ID_FIELD_NUMBER: _builtins.int
+    SAMPLE_ID_FIELD_NUMBER: _builtins.int
+    INSPECTION_TIME_FIELD_NUMBER: _builtins.int
+    WAFER_KEY_FIELD_NUMBER: _builtins.int
+    DEFECT_ID_FIELD_NUMBER: _builtins.int
+    ROLE_FIELD_NUMBER: _builtins.int
+    IMAGE_DATA_FIELD_NUMBER: _builtins.int
+    CONTENT_TYPE_FIELD_NUMBER: _builtins.int
+    ERROR_FIELD_NUMBER: _builtins.int
+    request_id: _builtins.str
+    sample_id: _builtins.str
+    inspection_time: _builtins.str
+    wafer_key: _builtins.int
+    defect_id: _builtins.str
+    role: _builtins.str
+    image_data: _builtins.bytes
+    content_type: _builtins.str
+    error: _builtins.str
+    def __init__(
+        self,
+        *,
+        request_id: _builtins.str = ...,
+        sample_id: _builtins.str = ...,
+        inspection_time: _builtins.str = ...,
+        wafer_key: _builtins.int = ...,
+        defect_id: _builtins.str = ...,
+        role: _builtins.str = ...,
+        image_data: _builtins.bytes = ...,
+        content_type: _builtins.str = ...,
+        error: _builtins.str = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["content_type", b"content_type", "defect_id", b"defect_id", "error", b"error", "image_data", b"image_data", "inspection_time", b"inspection_time", "request_id", b"request_id", "role", b"role", "sample_id", b"sample_id", "wafer_key", b"wafer_key"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___ResolvePatchImageResult: _TypeAlias = ResolvePatchImageResult  # noqa: Y015
+
+@_typing.final
+class ResolvePatchImagesBatchResponse(_message.Message):
+    """One ordered response frame used by the offline stdin/stdout batch parser.
+    It is deliberately not an RPC response: Training launches the parser locally
+    and never consumes the online ImageParser service.
+    """
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    RESULTS_FIELD_NUMBER: _builtins.int
+    @_builtins.property
+    def results(self) -> _containers.RepeatedCompositeFieldContainer[Global___ResolvePatchImageResult]: ...
+    def __init__(
+        self,
+        *,
+        results: _abc.Iterable[Global___ResolvePatchImageResult] | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["results", b"results"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___ResolvePatchImagesBatchResponse: _TypeAlias = ResolvePatchImagesBatchResponse  # noqa: Y015
+
+@_typing.final
 class WarmScCacheRequest(_message.Message):
     DESCRIPTOR: _descriptor.Descriptor
 

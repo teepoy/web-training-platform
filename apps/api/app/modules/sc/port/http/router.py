@@ -1357,7 +1357,7 @@ async def start_sc_import(
     current_user: CurrentUserDep,
     org: CurrentOrgDep,
 ) -> ScImportResponse:
-    status = await sc_import_service.submit_import(
+    status = await sc_import_service.submit_upstream_import(
         source_inspection_time=payload.source_inspection_time,
         source_wafer_key=payload.source_wafer_key,
         dataset_name=payload.dataset_name,
@@ -1405,7 +1405,7 @@ async def stream_sc_import(
             )
         )
         import_task = asyncio.create_task(
-            sc_import_service.submit_import(
+            sc_import_service.submit_upstream_import(
                 source_inspection_time=payload.source_inspection_time,
                 source_wafer_key=payload.source_wafer_key,
                 dataset_name=payload.dataset_name,

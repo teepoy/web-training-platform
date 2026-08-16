@@ -82,7 +82,7 @@ def test_post_import_success_returns_202() -> None:
         dataset_name="test-sc-dataset",
         storage_mode="file_shard_sparse",
     )
-    mock_service.submit_import = AsyncMock(return_value=mock_status)
+    mock_service.submit_upstream_import = AsyncMock(return_value=mock_status)
 
     _mock_auth()
     _set_service_mock(mock_service)
@@ -102,7 +102,7 @@ def test_post_import_success_returns_202() -> None:
 def test_post_import_stream_emits_progress_and_result() -> None:
     mock_service = MagicMock()
 
-    async def submit_import(**kwargs: object) -> ScImportStatus:
+    async def submit_upstream_import(**kwargs: object) -> ScImportStatus:
         on_progress = cast(
             Callable[[ScImportStatus], Awaitable[None]],
             kwargs["on_progress"],
@@ -130,7 +130,7 @@ def test_post_import_stream_emits_progress_and_result() -> None:
             storage_mode="file_shard_sparse",
         )
 
-    mock_service.submit_import = AsyncMock(side_effect=submit_import)
+    mock_service.submit_upstream_import = AsyncMock(side_effect=submit_upstream_import)
 
     _mock_auth()
     _set_service_mock(mock_service)
@@ -183,7 +183,7 @@ def test_post_import_direct_import_failure_returns_502() -> None:
         dataset_name="test-sc-dataset",
         storage_mode="file_shard_sparse",
     )
-    mock_service.submit_import = AsyncMock(return_value=mock_status)
+    mock_service.submit_upstream_import = AsyncMock(return_value=mock_status)
 
     _mock_auth()
     _set_service_mock(mock_service)

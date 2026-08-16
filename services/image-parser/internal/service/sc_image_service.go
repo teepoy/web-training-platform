@@ -4,7 +4,12 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strconv"
+	"strings"
+	"time"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	imageparserv1 "image-parser/gen/go/imageparser/v1"
 	imageloader "image-parser/internal/image_loader"
 )
@@ -14,6 +19,10 @@ const streamLookupBatchSize = 2048
 type ScImageService struct {
 	imageparserv1.UnimplementedImageParserServer
 	images imageloader.ImageLoader
+}
+
+type patchImageBatchResolver interface {
+	ResolvePatchImageBytes(ctx context.Context, profile string, keys []imageloader.ImageKey) ([]imageloader.ImageBytes, error)
 }
 
 func NewScImageService(images imageloader.ImageLoader) *ScImageService {
@@ -147,6 +156,175 @@ func (s *ScImageService) StreamScInspectionImages(req *imageparserv1.StreamScIns
 		}
 	}
 	return nil
+}
+
+func (s *ScImageService) ResolvePatchImages(req *imageparserv1.ResolvePatchImagesRequest, stream imageparserv1.ImageParser_ResolvePatchImagesServer) error {
+	response, err := ResolvePatchImagesBatch(stream.Context(), s.images, req)
+	if err != nil {
+		return err
+	}
+	for _, result := range response.Results {
+		if err := stream.Send(result); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ResolvePatchImagesBatch resolves one bounded request while preserving the
+// request-item then role order. The gRPC stream and the offline batch process
+// deliberately share this implementation so training and prediction cannot
+// drift in image-role or correlation semantics.
+func ResolvePatchImagesBatch(ctx context.Context, images imageloader.ImageLoader, req *imageparserv1.ResolvePatchImagesRequest) (*imageparserv1.ResolvePatchImagesBatchResponse, error) {
+	resolver, ok := images.(patchImageBatchResolver)
+	if !ok {
+		return nil, status.Error(codes.Internal, "configured image loader does not support source profiles")
+	}
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	profile := strings.TrimSpace(req.SourceProfile)
+	if profile == "" {
+		return nil, status.Error(codes.InvalidArgument, "source_profile is required")
+	}
+	if _, err := resolver.ResolvePatchImageBytes(ctx, profile, nil); err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	roles, err := validatePatchRoles(req.Roles)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	if len(req.Items) == 0 {
+		return nil, status.Error(codes.InvalidArgument, "items is required")
+	}
+
+	type correlation struct {
+		item *imageparserv1.ResolvePatchImageItem
+		role string
+	}
+	keys := make([]imageloader.ImageKey, 0, len(req.Items)*len(roles))
+	correlations := make([]correlation, 0, len(req.Items)*len(roles))
+	requestIDs := make(map[string]struct{}, len(req.Items))
+	for _, item := range req.Items {
+		if err := validatePatchItem(item); err != nil {
+			return nil, status.Error(codes.InvalidArgument, err.Error())
+		}
+		if _, exists := requestIDs[item.RequestId]; exists {
+			return nil, status.Errorf(codes.InvalidArgument, "duplicate request_id %q", item.RequestId)
+		}
+		requestIDs[item.RequestId] = struct{}{}
+		for _, role := range roles {
+			keys = append(keys, imageloader.ImageKey{
+				Kind:          imageloader.ImageKindPatch,
+				SourceProfile: profile,
+				InspectionKey: imageloader.InspectionKey{InspectionTime: item.InspectionTime, WaferKey: int(item.WaferKey)},
+				DefectID:      item.DefectId,
+				ImageType:     role,
+			})
+			correlations = append(correlations, correlation{item: item, role: role})
+		}
+	}
+
+	response := &imageparserv1.ResolvePatchImagesBatchResponse{
+		Results: make([]*imageparserv1.ResolvePatchImageResult, 0, len(keys)),
+	}
+	for start := 0; start < len(keys); start += streamLookupBatchSize {
+		end := start + streamLookupBatchSize
+		if end > len(keys) {
+			end = len(keys)
+		}
+		resolved, err := resolver.ResolvePatchImageBytes(ctx, profile, keys[start:end])
+		if err != nil {
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			return nil, status.Errorf(codes.Unavailable, "image source profile %q unavailable: %v", profile, err)
+		}
+		if len(resolved) != end-start {
+			return nil, status.Error(codes.Internal, "image resolver returned an unexpected result count")
+		}
+		for index, image := range resolved {
+			correlation := correlations[start+index]
+			result := &imageparserv1.ResolvePatchImageResult{
+				RequestId:      correlation.item.RequestId,
+				SampleId:       correlation.item.SampleId,
+				InspectionTime: correlation.item.InspectionTime,
+				WaferKey:       correlation.item.WaferKey,
+				DefectId:       correlation.item.DefectId,
+				Role:           correlation.role,
+				ContentType:    image.ContentType,
+			}
+			if image.Err != nil {
+				result.Error = image.Err.Error()
+			} else {
+				result.ImageData = image.Data
+			}
+			response.Results = append(response.Results, result)
+		}
+	}
+	return response, nil
+}
+
+func validatePatchRoles(rawRoles []string) ([]string, error) {
+	if len(rawRoles) == 0 {
+		return nil, fmt.Errorf("roles is required")
+	}
+	roles := make([]string, 0, len(rawRoles))
+	seen := make(map[string]struct{}, len(rawRoles))
+	for _, rawRole := range rawRoles {
+		normalized := imageloader.NormalizeImageType(rawRole)
+		var role string
+		switch normalized {
+		case "Reference":
+			role = "patch_template"
+		case "Defective":
+			role = "patch_defective"
+		case "Difference":
+			role = "patch_difference"
+		default:
+			return nil, fmt.Errorf("unsupported patch image role %q", rawRole)
+		}
+		if _, exists := seen[role]; exists {
+			return nil, fmt.Errorf("duplicate patch image role %q", role)
+		}
+		seen[role] = struct{}{}
+		roles = append(roles, role)
+	}
+	return roles, nil
+}
+
+func validatePatchItem(item *imageparserv1.ResolvePatchImageItem) error {
+	if item == nil {
+		return fmt.Errorf("items cannot contain null entries")
+	}
+	if strings.TrimSpace(item.RequestId) == "" {
+		return fmt.Errorf("item request_id is required")
+	}
+	if strings.TrimSpace(item.SampleId) == "" {
+		return fmt.Errorf("item %q sample_id is required", item.RequestId)
+	}
+	if item.WaferKey <= 0 {
+		return fmt.Errorf("item %q wafer_key must be greater than zero", item.RequestId)
+	}
+	defectID, err := strconv.Atoi(item.DefectId)
+	if err != nil || defectID <= 0 {
+		return fmt.Errorf("item %q defect_id must be a positive integer", item.RequestId)
+	}
+	if !validInspectionTime(item.InspectionTime) {
+		return fmt.Errorf("item %q inspection_time must be RFC3339 or YYYYMMDD_HHMMSS", item.RequestId)
+	}
+	return nil
+}
+
+func validInspectionTime(raw string) bool {
+	if _, err := time.Parse(time.RFC3339Nano, raw); err == nil {
+		return true
+	}
+	if _, err := time.Parse("2006-01-02T15:04:05", raw); err == nil {
+		return true
+	}
+	_, err := time.Parse("20060102_150405", raw)
+	return err == nil
 }
 
 func warmPatchZips(images imageloader.ImageLoader, inspectionTime string, waferKey int, defectIDs []int32) {

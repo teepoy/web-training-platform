@@ -6,7 +6,12 @@ import pytest
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from app.shared.api.schemas import Dataset, DatasetStorageMode, TaskSpec
+from app.shared.api.schemas import (
+    Dataset,
+    DatasetStorageMode,
+    ImageSourceBinding,
+    TaskSpec,
+)
 from app.shared.db.registry import Base, OrganizationORM
 from app.shared.db.session import create_session_factory
 from app.modules.datasets.adapter.repositories.dataset_sql_repository import DatasetSqlRepository
@@ -35,6 +40,10 @@ async def test_update_dataset_meta_persists_json_update_across_sessions() -> Non
             task_spec=TaskSpec(task_type="sc", label_space=[]),
             storage_mode=DatasetStorageMode.FILE_SHARD_SPARSE,
             ls_project_id="SPARSE_NO_LS",
+            image_source=ImageSourceBinding(
+                contract="sc.patch_archive.v1",
+                profile="mounted-archive",
+            ),
         )
         await repo.create_dataset(dataset, org_id=org_id)
 
@@ -59,6 +68,10 @@ async def test_update_dataset_meta_persists_json_update_across_sessions() -> Non
         reloaded = await repo.get_dataset(dataset.id, org_id=org_id)
         assert reloaded is not None
         assert reloaded.dataset_meta["geometry"] == geometry
+        assert reloaded.image_source == ImageSourceBinding(
+            contract="sc.patch_archive.v1",
+            profile="mounted-archive",
+        )
     finally:
         await engine.dispose()
 

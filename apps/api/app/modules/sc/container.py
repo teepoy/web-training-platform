@@ -15,12 +15,18 @@ from app.modules.storage.domain.data_plane import DataPlaneSchemaRegistry
 from app.modules.datasets.domain.repository import DatasetRepository
 from app.modules.datasets.port.local import DatasetRevisionPublisherPort
 from app.modules.sc.adapter.batch_reader import ScBatchReader
+from app.modules.sc.adapter.local_training_image_source import (
+    LocalTrainingImageSourceFactory,
+)
 from app.modules.sc.app.services.sc_plot_points_service import ScPlotPointsService
 from app.modules.sc.app.services.sc_import_service import ScImportService
 from app.modules.sc.domain.image_fetcher import ScImageFetcher
 from app.modules.sc.domain.upstream_reader import ScUpstreamReader
 from app.modules.sc.materialization.app.services.sc_inspection_materializer import (
     ScInspectionMaterializer,
+)
+from app.modules.sc.materialization.domain.training_image_source import (
+    ScTrainingImageSourceFactory,
 )
 from app.modules.sc.materialization.port.local import ScInspectionMaterializerPort
 from app.modules.sc.port.local import ScImportPort, ScPlotPointsPort
@@ -47,6 +53,7 @@ def init_sc(
     dataset_payload_store: DatasetPayloadStore | None = None,
     upstream_reader: ScUpstreamReader | None = None,
     image_fetcher: ScImageFetcher | None = None,
+    training_image_source_factory: ScTrainingImageSourceFactory | None = None,
 ) -> ScContext:
     repository = dataset_repository
     batch_reader = ScBatchReader(async_engine=shared.db_engine)
@@ -87,11 +94,17 @@ def init_sc(
             addr=os.environ.get("IMAGE_PARSER_GRPC_ADDR", "image-parser:9092")
         )
 
+    if training_image_source_factory is None:
+        training_image_source_factory = LocalTrainingImageSourceFactory(
+            binary_path=shared.config.sc.training_image_parser_binary
+        )
+
     svc = ScImportService(
         repository=repository,
         payload_store=dataset_payload_store,
         revision_publisher=revision_publisher,
         upstream_reader=upstream_reader,
+        upstream_image_source_profile=(shared.config.sc.upstream_image_source_profile),
         sparse_import_factory=sparse_import_factory,
         import_batch_rows=shared.config.sc.pipeline.import_batch_rows,
         index_row_group_rows=shared.config.sc.pipeline.index_row_group_rows,
@@ -102,7 +115,7 @@ def init_sc(
         storage_factory=storage_factory,
     )
     sc_inspection_materializer = ScInspectionMaterializer(
-        image_fetcher,
+        image_source_factory=training_image_source_factory,
         schema_registry=schema_registry,
         batch_rows=shared.config.sc.pipeline.materialization_batch_rows,
         max_error_records=(shared.config.sc.pipeline.materialization_max_error_records),

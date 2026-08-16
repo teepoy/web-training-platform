@@ -33,12 +33,16 @@ from app.modules.sc.app.services.training_selection import (
     limit_sc_training_rows_per_class,
 )
 from app.modules.sc.capabilities import SC_PATCH_IMAGE_V1
+from app.modules.sc.domain.image_fetcher import ScImageFetcher
 from app.modules.sc.materialization.port.local import ScInspectionMaterializerPort
 from app.modules.sc.runtime.data_source import open_sc_runtime_source
 from app.modules.sc.runtime.materialized_input import parquet_paths_from_manifest
 from app.modules.sc.runtime.prediction_io import (
     load_sc_prediction_model,
     write_sc_predictions,
+)
+from app.modules.sc.runtime.streaming_prediction import (
+    stream_sc_prediction_image_pairs,
 )
 from app.modules.training.domain.repository import TrainingRepository
 from app.shared.api.schemas import JobStatus, PredictionEvent, TrainingEvent
@@ -174,6 +178,8 @@ async def yolo_sc_train(ctx: TrainingRuntimeContext) -> RuntimeEventStream:
         materializer = app_context.injector.get(ScInspectionMaterializerPort)
         materialization = await materializer.materialize(
             rows_lazyframe=rows,
+            image_source_profiles=source.image_source_profiles,
+            direct_dataset_id=source.dataset_id,
             dataset_id=source.source_identity,
             job_id=ctx.job_id,
             image_types=["patch_template", "patch_defective"],
@@ -254,9 +260,8 @@ async def yolo_sc_train(ctx: TrainingRuntimeContext) -> RuntimeEventStream:
 
 async def yolo_sc_predictor(ctx: PredictionRuntimeContext) -> RuntimeEventStream:
     import app.registrations  # noqa: F401
-    import polars as pl
 
-    from ml_library import predict_yolo
+    from ml_library import predict_yolo_stream
 
     from app.modules.runtime.catalog import runtime_catalog
 
@@ -306,7 +311,6 @@ async def yolo_sc_predictor(ctx: PredictionRuntimeContext) -> RuntimeEventStream
                 cast(Any, rows),
                 ctx.sample_filter,
             )
-        total_samples = int(cast(Any, rows).select(pl.len()).collect().item())
         model_version = ctx.model_version or f"model-{model.id[:8]}"
         summary: dict[str, Any] = {
             **existing_summary,
@@ -320,7 +324,7 @@ async def yolo_sc_predictor(ctx: PredictionRuntimeContext) -> RuntimeEventStream
             "reproducibility_capability": False,
             "source_dataset_ids": list(source.source_dataset_ids),
             "resolved_dataset_revision_ids": list(source.resolved_dataset_revision_ids),
-            "total_samples": total_samples,
+            "total_samples": None,
             "successful": 0,
             "failed": 0,
             "processed": 0,
@@ -351,63 +355,57 @@ async def yolo_sc_predictor(ctx: PredictionRuntimeContext) -> RuntimeEventStream
             )
             last_flush = now
 
-        materializer = app_context.injector.get(ScInspectionMaterializerPort)
-        materialization = await materializer.materialize(
-            rows_lazyframe=rows,
-            dataset_id=source.source_identity,
-            job_id=ctx.job_id,
-            image_types=["patch_template", "patch_defective"],
-            max_output_bytes=pipeline.prediction_max_materialized_bytes,
-        )
-        try:
-            with tempfile.TemporaryDirectory(
-                prefix=f"sc-ultralytics-prediction-{ctx.job_id}-"
-            ) as temporary_directory:
-                checkpoint_path = Path(temporary_directory) / "model.pt"
-                await app_context.shared.artifact_storage.get_file(
-                    model.uri,
-                    str(checkpoint_path),
-                )
-                if materialization.errors:
-                    _runtime_logger().warning(
-                        "Ultralytics prediction materialization completed with %d "
-                        "image errors",
-                        len(materialization.errors),
+        with tempfile.TemporaryDirectory(
+            prefix=f"sc-ultralytics-prediction-{ctx.job_id}-"
+        ) as temporary_directory:
+            checkpoint_path = Path(temporary_directory) / "model.pt"
+            await app_context.shared.artifact_storage.get_file(
+                model.uri,
+                str(checkpoint_path),
+            )
+            image_fetcher = app_context.injector.get(ScImageFetcher)
+            image_pairs = stream_sc_prediction_image_pairs(
+                rows,
+                image_fetcher=image_fetcher,
+                image_source_profiles=source.image_source_profiles,
+                direct_dataset_id=source.dataset_id,
+                input_batch_rows=pipeline.prediction_input_batch_rows,
+            )
+
+            async def prediction_results():
+                async for output in predict_yolo_stream(
+                    checkpoint_path,
+                    labels,
+                    image_pairs,
+                    workers=pipeline.prediction_preprocess_workers,
+                    preprocess_task_size=pipeline.prediction_preprocess_task_rows,
+                    prefetch_tasks=pipeline.prediction_preprocess_prefetch_tasks,
+                ):
+                    result = PredictionResult(
+                        sample_id=output.sample_id,
+                        predicted_label=output.label,
+                        confidence=output.confidence,
+                        all_scores=(dict(output.scores) if output.scores else None),
+                        model_id=model.id,
+                        target=ctx.target,
+                        model_version=model_version,
+                        job_id=ctx.job_id,
+                        error=output.error,
                     )
-                parquet_paths = parquet_paths_from_manifest(materialization.manifest)
+                    summary["failed" if result.error else "successful"] += 1
+                    summary["processed"] += 1
+                    yield result
+                    await flush_progress()
 
-                async def prediction_results():
-                    for output in predict_yolo(
-                        checkpoint_path,
-                        labels,
-                        parquet_paths,
-                    ):
-                        result = PredictionResult(
-                            sample_id=output.sample_id,
-                            predicted_label=output.label,
-                            confidence=output.confidence,
-                            all_scores=(dict(output.scores) if output.scores else None),
-                            model_id=model.id,
-                            target=ctx.target,
-                            model_version=model_version,
-                            job_id=ctx.job_id,
-                            error=output.error,
-                        )
-                        summary["failed" if result.error else "successful"] += 1
-                        summary["processed"] += 1
-                        yield result
-                        await flush_progress()
-
-                await write_sc_predictions(
-                    runtime_ctx=ctx,
-                    source=source,
-                    predictions=prediction_results(),
-                    model_id=model.id,
-                    model_version=model_version,
-                    batch_size=pipeline.prediction_write_batch_rows,
-                )
-        finally:
-            materialization.cleanup()
+            await write_sc_predictions(
+                runtime_ctx=ctx,
+                source=source,
+                predictions=prediction_results(),
+                model_id=model.id,
+                model_version=model_version,
+                batch_size=pipeline.prediction_write_batch_rows,
+            )
+        summary["total_samples"] = int(summary["processed"])
         source_dataset_ids = source.source_dataset_ids
 
     publisher = app_context.shared.redis_event_publisher

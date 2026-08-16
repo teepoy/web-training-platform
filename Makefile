@@ -16,6 +16,7 @@ WEB_PORT    ?= 5173
 COMPOSE_DEV  := infra/compose/docker-compose.yaml -f infra/compose/docker-compose.dev.yaml
 DATA_DIR     := infra/compose/data
 IMAGE_PARSER_GRPC_ADDR_HOST ?= 127.0.0.1:9092
+IMAGE_PARSER_BATCH_BINARY_HOST ?= /tmp/web-training-platform-image-parser-batch
 MINIO_ENDPOINT_HOST ?= localhost:9000
 SC_WAFER_MOCK_DEFECTS ?= 2500
 SC_WAFER_MOCK_INSPECTION_TIME ?= 2026-08-01T04:00:00
@@ -168,13 +169,19 @@ dev-web: ## Start frontend dev server (default: 5173)
 	cd $(WEB_DIR) && pnpm dev
 
 # GPU worker (host) — only ONE of this OR compose --profile gpu should run at a time
+.PHONY: image-parser-batch-host
+image-parser-batch-host: ## Build the offline training image parser for the host GPU worker
+	cd services/image-parser && go build -o $(IMAGE_PARSER_BATCH_BINARY_HOST) ./cmd/batch-resolve
+
 .PHONY: prefect-worker-gpu-host
-prefect-worker-gpu-host: ## Start a host-side GPU Prefect worker (DO NOT run concurrently with compose --profile gpu)
-	cd apps/api && uv sync --group sc-runtime && \
-	uv run python -m prefect init --profile local --no-prompt && \
+prefect-worker-gpu-host: image-parser-batch-host ## Start a host-side GPU Prefect worker (DO NOT run concurrently with compose --profile gpu)
+	cd apps/api && $(UV_RUN_INSTALLED) python -m prefect init --profile local --no-prompt && \
 	$(DEV_API_HOST_ENV) \
+	SC_TRAINING_IMAGE_PARSER_BINARY=$(IMAGE_PARSER_BATCH_BINARY_HOST) \
+	IMAGE_SOURCE_PROFILES_JSON='{"sc_upstream":{"provider":"sc_upstream"}}' \
+	SC_COMPAT_IMAGE_SOURCE_PROFILE=sc_upstream \
 	PLATFORM_API_URL=http://localhost:8000 \
-	LITELLM_LOCAL_MODEL_COST_MAP="True" uv run python -m prefect worker start --pool default-gpu
+	LITELLM_LOCAL_MODEL_COST_MAP="True" $(UV_RUN_INSTALLED) python -m prefect worker start --pool default-gpu
 
 # ──────────────────────────────────────────────
 # Database
@@ -208,6 +215,10 @@ test-api: ## Run API tests
 .PHONY: test-web
 test-web: ## Run frontend unit tests (vitest)
 	cd $(WEB_DIR) && pnpm test:unit
+
+.PHONY: benchmark-sc-prediction
+benchmark-sc-prediction: ## Require >3000 samples/s for bounded SC prediction preprocessing
+	$(UV_RUN_INSTALLED) --package ml-library python libs/ml/benchmarks/sc_prediction_stream_throughput.py --minimum-samples-per-second 3000
 
 .PHONY: test-e2e
 test-e2e: ## Run frontend mock e2e tests (Playwright, no live stack required)

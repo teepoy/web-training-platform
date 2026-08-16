@@ -31,6 +31,7 @@ from app.shared.api.schemas import (
     Annotation,
     CreatorSummary,
     Dataset,
+    ImageSourceBinding,
     Sample,
     TaskSpec,
 )
@@ -96,6 +97,12 @@ def _dataset_conditions(
     return conditions
 
 
+def _image_source_binding(value: object) -> ImageSourceBinding | None:
+    if value is None:
+        return None
+    return ImageSourceBinding.model_validate(value)
+
+
 async def _org_name_for(session: AsyncSession, org_id: str | None) -> str:
     if not org_id:
         return ""
@@ -138,6 +145,11 @@ class DatasetSqlRepository:
                 embed_config=dataset.embed_config or None,
                 ls_project_id=dataset.ls_project_id,
                 storage_mode=dataset.storage_mode.value,
+                image_source_binding=(
+                    dataset.image_source.model_dump(mode="json")
+                    if dataset.image_source is not None
+                    else None
+                ),
             )
             session.add(row)
             await session.commit()
@@ -404,6 +416,7 @@ class DatasetSqlRepository:
                     ls_project_id=r.ls_project_id,
                     storage_mode=cast(DatasetStorageMode, r.storage_mode),
                     dataset_meta=r.dataset_meta,
+                    image_source=_image_source_binding(r.image_source_binding),
                 )
                 for r, org_name, user_name, user_email in rows
             ]
@@ -489,6 +502,7 @@ class DatasetSqlRepository:
                 ls_project_id=row.ls_project_id,
                 storage_mode=cast(DatasetStorageMode, row.storage_mode),
                 dataset_meta=row.dataset_meta,
+                image_source=_image_source_binding(row.image_source_binding),
             )
 
     async def list_dataset_names(
@@ -550,6 +564,7 @@ class DatasetSqlRepository:
                     ls_project_id=row.ls_project_id,
                     storage_mode=cast(DatasetStorageMode, row.storage_mode),
                     dataset_meta=row.dataset_meta,
+                    image_source=_image_source_binding(row.image_source_binding),
                 )
                 for row, org_name, user_name, user_email in rows
             ]
@@ -581,6 +596,7 @@ class DatasetSqlRepository:
                 ls_project_id=row.ls_project_id,
                 storage_mode=cast(DatasetStorageMode, row.storage_mode),
                 dataset_meta=row.dataset_meta,
+                image_source=_image_source_binding(row.image_source_binding),
             )
 
     async def delete_dataset(self, dataset_id: str, org_id: str | None = None) -> bool:
@@ -677,6 +693,7 @@ class DatasetSqlRepository:
                 ls_project_id=row.ls_project_id,
                 storage_mode=cast(DatasetStorageMode, row.storage_mode),
                 dataset_meta=row.dataset_meta,
+                image_source=_image_source_binding(row.image_source_binding),
             )
 
     # ── sample / annotation methods (db_full only) ──────────────────────────

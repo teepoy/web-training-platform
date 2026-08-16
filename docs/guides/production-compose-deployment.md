@@ -170,6 +170,9 @@ FINETUNE_GPU_WORKER_IMAGE=registry.example.com/finetune-gpu-worker:<release>
 PLATFORM_DATA_DIR=/srv/finetune/platform/data
 SC_UPSTREAM_DATA_DIR=/srv/finetune/platform/sc-upstream
 IMAGE_PARSER_DATA_DIR=/srv/finetune/platform/image-parser
+IMAGE_SOURCE_PROFILES_JSON={"sc_upstream":{"provider":"sc_upstream"}}
+SC_UPSTREAM_IMAGE_SOURCE_PROFILE=sc_upstream
+SC_COMPAT_IMAGE_SOURCE_PROFILE=sc_upstream
 PREFECT_SERVER_MEMORY=4g
 API_MEMORY=8g
 API_SHM_SIZE=1g
@@ -187,6 +190,27 @@ IMAGE_PARSER_MEMORY=32g
 IMAGE_PARSER_SHM_SIZE=2g
 PLATFORM_PREPARE_MEMORY=2g
 ```
+
+`IMAGE_SOURCE_PROFILES_JSON` is the deployment-owned patch archive resolver
+registry. A mounted local/SMB archive may be added with
+`{"provider":"sc_patch_zip_folder","root":"/data/<mounted-directory>"}`; mount
+that directory read-only into the image-parser container. Dataset metadata stores
+only the chosen profile name, never the root path or credentials. The compatibility
+profile must name one entry in the registry, and providers never fall back to a
+different entry after a failure.
+
+`SC_UPSTREAM_IMAGE_SOURCE_PROFILE` is the API-owned binding for datasets created
+from the direct SC preview/import flow. It must name the intended upstream entry in
+`IMAGE_SOURCE_PROFILES_JSON`; browsers never choose or submit this deployment-owned
+name. Versioned Source Discovery import profiles continue to carry their own explicit
+`image_source_profile` setting.
+
+SC training does not call the shared image-parser HTTP/gRPC service. The GPU worker
+starts the baked `/usr/local/bin/image-parser-batch` process once per materialization
+and sends ordered, bounded protobuf batches over stdin/stdout. Configure its per-job
+cache with `SC_TRAINING_IMAGE_PARSER_CACHE_SIZE_MB` (default `256`). If a profile uses
+`sc_patch_zip_folder`, the same `${IMAGE_PARSER_DATA_DIR}` is mounted read-only at
+`/data` in the GPU worker, so the profile root must use that shared absolute path.
 
 All service ceilings use `deploy.resources.limits.memory`, which is honored by
 current Docker Compose without requiring Swarm mode. Do not reintroduce the

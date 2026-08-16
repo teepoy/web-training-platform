@@ -29,6 +29,11 @@ import {
   type ScSampleTablePresentationColumn,
   type ScSampleTablePresentationRow,
 } from "./sampleTablePresentation";
+import {
+  downloadSampleTableCsv,
+  exportSampleTableCsv,
+  type SampleTableCsvProgress,
+} from "./sampleTableCsvExport";
 import type { ScSampleTableBaseProps, ScSampleTableEmits } from "./scSampleTableContract";
 
 interface ScSampleTableTanStackProps extends ScSampleTableBaseProps {
@@ -78,6 +83,10 @@ const setFilterDraft = ref<Record<string, Set<string>>>({});
 const discoveredSetFilterValues = ref<Record<string, Array<string | number>>>({});
 const searchedSetFilterValues = ref<Record<string, Array<string | number>>>({});
 const setFilterSearchLoading = ref<Record<string, boolean>>({});
+const isExportingCsv = ref(false);
+const csvExportProgress = ref<SampleTableCsvProgress | null>(null);
+const csvExportStatus = ref("");
+const csvExportError = ref("");
 
 let requestVersion = 0;
 let requestedStart = 0;
@@ -85,6 +94,7 @@ let loadingRequest: { start: number; version: number } | null = null;
 let loadController: AbortController | null = null;
 let loadTimer: ReturnType<typeof setTimeout> | null = null;
 let sourceColumnsRequestVersion = 0;
+let csvExportController: AbortController | null = null;
 
 const resolvedPageSize = computed(() => props.pageSize ?? PAGE_SIZE);
 const activeColumnDefinitions = computed(() =>
@@ -569,6 +579,50 @@ function clearSelection(): void {
   emitSelection();
 }
 
+function snapshotFilter(filter: ScSampleTableFilter): ScSampleTableFilter {
+  return Object.fromEntries(
+    Object.entries(filter).map(([field, value]) => [
+      field,
+      value.filterType === "set" ? { ...value, values: [...value.values] } : { ...value },
+    ]),
+  );
+}
+
+async function exportCsv(): Promise<void> {
+  if (isExportingCsv.value || activeColumnDefinitions.value.length === 0) return;
+  const controller = new AbortController();
+  csvExportController = controller;
+  isExportingCsv.value = true;
+  csvExportProgress.value = null;
+  csvExportStatus.value = "";
+  csvExportError.value = "";
+  try {
+    const result = await exportSampleTableCsv({
+      dataSource: props.dataSource,
+      columns: activeColumnDefinitions.value,
+      defectIds: [...(props.defectIds ?? [])],
+      filter: snapshotFilter(tableFilter.value),
+      sort: { ...tableSort.value },
+      signal: controller.signal,
+      onProgress: (progress) => {
+        csvExportProgress.value = progress;
+      },
+    });
+    downloadSampleTableCsv(
+      result.blob,
+      props.exportFileName ?? `${props.dataSource.scopeKey}-sample-data`,
+    );
+    csvExportStatus.value = `Exported ${result.total.toLocaleString()} rows`;
+  } catch (error) {
+    if (!isAbortError(error)) {
+      csvExportError.value = error instanceof Error ? error.message : "Failed to export CSV";
+    }
+  } finally {
+    if (csvExportController === controller) csvExportController = null;
+    isExportingCsv.value = false;
+  }
+}
+
 watch(
   () => props.filter,
   (filter) => {
@@ -636,6 +690,8 @@ onBeforeUnmount(() => {
   loadController?.abort();
   loadController = null;
   cancelQueuedLoad();
+  csvExportController?.abort();
+  csvExportController = null;
 });
 
 defineExpose({
@@ -686,10 +742,22 @@ defineExpose({
         <NButton
           v-if="enableSelection && selectedCount > 0"
           size="tiny"
-          quaternary
+          type="primary"
+          secondary
+          data-testid="clear-sample-selection"
           @click="clearSelection"
         >
           Clear Selection ({{ selectedCount }})
+        </NButton>
+        <NButton
+          size="tiny"
+          secondary
+          :loading="isExportingCsv"
+          :disabled="serverTotal === 0 || activeColumnDefinitions.length === 0"
+          data-testid="export-sample-data-csv"
+          @click="exportCsv"
+        >
+          Export CSV
         </NButton>
         <NButton
           v-if="Object.keys(tableFilter).length > 0"
@@ -701,6 +769,17 @@ defineExpose({
         </NButton>
         <NText v-if="streamStatus" depth="3" class="sst-tanstack-status-info">
           {{ streamStatus }}
+        </NText>
+        <NText
+          v-else-if="isExportingCsv && csvExportProgress"
+          depth="3"
+          class="sst-tanstack-status-info"
+        >
+          Exporting {{ csvExportProgress.completed.toLocaleString() }} /
+          {{ csvExportProgress.total.toLocaleString() }}
+        </NText>
+        <NText v-else-if="csvExportStatus" depth="3" class="sst-tanstack-status-info">
+          {{ csvExportStatus }}
         </NText>
       </div>
     </div>
@@ -970,6 +1049,9 @@ defineExpose({
     <NText v-if="pageError" type="error" class="sst-tanstack-error">
       {{ pageError }}
     </NText>
+    <NText v-if="csvExportError" type="error" class="sst-tanstack-error">
+      {{ csvExportError }}
+    </NText>
   </div>
 </template>
 
@@ -1072,9 +1154,8 @@ defineExpose({
 }
 
 .sst-tanstack-row:hover .sst-tanstack-cell {
-  background:
-    linear-gradient(rgba(127, 127, 127, 0.1), rgba(127, 127, 127, 0.1)), var(--sst-row-background);
-  background: color-mix(in srgb, var(--sst-row-background) 94%, currentColor 6%);
+  background-color: var(--sst-row-background);
+  background-image: linear-gradient(rgba(127, 127, 127, 0.1), rgba(127, 127, 127, 0.1));
 }
 
 .sst-tanstack-row--placeholder {
@@ -1093,7 +1174,7 @@ defineExpose({
   line-height: 35px;
   white-space: nowrap;
   text-overflow: ellipsis;
-  background: var(--sst-row-background);
+  background-color: var(--sst-row-background);
   border-right: 1px solid rgba(255, 255, 255, 0.08);
 }
 
@@ -1105,13 +1186,7 @@ defineExpose({
   position: sticky;
   z-index: 20;
   justify-content: center;
-  background: var(--sst-row-background);
-}
-
-.sst-tanstack-row:hover .sst-tanstack-cell--pinned {
-  background:
-    linear-gradient(rgba(127, 127, 127, 0.1), rgba(127, 127, 127, 0.1)), var(--sst-row-background);
-  background: color-mix(in srgb, var(--sst-row-background) 94%, currentColor 6%);
+  background-color: var(--sst-row-background);
 }
 
 .sst-tanstack-cell--defect {

@@ -48,6 +48,7 @@ class DatasetORM(Base):
     storage_mode: Mapped[str] = mapped_column(
         String(64), nullable=False, default="db_full", server_default="db_full"
     )
+    image_source_binding: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
 
 class DatasetRevisionORM(Base):

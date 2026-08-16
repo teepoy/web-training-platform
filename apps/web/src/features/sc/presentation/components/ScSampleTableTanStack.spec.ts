@@ -1,4 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ScSampleTableDisplayRow } from "@/features/sc/domain/workbenchInteraction";
 import type { ScSampleTableDataSource } from "@/features/sc/domain/workbenchInteraction";
 import type { ScDataColumn } from "@/features/sc/domain/workbenchDataSource";
@@ -93,7 +95,51 @@ const defaultColumns = [
   describedColumn("images", "Images", 1),
 ];
 
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
+
 describe("ScSampleTableTanStack", () => {
+  it("keeps row hover backgrounds compatible with the Chrome 108 target", () => {
+    const source = readFileSync(
+      resolve(process.cwd(), "src/features/sc/presentation/components/ScSampleTableTanStack.vue"),
+      "utf8",
+    );
+
+    expect(source).not.toContain(
+      "background: color-mix(in srgb, var(--sst-row-background) 94%, currentColor 6%)",
+    );
+    expect(source).toContain("background-color: var(--sst-row-background)");
+    expect(source).toContain(
+      "background-image: linear-gradient(rgba(127, 127, 127, 0.1), rgba(127, 127, 127, 0.1))",
+    );
+  });
+
+  it("gives the active clear-selection action primary visual priority", async () => {
+    const loadRows = vi.fn<ScSampleTableDataSource["loadRows"]>(async () => ({
+      items: [sampleRow("11", 1)],
+      total: 1,
+      nextAnchor: null,
+    }));
+    const dataSource: ScSampleTableDataSource = {
+      scopeKey: "dataset:selection-action",
+      loadColumns: async () => defaultColumns,
+      loadRows,
+    };
+    const { wrapper } = await mountWithProviders(ScSampleTableTanStack, {
+      props: { dataSource, enableSelection: true },
+    });
+
+    await vi.waitFor(() => expect(loadRows).toHaveBeenCalledOnce());
+    await wrapper.get<HTMLInputElement>('input[aria-label="Select sample 11"]').setValue(true);
+
+    const clearSelection = wrapper.get('[data-testid="clear-sample-selection"]');
+    expect(clearSelection.classes()).toContain("n-button--primary-type");
+    expect(clearSelection.classes()).toContain("n-button--secondary");
+    expect(clearSelection.classes()).not.toContain("n-button--quaternary");
+  });
+
   it("keeps the pinned selection and Defect ID cells in the same row", async () => {
     const loadRows = vi.fn<ScSampleTableDataSource["loadRows"]>(async () => ({
       items: [sampleRow("11", 1)],
@@ -113,6 +159,60 @@ describe("ScSampleTableTanStack", () => {
 
     expect(wrapper.get(".sst-tanstack-header").attributes("style")).toContain("display: flex");
     expect(wrapper.get(".sst-tanstack-row").attributes("style")).toContain("display: flex");
+  });
+
+  it("exports the complete current table query as CSV", async () => {
+    const loadRows = vi.fn<ScSampleTableDataSource["loadRows"]>(async () => ({
+      items: [sampleRow("11", 1)],
+      total: 1,
+      nextAnchor: null,
+    }));
+    const dataSource: ScSampleTableDataSource = {
+      scopeKey: "inspection:export",
+      loadColumns: async () => defaultColumns,
+      loadRows,
+    };
+    const createObjectURL = vi.fn(() => "blob:sample-export");
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal("URL", { createObjectURL, revokeObjectURL });
+    const downloads: Array<{ download: string; href: string }> = [];
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function () {
+      downloads.push({ download: this.download, href: this.href });
+    });
+    const filter = {
+      images: {
+        filterType: "number" as const,
+        type: "inRange" as const,
+        filter: 1,
+        filterTo: 2,
+      },
+    };
+
+    const { wrapper } = await mountWithProviders(ScSampleTableTanStack, {
+      props: {
+        dataSource,
+        exportFileName: "inspection:export sample data",
+        filter,
+        sort: { field: "images", direction: "desc" },
+      },
+    });
+    await vi.waitFor(() => expect(loadRows).toHaveBeenCalledOnce());
+
+    await wrapper.get('[data-testid="export-sample-data-csv"]').trigger("click");
+
+    await vi.waitFor(() => expect(wrapper.text()).toContain("Exported 1 rows"));
+    expect(loadRows).toHaveBeenCalledTimes(2);
+    expect(loadRows.mock.calls[1]?.[0]).toMatchObject({
+      anchor: "0",
+      limit: 10_000,
+      filter,
+      sort: { field: "images", direction: "desc" },
+    });
+    expect(createObjectURL).toHaveBeenCalledOnce();
+    expect(downloads).toEqual([
+      { download: "inspection-export-sample-data.csv", href: "blob:sample-export" },
+    ]);
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:sample-export");
   });
 
   it("keeps 300k select-all symbolic", async () => {

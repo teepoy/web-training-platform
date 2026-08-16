@@ -104,6 +104,45 @@ class GrpcImageFetcher:
         finally:
             await channel.close()
 
+    async def resolve_patch_images(
+        self,
+        *,
+        source_profile: str,
+        roles: list[str],
+        items: list[dict[str, object]],
+    ) -> AsyncIterator[dict[str, object]]:
+        stub = self._ensure_channel()
+        request = pb.ResolvePatchImagesRequest(
+            source_profile=source_profile,
+            roles=roles,
+            items=[
+                pb.ResolvePatchImageItem(
+                    request_id=str(item.get("request_id", "")),
+                    sample_id=str(item.get("sample_id", "")),
+                    inspection_time=str(item.get("inspection_time", "")),
+                    wafer_key=int(cast(object, item.get("wafer_key", 0)) or 0),  # type: ignore[arg-type]
+                    defect_id=str(item.get("defect_id", "")),
+                )
+                for item in items
+            ],
+        )
+        call = stub.ResolvePatchImages(request)
+        try:
+            async for result in call:
+                yield {
+                    "request_id": result.request_id,
+                    "sample_id": result.sample_id,
+                    "inspection_time": result.inspection_time,
+                    "wafer_key": result.wafer_key,
+                    "defect_id": result.defect_id,
+                    "role": result.role,
+                    "image_data": result.image_data,
+                    "content_type": result.content_type,
+                    "error": result.error,
+                }
+        finally:
+            call.cancel()
+
     async def warm_cache(
         self,
         *,

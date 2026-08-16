@@ -3,6 +3,8 @@ package client
 import (
 	"context"
 	"fmt"
+	"os"
+	"strings"
 	"time"
 
 	"google.golang.org/grpc"
@@ -23,7 +25,7 @@ func NewUpstreamClient() (*UpstreamClient, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	conn, err := grpc.DialContext(ctx, mocksource.UpstreamGRPCAddress,
+	conn, err := grpc.DialContext(ctx, upstreamGRPCAddress(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock(),
 	)
@@ -35,6 +37,13 @@ func NewUpstreamClient() (*UpstreamClient, error) {
 		conn: conn,
 		stub: scv1.NewScUpstreamClient(conn),
 	}, nil
+}
+
+func upstreamGRPCAddress() string {
+	if address := strings.TrimSpace(os.Getenv("SC_UPSTREAM_ADDR")); address != "" {
+		return strings.TrimPrefix(address, "grpc://")
+	}
+	return mocksource.UpstreamGRPCAddress
 }
 
 func (c *UpstreamClient) Close() error {

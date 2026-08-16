@@ -9,10 +9,23 @@ ScImportProgressCallback = Callable[[ScImportStatus], Awaitable[None]]
 
 
 class ScImportPort(Protocol):
+    async def submit_upstream_import(
+        self,
+        source_inspection_time: str,
+        source_wafer_key: int,
+        dataset_name: str,
+        org_id: str,
+        created_by: str = "system",
+        label_space: list[str] | None = None,
+        max_rows: int | None = None,
+        on_progress: ScImportProgressCallback | None = None,
+    ) -> ScImportStatus: ...
+
     async def submit_import(
         self,
         source_inspection_time: str,
         source_wafer_key: int,
+        image_source_profile: str,
         dataset_name: str,
         org_id: str,
         created_by: str = "system",

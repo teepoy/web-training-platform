@@ -150,6 +150,13 @@ const globalFilterModel = computed<ScGlobalFilter>({
 const globalFilterCount = computed(() => scGlobalFilterConditionCount(globalFilterModel.value));
 const tableFilterCount = computed(() => Object.keys(tableFilter.value).length);
 const samplingCohortCount = computed(() => props.galleryRandomSamplingDefectIds?.size ?? 0);
+const sampleTableExportFileName = computed(() => {
+  if (props.collectionId && props.collectionRevisionId) {
+    return `collection-${props.collectionId}-revision-${props.collectionRevisionId}-sample-data`;
+  }
+  if (props.datasetId) return `dataset-${props.datasetId}-sample-data`;
+  return `inspection-${props.inspectionTime}-${props.waferKey}-sample-data`;
+});
 const enabledLegendSources = computed<ScLegendSource[]>(() =>
   isReclassify.value
     ? ["class", "bin", "annotation", "prediction", "final_class"]
@@ -1018,6 +1025,7 @@ function useMapSelectionQueue() {
         v-if="model.sampleTableDataSource.value"
         :data-source="model.sampleTableDataSource.value"
         :loading="!dataReady"
+        :export-file-name="sampleTableExportFileName"
         :selection="model.tableSelection.value"
         :filter="tableFilter"
         :sort="tableSort"

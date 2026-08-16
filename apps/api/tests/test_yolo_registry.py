@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import inspect
+
 from app.modules.runtime.catalog import runtime_catalog
 from app.modules.sc.runtime import ultralytics
 
@@ -25,3 +27,14 @@ def test_registered_yolo_model_contract() -> None:
         runtime_catalog.get_trainer_meta("yolo-sc-v1").output_model.contract
         == "sc.yolo.model.v1"
     )
+
+
+def test_yolo_prediction_stays_streaming_without_image_materialization() -> None:
+    source = inspect.getsource(ultralytics.yolo_sc_predictor)
+
+    assert "predict_yolo_stream" in source
+    assert "stream_sc_prediction_image_pairs" in source
+    assert "ScInspectionMaterializerPort" not in source
+    assert ".materialize(" not in source
+    assert ".collect(" not in source
+    assert "prediction_max_materialized_bytes" not in source

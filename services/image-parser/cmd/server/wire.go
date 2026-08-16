@@ -1,12 +1,15 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
 	"net"
 	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	imageparserv1 "image-parser/gen/go/imageparser/v1"
@@ -53,6 +56,11 @@ func wire() *serverApp {
 		log.Fatalf("failed to init upstream client: %v", err)
 	}
 
+	profiles, defaultProfile, err := loadPatchSourceProfiles()
+	if err != nil {
+		_ = upstream.Close()
+		log.Fatalf("failed to load image source profiles: %v", err)
+	}
 	imageLoader, closeImageLoader, err := imageloader.Initialize(imageloader.Options{
 		Upstream:             upstream,
 		CacheSizeMB:          *cacheSizeMB,
@@ -60,6 +68,8 @@ func wire() *serverApp {
 		CacheTTL:             *cacheTTL,
 		CacheCleanupInterval: *cacheCleanupInterval,
 		CacheMaxBytes:        *cacheMaxBytes,
+		PatchSourceProfiles:  profiles,
+		DefaultPatchProfile:  defaultProfile,
 	})
 	if err != nil {
 		_ = upstream.Close()
@@ -69,11 +79,7 @@ func wire() *serverApp {
 	var httpHandler HTTPHandler = handler.NewSCRoutes(imageLoader)
 	var grpcHandler imageparserv1.ImageParserServer = service.NewScImageService(imageLoader)
 
-	grpcPort := os.Getenv("GRPC_PORT")
-	if grpcPort == "" {
-		grpcPort = "9092"
-	}
-	grpcLis, err := net.Listen("tcp", ":"+grpcPort)
+	grpcLis, grpcAddress, removeSocket, err := listenGRPC()
 	if err != nil {
 		_ = upstream.Close()
 		closeImageLoader()
@@ -85,7 +91,7 @@ func wire() *serverApp {
 	)
 	imageparserv1.RegisterImageParserServer(grpcServer, grpcHandler)
 	go func() {
-		log.Printf("gRPC server starting on :%s", grpcPort)
+		log.Printf("gRPC server starting on %s", grpcAddress)
 		if err := grpcServer.Serve(grpcLis); err != nil {
 			log.Fatalf("gRPC server failed: %v", err)
 		}
@@ -105,10 +111,64 @@ func wire() *serverApp {
 		cacheMaxBytes: *cacheMaxBytes,
 		close: func() {
 			grpcServer.GracefulStop()
+			_ = grpcLis.Close()
+			removeSocket()
 			_ = upstream.Close()
 			closeImageLoader()
 		},
 	}
+}
+
+func loadPatchSourceProfiles() (map[string]imageloader.PatchSourceProfileConfig, string, error) {
+	raw := strings.TrimSpace(os.Getenv("IMAGE_SOURCE_PROFILES_JSON"))
+	if raw == "" {
+		return nil, "", fmt.Errorf("IMAGE_SOURCE_PROFILES_JSON is required")
+	}
+	profiles := make(map[string]imageloader.PatchSourceProfileConfig)
+	if err := json.Unmarshal([]byte(raw), &profiles); err != nil {
+		return nil, "", fmt.Errorf("parse IMAGE_SOURCE_PROFILES_JSON: %w", err)
+	}
+	defaultProfile := strings.TrimSpace(os.Getenv("SC_COMPAT_IMAGE_SOURCE_PROFILE"))
+	if defaultProfile == "" {
+		return nil, "", fmt.Errorf("SC_COMPAT_IMAGE_SOURCE_PROFILE is required")
+	}
+	if _, ok := profiles[defaultProfile]; !ok {
+		return nil, "", fmt.Errorf("SC_COMPAT_IMAGE_SOURCE_PROFILE %q is not configured", defaultProfile)
+	}
+	return profiles, defaultProfile, nil
+}
+
+func listenGRPC() (net.Listener, string, func(), error) {
+	raw := strings.TrimSpace(os.Getenv("GRPC_LISTEN"))
+	if raw == "" {
+		port := os.Getenv("GRPC_PORT")
+		if port == "" {
+			port = "9092"
+		}
+		raw = "tcp://:" + port
+	}
+	if address, ok := strings.CutPrefix(raw, "tcp://"); ok {
+		listener, err := net.Listen("tcp", address)
+		return listener, raw, func() {}, err
+	}
+	if address, ok := strings.CutPrefix(raw, "unix://"); ok {
+		if !filepath.IsAbs(address) {
+			return nil, raw, func() {}, fmt.Errorf("unix socket path must be absolute")
+		}
+		if info, err := os.Lstat(address); err == nil {
+			if info.Mode()&os.ModeSocket == 0 {
+				return nil, raw, func() {}, fmt.Errorf("refusing to replace non-socket path %s", address)
+			}
+			if err := os.Remove(address); err != nil {
+				return nil, raw, func() {}, fmt.Errorf("remove stale unix socket: %w", err)
+			}
+		} else if !os.IsNotExist(err) {
+			return nil, raw, func() {}, fmt.Errorf("inspect unix socket: %w", err)
+		}
+		listener, err := net.Listen("unix", address)
+		return listener, raw, func() { _ = os.Remove(address) }, err
+	}
+	return nil, raw, func() {}, fmt.Errorf("GRPC_LISTEN must use tcp:// or unix://")
 }
 
 func applyEnvironment(

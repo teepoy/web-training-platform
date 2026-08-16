@@ -85,6 +85,8 @@ async def close_flow_app_context(ctx: AppContext) -> None:
             await publisher.close()
     finally:
         try:
+            if ctx.sc is not None:
+                await ctx.sc.image_fetcher.close()
             prefect_close = getattr(ctx.shared.prefect_client, "close", None)
             if prefect_close is not None:
                 await prefect_close()

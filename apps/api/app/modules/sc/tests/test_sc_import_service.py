@@ -12,13 +12,18 @@ from app.modules.datasets.domain.entities import (
 )
 from app.modules.datasets.port.local import DatasetRevisionPublisherPort
 from app.modules.sc.domain.models import ScInspectionRecord
+from app.shared.api.schemas import Dataset
 
 
 class _MockRepository:
     def __init__(self) -> None:
         self.updated_meta: dict | None = None
+        self.created_dataset: Dataset | None = None
 
-    async def create_dataset(self, dataset, org_id: str | None = None):
+    async def create_dataset(
+        self, dataset: Dataset, org_id: str | None = None
+    ) -> Dataset:
+        self.created_dataset = dataset
         return dataset.model_copy(update={"org_id": org_id})
 
     async def update_dataset_meta(
@@ -269,28 +274,57 @@ def _make_service(
         payload_store=payload_store or _MockPayloadStore(),
         revision_publisher=revision_publisher or _MockRevisionPublisher(),
         upstream_reader=upstream_reader or _MockUpstream(row_count=1000),
+        upstream_image_source_profile="configured-upstream",
         import_batch_rows=25_000,
         index_row_group_rows=65_536,
     )
 
 
 @pytest.mark.asyncio
+async def test_direct_upstream_import_binds_configured_image_source_profile() -> None:
+    repository = _MockRepository()
+    service = _make_service(
+        upstream_reader=_MockUpstream(row_count=1),
+        repository=repository,
+    )
+
+    status = await service.submit_upstream_import(
+        source_inspection_time="2024-01-15T08:30:00",
+        source_wafer_key=7,
+        dataset_name="Configured upstream profile",
+        org_id="test-org",
+    )
+
+    assert status.status == "completed"
+    assert repository.created_dataset is not None
+    assert repository.created_dataset.image_source is not None
+    assert repository.created_dataset.image_source.profile == "configured-upstream"
+
+
+@pytest.mark.asyncio
 async def test_completed_sc_import_publishes_initial_dataset_revision() -> None:
     publisher = _MockRevisionPublisher()
+    repository = _MockRepository()
     service = _make_service(
         upstream_reader=_MockUpstream(row_count=20),
+        repository=repository,
         revision_publisher=publisher,
     )
 
     status = await service.submit_import(
         source_inspection_time="2024-01-15T08:30:00",
         source_wafer_key=7,
+        image_source_profile="sc_upstream",
         dataset_name="Revision publication",
         org_id="test-org",
         created_by="test-user",
     )
 
     assert status.status == "completed"
+    assert repository.created_dataset is not None
+    assert repository.created_dataset.image_source is not None
+    assert repository.created_dataset.image_source.contract == "sc.patch_archive.v1"
+    assert repository.created_dataset.image_source.profile == "sc_upstream"
     assert len(publisher.publications) == 1
     publication = publisher.publications[0]
     assert publication["dataset_id"] == status.dataset_id
@@ -312,6 +346,7 @@ async def test_hybrid_data_exhausted_before_threshold_completes() -> None:
     status = await service.submit_import(
         source_inspection_time="2024-01-15T08:30:00",
         source_wafer_key=1,
+        image_source_profile="sc_upstream",
         dataset_name="Hybrid exhausted",
         org_id="test-org",
         max_rows=None,
@@ -329,6 +364,7 @@ async def test_boundary_exact_30k_stays_direct_only() -> None:
     status = await service.submit_import(
         source_inspection_time="2024-01-15T08:30:00",
         source_wafer_key=1,
+        image_source_profile="sc_upstream",
         dataset_name="Direct boundary",
         org_id="test-org",
         max_rows=30_000,
@@ -368,6 +404,7 @@ async def test_direct_import_persists_geometry_metadata() -> None:
     await service.submit_import(
         source_inspection_time="2024-01-15T08:30:00",
         source_wafer_key=1,
+        image_source_profile="sc_upstream",
         dataset_name="Geometry Test Dataset",
         org_id="test-org",
         max_rows=100,
@@ -403,6 +440,7 @@ async def test_hybrid_shuffle_exhausted_early() -> None:
     status = await service.submit_import(
         source_inspection_time="2024-01-15T08:30:00",
         source_wafer_key=1,
+        image_source_profile="sc_upstream",
         dataset_name="Hybrid shuffle exhausted",
         org_id="test-org",
         max_rows=50_000,
@@ -424,6 +462,7 @@ async def test_direct_import_uses_shuffled_ids() -> None:
     status = await service.submit_import(
         source_inspection_time="2024-01-15T08:30:00",
         source_wafer_key=1,
+        image_source_profile="sc_upstream",
         dataset_name="Shuffle direct",
         org_id="test-org",
         max_rows=50,
@@ -468,6 +507,7 @@ async def test_direct_import_shuffle_reproducible() -> None:
     await service_a.submit_import(
         source_inspection_time="2024-01-15T08:30:00",
         source_wafer_key=1,
+        image_source_profile="sc_upstream",
         dataset_name="Reproducible A",
         org_id="test-org",
         max_rows=50,
@@ -479,6 +519,7 @@ async def test_direct_import_shuffle_reproducible() -> None:
     await service_b.submit_import(
         source_inspection_time="2024-01-15T08:30:00",
         source_wafer_key=1,
+        image_source_profile="sc_upstream",
         dataset_name="Reproducible B",
         org_id="test-org",
         max_rows=50,

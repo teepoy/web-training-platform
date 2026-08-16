@@ -232,6 +232,16 @@ SC Import as Dataset 当前使用 API service 内的 direct sparse import 路径
 
 Dataset image access 必须通过平台后端代理表达。`file_shard_sparse` 中嵌入的图片通过 `/api/v1/samples/{sample_id}/images/{image_id}?dataset_id=...` 读取；对象存储 URI 通过 `/api/v1/images/resolve?uri=...` 读取；SC upstream/mock 图片通过 `/api/v1/sc/images/...` 作为兼容入口。前端 `<img>` / blink table / preview grid 不能携带自定义 header，因此图片 URL 必须显式携带 token 与 org context query 参数。前端不得把 raw image path helper 的返回值直接作为图片源，必须通过共享 authenticated URL helper 或 image adapter 生成最终 URL。
 
+需要在运行时解析 SC patch archive 的 Dataset 必须保存显式的 image source binding：
+稳定 contract 为 `sc.patch_archive.v1`，profile 是部署配置中的不透明名称。Dataset 只保存
+contract/profile，不保存本地或 SMB 绝对路径、对象存储凭据。image-parser 的 provider
+registry 把 profile 映射到 `sc_upstream` 或 `sc_patch_zip_folder`；调用方不得请求根目录，
+provider 之间也不得在失败后隐式 fallback。历史 Dataset 不回填 binding；首次相关写入或
+显式运维迁移前，缺失 binding 的 SC training/prediction 必须失败并说明如何配置。
+Direct SC preview/import 使用 API 部署配置 `sc.upstream_image_source_profile` 绑定 profile，
+public request 与浏览器不得传入或推断这个不透明名称；Source Discovery 则必须从版本化
+Import profile 显式读取 `image_source_profile`，两条路径都不得提供失败 fallback。
+
 大数据集模式不追求与小数据集完全功能对齐。`file_shard_sparse` 的目标是大规模 ingest、批量预测、稀疏人工修正；不是重建完整 `SampleORM + Label Studio` 流程。
 
 SC Train & Predict 对每个有效标注类别最多选择 1,000 个样本进入训练物化。
@@ -243,9 +253,24 @@ validation/review pool。前端必须在任一类别超过上限时向用户显�
 SC 当前只注册 `yolo-sc-v1` 算法，不保留 ResNet compatibility 分支。YOLO 输入是
 `patch_defective` 与 `patch_template` 两张灰度图：每张独立 resize 到 `128x128`，
 再按 channel 顺序叠成 `[2, 128, 128]`，禁止在空间维纵向或横向拼图。训练固定
-50 epochs；预测模型 batch 固定 256。Parquet 读取、图片解码、灰度转换、resize
-和 channel stack 属于算法 Dataset preprocess，并由多进程 DataLoader worker
-执行；预测主进程只把 worker 输出的预处理 tensor 聚合为 256 条模型 batch。
+50 epochs；预测模型 batch 固定 256。Training 继续使用可重放、可 shuffle 的
+materialized Parquet/DataLoader。训练物化不得调用共享的线上 image-parser RPC；GPU
+worker 为每个 materialization 启动一个独立的本地 image-parser batch 进程，通过有界、
+顺序的 length-prefixed protobuf frame 按 512 行读取 source profile 对应图片，全部批次完成
+后关闭进程。该进程可复用 image-parser provider 实现和 job-local cache，但不监听端口、不与
+Prediction/Preview 争用线上服务容量，也不得失败后 fallback 到线上 RPC。之后的图片解码、
+灰度转换、resize 和 channel stack 属于算法 Dataset preprocess，并由多进程 DataLoader
+worker 执行。
+
+SC v3 Prediction 不生成完整临时图片 Parquet，也不为进度预先 collect/count 全量数据。
+它从 Dataset 当前持久化数据以 512 行有界扫描；Collection 按 `source_dataset_id` 映射
+各成员的 source profile，再通过 image-parser `ResolvePatchImages` server stream 批量取
+`sample × role` 图片。预处理固定 4 个 spawn 进程，每个 task 最多 64 条、最多预取 8 个
+task；主进程聚合为 256 条模型 batch，prediction 每 5,000 条批量写回，结束时写入实际
+processed total。因此内存上界由各批次和队列上限决定，不随 Dataset 总样本数线性增长。
+图片缺失、损坏等稳定 item error 只生成该 sample 的 prediction error，其他 sample 继续；
+模型加载失败、worker 崩溃、source profile 整体不可用或 RPC 中断使整个任务失败。取消时
+必须关闭 RPC stream/channel、队列与子进程。Collection prediction 仍按源 Dataset 拆分写回。
 
 完整 capability matrix 和 SC sparse 路径详见 `docs/architecture/dataset-storage-modes.md`。Smoke 验证使用 `make smoke-tests`。
 

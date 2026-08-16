@@ -126,6 +126,8 @@ async def lifespan(api: FastAPI):
             await metrics_redis.aclose()
         online_jwt_users.configure_redis(None)
         api.state.metrics_redis = None
+        if ctx.sc is not None:
+            await ctx.sc.image_fetcher.close()
         prefect_close = getattr(ctx.shared.prefect_client, "close", None)
         if prefect_close is not None:
             await prefect_close()

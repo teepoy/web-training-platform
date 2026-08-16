@@ -738,6 +738,11 @@ class DatasetCollectionService:
             "dataset_type": dataset.dataset_type,
             "view_types": list(dataset.view_types),
             "label_space": list(dataset.task_spec.label_space),
+            "image_source": (
+                dataset.image_source.model_dump(mode="json")
+                if dataset.image_source is not None
+                else None
+            ),
         }
 
     @staticmethod

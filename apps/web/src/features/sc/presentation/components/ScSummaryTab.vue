@@ -66,29 +66,12 @@ const selectableColumns = computed<DataTableColumns<InspectionSummaryItem>>(() =
   {
     key: "datasets",
     title: "Dataset",
-    width: 220,
+    width: 150,
     fixed: "right",
     render: (row) => {
       const datasets = row.datasets ?? [];
       if (datasets.length === 0) {
-        return h(
-          NButton,
-          {
-            size: "tiny",
-            type: "primary",
-            secondary: true,
-            loading: props.importingInspectionKey === rowKey(row),
-            disabled:
-              props.importingInspectionKey !== null && props.importingInspectionKey !== rowKey(row),
-            "data-row-click-stop": true,
-            "data-testid": `create-dataset-${rowKey(row)}`,
-            onClick: (event: MouseEvent) => {
-              event.stopPropagation();
-              emit("createDataset", row);
-            },
-          },
-          { default: () => "Create Dataset" },
-        );
+        return h(NText, { depth: 3 }, { default: () => "None" });
       }
       if (datasets.length === 1) {
         const dataset = datasets[0];
@@ -124,6 +107,54 @@ const selectableColumns = computed<DataTableColumns<InspectionSummaryItem>>(() =
         { default: () => `Datasets (${datasets.length})` },
       );
     },
+  },
+  {
+    key: "actions",
+    title: "Actions",
+    width: 190,
+    fixed: "right",
+    render: (row) =>
+      h(
+        NSpace,
+        { size: 6, wrap: false },
+        {
+          default: () => [
+            h(
+              NButton,
+              {
+                size: "tiny",
+                secondary: true,
+                "data-row-click-stop": true,
+                "data-testid": `preview-inspection-${rowKey(row)}`,
+                onClick: (event: MouseEvent) => {
+                  event.stopPropagation();
+                  emit("rowClick", row);
+                },
+              },
+              { default: () => "Preview" },
+            ),
+            h(
+              NButton,
+              {
+                size: "tiny",
+                type: "primary",
+                secondary: true,
+                loading: props.importingInspectionKey === rowKey(row),
+                disabled:
+                  props.importingInspectionKey !== null &&
+                  props.importingInspectionKey !== rowKey(row),
+                "data-row-click-stop": true,
+                "data-testid": `create-dataset-${rowKey(row)}`,
+                onClick: (event: MouseEvent) => {
+                  event.stopPropagation();
+                  emit("createDataset", row);
+                },
+              },
+              { default: () => "New dataset" },
+            ),
+          ],
+        },
+      ),
   },
 ]);
 
@@ -256,7 +287,7 @@ function rowProps(row: InspectionSummaryItem): Record<string, unknown> {
         :pagination="tablePagination"
         :single-line="false"
         :virtual-scroll="true"
-        :scroll-x="1280"
+        :scroll-x="1480"
         :min-row-height="32"
         striped
         size="small"

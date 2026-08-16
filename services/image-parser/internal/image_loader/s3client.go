@@ -3,6 +3,8 @@ package image_loader
 import (
 	"context"
 	"net/http"
+	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -23,19 +25,70 @@ var (
 
 func getZips() *s3.Client {
 	zipsOnce.Do(func() {
-		zipsClient = newMockClient()
+		zipsClient = newObjectStoreClient(
+			objectStoreConfigFromEnvironment("SC_PATCH_S3"),
+		)
 	})
 	return zipsClient
 }
 
 func getReview() *s3.Client {
 	reviewOnce.Do(func() {
-		reviewClient = newMockClient()
+		reviewClient = newObjectStoreClient(
+			objectStoreConfigFromEnvironment("SC_REVIEW_S3"),
+		)
 	})
 	return reviewClient
 }
 
-func newMockClient() *s3.Client {
+type objectStoreClientConfig struct {
+	endpoint  string
+	region    string
+	accessKey string
+	secretKey string
+}
+
+func objectStoreConfigFromEnvironment(prefix string) objectStoreClientConfig {
+	endpoint := firstEnvironment(
+		prefix+"_ENDPOINT",
+		"MINIO_ENDPOINT",
+	)
+	if endpoint == "" {
+		endpoint = mocksource.ObjectStoreEndpoint
+	}
+	if !strings.Contains(endpoint, "://") {
+		endpoint = "http://" + endpoint
+	}
+	region := firstEnvironment(prefix+"_REGION", "MINIO_REGION")
+	if region == "" {
+		region = mocksource.ObjectStoreRegion
+	}
+	accessKey := firstEnvironment(prefix+"_ACCESS_KEY", "MINIO_ACCESS_KEY")
+	if accessKey == "" {
+		accessKey = mocksource.ObjectStoreAccessKey
+	}
+	secretKey := firstEnvironment(prefix+"_SECRET_KEY", "MINIO_SECRET_KEY")
+	if secretKey == "" {
+		secretKey = mocksource.ObjectStoreSecretKey
+	}
+	return objectStoreClientConfig{
+		endpoint:  endpoint,
+		region:    region,
+		accessKey: accessKey,
+		secretKey: secretKey,
+	}
+}
+
+func firstEnvironment(names ...string) string {
+	for _, name := range names {
+		if value := strings.TrimSpace(os.Getenv(name)); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func newObjectStoreClient(source objectStoreClientConfig) *s3.Client {
 	customTransport := &http.Transport{
 		MaxIdleConns:        mocksource.ObjectStoreMaxConnections,
 		MaxIdleConnsPerHost: mocksource.ObjectStoreMaxConnections,
@@ -44,17 +97,17 @@ func newMockClient() *s3.Client {
 
 	customResolver := aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
 		return aws.Endpoint{
-			URL:               mocksource.ObjectStoreEndpoint,
+			URL:               source.endpoint,
 			HostnameImmutable: true,
-			SigningRegion:     mocksource.ObjectStoreRegion,
+			SigningRegion:     source.region,
 		}, nil
 	})
 
 	cfg, err := config.LoadDefaultConfig(context.TODO(),
-		config.WithRegion(mocksource.ObjectStoreRegion),
+		config.WithRegion(source.region),
 		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
-			mocksource.ObjectStoreAccessKey,
-			mocksource.ObjectStoreSecretKey,
+			source.accessKey,
+			source.secretKey,
 			"",
 		)),
 		config.WithHTTPClient(&http.Client{

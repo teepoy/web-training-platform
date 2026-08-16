@@ -229,7 +229,10 @@ class ScPipelineConfig(ConfigSection):
     index_row_group_rows: int
     materialization_batch_rows: int
     materialization_max_error_records: int
-    prediction_max_materialized_bytes: int
+    prediction_input_batch_rows: int
+    prediction_preprocess_task_rows: int
+    prediction_preprocess_workers: int
+    prediction_preprocess_prefetch_tasks: int
     prediction_progress_flush_rows: int
     prediction_progress_flush_seconds: float
     prediction_write_batch_rows: int
@@ -240,6 +243,8 @@ class ScPipelineConfig(ConfigSection):
 
 
 class ScConfig(ConfigSection):
+    upstream_image_source_profile: str = Field(min_length=1)
+    training_image_parser_binary: str = Field(min_length=1)
     mock: ScMockConfig = Field(default_factory=ScMockConfig)
     data_provider: ScDataProviderConfig
     pipeline: ScPipelineConfig
@@ -426,6 +431,12 @@ def load_config(skip_runtime_validation: bool = False) -> AppConfig:
     startup_timeout = os.getenv("STARTUP_CHECK_DEPENDENCY_TIMEOUT_SECONDS")
     if startup_timeout:
         cfg.startup_checks.dependency_timeout_seconds = float(startup_timeout)
+    upstream_image_source_profile = os.getenv("SC_UPSTREAM_IMAGE_SOURCE_PROFILE")
+    if upstream_image_source_profile is not None:
+        cfg.sc.upstream_image_source_profile = upstream_image_source_profile
+    training_image_parser_binary = os.getenv("SC_TRAINING_IMAGE_PARSER_BINARY")
+    if training_image_parser_binary is not None:
+        cfg.sc.training_image_parser_binary = training_image_parser_binary
     data_provider_environment = {
         "SC_DATA_PROVIDER_IMPLEMENTATION": ("implementation", str),
         "SC_DATA_PROVIDER_MAX_RSS_MB": ("max_rss_mb", int),
@@ -526,8 +537,20 @@ def load_config(skip_runtime_validation: bool = False) -> AppConfig:
             "materialization_max_error_records",
             int,
         ),
-        "SC_PIPELINE_PREDICTION_MAX_MATERIALIZED_BYTES": (
-            "prediction_max_materialized_bytes",
+        "SC_PIPELINE_PREDICTION_INPUT_BATCH_ROWS": (
+            "prediction_input_batch_rows",
+            int,
+        ),
+        "SC_PIPELINE_PREDICTION_PREPROCESS_TASK_ROWS": (
+            "prediction_preprocess_task_rows",
+            int,
+        ),
+        "SC_PIPELINE_PREDICTION_PREPROCESS_WORKERS": (
+            "prediction_preprocess_workers",
+            int,
+        ),
+        "SC_PIPELINE_PREDICTION_PREPROCESS_PREFETCH_TASKS": (
+            "prediction_preprocess_prefetch_tasks",
             int,
         ),
         "SC_PIPELINE_PREDICTION_PROGRESS_FLUSH_ROWS": (
