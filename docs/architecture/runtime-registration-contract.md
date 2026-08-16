@@ -96,20 +96,27 @@ metadata-only duplicate catalog, YAML capability preset, or directory scan.
 
 Prefect deployment is execution infrastructure and is declared independently
 from algorithm registration. One repository-owned `PrefectDeploymentSpec`
-contains the deployment name, flow name, entrypoint, work pool, and path.
+contains the deployment name, flow name, entrypoint, work pool, optional work
+queue and path.
 Deployment seed, startup validation, and submission consume the same objects.
 
-| Deployment                     | Flow                         | Work pool     |
-| ------------------------------ | ---------------------------- | ------------- |
-| `train-job-deployment`         | `training-train-job`         | `default-gpu` |
-| `train-and-predict-deployment` | `training-train-and-predict` | `default-gpu` |
-| `predict-job-batch-deployment` | `prediction-predict-job`     | `default-gpu` |
-| sensor/drain deployments       | their declared CPU flows     | `default-cpu` |
+| Deployment                                | Flow                         | Work pool     | Work queue / priority        |
+| ----------------------------------------- | ---------------------------- | ------------- | ---------------------------- |
+| `train-job-deployment`                    | `training-train-job`         | `default-gpu` | default                      |
+| `train-and-predict-deployment`            | `training-train-and-predict` | `default-gpu` | default                      |
+| `predict-job-batch-deployment`            | `prediction-predict-job`     | `default-gpu` | `prediction-manual` / 1      |
+| `predict-job-batch-automation-deployment` | `prediction-predict-job`     | `default-gpu` | `prediction-automation` / 10 |
+| sensor/drain deployments                  | their declared CPU flows     | `default-cpu` | default                      |
 
 A deployment identifies a configured flow submission target. A work pool is
 the execution resource queue to which that deployment is bound. CPU/GPU is
 therefore expressed by the selected work pool, not by a capability
 `resource_profile` field and not by string concatenation during seed.
+
+Prefect uses lower numeric work-queue priorities first. Manually submitted and
+manually retried prediction work uses the manual queue; incremental Collection
+automation uses the automation queue. Queue priority does not preempt a running
+flow run.
 
 All current deployments are repository-owned. There is no `owner` field or
 external deployment branch. A future external runtime should be integrated by

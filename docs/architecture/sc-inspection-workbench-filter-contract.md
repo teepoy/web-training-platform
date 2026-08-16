@@ -236,12 +236,13 @@ the compact select-all exclusion predicate when the table uses symbolic
 select-all state. Review mode and the active sampling cohort are deliberately
 not candidate inputs.
 
-The web datasource compiles the candidate predicate and enabled rules into one
-parameterized, read-only DuckDB query. Its CTE stages are Extra filter/candidate
-base, conditional limit, group quota, then total limit. The SC data-provider
-validates the statement against its scoped SQL policy and executes it over the
-materialized `samples` view, returning Arrow IPC containing only `defect_id`.
-No user value is interpolated into SQL text.
+The web datasource compiles only the candidate predicate into a parameterized,
+read-only source query and sends the enabled rules as a structured program. The
+SC data-provider validates the source query, maps the transport program to
+`libs/sampling-rules`, and lets that library compile the conditional limit, group
+quota, and total-limit CTE stages. The final statement is validated again and
+executed over the materialized `samples` view, returning Arrow IPC containing
+only `defect_id`. No user value is interpolated into SQL text.
 
 For group sampling, `sample ratio` is a percentage of each group's population:
 `2` applied to a group of 1,000 yields 20 candidates. It is not a percentage of
@@ -250,10 +251,11 @@ every group without an explicit target. Count requests larger than the available
 group naturally take all available rows. `FLOOR`, `CEIL`, or `ROUND` is applied
 before the final total limit.
 
-Every conditional, group, and final ordering hashes `defect_id` with the fixed
-seed `42`, so an unchanged candidate set and rule program reproduce the same
-cohort. The Python `sampling-rules` library mirrors these semantics for bounded
-in-memory callers and audit plans; it is not the high-volume SC execution path.
+Every conditional, group, and final ordering hashes the stable source identity
+with the fixed seed `42`, so an unchanged candidate set and rule program reproduce
+the same cohort. The Python `sampling-rules` library is the production owner of
+these sampling stages and executes them through its DuckDB table backend. Its
+mapping-based executor remains a compatibility surface for bounded callers.
 
 ## TO-BE: three cumulative filter layers
 

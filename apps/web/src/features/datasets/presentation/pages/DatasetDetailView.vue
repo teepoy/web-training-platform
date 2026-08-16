@@ -8,6 +8,7 @@ import { buildExportDownloadUrl } from "@/shared/api/datasets";
 import {
   getGetDatasetApiV1DatasetsDatasetIdGetQueryKey,
   getGetSparseSummaryApiV1DatasetsDatasetIdSparseSummaryGetQueryKey,
+  useGetCurrentDatasetRevisionApiV1DatasetsDatasetIdRevisionsCurrentGet,
   useGetDatasetApiV1DatasetsDatasetIdGet,
   useGetSparseSummaryApiV1DatasetsDatasetIdSparseSummaryGet,
 } from "@/generated/orval/endpoints/api";
@@ -33,7 +34,11 @@ const qc = useQueryClient();
 const orgStore = useOrgStore();
 
 const id = computed(() => String(route.params.id));
-const activeTab = ref("overview");
+function tabFromHash(hash: string): string {
+  return hash.startsWith("#") && hash.length > 1 ? hash.slice(1) : "overview";
+}
+
+const activeTab = ref(tabFromHash(route.hash));
 const selectedSampleId = ref<string | null>(null);
 const showImportFlow = ref(false);
 const exportStep = ref<"select" | "execute">("select");
@@ -55,6 +60,16 @@ const datasetQuery = useGetDatasetApiV1DatasetsDatasetIdGet(id, {
 const dataset = computed(
   () => datasetQuery.data.value as Dataset & { ls_project_url?: string | null },
 );
+const currentRevisionQuery = useGetCurrentDatasetRevisionApiV1DatasetsDatasetIdRevisionsCurrentGet(
+  id,
+  {
+    query: {
+      enabled: computed(() => !!orgStore.currentOrgId && !!id.value),
+      retry: false,
+    },
+  },
+);
+const currentRevision = computed(() => currentRevisionQuery.data.value);
 
 const isSparse = computed(() => dataset.value?.storage_mode === "file_shard_sparse");
 const labelSpace = computed(() => dataset.value?.task_spec?.label_space ?? []);
@@ -94,6 +109,19 @@ watch(
   },
   { immediate: true },
 );
+
+watch(
+  () => route.hash,
+  (hash) => {
+    const requestedTab = tabFromHash(hash);
+    if (requestedTab !== activeTab.value) activeTab.value = requestedTab;
+  },
+);
+
+watch(activeTab, (tab) => {
+  const hash = `#${tab}`;
+  if (route.hash !== hash) void router.replace({ hash });
+});
 
 const importerFlows: FlowCard[] = [
   {
@@ -293,6 +321,33 @@ function openScClassify() {
               </div>
             </div>
           </n-card>
+          <n-card size="small" title="Change record" class="dataset-revision-card">
+            <n-alert type="info" :show-icon="false" class="dataset-revision-explainer">
+              Dataset changes receive a simple sequence number for audit and update notices. This
+              record does not copy or freeze samples; jobs read current data when they start.
+            </n-alert>
+            <div v-if="currentRevision" class="dataset-revision-summary">
+              <div class="contract-field">
+                <n-text depth="3">Latest change</n-text>
+                <strong>#{{ currentRevision.revision_number }}</strong>
+              </div>
+              <div class="contract-field">
+                <n-text depth="3">Operation</n-text>
+                <strong>{{ currentRevision.operation.replace(/_/g, " ") }}</strong>
+              </div>
+              <div class="contract-field">
+                <n-text depth="3">Recorded</n-text>
+                <strong>{{ new Date(currentRevision.created_at).toLocaleString() }}</strong>
+              </div>
+              <div class="contract-field">
+                <n-text depth="3">Data copy</n-text>
+                <strong>None</strong>
+              </div>
+            </div>
+            <n-text v-else depth="3">
+              No change record yet. Existing historical data is not backfilled.
+            </n-text>
+          </n-card>
           <DatasetSparseSummary
             v-if="isSparse"
             :dataset-id="id"
@@ -441,6 +496,20 @@ function openScClassify() {
   margin-top: 4px;
 }
 
+.dataset-revision-card {
+  margin-top: 16px;
+}
+
+.dataset-revision-explainer {
+  margin-bottom: 16px;
+}
+
+.dataset-revision-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
 .dataset-contract-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -484,6 +553,10 @@ function openScClassify() {
 
   .dataset-contract-grid {
     grid-template-columns: 1fr;
+  }
+
+  .dataset-revision-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .contract-field-wide {

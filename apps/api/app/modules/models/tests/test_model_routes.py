@@ -80,6 +80,7 @@ def test_list_models_applies_search_and_creator_before_pagination() -> None:
         missing_creator = c.get(
             "/api/v1/models?limit=1&creator_id=creator-who-does-not-exist"
         )
+        collection_sources = c.get("/api/v1/models?source_type=collection")
         creators = c.get("/api/v1/models/creators")
 
         assert searched.status_code == 200
@@ -87,11 +88,34 @@ def test_list_models_applies_search_and_creator_before_pagination() -> None:
         assert [item["id"] for item in searched.json()["items"]] == [model_id]
         assert missing_creator.status_code == 200
         assert missing_creator.json() == {"items": [], "total": 0}
+        assert collection_sources.status_code == 200
+        assert collection_sources.json() == {"items": [], "total": 0}
         assert creators.status_code == 200
         assert any(
             creator["id"] == searched.json()["items"][0]["created_by"]
             for creator in creators.json()
         )
+
+
+def test_list_models_sorts_before_pagination() -> None:
+    with TestClient(app) as c:
+        _, _, first_model_id = _setup(c)
+        _, _, second_model_id = _setup(c)
+        assert c.patch(
+            f"/api/v1/models/{first_model_id}", json={"name": "Zulu model"}
+        ).status_code == 200
+        assert c.patch(
+            f"/api/v1/models/{second_model_id}", json={"name": "Alpha model"}
+        ).status_code == 200
+
+        response = c.get(
+            "/api/v1/models?sort_by=name&sort_order=asc&limit=1&offset=0"
+        )
+
+        assert response.status_code == 200
+        assert response.json()["total"] == 2
+        assert [item["name"] for item in response.json()["items"]] == ["Alpha model"]
+        assert c.get("/api/v1/models?sort_order=sideways").status_code == 422
 
 
 def test_download_model_not_found() -> None:

@@ -21,6 +21,7 @@ def test_platform_prefect_deployment_specs_cover_runtime_and_cpu() -> None:
         "train-job-deployment",
         "train-and-predict-deployment",
         "predict-job-batch-deployment",
+        "predict-job-batch-automation-deployment",
         "timer-sensor",
         "dataset-size-sensor",
         "drain-dataset",
@@ -42,6 +43,10 @@ async def test_prepare_prefect_ensures_pools_and_deployments(monkeypatch) -> Non
     assert prefect.ensure_work_pool.await_args_list == [
         call("default-cpu", "process"),
         call("default-gpu", "process"),
+    ]
+    assert prefect.ensure_work_queue.await_args_list == [
+        call("default-gpu", "prediction-manual", priority=1),
+        call("default-gpu", "prediction-automation", priority=10),
     ]
     assert prefect.ensure_deployment.await_count == len(
         platform_prefect_deployment_specs()

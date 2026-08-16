@@ -51,7 +51,7 @@ onMounted(async () => {
   try {
     await authStore.oauthLogin(token);
     await orgStore.fetchOrganizations();
-    router.replace("/datasets");
+    router.replace("/library");
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "OAuth authentication failed";
     errorMessage.value = msg;

@@ -7,6 +7,11 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.modules.dataset_collections.domain.models import (
+    CollectionPredictionBatch,
+    CollectionPredictionBatchItem,
+    CollectionPredictionCoverage,
+    CollectionSnapshotRefreshResult,
+    CollectionSnapshotUpdateStatus,
     DatasetCollection,
     DatasetCollectionMember,
     DatasetCollectionRevision,
@@ -29,6 +34,18 @@ class CreateDatasetCollectionRequest(StrictRequest):
 class UpdateDatasetCollectionRequest(StrictRequest):
     name: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = Field(default=None, max_length=10000)
+
+
+class UpdateCollectionDefaultModelRequest(StrictRequest):
+    expected_binding_version: int = Field(ge=0)
+    model_id: str | None = Field(default=None, min_length=1, max_length=64)
+
+
+class CreateCollectionPredictionBatchRequest(StrictRequest):
+    snapshot_id: str = Field(min_length=1, max_length=64)
+    expected_default_model_id: str = Field(min_length=1, max_length=64)
+    request_id: str = Field(min_length=1, max_length=128)
+    dataset_ids: list[str] = Field(min_length=1)
 
 
 class DatasetCollectionMemberInput(StrictRequest):
@@ -76,6 +93,8 @@ class DatasetCollectionResponse(BaseModel):
     created_by: str
     created_at: datetime
     updated_at: datetime
+    default_model_id: str | None
+    model_binding_version: int
 
     @classmethod
     def from_domain(cls, collection: DatasetCollection) -> DatasetCollectionResponse:
@@ -138,6 +157,9 @@ class DatasetCollectionRevisionResponse(BaseModel):
     label_counts: dict[str, int]
     manifest_uri: str | None
     provenance_uri: str | None
+    manifest_format: str
+    source_resolution: str
+    reproducibility_capability: bool
     trigger_kind: str
     trigger_ref: str | None
     created_by: str
@@ -164,6 +186,9 @@ class DatasetCollectionRevisionResponse(BaseModel):
             label_counts=revision.label_counts,
             manifest_uri=revision.manifest_uri,
             provenance_uri=revision.provenance_uri,
+            manifest_format=revision.manifest_format,
+            source_resolution=revision.source_resolution,
+            reproducibility_capability=revision.reproducibility_capability,
             trigger_kind=revision.trigger_kind,
             trigger_ref=revision.trigger_ref,
             created_by=revision.created_by,
@@ -173,6 +198,121 @@ class DatasetCollectionRevisionResponse(BaseModel):
         )
 
 
+class CollectionSnapshotMemberUpdateResponse(BaseModel):
+    member_id: str
+    dataset_id: str
+    observed_dataset_revision_id: str | None
+    observed_dataset_revision_number: int | None
+    current_dataset_revision_id: str | None
+    current_dataset_revision_number: int | None
+    update_available: bool
+
+
+class CollectionSnapshotUpdateStatusResponse(BaseModel):
+    snapshot_id: str | None
+    snapshot_revision_number: int | None
+    update_available: bool
+    outdated_member_count: int
+    members: list[CollectionSnapshotMemberUpdateResponse]
+
+    @classmethod
+    def from_domain(
+        cls, status: CollectionSnapshotUpdateStatus
+    ) -> CollectionSnapshotUpdateStatusResponse:
+        return cls(
+            snapshot_id=status.snapshot_id,
+            snapshot_revision_number=status.snapshot_revision_number,
+            update_available=status.update_available,
+            outdated_member_count=status.outdated_member_count,
+            members=[
+                CollectionSnapshotMemberUpdateResponse(**asdict(member))
+                for member in status.members
+            ],
+        )
+
+
+class CollectionSnapshotRefreshResponse(BaseModel):
+    outcome: Literal["refreshed", "unchanged"]
+    snapshot: DatasetCollectionRevisionResponse
+
+    @classmethod
+    def from_domain(
+        cls, result: CollectionSnapshotRefreshResult
+    ) -> CollectionSnapshotRefreshResponse:
+        return cls(
+            outcome=result.outcome,
+            snapshot=DatasetCollectionRevisionResponse.from_domain(result.snapshot),
+        )
+
+
 class DatasetCollectionErrorResponse(BaseModel):
     code: str
     detail: str
+
+
+class CollectionPredictionCoverageResponse(BaseModel):
+    member_id: str
+    dataset_id: str
+    expected_dataset_revision_id: str
+    status: str
+    default_model_id: str | None
+    latest_prediction_job_id: str | None
+    latest_prediction_model_id: str | None
+    latest_prediction_dataset_revision_id: str | None
+    latest_prediction_status: str | None
+    active_prediction_job_id: str | None
+    active_prediction_status: str | None
+
+    @classmethod
+    def from_domain(
+        cls, coverage: CollectionPredictionCoverage
+    ) -> CollectionPredictionCoverageResponse:
+        return cls(**asdict(coverage))
+
+
+class CollectionPredictionBatchItemResponse(BaseModel):
+    id: str
+    batch_id: str
+    member_id: str
+    dataset_id: str
+    dataset_revision_id: str
+    prediction_job_id: str | None
+    status: str
+    attempt_count: int
+    error_detail: str | None
+    created_at: datetime
+    updated_at: datetime
+
+    @classmethod
+    def from_domain(
+        cls, item: CollectionPredictionBatchItem
+    ) -> CollectionPredictionBatchItemResponse:
+        return cls(**asdict(item))
+
+
+class CollectionPredictionBatchResponse(BaseModel):
+    id: str
+    collection_id: str
+    collection_revision_id: str
+    model_id: str
+    kind: str
+    request_id: str
+    status: str
+    created_by: str
+    created_at: datetime
+    updated_at: datetime
+    items: list[CollectionPredictionBatchItemResponse]
+
+    @classmethod
+    def from_domain(
+        cls,
+        batch: CollectionPredictionBatch,
+        items: list[CollectionPredictionBatchItem],
+    ) -> CollectionPredictionBatchResponse:
+        return cls(
+            **asdict(batch),
+            items=[
+                CollectionPredictionBatchItemResponse.from_domain(item)
+                for item in items
+            ],
+        )

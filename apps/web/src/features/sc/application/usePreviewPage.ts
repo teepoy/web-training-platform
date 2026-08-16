@@ -2,7 +2,7 @@ import { computed, onMounted, ref, watch, type ComputedRef, type Ref } from "vue
 import { useRoute } from "vue-router";
 import { useMessage } from "naive-ui";
 import type { DataTableColumns } from "naive-ui";
-import { useGetInspectionsApiV1ScInspectionsGet } from "@/generated/orval/endpoints/api";
+import { getInspectionsApiV1ScInspectionsGet } from "@/generated/orval/endpoints/api";
 import { streamApiSse } from "@/shared/api/sse";
 import { create } from "@bufbuild/protobuf";
 import { type DefectList, ScSampleItemSchema } from "../generated/proto/sc/v1/sample_pb";
@@ -192,31 +192,6 @@ export function usePreviewPage(): PreviewPageState {
     const lot = row.lot_id ? `${row.lot_id} / ` : "";
     return `${lot}W${row.wafer_key} · ${formatInspectionTime(row.inspection_time)}`;
   });
-
-  const searchParams = ref<GetInspectionsApiV1ScInspectionsGetParams | null>(null);
-
-  const searchNonce = ref(0);
-
-  const inspectionsQuery = useGetInspectionsApiV1ScInspectionsGet(
-    computed(() => searchParams.value ?? { start_time: "", end_time: "" }),
-    {
-      query: {
-        enabled: computed(() => searchParams.value !== null),
-        staleTime: 0,
-        queryKey: computed(
-          () =>
-            [
-              "api",
-              "v1",
-              "sc",
-              "inspections",
-              searchNonce.value,
-              searchParams.value ?? { start_time: "", end_time: "" },
-            ] as const,
-        ),
-      },
-    },
-  );
 
   type SummaryFilterKey =
     | "inspection_time"
@@ -671,7 +646,7 @@ export function usePreviewPage(): PreviewPageState {
 
   async function searchInspections(): Promise<void> {
     const range = dateRange.value;
-    if (!range) return;
+    if (!range || summariesLoading.value) return;
 
     const startVal = range[0];
     const endVal = range[1];
@@ -701,12 +676,13 @@ export function usePreviewPage(): PreviewPageState {
     if (layerId) nextSearchParams.layer_id = layerId;
     if (device) nextSearchParams.device = device;
 
-    searchParams.value = nextSearchParams;
-    searchNonce.value += 1;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15_000);
 
     try {
-      const { data } = await inspectionsQuery.refetch({ throwOnError: true });
-      const payload = data;
+      const payload = await getInspectionsApiV1ScInspectionsGet(nextSearchParams, {
+        signal: controller.signal,
+      });
       if (payload && "items" in payload) {
         const items = payload.items;
         summaries.value = items;
@@ -716,9 +692,15 @@ export function usePreviewPage(): PreviewPageState {
         summariesEmpty.value = true;
       }
     } catch (err) {
-      summariesError.value = err instanceof Error ? err.message : "Failed to fetch inspections";
+      summariesError.value =
+        err instanceof DOMException && err.name === "AbortError"
+          ? "The inspection search timed out. Check the SC service and retry."
+          : err instanceof Error
+            ? err.message
+            : "Failed to fetch inspections";
       summaries.value = [];
     } finally {
+      clearTimeout(timeoutId);
       summariesLoading.value = false;
     }
   }

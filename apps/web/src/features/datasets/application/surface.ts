@@ -61,6 +61,7 @@ export function buildDatasetColumns<TDataset extends DatasetListItem>(
     {
       title: "Name",
       key: "name",
+      sorter: true,
       render: (row: TDataset) => {
         const nodes = [h("span", { style: "font-weight: 500" }, row.name)];
         if (row.is_public) {
@@ -86,6 +87,7 @@ export function buildDatasetColumns<TDataset extends DatasetListItem>(
     {
       title: "Dataset Type",
       key: "dataset_type",
+      sorter: true,
       render: (row: TDataset) =>
         h(NTag, { type: "default", size: "small" }, { default: () => row.dataset_type }),
     },
@@ -117,8 +119,15 @@ export function buildDatasetColumns<TDataset extends DatasetListItem>(
         ),
     },
     {
+      title: "Creator",
+      key: "creator",
+      sorter: true,
+      render: (row: TDataset) => row.creator_name?.trim() || row.created_by?.trim() || "system",
+    },
+    {
       title: "Create Time",
       key: "created_at",
+      sorter: true,
       render: (row: TDataset) => h("span", {}, new Date(row.created_at).toLocaleString()),
     },
     {

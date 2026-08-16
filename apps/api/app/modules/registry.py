@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from app.modules.agent.port.http.router import router as agent_router
+from app.modules.automations.port.http.router import router as automations_router
 from app.modules.auth.port.http.router import router as auth_router
 from app.modules.agent.classify.port.http.router import router as classify_router
 from app.modules.dashboard.port.http.router import (
@@ -37,6 +38,11 @@ from app.modules.jobs.task_tracker.port.http.router import (
     router as task_tracker_router,
 )
 from app.modules.training.port.http.router import router as training_router
+from app.modules.source_discovery.port.http.router import (
+    collections_router as source_discovery_collections_router,
+    connectors_router as source_connectors_router,
+    runs_router as source_discovery_runs_router,
+)
 
 MODULE_ROUTERS: list[APIRouter] = [
     import_parquet_router,
@@ -45,6 +51,7 @@ MODULE_ROUTERS: list[APIRouter] = [
     datasets_router,
     dataset_collections_router,
     agent_router,
+    automations_router,
     auth_router,
     classify_router,
     dashboard_router,
@@ -58,6 +65,9 @@ MODULE_ROUTERS: list[APIRouter] = [
     training_router,
     sc_router,
     sc_datasets_router,
+    source_connectors_router,
+    source_discovery_collections_router,
+    source_discovery_runs_router,
 ]
 
 EXTENSION_ROUTERS: list[APIRouter] = [

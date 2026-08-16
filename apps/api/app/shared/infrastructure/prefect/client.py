@@ -216,6 +216,44 @@ class PrefectClient:
             "GET", f"/work_pools/{name}", resource_label="work pool"
         )
 
+    async def ensure_work_queue(
+        self,
+        work_pool_name: str,
+        name: str,
+        *,
+        priority: int,
+    ) -> dict:
+        """Create or reconcile a repository-owned Prefect work queue."""
+
+        queue = await self.get_work_queue_by_name(name, work_pool_name)
+        if queue is None:
+            created = await self._request(
+                "POST",
+                f"/work_pools/{work_pool_name}/queues",
+                json={"name": name, "priority": priority},
+                allow_conflict=True,
+                resource_label="work queue",
+            )
+            if isinstance(created, dict):
+                queue = created
+            else:
+                queue = await self.get_work_queue_by_name(name, work_pool_name)
+        if queue is None:
+            raise RuntimeError(
+                f"Prefect work queue {name!r} could not be resolved in "
+                f"pool {work_pool_name!r}"
+            )
+        if queue.get("priority") != priority:
+            await self._request(
+                "PATCH",
+                f"/work_pools/{work_pool_name}/queues/{name}",
+                json={"priority": priority},
+                expect_json=False,
+                resource_label="work queue",
+            )
+            queue = {**queue, "priority": priority}
+        return queue
+
     async def list_work_pools(self) -> list[dict]:
         """Return all work pools registered in Prefect.
 
@@ -335,6 +373,7 @@ class PrefectClient:
         path: str | None = None,
         parameters: dict[str, object] | None = None,
         tags: list[str] | None = None,
+        work_queue_name: str | None = None,
     ) -> dict:
         """Ensure a deployment exists, creating it via the Prefect API if needed.
 
@@ -371,6 +410,7 @@ class PrefectClient:
                     "path": path,
                     "parameters": parameters,
                     "tags": tags,
+                    "work_queue_name": work_queue_name,
                 }.items()
                 if value is not None
             }
@@ -398,6 +438,8 @@ class PrefectClient:
             body["parameters"] = parameters
         if tags is not None:
             body["tags"] = tags
+        if work_queue_name is not None:
+            body["work_queue_name"] = work_queue_name
         created = await self._request(
             "POST",
             "/deployments/",
@@ -422,6 +464,7 @@ class PrefectClient:
                 "path": path,
                 "parameters": parameters,
                 "tags": tags,
+                "work_queue_name": work_queue_name,
             }.items()
             if value is not None
         }

@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import { computed, h, reactive } from "vue";
+import { computed, h, reactive, ref } from "vue";
 import {
   NButton,
   NDataTable,
   NDatePicker,
   NInput,
+  NList,
+  NListItem,
+  NModal,
   NSpace,
   NText,
   NTooltip,
@@ -41,8 +44,17 @@ const emit = defineEmits<{
   (e: "rowClick", row: InspectionSummaryItem): void;
   (e: "openDataset", datasetId: string): void;
   (e: "createDataset", row: InspectionSummaryItem): void;
+  (e: "buildCollection"): void;
   (e: "update:selectedRowKeys", value: string[]): void;
 }>();
+
+const datasetListVisible = ref(false);
+const datasetList = ref<InspectionSummaryItem["datasets"]>([]);
+
+function showDatasets(row: InspectionSummaryItem): void {
+  datasetList.value = row.datasets ?? [];
+  datasetListVisible.value = true;
+}
 
 function rowKey(row: InspectionSummaryItem): string {
   return `${row.inspection_time}_${row.wafer_key}`;
@@ -78,29 +90,38 @@ const selectableColumns = computed<DataTableColumns<InspectionSummaryItem>>(() =
           { default: () => "Create Dataset" },
         );
       }
+      if (datasets.length === 1) {
+        const dataset = datasets[0];
+        return h(
+          NButton,
+          {
+            size: "tiny",
+            secondary: true,
+            type: "primary",
+            "data-row-click-stop": true,
+            "data-testid": `open-dataset-${dataset.id}`,
+            onClick: (event: MouseEvent) => {
+              event.stopPropagation();
+              emit("openDataset", dataset.id);
+            },
+          },
+          { default: () => "Open dataset" },
+        );
+      }
       return h(
-        NSpace,
-        { size: 6, wrap: true },
+        NButton,
         {
-          default: () =>
-            datasets.map((dataset) =>
-              h(
-                NButton,
-                {
-                  size: "tiny",
-                  text: true,
-                  type: "primary",
-                  "data-row-click-stop": true,
-                  "data-testid": `open-dataset-${dataset.id}`,
-                  onClick: (event: MouseEvent) => {
-                    event.stopPropagation();
-                    emit("openDataset", dataset.id);
-                  },
-                },
-                { default: () => dataset.name },
-              ),
-            ),
+          size: "tiny",
+          secondary: true,
+          type: "primary",
+          "data-row-click-stop": true,
+          "data-testid": `show-datasets-${rowKey(row)}`,
+          onClick: (event: MouseEvent) => {
+            event.stopPropagation();
+            showDatasets(row);
+          },
         },
+        { default: () => `Datasets (${datasets.length})` },
       );
     },
   },
@@ -139,20 +160,6 @@ function rowProps(row: InspectionSummaryItem): Record<string, unknown> {
   <div class="sc-preview-tabsummary">
     <div class="sc-preview-search-bar">
       <NSpace align="center" :wrap="true" :size="8">
-        <NTooltip trigger="hover">
-          <template #trigger>
-            <NButton
-              text
-              size="tiny"
-              aria-label="Inspection filter help"
-              data-testid="inspection-filter-help"
-            >
-              Filter help
-            </NButton>
-          </template>
-          Separate multiple values with commas. Use * as a wildcard (for example, LOT-*); a single *
-          or a blank field includes all values.
-        </NTooltip>
         <NDatePicker
           :value="dateRange"
           type="daterange"
@@ -161,38 +168,58 @@ function rowProps(row: InspectionSummaryItem): Record<string, unknown> {
           size="small"
           @update:value="emit('update:dateRange', $event)"
         />
-        <NInput
-          :value="deviceFilter"
-          placeholder="Device"
-          size="small"
-          style="width: 140px"
-          clearable
-          @update:value="emit('update:deviceFilter', $event)"
-        />
-        <NInput
-          :value="layerIdFilter"
-          placeholder="Layer ID"
-          size="small"
-          style="width: 140px"
-          clearable
-          @update:value="emit('update:layerIdFilter', $event)"
-        />
-        <NInput
-          :value="lotIdFilter"
-          placeholder="Lot ID"
-          size="small"
-          style="width: 140px"
-          clearable
-          @update:value="emit('update:lotIdFilter', $event)"
-        />
-        <NInput
-          :value="eqpIdFilter"
-          placeholder="Equipment ID"
-          size="small"
-          style="width: 160px"
-          clearable
-          @update:value="emit('update:eqpIdFilter', $event)"
-        />
+        <NTooltip trigger="hover">
+          <template #trigger>
+            <NInput
+              :value="deviceFilter"
+              placeholder="Device"
+              size="small"
+              style="width: 140px"
+              clearable
+              @update:value="emit('update:deviceFilter', $event)"
+            />
+          </template>
+          Separate values with commas; use * as a wildcard. Blank includes every device.
+        </NTooltip>
+        <NTooltip trigger="hover">
+          <template #trigger>
+            <NInput
+              :value="layerIdFilter"
+              placeholder="Layer ID"
+              size="small"
+              style="width: 140px"
+              clearable
+              @update:value="emit('update:layerIdFilter', $event)"
+            />
+          </template>
+          Separate values with commas; use * as a wildcard. Blank includes every layer.
+        </NTooltip>
+        <NTooltip trigger="hover">
+          <template #trigger>
+            <NInput
+              :value="lotIdFilter"
+              placeholder="Lot ID"
+              size="small"
+              style="width: 140px"
+              clearable
+              @update:value="emit('update:lotIdFilter', $event)"
+            />
+          </template>
+          Separate values with commas; use * as a wildcard. Blank includes every lot.
+        </NTooltip>
+        <NTooltip trigger="hover">
+          <template #trigger>
+            <NInput
+              :value="eqpIdFilter"
+              placeholder="Equipment ID"
+              size="small"
+              style="width: 160px"
+              clearable
+              @update:value="emit('update:eqpIdFilter', $event)"
+            />
+          </template>
+          Separate values with commas; use * as a wildcard. Blank includes every equipment ID.
+        </NTooltip>
         <NButton
           type="primary"
           :disabled="dateRange === null"
@@ -201,6 +228,16 @@ function rowProps(row: InspectionSummaryItem): Record<string, unknown> {
           size="small"
         >
           Search
+        </NButton>
+        <NButton
+          v-if="selectedRowKeys.length > 0"
+          size="small"
+          type="primary"
+          secondary
+          data-testid="build-collection"
+          @click="emit('buildCollection')"
+        >
+          Build collection ({{ selectedRowKeys.length }})
         </NButton>
         <NText v-if="lastOpenedSummaryLabel" depth="3" class="sc-preview-last-opened">
           Last opened: {{ lastOpenedSummaryLabel }}
@@ -219,6 +256,7 @@ function rowProps(row: InspectionSummaryItem): Record<string, unknown> {
         :pagination="tablePagination"
         :single-line="false"
         :virtual-scroll="true"
+        :scroll-x="1280"
         :min-row-height="32"
         striped
         size="small"
@@ -235,6 +273,30 @@ function rowProps(row: InspectionSummaryItem): Record<string, unknown> {
         </template>
       </NDataTable>
     </div>
+
+    <NModal
+      v-model:show="datasetListVisible"
+      preset="card"
+      title="Datasets created from this inspection"
+      style="width: min(560px, 92vw)"
+    >
+      <NList bordered>
+        <NListItem v-for="dataset in datasetList" :key="dataset.id">
+          <div class="sc-dataset-list-row">
+            <NText>{{ dataset.name }}</NText>
+            <NButton
+              size="small"
+              type="primary"
+              secondary
+              :data-testid="`open-dataset-${dataset.id}`"
+              @click="emit('openDataset', dataset.id)"
+            >
+              Open in new tab
+            </NButton>
+          </div>
+        </NListItem>
+      </NList>
+    </NModal>
   </div>
 </template>
 
@@ -251,7 +313,6 @@ function rowProps(row: InspectionSummaryItem): Record<string, unknown> {
   flex-shrink: 0;
   padding: 8px 0;
   border-bottom: 1px solid var(--cv-border, rgba(255, 255, 255, 0.08));
-  margin-bottom: 8px;
 }
 
 .sc-preview-table-wrapper {
@@ -260,6 +321,13 @@ function rowProps(row: InspectionSummaryItem): Record<string, unknown> {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.sc-dataset-list-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
 }
 
 .sc-preview-empty {
@@ -279,5 +347,9 @@ function rowProps(row: InspectionSummaryItem): Record<string, unknown> {
 
 :deep(.sc-summary-row--last-opened td:first-child) {
   box-shadow: inset 3px 0 0 var(--cv-primary, #18a058);
+}
+
+:deep(.n-data-table-th__title) {
+  white-space: nowrap;
 }
 </style>

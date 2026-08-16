@@ -50,13 +50,13 @@ test("selects and deletes multiple owned dataset collections @mock", async ({ au
     });
   });
 
-  await authedPage.goto("/dataset-collections");
-  await authedPage.getByRole("heading", { name: "Dataset Collections" }).waitFor();
+  await authedPage.goto("/library?tab=collections");
+  await authedPage.getByRole("heading", { name: "Library" }).waitFor();
 
   const rowCheckboxes = authedPage.getByRole("checkbox");
   await rowCheckboxes.nth(1).check();
   await rowCheckboxes.nth(2).check();
-  await expect(authedPage).toHaveURL(/\/dataset-collections$/);
+  await expect(authedPage).toHaveURL(/\/library\?tab=collections$/);
   await expect(authedPage.getByText("2 collections selected")).toBeVisible();
 
   authedPage.once("dialog", (dialog) => dialog.accept());

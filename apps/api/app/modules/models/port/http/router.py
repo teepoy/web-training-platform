@@ -26,6 +26,11 @@ from app.modules.models.port.http.schemas import (
     UpdateModelRequest,
     UploadTemplateProfileResponse,
 )
+from app.modules.models.domain.repository import (
+    ModelSortField,
+    ModelSourceType,
+    SortDirection,
+)
 from app.modules.models.port.local import ModelManagementPort
 from app.shared.application.compatibility import UPLOAD_TEMPLATE_DEFINITIONS
 from app.modules.models.port.http.deps import (
@@ -76,6 +81,9 @@ async def list_models(
     limit: int = Query(default=50, ge=1, le=200),
     q: str | None = Query(default=None, max_length=200),
     creator_id: str | None = Query(default=None, max_length=255),
+    source_type: ModelSourceType | None = Query(default=None),
+    sort_by: ModelSortField = Query(default="created_at"),
+    sort_order: SortDirection = Query(default="desc"),
 ) -> PaginatedResponse[ModelResponse]:
     models, total = await model_service.list_models_paginated(
         org_id=org.id,
@@ -85,6 +93,9 @@ async def list_models(
         limit=limit,
         query=q,
         creator_id=creator_id,
+        source_type=source_type,
+        sort_by=sort_by,
+        sort_order=sort_order,
     )
     return PaginatedResponse(
         items=[_model_to_response(model) for model in models],

@@ -2,7 +2,7 @@ import { expect, type Locator, type Page } from "@playwright/test";
 import { BasePage } from "../BasePage";
 
 /**
- * Page Object Model for the `/datasets` list route.
+ * Page Object Model for the Dataset tab in the `/library` workspace.
  *
  * Covers the dataset toolbar (Import Dataset, Preview Dataset buttons)
  * and row-level actions (View, Delete)

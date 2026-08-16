@@ -12,6 +12,7 @@ from typing import Literal, Protocol, TypeVar, cast
 import duckdb
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response, StreamingResponse
+from sampling_rules import InvalidSamplingRuleError
 from starlette.types import Receive, Scope, Send
 
 from app.core.config import ScDataProviderConfig
@@ -32,6 +33,7 @@ from app.modules.sc.data_provider.schemas import (
     ScSampleTableDescriptor,
     ScSqlQueryRequest,
 )
+from app.modules.sc.data_provider.sampling import compile_sc_sampling_query
 from app.modules.sc.data_provider.scope import ScDataScope
 from app.modules.sc.data_provider.sql_policy import ScSqlPolicyError, validate_sc_sql
 from app.shared.api.schemas import Organization, User
@@ -208,7 +210,14 @@ async def _query_scope(
     runtime = _runtime(request)
     try:
         validated_sql = validate_sc_sql(query.sql)
-    except ScSqlPolicyError as exc:
+        parameters = query.parameters
+        if query.sampling is not None:
+            validated_sql, parameters = compile_sc_sampling_query(
+                validated_sql,
+                query.parameters,
+                query.sampling,
+            )
+    except (InvalidSamplingRuleError, ScSqlPolicyError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     materialize_started = time.monotonic()
@@ -228,7 +237,7 @@ async def _query_scope(
             request,
             runtime.executor.prepare_stream(
                 sql=validated_sql,
-                parameters=query.parameters,
+                parameters=parameters,
                 materialized=materialized,
             ),
         )

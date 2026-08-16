@@ -93,7 +93,7 @@ async function handleSubmit() {
   try {
     await authStore.register(formData.value.name, formData.value.email, formData.value.password);
     await orgStore.fetchOrganizations();
-    router.push("/datasets");
+    router.push("/library");
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Registration failed";
     message.error(msg);

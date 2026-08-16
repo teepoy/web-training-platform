@@ -177,7 +177,7 @@ const containerStyle = computed(() => ({
 }));
 
 function goBack() {
-  void router.push(`/datasets/${datasetId.value}`);
+  window.location.assign(router.resolve(`/datasets/${datasetId.value}`).href);
 }
 
 const selectedDraftCount = computed(() => {

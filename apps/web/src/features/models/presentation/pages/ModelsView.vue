@@ -11,15 +11,9 @@
           placeholder="Search models"
           class="models-search"
         />
-        <n-select
-          v-model:value="creatorFilter"
-          size="small"
-          clearable
-          filterable
-          placeholder="Creator"
-          :options="creatorOptions"
-          class="models-creator"
-        />
+        <n-text depth="3">
+          Use the Training Source and Creator column filters to narrow results.
+        </n-text>
       </div>
 
       <BulkSelectionToolbar
@@ -45,10 +39,14 @@
         :pagination="tablePagination"
         :row-key="(row: ModelResponse) => row.id"
         :checked-row-keys="checkedModelIds"
+        :sorter="sorter"
+        :filters="tableFilters"
         :scroll-x="980"
         size="small"
         remote
         @update:checked-row-keys="checkedModelIds = $event"
+        @update:sorter="handleSorterChange"
+        @update:filters="handleFiltersChange"
       >
         <template #empty>
           <n-empty :description="emptyDescription" />
@@ -79,19 +77,24 @@ import { computed, h, reactive, ref, watch } from "vue";
 import { useQueryClient } from "@tanstack/vue-query";
 import { refDebounced } from "@vueuse/core";
 import { useRouter } from "vue-router";
-import type { DataTableColumns, DataTableRowKey, PaginationProps } from "naive-ui";
+import type {
+  DataTableColumns,
+  DataTableFilterState,
+  DataTableRowKey,
+  DataTableSortState,
+  PaginationProps,
+} from "naive-ui";
 import {
   NButton,
   NDataTable,
   NInput,
   NModal,
   NPopconfirm,
-  NSelect,
   NSpace,
   NText,
   useMessage,
 } from "naive-ui";
-import type { ModelResponse } from "@/generated/orval/models";
+import type { ListModelsApiV1ModelsGetParams, ModelResponse } from "@/generated/orval/models";
 import {
   deleteModelApiV1ModelsModelIdDelete,
   useDeleteModelApiV1ModelsModelIdDelete,
@@ -120,6 +123,12 @@ const authStore = useAuthStore();
 const orgStore = useOrgStore();
 const checkedModelIds = ref<DataTableRowKey[]>([]);
 const batchDeletePending = ref(false);
+const sorter = ref<DataTableSortState | null>({
+  columnKey: "created_at",
+  order: "descend",
+  sorter: true,
+});
+const sourceTypeFilter = ref<"dataset" | "collection" | null>(null);
 
 const pagination = reactive<PaginationProps>({
   page: 1,
@@ -142,12 +151,29 @@ const { creatorFilter, isReady: creatorFilterReady } = useDefaultCreatorFilter(
   () => orgStore.currentOrgId,
   () => authStore.user?.id,
 );
-const modelListParams = computed(() => ({
+const modelListParams = computed<ListModelsApiV1ModelsGetParams>(() => ({
   offset: ((pagination.page ?? 1) - 1) * (pagination.pageSize ?? 20),
   limit: pagination.pageSize ?? 20,
   q: debouncedKeyword.value.trim() || undefined,
   creator_id: creatorFilter.value ?? undefined,
+  source_type: sourceTypeFilter.value ?? undefined,
+  sort_by: modelSortField(sorter.value?.columnKey),
+  sort_order: sorter.value?.order === "ascend" ? ("asc" as const) : ("desc" as const),
 }));
+
+function modelSortField(
+  columnKey: DataTableSortState["columnKey"] | undefined,
+): NonNullable<ListModelsApiV1ModelsGetParams["sort_by"]> {
+  if (
+    columnKey === "name" ||
+    columnKey === "source" ||
+    columnKey === "trainer" ||
+    columnKey === "creator"
+  ) {
+    return columnKey;
+  }
+  return "created_at" as const;
+}
 const modelListQueryKey = computed(() =>
   orgScopedQueryKey(
     orgStore.currentOrgId,
@@ -166,7 +192,7 @@ const tablePagination = computed(() =>
   (pagination.itemCount ?? 0) > (pagination.pageSize ?? 20) ? pagination : false,
 );
 const emptyDescription = computed(() =>
-  keyword.value.trim() || creatorFilter.value
+  keyword.value.trim() || creatorFilter.value || sourceTypeFilter.value
     ? "No models match the current filters"
     : "No models have been created yet",
 );
@@ -201,10 +227,32 @@ const creatorOptions = computed(() => {
   return options;
 });
 
-watch([keyword, creatorFilter], () => {
+watch([keyword, creatorFilter, sourceTypeFilter], () => {
   pagination.page = 1;
   checkedModelIds.value = [];
 });
+
+const tableFilters = computed<DataTableFilterState>(() => ({
+  source: sourceTypeFilter.value,
+  creator: creatorFilter.value,
+}));
+
+function firstFilterValue(value: DataTableFilterState[string]): string | null {
+  const resolved = Array.isArray(value) ? value[0] : value;
+  return typeof resolved === "string" ? resolved : null;
+}
+
+function handleFiltersChange(filters: DataTableFilterState): void {
+  const source = firstFilterValue(filters.source);
+  sourceTypeFilter.value = source === "dataset" || source === "collection" ? source : null;
+  creatorFilter.value = firstFilterValue(filters.creator);
+}
+
+function handleSorterChange(value: DataTableSortState | DataTableSortState[] | null): void {
+  sorter.value = Array.isArray(value) ? (value[0] ?? null) : value;
+  pagination.page = 1;
+  checkedModelIds.value = [];
+}
 
 watch(
   () => [pagination.page, pagination.pageSize, orgStore.currentOrgId],
@@ -350,14 +398,22 @@ const columns = computed<DataTableColumns<ModelRow>>(() => [
     title: "Model Name",
     key: "name",
     width: 170,
-    sorter: "default",
+    sorter: true,
     render: (row) =>
       h(NText, { style: "font-weight: 500" }, { default: () => modelDisplayName(row) }),
   },
   {
     title: "Training Source",
-    key: "dataset_name",
+    key: "source",
     width: 210,
+    sorter: true,
+    filter: true,
+    filterMultiple: false,
+    filterOptions: [
+      { label: "Dataset", value: "dataset" },
+      { label: "Collection", value: "collection" },
+    ],
+    filterOptionValue: sourceTypeFilter.value,
     render: (row) =>
       row.dataset_id || row.collection_id
         ? h(
@@ -377,25 +433,26 @@ const columns = computed<DataTableColumns<ModelRow>>(() => [
   },
   {
     title: "Trainer",
-    key: "trainer_name",
+    key: "trainer",
     width: 150,
+    sorter: true,
   },
   {
     title: "Creator",
-    key: "creator_name",
+    key: "creator",
     width: 130,
-    sorter: (left, right) =>
-      modelCreatorName(left).localeCompare(modelCreatorName(right), undefined, {
-        numeric: true,
-      }),
+    sorter: true,
+    filter: true,
+    filterMultiple: false,
+    filterOptions: creatorOptions.value,
+    filterOptionValue: creatorFilter.value,
     render: (row) => modelCreatorName(row),
   },
   {
     title: "Created At",
     key: "created_at",
     width: 170,
-    sorter: (left, right) =>
-      new Date(left.created_at ?? 0).getTime() - new Date(right.created_at ?? 0).getTime(),
+    sorter: true,
     render: (row) => (row.created_at ? new Date(row.created_at).toLocaleString() : "-"),
   },
   {
@@ -468,10 +525,6 @@ const columns = computed<DataTableColumns<ModelRow>>(() => [
   width: min(320px, 100%);
 }
 
-.models-creator {
-  width: min(220px, 100%);
-}
-
 .mobile-table-hint {
   display: none;
 }
@@ -483,10 +536,6 @@ const columns = computed<DataTableColumns<ModelRow>>(() => [
   }
 
   .models-search,
-  .models-creator {
-    width: 100%;
-  }
-
   .mobile-table-hint {
     display: block;
     margin-top: 10px;

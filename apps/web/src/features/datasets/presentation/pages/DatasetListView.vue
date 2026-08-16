@@ -1,9 +1,12 @@
 <template>
   <div>
     <DatasetPageShell v-bind="surface.pageShellProps.value">
-      <DatasetToolbar :title="activeDatasetType === 'image_sc' ? 'Patch Datasets' : 'Datasets'" />
+      <DatasetToolbar
+        v-if="!props.embedded"
+        :title="activeDatasetType === 'image_sc' ? 'Patch Datasets' : 'Datasets'"
+      />
 
-      <div class="dataset-list-filters">
+      <div v-if="!props.embedded" class="dataset-list-filters">
         <n-input
           v-model:value="keyword"
           size="small"
@@ -46,11 +49,13 @@
         :is-superadmin="authStore.user?.is_superadmin ?? false"
         :checked-row-keys="checkedDatasetIds"
         :pagination="pagination"
+        :sorter="sorter"
         @view="handleViewDataset"
         @toggle-public="handleTogglePublic"
         @delete="handleDeleteDataset"
         @rename="handleRenameDataset"
         @update:checked-row-keys="checkedDatasetIds = $event"
+        @update:sorter="handleSorterChange"
       />
     </DatasetPageShell>
 
@@ -87,6 +92,7 @@ import {
   NInput,
   NSelect,
   type DataTableRowKey,
+  type DataTableSortState,
   type PaginationProps,
 } from "naive-ui";
 import { DatasetPageShell, DatasetToolbar } from "@/shared";
@@ -110,6 +116,7 @@ import { resolveDatasetShim } from "./schema-registry";
 import { resolveDatasetTaskType } from "./registry";
 import { getActiveDatasetType, getActiveViewTypes } from "./selection";
 import type { UserResponse as User } from "@/generated/orval/models";
+import type { ListDatasetsApiV1DatasetsGetParams } from "@/generated/orval/models";
 import type { DatasetListItem } from "@/shared/datasets/types";
 
 const router = useRouter();
@@ -117,13 +124,46 @@ const message = useMessage();
 const qc = useQueryClient();
 const orgStore = useOrgStore();
 const authStore = useAuthStore();
-const keyword = ref("");
+const props = withDefaults(
+  defineProps<{
+    embedded?: boolean;
+    search?: string;
+    creatorId?: string | null;
+  }>(),
+  {
+    embedded: false,
+    search: "",
+    creatorId: null,
+  },
+);
+const localKeyword = ref("");
 const checkedDatasetIds = ref<DataTableRowKey[]>([]);
+const sorter = ref<DataTableSortState | null>({
+  columnKey: "created_at",
+  order: "descend",
+  sorter: true,
+});
 const batchDeletePending = ref(false);
+const keyword = computed({
+  get: () => (props.embedded ? props.search : localKeyword.value),
+  set: (value: string) => {
+    localKeyword.value = value;
+  },
+});
 const debouncedKeyword = refDebounced(keyword, 250);
-const { creatorFilter, isReady: creatorFilterReady } = useDefaultCreatorFilter(
-  () => orgStore.currentOrgId,
-  () => authStore.user?.id,
+const { creatorFilter: localCreatorFilter, isReady: localCreatorFilterReady } =
+  useDefaultCreatorFilter(
+    () => orgStore.currentOrgId,
+    () => authStore.user?.id,
+  );
+const creatorFilter = computed({
+  get: () => (props.embedded ? props.creatorId : localCreatorFilter.value),
+  set: (value: string | null) => {
+    localCreatorFilter.value = value;
+  },
+});
+const creatorFilterReady = computed(() =>
+  props.embedded ? authStore.user !== null : localCreatorFilterReady.value,
 );
 
 const pagination = reactive<PaginationProps>({
@@ -141,12 +181,29 @@ const pagination = reactive<PaginationProps>({
   },
 });
 
-const datasetListParams = computed(() => ({
+const datasetListParams = computed<ListDatasetsApiV1DatasetsGetParams>(() => ({
   limit: pagination.pageSize ?? 20,
   offset: ((pagination.page ?? 1) - 1) * (pagination.pageSize ?? 20),
   q: debouncedKeyword.value.trim() || undefined,
   creator_id: creatorFilter.value ?? undefined,
+  sort_by: datasetSortField(sorter.value?.columnKey),
+  sort_order: sorter.value?.order === "ascend" ? ("asc" as const) : ("desc" as const),
 }));
+
+function datasetSortField(
+  columnKey: DataTableSortState["columnKey"] | undefined,
+): NonNullable<ListDatasetsApiV1DatasetsGetParams["sort_by"]> {
+  if (columnKey === "name" || columnKey === "dataset_type" || columnKey === "creator") {
+    return columnKey;
+  }
+  return "created_at" as const;
+}
+
+function handleSorterChange(value: DataTableSortState | null): void {
+  sorter.value = value;
+  pagination.page = 1;
+  checkedDatasetIds.value = [];
+}
 const datasetListQueryKey = computed(() =>
   orgScopedQueryKey(
     orgStore.currentOrgId,
@@ -176,7 +233,7 @@ const datasets = computed(() => datasetPage.value?.items ?? []);
 const { data: datasetCreators } = useListDatasetCreatorsApiV1DatasetsCreatorsGet({
   query: {
     queryKey: computed(() => orgScopedQueryKey(orgStore.currentOrgId, ["datasets", "creators"])),
-    enabled: computed(() => !!orgStore.currentOrgId),
+    enabled: computed(() => !props.embedded && !!orgStore.currentOrgId),
   },
 });
 const creatorOptions = computed(() => {
@@ -369,7 +426,7 @@ watch(
   () => {
     resolvedDatasetType.value = undefined;
     resolvedViewTypes.value = undefined;
-    keyword.value = "";
+    if (!props.embedded) localKeyword.value = "";
     pagination.page = 1;
     checkedDatasetIds.value = [];
   },

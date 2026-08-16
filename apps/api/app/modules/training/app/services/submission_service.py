@@ -12,9 +12,11 @@ from app.modules.dataset_collections.port.local import (
     DatasetCollectionRevisionReaderPort,
 )
 from app.modules.datasets.port.local import (
+    DatasetRevisionReaderPort,
     validate_predictor_for_dataset,
     validate_trainer_for_dataset,
 )
+from app.modules.datasets.domain.entities import DatasetRevision
 from app.modules.runtime.app.services.deployment_seed import (
     TRAIN_AND_PREDICT_RUNTIME_DEPLOYMENT,
 )
@@ -57,6 +59,7 @@ class TrainingSubmissionService:
         dataset_reader: DatasetReader,
         prefect_client: PrefectClient,
         collection_revisions: DatasetCollectionRevisionReaderPort,
+        dataset_revisions: DatasetRevisionReaderPort,
         status_reconciler: TrainingStatusReconciler,
     ) -> None:
         self.engine = engine
@@ -66,16 +69,20 @@ class TrainingSubmissionService:
         self._dataset_reader = dataset_reader
         self._prefect_client = prefect_client
         self._collection_revisions = collection_revisions
+        self._dataset_revisions = dataset_revisions
         self._status_reconciler = status_reconciler
 
     async def submit_job(self, command: TrainingJobCommand) -> TrainingJob:
-        await self._validate_source(
+        _dataset, _collection_revision, dataset_revision = await self._validate_source(
             command,
             trainer_id=command.trainer_id,
         )
         return await self._start_job(
             TrainingJob(
                 dataset_id=command.dataset_id,
+                dataset_revision_id=(
+                    dataset_revision.id if dataset_revision is not None else None
+                ),
                 collection_id=command.collection_id,
                 collection_revision_id=command.collection_revision_id,
                 trainer_id=command.trainer_id,
@@ -88,7 +95,7 @@ class TrainingSubmissionService:
         self,
         command: TrainAndPredictCommand,
     ) -> TrainAndPredictSubmission:
-        dataset, revision = await self._validate_source(
+        dataset, revision, dataset_revision = await self._validate_source(
             command,
             trainer_id=command.trainer_id,
         )
@@ -133,6 +140,9 @@ class TrainingSubmissionService:
             job = await self.repository.create_job(
                 TrainingJob(
                     dataset_id=command.dataset_id,
+                    dataset_revision_id=(
+                        dataset_revision.id if dataset_revision is not None else None
+                    ),
                     collection_id=command.collection_id,
                     collection_revision_id=command.collection_revision_id,
                     trainer_id=command.trainer_id,
@@ -191,7 +201,11 @@ class TrainingSubmissionService:
         command: TrainingJobCommand,
         *,
         trainer_id: str,
-    ) -> tuple[Dataset | None, DatasetCollectionRevision | None]:
+    ) -> tuple[
+        Dataset | None,
+        DatasetCollectionRevision | None,
+        DatasetRevision | None,
+    ]:
         source = command.data_source
         if source.kind == "dataset":
             assert source.dataset_id is not None
@@ -205,7 +219,12 @@ class TrainingSubmissionService:
                 trainer_id=trainer_id,
                 view_types=dataset.view_types,
             )
-            return dataset, None
+            dataset_revision = await self._dataset_revisions.resolve_or_create_baseline(
+                dataset_id=source.dataset_id,
+                org_id=command.org_id,
+                created_by=command.created_by,
+            )
+            return dataset, None, dataset_revision
         assert source.collection_id is not None
         assert source.collection_revision_id is not None
         try:
@@ -226,7 +245,7 @@ class TrainingSubmissionService:
                 f"Trainer '{trainer_id}' requires view '{trainer.input_view.view_id}', "
                 f"collection revision provides '{revision.target_view_id}'"
             )
-        return None, revision
+        return None, revision, None
 
     async def _start_job(self, job: TrainingJob) -> TrainingJob:
         try:

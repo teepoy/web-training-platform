@@ -121,8 +121,15 @@ test.describe("SC Reclassify warmup and sidebar @mock", () => {
 
     const pom = new ReclassifyPagePom(authedPage);
     await pom.gotoReclassify(DATASET_ID);
-    await authedPage.getByRole("button", { name: /Back$/ }).click();
-
-    await expect(authedPage).toHaveURL(`/datasets/${DATASET_ID}`, { timeout: 2_000 });
+    const detailDocument = authedPage.waitForRequest(
+      (request) => {
+        const url = new URL(request.url());
+        return request.isNavigationRequest() && url.pathname === `/datasets/${DATASET_ID}`;
+      },
+      { timeout: 2_000 },
+    );
+    await authedPage.getByRole("button", { name: /Back$/ }).click({ noWaitAfter: true });
+    const request = await detailDocument;
+    expect(new URL(request.url()).pathname).toBe(`/datasets/${DATASET_ID}`);
   });
 });

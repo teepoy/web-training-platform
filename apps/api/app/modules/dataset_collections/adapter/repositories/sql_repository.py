@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import cast
 from uuid import uuid4
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -13,20 +13,35 @@ from app.modules.dataset_collections.domain.errors import (
     DatasetCollectionNotFoundError,
 )
 from app.modules.dataset_collections.domain.models import (
+    CollectionPredictionBatch,
+    CollectionPredictionBatchItem,
+    CollectionPredictionObservation,
     DatasetCollection,
     DatasetCollectionMember,
     DatasetCollectionRevision,
     NewCollectionMember,
 )
+from app.modules.dataset_collections.domain.repository import (
+    CollectionSortField,
+    SortDirection,
+)
 from app.shared.db.models.dataset_collections import (
+    CollectionPredictionBatchItemORM,
+    CollectionPredictionBatchORM,
     DatasetCollectionMemberORM,
     DatasetCollectionORM,
     DatasetCollectionRevisionORM,
 )
+from app.shared.db.models.prediction import PredictionJobORM
 
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _like_pattern(value: str) -> str:
+    escaped = value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
 
 
 def _collection(row: DatasetCollectionORM) -> DatasetCollection:
@@ -44,6 +59,8 @@ def _collection(row: DatasetCollectionORM) -> DatasetCollection:
         created_by=row.created_by,
         created_at=row.created_at,
         updated_at=row.updated_at,
+        default_model_id=row.default_model_id,
+        model_binding_version=row.model_binding_version,
     )
 
 
@@ -90,6 +107,44 @@ def _revision(row: DatasetCollectionRevisionORM) -> DatasetCollectionRevision:
         created_at=row.created_at,
         error_code=row.error_code,
         error_detail=row.error_detail,
+        manifest_format=row.manifest_format,
+        source_resolution=row.source_resolution,
+        reproducibility_capability=row.reproducibility_capability,
+    )
+
+
+def _prediction_batch(row: CollectionPredictionBatchORM) -> CollectionPredictionBatch:
+    return CollectionPredictionBatch(
+        id=row.id,
+        collection_id=row.collection_id,
+        collection_revision_id=row.collection_revision_id,
+        model_id=row.model_id,
+        kind=row.kind,
+        request_id=row.request_id,
+        status=row.status,
+        created_by=row.created_by,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+    )
+
+
+def _prediction_batch_item(
+    row: CollectionPredictionBatchItemORM,
+    *,
+    job_status: str | None = None,
+) -> CollectionPredictionBatchItem:
+    return CollectionPredictionBatchItem(
+        id=row.id,
+        batch_id=row.batch_id,
+        member_id=row.member_id,
+        dataset_id=row.dataset_id,
+        dataset_revision_id=row.dataset_revision_id,
+        prediction_job_id=row.prediction_job_id,
+        status=job_status or row.status,
+        attempt_count=row.attempt_count,
+        error_detail=row.error_detail,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
     )
 
 
@@ -112,6 +167,8 @@ class DatasetCollectionSqlRepository:
                 duplicate_policy=collection.duplicate_policy,
                 missing_data_policy=collection.missing_data_policy,
                 definition_version=collection.definition_version,
+                default_model_id=collection.default_model_id,
+                model_binding_version=collection.model_binding_version,
                 created_by=collection.created_by,
                 created_at=collection.created_at,
                 updated_at=collection.updated_at,
@@ -127,11 +184,37 @@ class DatasetCollectionSqlRepository:
         offset: int,
         limit: int,
         creator_id: str | None = None,
+        query: str | None = None,
+        sort_by: CollectionSortField = "updated_at",
+        sort_order: SortDirection = "desc",
     ) -> tuple[list[DatasetCollection], int]:
         async with self._session_factory() as session:
+            sort_columns = {
+                "name": DatasetCollectionORM.name,
+                "creator": DatasetCollectionORM.created_by,
+                "created_at": DatasetCollectionORM.created_at,
+                "updated_at": DatasetCollectionORM.updated_at,
+            }
+            sort_column = sort_columns[sort_by]
+            order = sort_column.asc() if sort_order == "asc" else sort_column.desc()
+            id_order = (
+                DatasetCollectionORM.id.asc()
+                if sort_order == "asc"
+                else DatasetCollectionORM.id.desc()
+            )
             conditions = [DatasetCollectionORM.org_id == org_id]
             if creator_id is not None:
                 conditions.append(DatasetCollectionORM.created_by == creator_id)
+            normalized_query = query.strip() if query is not None else ""
+            if normalized_query:
+                pattern = _like_pattern(normalized_query)
+                conditions.append(
+                    or_(
+                        DatasetCollectionORM.id.ilike(pattern, escape="\\"),
+                        DatasetCollectionORM.name.ilike(pattern, escape="\\"),
+                        DatasetCollectionORM.description.ilike(pattern, escape="\\"),
+                    )
+                )
             total = int(
                 await session.scalar(
                     select(func.count())
@@ -144,10 +227,7 @@ class DatasetCollectionSqlRepository:
                 await session.execute(
                     select(DatasetCollectionORM)
                     .where(*conditions)
-                    .order_by(
-                        DatasetCollectionORM.updated_at.desc(),
-                        DatasetCollectionORM.id.desc(),
-                    )
+                    .order_by(order.nulls_last(), id_order)
                     .offset(offset)
                     .limit(limit)
                 )
@@ -179,6 +259,33 @@ class DatasetCollectionSqlRepository:
                 row.name = name
             if description is not None:
                 row.description = description
+            row.updated_at = _utcnow()
+            await session.commit()
+            return _collection(row)
+
+    async def set_default_model(
+        self,
+        collection_id: str,
+        org_id: str,
+        *,
+        expected_binding_version: int,
+        model_id: str | None,
+    ) -> DatasetCollection:
+        async with self._session_factory() as session:
+            row = await self._collection_row(
+                session, collection_id, org_id, for_update=True
+            )
+            if row is None:
+                raise DatasetCollectionNotFoundError("Dataset collection not found")
+            if row.model_binding_version != expected_binding_version:
+                raise DatasetCollectionConflictError(
+                    "model_binding_version_conflict",
+                    "Collection default model changed; reload before saving",
+                )
+            if row.default_model_id == model_id:
+                return _collection(row)
+            row.default_model_id = model_id
+            row.model_binding_version += 1
             row.updated_at = _utcnow()
             await session.commit()
             return _collection(row)
@@ -404,6 +511,9 @@ class DatasetCollectionSqlRepository:
                 label_counts=revision.label_counts,
                 manifest_uri=revision.manifest_uri,
                 provenance_uri=revision.provenance_uri,
+                manifest_format=revision.manifest_format,
+                source_resolution=revision.source_resolution,
+                reproducibility_capability=revision.reproducibility_capability,
                 trigger_kind=revision.trigger_kind,
                 trigger_ref=revision.trigger_ref,
                 created_by=revision.created_by,
@@ -452,6 +562,243 @@ class DatasetCollectionSqlRepository:
                 )
             ).scalar_one_or_none()
             return _revision(row) if row is not None else None
+
+    async def get_current_revision(
+        self, collection_id: str, org_id: str
+    ) -> DatasetCollectionRevision | None:
+        async with self._session_factory() as session:
+            collection = await self._collection_row(session, collection_id, org_id)
+            if collection is None:
+                return None
+            row = (
+                await session.execute(
+                    select(DatasetCollectionRevisionORM)
+                    .where(DatasetCollectionRevisionORM.collection_id == collection_id)
+                    .where(DatasetCollectionRevisionORM.status == "ready")
+                    .order_by(DatasetCollectionRevisionORM.revision_number.desc())
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+            return _revision(row) if row is not None else None
+
+    async def list_prediction_observations(
+        self,
+        collection_id: str,
+        org_id: str,
+        dataset_ids: tuple[str, ...],
+    ) -> list[CollectionPredictionObservation]:
+        if not dataset_ids:
+            return []
+        async with self._session_factory() as session:
+            collection = await self._collection_row(session, collection_id, org_id)
+            if collection is None:
+                raise DatasetCollectionNotFoundError("Dataset collection not found")
+            rows = (
+                await session.execute(
+                    select(PredictionJobORM)
+                    .where(PredictionJobORM.dataset_collection_id == collection_id)
+                    .where(PredictionJobORM.dataset_id.in_(dataset_ids))
+                    .order_by(
+                        PredictionJobORM.created_at.desc(),
+                        PredictionJobORM.id.desc(),
+                    )
+                )
+            ).scalars()
+            return [
+                CollectionPredictionObservation(
+                    member_id=(
+                        str(row.summary_json.get("collection_member_id"))
+                        if row.summary_json.get("collection_member_id") is not None
+                        else None
+                    ),
+                    dataset_id=str(row.dataset_id),
+                    prediction_job_id=row.id,
+                    dataset_revision_id=row.dataset_revision_id,
+                    model_id=row.model_id,
+                    status=row.status,
+                    created_at=row.created_at,
+                )
+                for row in rows
+                if row.dataset_id is not None
+            ]
+
+    async def create_or_get_prediction_batch(
+        self,
+        batch: CollectionPredictionBatch,
+        items: tuple[CollectionPredictionBatchItem, ...],
+        org_id: str,
+    ) -> tuple[CollectionPredictionBatch, list[CollectionPredictionBatchItem], bool]:
+        async with self._session_factory() as session:
+            collection = await self._collection_row(
+                session, batch.collection_id, org_id
+            )
+            if collection is None:
+                raise DatasetCollectionNotFoundError("Dataset collection not found")
+            existing = (
+                await session.execute(
+                    select(CollectionPredictionBatchORM).where(
+                        CollectionPredictionBatchORM.collection_id
+                        == batch.collection_id,
+                        CollectionPredictionBatchORM.kind == batch.kind,
+                        CollectionPredictionBatchORM.request_id == batch.request_id,
+                    )
+                )
+            ).scalar_one_or_none()
+            if existing is not None:
+                existing_items = await self._prediction_batch_items(
+                    session, existing.id
+                )
+                return (
+                    _prediction_batch(existing),
+                    existing_items,
+                    False,
+                )
+            session.add(
+                CollectionPredictionBatchORM(
+                    id=batch.id,
+                    collection_id=batch.collection_id,
+                    collection_revision_id=batch.collection_revision_id,
+                    model_id=batch.model_id,
+                    kind=batch.kind,
+                    request_id=batch.request_id,
+                    status=batch.status,
+                    created_by=batch.created_by,
+                    created_at=batch.created_at,
+                    updated_at=batch.updated_at,
+                )
+            )
+            session.add_all(
+                [
+                    CollectionPredictionBatchItemORM(
+                        id=item.id,
+                        batch_id=item.batch_id,
+                        member_id=item.member_id,
+                        dataset_id=item.dataset_id,
+                        dataset_revision_id=item.dataset_revision_id,
+                        prediction_job_id=item.prediction_job_id,
+                        status=item.status,
+                        attempt_count=item.attempt_count,
+                        error_detail=item.error_detail,
+                        created_at=item.created_at,
+                        updated_at=item.updated_at,
+                    )
+                    for item in items
+                ]
+            )
+            try:
+                await session.commit()
+            except IntegrityError:
+                await session.rollback()
+                existing = (
+                    await session.execute(
+                        select(CollectionPredictionBatchORM).where(
+                            CollectionPredictionBatchORM.collection_id
+                            == batch.collection_id,
+                            CollectionPredictionBatchORM.kind == batch.kind,
+                            CollectionPredictionBatchORM.request_id == batch.request_id,
+                        )
+                    )
+                ).scalar_one()
+                existing_items = await self._prediction_batch_items(
+                    session, existing.id
+                )
+                return (
+                    _prediction_batch(existing),
+                    existing_items,
+                    False,
+                )
+            return batch, list(items), True
+
+    async def get_prediction_batch(
+        self,
+        batch_id: str,
+        org_id: str,
+    ) -> tuple[CollectionPredictionBatch, list[CollectionPredictionBatchItem]] | None:
+        async with self._session_factory() as session:
+            row = (
+                await session.execute(
+                    select(CollectionPredictionBatchORM)
+                    .join(
+                        DatasetCollectionORM,
+                        DatasetCollectionORM.id
+                        == CollectionPredictionBatchORM.collection_id,
+                    )
+                    .where(CollectionPredictionBatchORM.id == batch_id)
+                    .where(DatasetCollectionORM.org_id == org_id)
+                )
+            ).scalar_one_or_none()
+            if row is None:
+                return None
+            items = await self._prediction_batch_items(session, row.id)
+            return _prediction_batch(row), items
+
+    async def list_prediction_batches(
+        self,
+        collection_id: str,
+        org_id: str,
+    ) -> list[tuple[CollectionPredictionBatch, list[CollectionPredictionBatchItem]]]:
+        async with self._session_factory() as session:
+            collection = await self._collection_row(session, collection_id, org_id)
+            if collection is None:
+                raise DatasetCollectionNotFoundError("Dataset collection not found")
+            rows = (
+                await session.execute(
+                    select(CollectionPredictionBatchORM)
+                    .where(CollectionPredictionBatchORM.collection_id == collection_id)
+                    .order_by(
+                        CollectionPredictionBatchORM.created_at.desc(),
+                        CollectionPredictionBatchORM.id.desc(),
+                    )
+                )
+            ).scalars()
+            batch_rows = list(rows)
+            if not batch_rows:
+                return []
+            item_rows = await self._prediction_batch_items_for_batches(
+                session, tuple(row.id for row in batch_rows)
+            )
+            items_by_batch: dict[str, list[CollectionPredictionBatchItem]] = {}
+            for item in item_rows:
+                items_by_batch.setdefault(item.batch_id, []).append(item)
+            return [
+                (_prediction_batch(row), items_by_batch.get(row.id, []))
+                for row in batch_rows
+            ]
+
+    async def update_prediction_batch_item(
+        self,
+        item_id: str,
+        *,
+        prediction_job_id: str | None,
+        status: str,
+        error_detail: str | None,
+        increment_attempt: bool,
+    ) -> CollectionPredictionBatchItem:
+        async with self._session_factory() as session:
+            row = await session.get(CollectionPredictionBatchItemORM, item_id)
+            if row is None:
+                raise DatasetCollectionNotFoundError("Prediction batch item not found")
+            row.prediction_job_id = prediction_job_id
+            row.status = status
+            row.error_detail = error_detail
+            if increment_attempt:
+                row.attempt_count += 1
+            row.updated_at = _utcnow()
+            await session.commit()
+            return _prediction_batch_item(row)
+
+    async def update_prediction_batch_status(
+        self,
+        batch_id: str,
+        status: str,
+    ) -> None:
+        async with self._session_factory() as session:
+            row = await session.get(CollectionPredictionBatchORM, batch_id)
+            if row is None:
+                return
+            row.status = status
+            row.updated_at = _utcnow()
+            await session.commit()
 
     async def next_revision_number(self, collection_id: str, org_id: str) -> int:
         async with self._session_factory() as session:
@@ -554,3 +901,36 @@ class DatasetCollectionSqlRepository:
         if for_update:
             stmt = stmt.with_for_update()
         return list((await session.execute(stmt)).scalars())
+
+    async def _prediction_batch_items(
+        self,
+        session: AsyncSession,
+        batch_id: str,
+    ) -> list[CollectionPredictionBatchItem]:
+        return await self._prediction_batch_items_for_batches(session, (batch_id,))
+
+    @staticmethod
+    async def _prediction_batch_items_for_batches(
+        session: AsyncSession,
+        batch_ids: tuple[str, ...],
+    ) -> list[CollectionPredictionBatchItem]:
+        rows = (
+            await session.execute(
+                select(CollectionPredictionBatchItemORM, PredictionJobORM.status)
+                .outerjoin(
+                    PredictionJobORM,
+                    PredictionJobORM.id
+                    == CollectionPredictionBatchItemORM.prediction_job_id,
+                )
+                .where(CollectionPredictionBatchItemORM.batch_id.in_(batch_ids))
+                .order_by(
+                    CollectionPredictionBatchItemORM.batch_id,
+                    CollectionPredictionBatchItemORM.created_at,
+                    CollectionPredictionBatchItemORM.id,
+                )
+            )
+        ).all()
+        return [
+            _prediction_batch_item(row, job_status=job_status)
+            for row, job_status in rows
+        ]

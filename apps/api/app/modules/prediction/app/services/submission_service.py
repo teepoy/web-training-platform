@@ -11,7 +11,11 @@ from app.modules.dataset_collections.port.local import (
     DatasetCollectionRevisionReaderPort,
 )
 from app.modules.datasets.port.dataset_reader import DatasetReader
-from app.modules.datasets.port.local import validate_predictor_for_dataset
+from app.modules.datasets.domain.entities import DatasetRevision
+from app.modules.datasets.port.local import (
+    DatasetRevisionReaderPort,
+    validate_predictor_for_dataset,
+)
 from app.modules.models.port.local import ModelCatalogPort
 from app.modules.prediction.domain.submission import (
     PredictionJobCommand,
@@ -19,12 +23,14 @@ from app.modules.prediction.domain.submission import (
     PredictionRuntimeUnavailableError,
     PredictionSubmissionError,
     PredictionSubmissionRejectedError,
+    PredictionSubmissionOrigin,
 )
 from app.modules.prediction.domain.repository import PredictionRepository
 from app.modules.prediction.app.services.submission_parameters import (
     prediction_workflow_parameters,
 )
 from app.modules.runtime.app.services.deployment_seed import (
+    PREDICTION_AUTOMATION_RUNTIME_DEPLOYMENT,
     PREDICTION_RUNTIME_DEPLOYMENT,
 )
 from app.modules.runtime.catalog import runtime_catalog
@@ -43,12 +49,14 @@ class PredictionSubmissionService:
         repository: PredictionRepository,
         dataset_reader: DatasetReader,
         model_catalog: ModelCatalogPort,
+        dataset_revisions: DatasetRevisionReaderPort,
         collection_revisions: DatasetCollectionRevisionReaderPort | None = None,
     ) -> None:
         self._prefect_client = prefect_client
         self._repository = repository
         self._dataset_reader = dataset_reader
         self._model_catalog = model_catalog
+        self._dataset_revisions = dataset_revisions
         self._collection_revisions = collection_revisions
 
     @staticmethod
@@ -74,7 +82,7 @@ class PredictionSubmissionService:
         return {}
 
     async def submit_job(self, command: PredictionJobCommand) -> PredictionJob:
-        dataset, revision = await self._resolve_source(command)
+        dataset, revision, dataset_revision = await self._resolve_source(command)
         model = await self._model_catalog.get_model(
             command.model_id,
             org_id=command.org_id,
@@ -121,19 +129,26 @@ class PredictionSubmissionService:
                 f"Model '{command.model_id}' cannot use predictor "
                 f"'{predictor_id}': {exc}"
             ) from exc
+        deployment = (
+            PREDICTION_AUTOMATION_RUNTIME_DEPLOYMENT
+            if command.submission_origin is PredictionSubmissionOrigin.AUTOMATION
+            else PREDICTION_RUNTIME_DEPLOYMENT
+        )
         deployment_id = await self._prefect_client.resolve_deployment_id(
-            PREDICTION_RUNTIME_DEPLOYMENT.deployment_name
+            deployment.deployment_name
         )
         if deployment_id is None:
             raise PredictionRuntimeUnavailableError(
-                f"Deployment '{PREDICTION_RUNTIME_DEPLOYMENT.deployment_name}' "
-                "is not registered"
+                f"Deployment '{deployment.deployment_name}' is not registered"
             )
 
         try:
             job = await self._repository.create_prediction_job(
                 PredictionJob(
                     dataset_id=command.dataset_id,
+                    dataset_revision_id=(
+                        dataset_revision.id if dataset_revision is not None else None
+                    ),
                     collection_id=command.collection_id,
                     collection_revision_id=command.collection_revision_id,
                     model_id=command.model_id,
@@ -148,6 +163,21 @@ class PredictionSubmissionService:
                     ),
                     summary={
                         "predictor_id": predictor_id,
+                        "submission_origin": command.submission_origin.value,
+                        **(
+                            {
+                                "collection_prediction_batch_id": (
+                                    command.collection_prediction_batch_id
+                                )
+                            }
+                            if command.collection_prediction_batch_id is not None
+                            else {}
+                        ),
+                        **(
+                            {"collection_member_id": command.collection_member_id}
+                            if command.collection_member_id is not None
+                            else {}
+                        ),
                         **(
                             {"prompt": command.prompt}
                             if command.prompt is not None
@@ -196,7 +226,11 @@ class PredictionSubmissionService:
 
     async def _resolve_source(
         self, command: PredictionJobCommand
-    ) -> tuple[Dataset | None, DatasetCollectionRevision | None]:
+    ) -> tuple[
+        Dataset | None,
+        DatasetCollectionRevision | None,
+        DatasetRevision | None,
+    ]:
         source = command.data_source
         if source.kind == "dataset":
             assert source.dataset_id is not None
@@ -208,7 +242,12 @@ class PredictionSubmissionService:
                 raise PredictionResourceNotFoundError(
                     f"Dataset '{source.dataset_id}' not found"
                 )
-            return dataset, None
+            dataset_revision = await self._dataset_revisions.resolve_or_create_baseline(
+                dataset_id=source.dataset_id,
+                org_id=command.org_id,
+                created_by=command.created_by,
+            )
+            return dataset, None, dataset_revision
         assert source.collection_id is not None
         assert source.collection_revision_id is not None
         if self._collection_revisions is None:
@@ -229,7 +268,7 @@ class PredictionSubmissionService:
             raise PredictionSubmissionRejectedError(
                 f"Collection revision '{revision.id}' is not ready for runtime use"
             )
-        return None, revision
+        return None, revision, None
 
     async def _poll_run(self, job_id: str, external_id: str) -> None:
         log_offset = 0

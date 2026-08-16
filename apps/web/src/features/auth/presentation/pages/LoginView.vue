@@ -100,7 +100,7 @@ async function handleSubmit() {
   try {
     await authStore.login(formData.value.email, formData.value.password);
     await orgStore.fetchOrganizations();
-    router.push("/datasets");
+    router.push("/library");
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Login failed";
     message.error(msg);

@@ -118,6 +118,31 @@ API 可以通过调度器或 runtime service client 创建后台任务、查询�
 
 Prometheus label 不允许包含 `job_id`、`dataset_id`、`model_id`、`user_id`、`org_id` 等高基数字段。单任务细节进入 Prefect、Task Tracker 或结构化日志。
 
+### Resource Automation
+
+用户自动化采用 target-bound、context-first 模型。每条 Resource automation 必须绑定
+一个 Dataset、Collection、Model 或其他目标资源，并从该资源页面选择产品注册的受限
+recipe。普通用户配置按时间或资源事件运行等业务化 run mode，不创建 Schedule、Sensor
+或 Subscription，也不能任意拼接 trigger/action。底层机制可以继续使用独立 trigger
+adapter；Schedule/Sensor 是内部实现术语。
+
+- 全局 `Automations` 页面只做跨资源查询、状态、暂停/恢复、Retry 和历史检查，不提供
+  无目标通用工作流 builder。旧 `/schedules` 和 `/sensors` 页面不保留兼容跳转。
+- Event source 和 Source connector 由系统注册或 Org admin 在 Admin 配置。普通用户只选择
+  当前资源/recipe 支持的连接与运行方式。
+- 同一 automation 的 cron occurrence 与活跃 run 重叠时记录 skipped；事件重叠时合并为
+  一个 pending rerun。取消只停止新 child work 并 best-effort 取消已派发 work，不回滚已
+  完成结果；Retry 只处理失败/未完成项并固定原始输入，使用最新配置必须创建新 run。
+- 用户手动触发的 prediction child work 使用高优先级 work queue；自动新增成员 prediction
+  使用低优先级 work queue。优先级只影响尚未开始的任务，不抢占运行中任务；用户手动
+  Retry 仍使用高优先级队列。
+- Automation 继承目标资源权限和归档状态。组织成员可以编辑和触发 Collection 规则、
+  Backfill、预测与 candidate training；Source connector 和基础设施配置只允许 Org admin。
+  高成本操作必须展示目标、固定 Model/Snapshot/Rule 和预计 child work 后显式确认。
+- 目标归档后停止新运行但保留历史；恢复目标不自动恢复 automation。所有 mutation/run
+  记录 actor 与 org。失败、Partial 和 Needs attention 先通过站内通知、资源 Activity 与
+  全局 Automations 暴露，不在第一阶段加入邮件/Webhook。
+
 ## 4. Dataset / View / Storage
 
 Dataset 相关概念分四层，不能混用：
@@ -130,6 +155,58 @@ Dataset 相关概念分四层，不能混用：
 `storage_mode` 与 `dataset_type` 正交。任何涉及样本枚举、训练、预测、导出、Label Studio 同步的逻辑都必须显式检查 `storage_mode`，不能从 `dataset_type` 推断。
 
 `view contract` 是 dataset 与 runtime 的兼容边界。Trainer/predictor 只声明自己消费的 view，不直接依赖某个 dataset type 的内部存储结构。
+
+Dataset 是稳定逻辑资源；首次成功导入、兼容 Re-import、标注同步和批量编辑在操作边界
+发布轻量 Dataset Revision 变更记录。Revision 记录本身不可修改，但第一阶段只保存操作
+审计、provenance 和指向当前数据的逻辑引用，不复制每次变化后的样本、标注或图片，也不
+承诺完整可复现。训练和预测记录提交时观察到的 Dataset Revision ID 作为 provenance，
+runtime 仍解析 Dataset 当前数据；需要完全冻结输入时应另行设计低频、显式的 frozen
+release，而不是让每个高频 Revision 自动物化。输出 contract 不兼容的 Re-import 创建新
+Dataset。历史 Dataset 不批量回填 Revision、import identity 或内容指纹；首次进入
+revision-aware 写入/任务流程时才按需建立 Revision #1，不伪造更早历史。
+
+平台不通过逐图片 hash 或 Dataset 内容 fingerprint 判重。自动导入只在一条
+Resource automation/Collection 链路内使用 Source connector、provider record key、
+Source version 与 Import profile version 建立 Import receipt 和数据库唯一约束，防止
+重放/并发创建重复 Dataset；不同 Automation/Collection 不共享自动导入的 Dataset。
+Dataset name 不是 identity。
+
+### Dataset Collection 与 Snapshot
+
+Collection 是 Dataset membership 的组合资源；Dataset 与 Collection 在 `Library` 中
+统一入口但保持独立身份、列表、分页和生命周期。Collection 声明 target view、task
+schema 和 canonical label space 组成的数据 contract；成员兼容性由 Dataset adapter
+能力判断，不要求 `dataset_type` 名称相同。显式 label mapping 必须覆盖每个 source label
+或标记 Ignore，并在发布前展示排除计数；不得模糊自动映射。
+
+- Collection head 是可编辑定义，Collection Snapshot/Revision 是不可修改的发布记录。
+  Snapshot 记录发布时观察到的 Dataset Revision ID、规则/映射版本、组合 manifest、
+  汇总与审计，但第一阶段的 `source_resolution` 为 `observed`，不宣称成员数据已冻结或
+  可复现。Snapshot 不复制全部成员行或图片；runtime 在启动时解析当前成员数据，完整
+  merge 只能作为可清理重建的 cache，不是归档事实来源。
+- 空 Collection 可以作为 Draft，但不发布空 Snapshot。成功的 manual batch、Discovery
+  或 Backfill 每次至多自动发布一个 Snapshot；用户不手工创建 Revision。失败 publication
+  保留 pending head changes 和最后成功 current Snapshot。定义和观察到的 Dataset
+  Revision 集合不变时结果为 unchanged。
+- 共享 Dataset 发布新 Revision 时，引用它的 Collection 只显示 Update available，不自动
+  发布 Snapshot。用户显式 refresh 后记录所有成员最新兼容 Revision，并发布一个
+  Snapshot；中间 Dataset Revisions 仍保留审计历史。该 refresh 第一阶段不自动触发预测、
+  reconciliation 或 candidate training。
+- Membership 可以手动 Link，也可由版本化 typed rule 从一个 Source connector + Import
+  profile 发现 Source record。Rule 只使用 provider descriptor 声明的字段/类型/operator
+  和通用 All/Any 条件树，不接受 SQL、JSONPath 或 Python。自动发现第一阶段只增加成员，
+  不自动 unlink；手工移除规则成员会建立 Collection-scoped suppression。
+- 同一 Collection 中相同 Source identity 只保留一个活跃规则成员；不同 Collection 各自
+  导入 Dataset。Rule activation 只处理未来数据，历史范围通过独立 Backfill 处理。
+  Backfill 固定 rule version、connector、Import profile、IANA timezone 与 UTC `[start,end)`
+  范围，使用独立 cursor，不推进 live watermark；内部 execution window 不暴露为产品
+  Partition。Partial success 可发布成功成员，失败 Source record 单独 Retry。
+- Collection 可固定 exact default Model version。新 admission 发布 Snapshot 后只预测新
+  Dataset，不全量重跑；Model 变更不自动重跑既有成员。Coverage 必须区分 Current、Model
+  mismatch、Data outdated 与 Not predicted，并支持选择性 reconciliation。自动训练只在
+  membership/definition/mapping Snapshot 变化后按用户选择的每日/每周本地时间 gated
+  运行，产出 Candidate Model，不自动替换 default Model。仅 Dataset Revision refresh 不
+  标记 candidate training dirty。
 
 Dataset view samples 必须通过 dataset registry / dataset class / adapter 动态投影。不能为每个 view 新增 hardcoded route 作为主要集成方式。
 
@@ -295,6 +372,13 @@ Label Studio 是人工标注界面和临时同步界面，不是平台 predictio
 
 如果某个能力在 test/smoke 下被 mock 或降级，必须在测试、文档或 capability matrix 中说明。
 
+Production Compose 默认不发布 Label Studio、Prefect UI、MinIO Console 或其他内部服务
+host port。需要访问时由 operator 通过 TLS、认证反向代理或 VPN 显式暴露。Label Studio
+在支持它的 Dataset 上作为上下文 work surface；未配置外部 URL 时显示带原因的 disabled
+action。Prefect UI 与 MinIO Console 是 operator console，只进入受保护的
+`Admin > Infrastructure`；Source connectors 与 Label Studio 配置进入
+`Admin > Connections`。前端不得合成 localhost/container URL。
+
 ## 9. 数据库与持久化
 
 修改 ORM schema 必须同时提供 Alembic migration。
@@ -329,6 +413,12 @@ Widget 必须声明自身 contract，包括 props、读取的 shared context、�
 前端采用 Vue 3 + Vite + Naive UI。
 
 页面布局偏好填充整页并避免无意义 overflow。
+
+Dataset 与 Collection 的主导航统一为 `Library` / `数据资源库`，canonical route 为
+`/library`。页面使用独立 Datasets/Collections tab，默认 Datasets；tab 与基础
+search/creator/current-user scope 写入 URL 并跨 tab 保留，resource-specific filter 与
+pagination 独立。旧 `/datasets`、`/dataset-collections` 列表 route 跳转到对应 tab，
+详情 route 保持 resource-specific。Create 菜单提供 Import Dataset 与 Create Collection。
 
 迭代页面视觉方案时，每个 PageView 应保留旁路的 `*.design.vue` 页面设计契约文件。设计契约只表达比例、层级、视觉结构，不接真实 API、store 或 router；先更新设计契约，再改真实 PageView。生产代码不得路由或导入设计契约。
 

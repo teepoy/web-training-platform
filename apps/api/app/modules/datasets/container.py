@@ -11,6 +11,9 @@ from app.shared.adapter.repositories.artifact_lookup_repository import (
     ArtifactSqlLookupRepository,
 )
 from app.modules.datasets.app.services.dataset_service import DatasetService
+from app.modules.datasets.app.services.dataset_revision_service import (
+    DatasetRevisionService,
+)
 from app.modules.datasets.app.services.dataset_deletion_guard import (
     DatasetDeletionGuard,
 )
@@ -18,10 +21,13 @@ from app.modules.datasets.app.services.sample_similarity import SampleSimilarity
 from app.modules.datasets.domain.repository import (
     ArtifactLookupRepository,
     DatasetRepository,
+    DatasetRevisionRepository,
 )
 from app.modules.datasets.port.dataset_reader import DatasetReader
 from app.modules.datasets.port.local import (
     DatasetDeletionGuardPort,
+    DatasetRevisionReaderPort,
+    DatasetRevisionPublisherPort,
     IDatasetService,
     SampleSimilarityPort,
 )
@@ -35,9 +41,11 @@ from app.shared.context import SharedInfra
 @dataclass
 class DatasetsContext:
     dataset_repository: DatasetRepository
+    dataset_revision_repository: DatasetRevisionRepository
     artifact_lookup_repository: ArtifactLookupRepository
     dataset_reader: DatasetReader
     dataset_service: DatasetService
+    dataset_revision_service: DatasetRevisionService
     sample_similarity_service: SampleSimilarityService
 
 
@@ -53,14 +61,21 @@ def init_datasets(
         storage_factory=storage.dataset_storage_factory,
         config=shared.config,
     )
+    dataset_revision_service = DatasetRevisionService(
+        repository=repository,
+        revision_repository=repository,
+        payload_store=storage.dataset_payload_store,
+    )
     sample_similarity_service = SampleSimilarityService(
         storage_factory=storage.dataset_storage_factory
     )
     return DatasetsContext(
         dataset_repository=repository,
+        dataset_revision_repository=repository,
         artifact_lookup_repository=artifact_lookup_repository,
         dataset_reader=repository,
         dataset_service=dataset_service,
+        dataset_revision_service=dataset_revision_service,
         sample_similarity_service=sample_similarity_service,
     )
 
@@ -115,6 +130,27 @@ class DatasetsModule(Module):
 
     @provider
     @singleton
+    def provide_dataset_revision_service(
+        self, context: DatasetsContext
+    ) -> DatasetRevisionService:
+        return context.dataset_revision_service
+
+    @provider
+    @singleton
+    def provide_dataset_revision_reader(
+        self, context: DatasetsContext
+    ) -> DatasetRevisionReaderPort:
+        return context.dataset_revision_service
+
+    @provider
+    @singleton
+    def provide_dataset_revision_publisher(
+        self, context: DatasetsContext
+    ) -> DatasetRevisionPublisherPort:
+        return context.dataset_revision_service
+
+    @provider
+    @singleton
     def provide_dataset_service_port(self, context: DatasetsContext) -> IDatasetService:
         return context.dataset_service
 
@@ -129,6 +165,13 @@ class DatasetsModule(Module):
     @singleton
     def provide_dataset_repository(self, context: DatasetsContext) -> DatasetRepository:
         return context.dataset_repository
+
+    @provider
+    @singleton
+    def provide_dataset_revision_repository(
+        self, context: DatasetsContext
+    ) -> DatasetRevisionRepository:
+        return context.dataset_revision_repository
 
     @provider
     @singleton

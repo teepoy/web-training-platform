@@ -2,12 +2,67 @@ from __future__ import annotations
 
 from typing import Annotated, Literal, TypeAlias
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 ScSqlScalar: TypeAlias = bool | int | float | str | None
 ScSqlArray: TypeAlias = list[bool] | list[int] | list[float] | list[str]
 ScSqlParameter: TypeAlias = ScSqlScalar | ScSqlArray
+
+
+class ScSamplingConditionalRule(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    enabled: bool
+    field: str
+    value: ScSqlScalar
+    limit: Annotated[int, Field(ge=0)]
+
+
+class ScSamplingGroupTarget(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    value: ScSqlScalar
+    amount: int | float
+
+
+class ScSamplingGroupRule(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True, populate_by_name=True)
+
+    enabled: bool
+    field: str
+    unit: Literal["count", "ratio"]
+    targets: list[ScSamplingGroupTarget]
+    others_amount: int | float = Field(alias="othersAmount")
+    rounding: Literal["floor", "ceil", "nearest"]
+
+
+class ScSamplingTotalRule(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    enabled: bool
+    limit: Annotated[int, Field(ge=1)]
+
+
+class ScSamplingProgramRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    conditional: ScSamplingConditionalRule
+    group: ScSamplingGroupRule
+    total: ScSamplingTotalRule
+
+    @model_validator(mode="after")
+    def validate_bounded_program(self) -> ScSamplingProgramRequest:
+        if not self.group.enabled and not self.total.enabled:
+            raise ValueError("sampling requires an enabled group rule or total limit")
+        return self
+
+
+class ScSamplingSelectionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    program: ScSamplingProgramRequest
+    seed: Annotated[int, Field(ge=0)]
 
 
 class ScSqlQueryRequest(BaseModel):
@@ -23,6 +78,7 @@ class ScSqlQueryRequest(BaseModel):
     ]
     sql: str
     parameters: list[ScSqlParameter]
+    sampling: ScSamplingSelectionRequest | None = None
 
     @field_validator("parameters")
     @classmethod

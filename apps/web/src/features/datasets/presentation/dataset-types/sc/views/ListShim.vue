@@ -8,15 +8,23 @@
       :bordered="false"
       size="small"
       :pagination="pagination"
+      :sorter="sorter"
+      :row-props="rowProps"
       remote
       @update:checked-row-keys="handleCheckedRowKeysChange"
+      @update:sorter="handleSorterChange"
     />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, h } from "vue";
-import type { DataTableColumns, DataTableRowKey, PaginationProps } from "naive-ui";
+import type {
+  DataTableColumns,
+  DataTableRowKey,
+  DataTableSortState,
+  PaginationProps,
+} from "naive-ui";
 import { NButton, NDataTable, NTag, NText, NSpace } from "naive-ui";
 import type { DatasetListItem } from "@/shared/datasets/types";
 
@@ -28,6 +36,7 @@ const props = withDefaults(
     isSuperadmin: boolean;
     checkedRowKeys?: DataTableRowKey[];
     pagination?: false | PaginationProps;
+    sorter?: DataTableSortState | null;
   }>(),
   {
     currentUserId: null,
@@ -41,10 +50,31 @@ const emit = defineEmits<{
   rename: [row: DatasetListItem];
   delete: [row: DatasetListItem];
   "update:checked-row-keys": [keys: DataTableRowKey[]];
+  "update:sorter": [sorter: DataTableSortState | null];
 }>();
 
 function handleCheckedRowKeysChange(keys: DataTableRowKey[]) {
   emit("update:checked-row-keys", keys);
+}
+
+function handleSorterChange(sorter: DataTableSortState | DataTableSortState[] | null): void {
+  emit("update:sorter", Array.isArray(sorter) ? (sorter[0] ?? null) : sorter);
+}
+
+function rowProps(row: DatasetListItem): Record<string, unknown> {
+  return {
+    style: { cursor: "pointer" },
+    onClick: (event: MouseEvent) => {
+      const target = event.target;
+      if (
+        target instanceof Element &&
+        target.closest("button, a, input, [role='checkbox'], [data-stop-row-click]")
+      ) {
+        return;
+      }
+      emit("view", row.id);
+    },
+  };
 }
 
 function resolveCreator(row: DatasetListItem): string {
@@ -80,7 +110,7 @@ const columns = computed<DataTableColumns<DatasetListItem>>(() => [
   },
   {
     title: "Creator",
-    key: "created_by",
+    key: "creator",
     width: 160,
     sorter: "default",
     render(row) {

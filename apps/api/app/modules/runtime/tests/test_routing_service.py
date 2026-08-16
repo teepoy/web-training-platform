@@ -5,6 +5,7 @@ from typing import Any, cast
 import pytest
 
 from app.modules.runtime.app.services.deployment_seed import (
+    PREDICTION_AUTOMATION_RUNTIME_DEPLOYMENT,
     PREDICTION_RUNTIME_DEPLOYMENT,
     TRAIN_AND_PREDICT_RUNTIME_DEPLOYMENT,
     TRAIN_RUNTIME_DEPLOYMENT,
@@ -50,11 +51,24 @@ def test_runtime_deployments_are_declared_directly() -> None:
             "work_pool_name": "default-gpu",
             "entrypoint": "app.modules.prediction.flows.predict_job:predict_job_flow",
             "path": "",
+            "work_queue_name": "prediction-manual",
+            "work_queue_priority": 1,
+        },
+        {
+            "deployment_name": "predict-job-batch-automation-deployment",
+            "flow_name": "prediction-predict-job",
+            "work_pool_name": "default-gpu",
+            "entrypoint": "app.modules.prediction.flows.predict_job:predict_job_flow",
+            "path": "",
+            "work_queue_name": "prediction-automation",
+            "work_queue_priority": 10,
         },
     ]
     assert TRAIN_RUNTIME_DEPLOYMENT.work_pool_name == "default-gpu"
     assert TRAIN_AND_PREDICT_RUNTIME_DEPLOYMENT.work_pool_name == "default-gpu"
     assert PREDICTION_RUNTIME_DEPLOYMENT.work_pool_name == "default-gpu"
+    assert PREDICTION_RUNTIME_DEPLOYMENT.work_queue_priority == 1
+    assert PREDICTION_AUTOMATION_RUNTIME_DEPLOYMENT.work_queue_priority == 10
     assert prefect_work_pool_names() == {"default-cpu", "default-gpu"}
 
 

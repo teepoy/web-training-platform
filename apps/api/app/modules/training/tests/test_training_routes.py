@@ -135,6 +135,8 @@ def test_train_and_predict_defers_image_validation_to_runtime() -> None:
             )
 
         assert response.status_code == 200
+        dataset_revision_id = response.json()["train_job"]["dataset_revision_id"]
+        assert dataset_revision_id
 
         jobs = c.get(
             "/api/v1/training-jobs",
@@ -142,6 +144,14 @@ def test_train_and_predict_defers_image_validation_to_runtime() -> None:
         )
         assert jobs.status_code == 200
         assert jobs.json()["total"] == 1
+        assert jobs.json()["items"][0]["dataset_revision_id"] == dataset_revision_id
+
+        current_revision = c.get(
+            f"/api/v1/datasets/{dataset_id}/revisions/current"
+        )
+        assert current_revision.status_code == 200
+        assert current_revision.json()["id"] == dataset_revision_id
+        assert current_revision.json()["operation"] == "legacy_baseline"
 
 
 def test_train_and_predict_submits_readable_seed_images() -> None:

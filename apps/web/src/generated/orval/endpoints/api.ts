@@ -28,6 +28,11 @@ import type {
 import type {
   AddMemberRequest,
   Annotation,
+  BackfillPreviewRequest,
+  BackfillPreviewResponse,
+  BackfillRangeRequest,
+  BodyCreateImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPost,
+  BodyCreateSourceConnectorApiV1SourceConnectorsPost,
   BodyImportParquetApiV1PluginsImportParquetImportPost,
   BodyUploadModelApiV1ModelsUploadPost,
   BodyUploadSampleImageApiV1DatasetsDatasetIdSamplesSampleIdUploadPost,
@@ -37,10 +42,17 @@ import type {
   BulkCreateSampleResponse,
   CancelJobResponse,
   ChatRequest,
+  CollectionPredictionBatchResponse,
+  CollectionPredictionCoverageResponse,
+  CollectionSnapshotRefreshResponse,
+  CollectionSnapshotUpdateStatusResponse,
   CreateAnnotationRequest,
+  CreateCollectionPredictionBatchRequest,
   CreateDatasetCollectionRequest,
   CreateDatasetCollectionRevisionRequest,
   CreateDatasetRequest,
+  CreateMembershipRuleRequest,
+  CreateMembershipRuleVersionRequest,
   CreateOrgRequest,
   CreateReviewActionRequest,
   CreateSampleRequest,
@@ -56,10 +68,12 @@ import type {
   DatasetCollectionMembershipResponse,
   DatasetCollectionResponse,
   DatasetCollectionRevisionResponse,
+  DatasetRevisionResponse,
   DatasetStatusResponse,
   DeleteAnnotationApiV1AnnotationsAnnotationIdDeleteParams,
   DeleteSensorSubscriptionApiV1SensorsSensorIdSubscriptionsSubIdDelete200,
   DeleteSettingApiV1SettingsKeyDelete200,
+  DiscoveryRunResponse,
   DownloadExportApiV1DownloadGetParams,
   ExportDatasetApiV1ExportsDatasetIdGet200,
   ExportFormatResponse,
@@ -79,14 +93,18 @@ import type {
   HTTPValidationError,
   HealthHealthGet200,
   ImportParquetApiV1PluginsImportParquetImportPostParams,
+  ImportProfileVersionResponse,
   LinkDatasetCollectionMembersRequest,
   ListAnnotationVersionsApiV1PredictionReviewsActionIdAnnotationVersionsGetParams,
+  ListAutomationRunsApiV1AutomationsGetParams,
   ListCollectionsApiV1DatasetCollectionsGetParams,
+  ListDatasetRevisionsApiV1DatasetsDatasetIdRevisionsGetParams,
   ListDatasetsApiV1DatasetsGetParams,
   ListJobsApiV1TrainingJobsGetParams,
   ListLatestPredictionsApiV1DatasetsDatasetIdLatestPredictionsGetParams,
   ListModelsApiV1ModelsGetParams,
   ListPredictionCollectionsApiV1PredictionCollectionsGetParams,
+  ListPredictionCoverageApiV1DatasetCollectionsCollectionIdPredictionCoverageGetParams,
   ListPredictionJobEventsApiV1PredictionJobsJobIdEventsGetParams,
   ListPredictionJobPredictionsApiV1PredictionJobsJobIdPredictionsGetParams,
   ListPredictionJobsApiV1PredictionJobsGetParams,
@@ -104,6 +122,8 @@ import type {
   LoginResponse,
   MarkLeftResponse,
   MemberResponse,
+  MembershipRuleResponse,
+  MembershipSuppressionResponse,
   ModelResponse,
   ModelUploadTemplateResponse,
   OAuthProviderInfo,
@@ -111,8 +131,10 @@ import type {
   OauthCallbackApiV1AuthOauthProviderCallbackGetParams,
   OrgResponse,
   PaginatedResponseAnnotationVersionResponse,
+  PaginatedResponseAutomationRunOverviewResponse,
   PaginatedResponseDataset,
   PaginatedResponseDatasetCollectionResponse,
+  PaginatedResponseDatasetRevisionResponse,
   PaginatedResponseModelResponse,
   PaginatedResponsePredictionCollectionResponse,
   PaginatedResponsePredictionEventResponse,
@@ -137,6 +159,7 @@ import type {
   ReplaceDatasetCollectionMembersRequest,
   ResolveImageApiV1ImagesResolveGetParams,
   ReviewActionResponse,
+  RunLiveDiscoveryRequest,
   RunLogResponse,
   RunPredictionRequest,
   RunResponse,
@@ -167,9 +190,12 @@ import type {
   SetSettingApiV1SettingsKeyPutBody,
   SimilarityResponse,
   SimilaritySearchApiV1DatasetsDatasetIdSimilaritySampleIdGetParams,
+  SourceConnectorResponse,
+  SourceProviderDescriptorResponse,
   SparseSummaryResponse,
   StreamInspectionMapPointsProgressApiV1ScInspectionsInspectionTimeWaferKeyMapPointsStreamGetParams,
   StreamScDatasetPlotPointsProgressApiV1ScDatasetsDatasetIdPlotPointsStreamGetParams,
+  SuppressSourceMemberRequest,
   SurfaceStateDocumentInput,
   SurfaceStateDocumentOutput,
   SyncAnnotationsResponse,
@@ -183,6 +209,7 @@ import type {
   TrainingJob,
   UnlinkMemberApiV1DatasetCollectionsCollectionIdMembersMemberIdDeleteParams,
   UpdateAnnotationRequest,
+  UpdateCollectionDefaultModelRequest,
   UpdateDatasetCollectionRequest,
   UpdateDatasetRequest,
   UpdateLabelSpaceRequest,
@@ -943,6 +970,158 @@ export const useUpdateDatasetApiV1DatasetsDatasetIdPatch = <TError = ErrorType<H
 
       return useMutation(mutationOptions);
     }
+
+/**
+ * @summary Get Current Dataset Revision
+ */
+export const getGetCurrentDatasetRevisionApiV1DatasetsDatasetIdRevisionsCurrentGetUrl = (datasetId: string,) => {
+
+
+  return `/api/v1/datasets/${datasetId}/revisions/current`
+}
+
+export const getCurrentDatasetRevisionApiV1DatasetsDatasetIdRevisionsCurrentGet = async (datasetId: string, options?: RequestInit): Promise<DatasetRevisionResponse> => {
+
+  return orvalFetcher<DatasetRevisionResponse>(getGetCurrentDatasetRevisionApiV1DatasetsDatasetIdRevisionsCurrentGetUrl(datasetId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getGetCurrentDatasetRevisionApiV1DatasetsDatasetIdRevisionsCurrentGetQueryKey = (datasetId: MaybeRef<string>,) => {
+    return ['api','v1','datasets',datasetId,'revisions','current'] as const;
+    }
+
+
+export const getGetCurrentDatasetRevisionApiV1DatasetsDatasetIdRevisionsCurrentGetQueryOptions = <TData = Awaited<ReturnType<typeof getCurrentDatasetRevisionApiV1DatasetsDatasetIdRevisionsCurrentGet>>, TError = ErrorType<HTTPValidationError>>(datasetId: MaybeRef<string>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCurrentDatasetRevisionApiV1DatasetsDatasetIdRevisionsCurrentGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  getGetCurrentDatasetRevisionApiV1DatasetsDatasetIdRevisionsCurrentGetQueryKey(datasetId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCurrentDatasetRevisionApiV1DatasetsDatasetIdRevisionsCurrentGet>>> = ({ signal }) => getCurrentDatasetRevisionApiV1DatasetsDatasetIdRevisionsCurrentGet(unref(datasetId), { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: computed(() => !!(unref(datasetId))), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCurrentDatasetRevisionApiV1DatasetsDatasetIdRevisionsCurrentGet>>, TError, TData>
+}
+
+export type GetCurrentDatasetRevisionApiV1DatasetsDatasetIdRevisionsCurrentGetQueryResult = NonNullable<Awaited<ReturnType<typeof getCurrentDatasetRevisionApiV1DatasetsDatasetIdRevisionsCurrentGet>>>
+export type GetCurrentDatasetRevisionApiV1DatasetsDatasetIdRevisionsCurrentGetQueryError = ErrorType<HTTPValidationError>
+
+
+/**
+ * @summary Get Current Dataset Revision
+ */
+
+export function useGetCurrentDatasetRevisionApiV1DatasetsDatasetIdRevisionsCurrentGet<TData = Awaited<ReturnType<typeof getCurrentDatasetRevisionApiV1DatasetsDatasetIdRevisionsCurrentGet>>, TError = ErrorType<HTTPValidationError>>(
+ datasetId: MaybeRef<string>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCurrentDatasetRevisionApiV1DatasetsDatasetIdRevisionsCurrentGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+
+  ): UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetCurrentDatasetRevisionApiV1DatasetsDatasetIdRevisionsCurrentGetQueryOptions(datasetId,options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = unref(queryOptions).queryKey as DataTag<QueryKey, TData, TError>;
+
+  return query;
+}
+
+
+
+
+/**
+ * @summary List Dataset Revisions
+ */
+export const getListDatasetRevisionsApiV1DatasetsDatasetIdRevisionsGetUrl = (datasetId: string,
+    params?: ListDatasetRevisionsApiV1DatasetsDatasetIdRevisionsGetParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  return normalizedParams.size ? `/api/v1/datasets/${datasetId}/revisions?${normalizedParams.toString()}` : `/api/v1/datasets/${datasetId}/revisions`
+}
+
+export const listDatasetRevisionsApiV1DatasetsDatasetIdRevisionsGet = async (datasetId: string,
+    params?: ListDatasetRevisionsApiV1DatasetsDatasetIdRevisionsGetParams, options?: RequestInit): Promise<PaginatedResponseDatasetRevisionResponse> => {
+
+  return orvalFetcher<PaginatedResponseDatasetRevisionResponse>(getListDatasetRevisionsApiV1DatasetsDatasetIdRevisionsGetUrl(datasetId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getListDatasetRevisionsApiV1DatasetsDatasetIdRevisionsGetQueryKey = (datasetId: MaybeRef<string>,
+    params?: MaybeRef<ListDatasetRevisionsApiV1DatasetsDatasetIdRevisionsGetParams>,) => {
+    return ['api','v1','datasets',datasetId,'revisions', ...(params ? [params]: [])] as const;
+    }
+
+
+export const getListDatasetRevisionsApiV1DatasetsDatasetIdRevisionsGetQueryOptions = <TData = Awaited<ReturnType<typeof listDatasetRevisionsApiV1DatasetsDatasetIdRevisionsGet>>, TError = ErrorType<HTTPValidationError>>(datasetId: MaybeRef<string>,
+    params?: MaybeRef<ListDatasetRevisionsApiV1DatasetsDatasetIdRevisionsGetParams>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDatasetRevisionsApiV1DatasetsDatasetIdRevisionsGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  getListDatasetRevisionsApiV1DatasetsDatasetIdRevisionsGetQueryKey(datasetId,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listDatasetRevisionsApiV1DatasetsDatasetIdRevisionsGet>>> = ({ signal }) => listDatasetRevisionsApiV1DatasetsDatasetIdRevisionsGet(unref(datasetId),unref(params), { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: computed(() => !!(unref(datasetId))), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listDatasetRevisionsApiV1DatasetsDatasetIdRevisionsGet>>, TError, TData>
+}
+
+export type ListDatasetRevisionsApiV1DatasetsDatasetIdRevisionsGetQueryResult = NonNullable<Awaited<ReturnType<typeof listDatasetRevisionsApiV1DatasetsDatasetIdRevisionsGet>>>
+export type ListDatasetRevisionsApiV1DatasetsDatasetIdRevisionsGetQueryError = ErrorType<HTTPValidationError>
+
+
+/**
+ * @summary List Dataset Revisions
+ */
+
+export function useListDatasetRevisionsApiV1DatasetsDatasetIdRevisionsGet<TData = Awaited<ReturnType<typeof listDatasetRevisionsApiV1DatasetsDatasetIdRevisionsGet>>, TError = ErrorType<HTTPValidationError>>(
+ datasetId: MaybeRef<string>,
+    params?: MaybeRef<ListDatasetRevisionsApiV1DatasetsDatasetIdRevisionsGetParams>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDatasetRevisionsApiV1DatasetsDatasetIdRevisionsGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+
+  ): UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListDatasetRevisionsApiV1DatasetsDatasetIdRevisionsGetQueryOptions(datasetId,params,options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = unref(queryOptions).queryKey as DataTag<QueryKey, TData, TError>;
+
+  return query;
+}
+
+
+
 
 /**
  * @summary Get Sparse Summary
@@ -3159,6 +3338,147 @@ export const useDeleteCollectionApiV1DatasetCollectionsCollectionIdDelete = <TEr
     }
 
 /**
+ * @summary Get Snapshot Update Status
+ */
+export const getGetSnapshotUpdateStatusApiV1DatasetCollectionsCollectionIdSnapshotUpdateStatusGetUrl = (collectionId: string,) => {
+
+
+  return `/api/v1/dataset-collections/${collectionId}/snapshot-update-status`
+}
+
+export const getSnapshotUpdateStatusApiV1DatasetCollectionsCollectionIdSnapshotUpdateStatusGet = async (collectionId: string, options?: RequestInit): Promise<CollectionSnapshotUpdateStatusResponse> => {
+
+  return orvalFetcher<CollectionSnapshotUpdateStatusResponse>(getGetSnapshotUpdateStatusApiV1DatasetCollectionsCollectionIdSnapshotUpdateStatusGetUrl(collectionId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getGetSnapshotUpdateStatusApiV1DatasetCollectionsCollectionIdSnapshotUpdateStatusGetQueryKey = (collectionId: MaybeRef<string>,) => {
+    return ['api','v1','dataset-collections',collectionId,'snapshot-update-status'] as const;
+    }
+
+
+export const getGetSnapshotUpdateStatusApiV1DatasetCollectionsCollectionIdSnapshotUpdateStatusGetQueryOptions = <TData = Awaited<ReturnType<typeof getSnapshotUpdateStatusApiV1DatasetCollectionsCollectionIdSnapshotUpdateStatusGet>>, TError = ErrorType<HTTPValidationError>>(collectionId: MaybeRef<string>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getSnapshotUpdateStatusApiV1DatasetCollectionsCollectionIdSnapshotUpdateStatusGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  getGetSnapshotUpdateStatusApiV1DatasetCollectionsCollectionIdSnapshotUpdateStatusGetQueryKey(collectionId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSnapshotUpdateStatusApiV1DatasetCollectionsCollectionIdSnapshotUpdateStatusGet>>> = ({ signal }) => getSnapshotUpdateStatusApiV1DatasetCollectionsCollectionIdSnapshotUpdateStatusGet(unref(collectionId), { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: computed(() => !!(unref(collectionId))), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSnapshotUpdateStatusApiV1DatasetCollectionsCollectionIdSnapshotUpdateStatusGet>>, TError, TData>
+}
+
+export type GetSnapshotUpdateStatusApiV1DatasetCollectionsCollectionIdSnapshotUpdateStatusGetQueryResult = NonNullable<Awaited<ReturnType<typeof getSnapshotUpdateStatusApiV1DatasetCollectionsCollectionIdSnapshotUpdateStatusGet>>>
+export type GetSnapshotUpdateStatusApiV1DatasetCollectionsCollectionIdSnapshotUpdateStatusGetQueryError = ErrorType<HTTPValidationError>
+
+
+/**
+ * @summary Get Snapshot Update Status
+ */
+
+export function useGetSnapshotUpdateStatusApiV1DatasetCollectionsCollectionIdSnapshotUpdateStatusGet<TData = Awaited<ReturnType<typeof getSnapshotUpdateStatusApiV1DatasetCollectionsCollectionIdSnapshotUpdateStatusGet>>, TError = ErrorType<HTTPValidationError>>(
+ collectionId: MaybeRef<string>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getSnapshotUpdateStatusApiV1DatasetCollectionsCollectionIdSnapshotUpdateStatusGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+
+  ): UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetSnapshotUpdateStatusApiV1DatasetCollectionsCollectionIdSnapshotUpdateStatusGetQueryOptions(collectionId,options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = unref(queryOptions).queryKey as DataTag<QueryKey, TData, TError>;
+
+  return query;
+}
+
+
+
+
+/**
+ * @summary Refresh Snapshot
+ */
+export const getRefreshSnapshotApiV1DatasetCollectionsCollectionIdRefreshSnapshotPostUrl = (collectionId: string,) => {
+
+
+  return `/api/v1/dataset-collections/${collectionId}/refresh-snapshot`
+}
+
+export const refreshSnapshotApiV1DatasetCollectionsCollectionIdRefreshSnapshotPost = async (collectionId: string,
+    createDatasetCollectionRevisionRequest: CreateDatasetCollectionRevisionRequest, options?: RequestInit): Promise<CollectionSnapshotRefreshResponse> => {
+
+  return orvalFetcher<CollectionSnapshotRefreshResponse>(getRefreshSnapshotApiV1DatasetCollectionsCollectionIdRefreshSnapshotPostUrl(collectionId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      createDatasetCollectionRevisionRequest,)
+  }
+);}
+
+
+
+
+export const getRefreshSnapshotApiV1DatasetCollectionsCollectionIdRefreshSnapshotPostMutationOptions = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof refreshSnapshotApiV1DatasetCollectionsCollectionIdRefreshSnapshotPost>>, TError,{collectionId: string;data: BodyType<CreateDatasetCollectionRevisionRequest>}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+): UseMutationOptions<Awaited<ReturnType<typeof refreshSnapshotApiV1DatasetCollectionsCollectionIdRefreshSnapshotPost>>, TError,{collectionId: string;data: BodyType<CreateDatasetCollectionRevisionRequest>}, TContext> => {
+
+const mutationKey = ['refreshSnapshotApiV1DatasetCollectionsCollectionIdRefreshSnapshotPost'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof refreshSnapshotApiV1DatasetCollectionsCollectionIdRefreshSnapshotPost>>, {collectionId: string;data: BodyType<CreateDatasetCollectionRevisionRequest>}> = (props) => {
+          const {collectionId,data} = props ?? {};
+
+          return  refreshSnapshotApiV1DatasetCollectionsCollectionIdRefreshSnapshotPost(collectionId,data,requestOptions)
+        }
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RefreshSnapshotApiV1DatasetCollectionsCollectionIdRefreshSnapshotPostMutationResult = NonNullable<Awaited<ReturnType<typeof refreshSnapshotApiV1DatasetCollectionsCollectionIdRefreshSnapshotPost>>>
+    export type RefreshSnapshotApiV1DatasetCollectionsCollectionIdRefreshSnapshotPostMutationBody = BodyType<CreateDatasetCollectionRevisionRequest>
+    export type RefreshSnapshotApiV1DatasetCollectionsCollectionIdRefreshSnapshotPostMutationError = ErrorType<HTTPValidationError>
+
+    /**
+ * @summary Refresh Snapshot
+ */
+export const useRefreshSnapshotApiV1DatasetCollectionsCollectionIdRefreshSnapshotPost = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof refreshSnapshotApiV1DatasetCollectionsCollectionIdRefreshSnapshotPost>>, TError,{collectionId: string;data: BodyType<CreateDatasetCollectionRevisionRequest>}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+): UseMutationReturnType<
+        Awaited<ReturnType<typeof refreshSnapshotApiV1DatasetCollectionsCollectionIdRefreshSnapshotPost>>,
+        TError,
+        {collectionId: string;data: BodyType<CreateDatasetCollectionRevisionRequest>},
+        TContext
+      > => {
+
+      const mutationOptions = getRefreshSnapshotApiV1DatasetCollectionsCollectionIdRefreshSnapshotPostMutationOptions(options);
+
+      return useMutation(mutationOptions);
+    }
+
+/**
  * @summary List Members
  */
 export const getListMembersApiV1DatasetCollectionsCollectionIdMembersGetUrl = (collectionId: string,) => {
@@ -3446,6 +3766,371 @@ export const useUnlinkMemberApiV1DatasetCollectionsCollectionIdMembersMemberIdDe
       > => {
 
       const mutationOptions = getUnlinkMemberApiV1DatasetCollectionsCollectionIdMembersMemberIdDeleteMutationOptions(options);
+
+      return useMutation(mutationOptions);
+    }
+
+/**
+ * @summary Update Default Model
+ */
+export const getUpdateDefaultModelApiV1DatasetCollectionsCollectionIdDefaultModelPatchUrl = (collectionId: string,) => {
+
+
+  return `/api/v1/dataset-collections/${collectionId}/default-model`
+}
+
+export const updateDefaultModelApiV1DatasetCollectionsCollectionIdDefaultModelPatch = async (collectionId: string,
+    updateCollectionDefaultModelRequest: UpdateCollectionDefaultModelRequest, options?: RequestInit): Promise<DatasetCollectionResponse> => {
+
+  return orvalFetcher<DatasetCollectionResponse>(getUpdateDefaultModelApiV1DatasetCollectionsCollectionIdDefaultModelPatchUrl(collectionId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updateCollectionDefaultModelRequest,)
+  }
+);}
+
+
+
+
+export const getUpdateDefaultModelApiV1DatasetCollectionsCollectionIdDefaultModelPatchMutationOptions = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateDefaultModelApiV1DatasetCollectionsCollectionIdDefaultModelPatch>>, TError,{collectionId: string;data: BodyType<UpdateCollectionDefaultModelRequest>}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateDefaultModelApiV1DatasetCollectionsCollectionIdDefaultModelPatch>>, TError,{collectionId: string;data: BodyType<UpdateCollectionDefaultModelRequest>}, TContext> => {
+
+const mutationKey = ['updateDefaultModelApiV1DatasetCollectionsCollectionIdDefaultModelPatch'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateDefaultModelApiV1DatasetCollectionsCollectionIdDefaultModelPatch>>, {collectionId: string;data: BodyType<UpdateCollectionDefaultModelRequest>}> = (props) => {
+          const {collectionId,data} = props ?? {};
+
+          return  updateDefaultModelApiV1DatasetCollectionsCollectionIdDefaultModelPatch(collectionId,data,requestOptions)
+        }
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateDefaultModelApiV1DatasetCollectionsCollectionIdDefaultModelPatchMutationResult = NonNullable<Awaited<ReturnType<typeof updateDefaultModelApiV1DatasetCollectionsCollectionIdDefaultModelPatch>>>
+    export type UpdateDefaultModelApiV1DatasetCollectionsCollectionIdDefaultModelPatchMutationBody = BodyType<UpdateCollectionDefaultModelRequest>
+    export type UpdateDefaultModelApiV1DatasetCollectionsCollectionIdDefaultModelPatchMutationError = ErrorType<HTTPValidationError>
+
+    /**
+ * @summary Update Default Model
+ */
+export const useUpdateDefaultModelApiV1DatasetCollectionsCollectionIdDefaultModelPatch = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateDefaultModelApiV1DatasetCollectionsCollectionIdDefaultModelPatch>>, TError,{collectionId: string;data: BodyType<UpdateCollectionDefaultModelRequest>}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+): UseMutationReturnType<
+        Awaited<ReturnType<typeof updateDefaultModelApiV1DatasetCollectionsCollectionIdDefaultModelPatch>>,
+        TError,
+        {collectionId: string;data: BodyType<UpdateCollectionDefaultModelRequest>},
+        TContext
+      > => {
+
+      const mutationOptions = getUpdateDefaultModelApiV1DatasetCollectionsCollectionIdDefaultModelPatchMutationOptions(options);
+
+      return useMutation(mutationOptions);
+    }
+
+/**
+ * @summary List Prediction Coverage
+ */
+export const getListPredictionCoverageApiV1DatasetCollectionsCollectionIdPredictionCoverageGetUrl = (collectionId: string,
+    params?: ListPredictionCoverageApiV1DatasetCollectionsCollectionIdPredictionCoverageGetParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  return normalizedParams.size ? `/api/v1/dataset-collections/${collectionId}/prediction-coverage?${normalizedParams.toString()}` : `/api/v1/dataset-collections/${collectionId}/prediction-coverage`
+}
+
+export const listPredictionCoverageApiV1DatasetCollectionsCollectionIdPredictionCoverageGet = async (collectionId: string,
+    params?: ListPredictionCoverageApiV1DatasetCollectionsCollectionIdPredictionCoverageGetParams, options?: RequestInit): Promise<CollectionPredictionCoverageResponse[]> => {
+
+  return orvalFetcher<CollectionPredictionCoverageResponse[]>(getListPredictionCoverageApiV1DatasetCollectionsCollectionIdPredictionCoverageGetUrl(collectionId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getListPredictionCoverageApiV1DatasetCollectionsCollectionIdPredictionCoverageGetQueryKey = (collectionId: MaybeRef<string>,
+    params?: MaybeRef<ListPredictionCoverageApiV1DatasetCollectionsCollectionIdPredictionCoverageGetParams>,) => {
+    return ['api','v1','dataset-collections',collectionId,'prediction-coverage', ...(params ? [params]: [])] as const;
+    }
+
+
+export const getListPredictionCoverageApiV1DatasetCollectionsCollectionIdPredictionCoverageGetQueryOptions = <TData = Awaited<ReturnType<typeof listPredictionCoverageApiV1DatasetCollectionsCollectionIdPredictionCoverageGet>>, TError = ErrorType<HTTPValidationError>>(collectionId: MaybeRef<string>,
+    params?: MaybeRef<ListPredictionCoverageApiV1DatasetCollectionsCollectionIdPredictionCoverageGetParams>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listPredictionCoverageApiV1DatasetCollectionsCollectionIdPredictionCoverageGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  getListPredictionCoverageApiV1DatasetCollectionsCollectionIdPredictionCoverageGetQueryKey(collectionId,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPredictionCoverageApiV1DatasetCollectionsCollectionIdPredictionCoverageGet>>> = ({ signal }) => listPredictionCoverageApiV1DatasetCollectionsCollectionIdPredictionCoverageGet(unref(collectionId),unref(params), { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: computed(() => !!(unref(collectionId))), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listPredictionCoverageApiV1DatasetCollectionsCollectionIdPredictionCoverageGet>>, TError, TData>
+}
+
+export type ListPredictionCoverageApiV1DatasetCollectionsCollectionIdPredictionCoverageGetQueryResult = NonNullable<Awaited<ReturnType<typeof listPredictionCoverageApiV1DatasetCollectionsCollectionIdPredictionCoverageGet>>>
+export type ListPredictionCoverageApiV1DatasetCollectionsCollectionIdPredictionCoverageGetQueryError = ErrorType<HTTPValidationError>
+
+
+/**
+ * @summary List Prediction Coverage
+ */
+
+export function useListPredictionCoverageApiV1DatasetCollectionsCollectionIdPredictionCoverageGet<TData = Awaited<ReturnType<typeof listPredictionCoverageApiV1DatasetCollectionsCollectionIdPredictionCoverageGet>>, TError = ErrorType<HTTPValidationError>>(
+ collectionId: MaybeRef<string>,
+    params?: MaybeRef<ListPredictionCoverageApiV1DatasetCollectionsCollectionIdPredictionCoverageGetParams>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listPredictionCoverageApiV1DatasetCollectionsCollectionIdPredictionCoverageGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+
+  ): UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListPredictionCoverageApiV1DatasetCollectionsCollectionIdPredictionCoverageGetQueryOptions(collectionId,params,options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = unref(queryOptions).queryKey as DataTag<QueryKey, TData, TError>;
+
+  return query;
+}
+
+
+
+
+/**
+ * @summary Create Prediction Batch
+ */
+export const getCreatePredictionBatchApiV1DatasetCollectionsCollectionIdPredictionBatchesPostUrl = (collectionId: string,) => {
+
+
+  return `/api/v1/dataset-collections/${collectionId}/prediction-batches`
+}
+
+export const createPredictionBatchApiV1DatasetCollectionsCollectionIdPredictionBatchesPost = async (collectionId: string,
+    createCollectionPredictionBatchRequest: CreateCollectionPredictionBatchRequest, options?: RequestInit): Promise<CollectionPredictionBatchResponse> => {
+
+  return orvalFetcher<CollectionPredictionBatchResponse>(getCreatePredictionBatchApiV1DatasetCollectionsCollectionIdPredictionBatchesPostUrl(collectionId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      createCollectionPredictionBatchRequest,)
+  }
+);}
+
+
+
+
+export const getCreatePredictionBatchApiV1DatasetCollectionsCollectionIdPredictionBatchesPostMutationOptions = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPredictionBatchApiV1DatasetCollectionsCollectionIdPredictionBatchesPost>>, TError,{collectionId: string;data: BodyType<CreateCollectionPredictionBatchRequest>}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+): UseMutationOptions<Awaited<ReturnType<typeof createPredictionBatchApiV1DatasetCollectionsCollectionIdPredictionBatchesPost>>, TError,{collectionId: string;data: BodyType<CreateCollectionPredictionBatchRequest>}, TContext> => {
+
+const mutationKey = ['createPredictionBatchApiV1DatasetCollectionsCollectionIdPredictionBatchesPost'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createPredictionBatchApiV1DatasetCollectionsCollectionIdPredictionBatchesPost>>, {collectionId: string;data: BodyType<CreateCollectionPredictionBatchRequest>}> = (props) => {
+          const {collectionId,data} = props ?? {};
+
+          return  createPredictionBatchApiV1DatasetCollectionsCollectionIdPredictionBatchesPost(collectionId,data,requestOptions)
+        }
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreatePredictionBatchApiV1DatasetCollectionsCollectionIdPredictionBatchesPostMutationResult = NonNullable<Awaited<ReturnType<typeof createPredictionBatchApiV1DatasetCollectionsCollectionIdPredictionBatchesPost>>>
+    export type CreatePredictionBatchApiV1DatasetCollectionsCollectionIdPredictionBatchesPostMutationBody = BodyType<CreateCollectionPredictionBatchRequest>
+    export type CreatePredictionBatchApiV1DatasetCollectionsCollectionIdPredictionBatchesPostMutationError = ErrorType<HTTPValidationError>
+
+    /**
+ * @summary Create Prediction Batch
+ */
+export const useCreatePredictionBatchApiV1DatasetCollectionsCollectionIdPredictionBatchesPost = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPredictionBatchApiV1DatasetCollectionsCollectionIdPredictionBatchesPost>>, TError,{collectionId: string;data: BodyType<CreateCollectionPredictionBatchRequest>}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+): UseMutationReturnType<
+        Awaited<ReturnType<typeof createPredictionBatchApiV1DatasetCollectionsCollectionIdPredictionBatchesPost>>,
+        TError,
+        {collectionId: string;data: BodyType<CreateCollectionPredictionBatchRequest>},
+        TContext
+      > => {
+
+      const mutationOptions = getCreatePredictionBatchApiV1DatasetCollectionsCollectionIdPredictionBatchesPostMutationOptions(options);
+
+      return useMutation(mutationOptions);
+    }
+
+/**
+ * @summary List Prediction Batches
+ */
+export const getListPredictionBatchesApiV1DatasetCollectionsCollectionIdPredictionBatchesGetUrl = (collectionId: string,) => {
+
+
+  return `/api/v1/dataset-collections/${collectionId}/prediction-batches`
+}
+
+export const listPredictionBatchesApiV1DatasetCollectionsCollectionIdPredictionBatchesGet = async (collectionId: string, options?: RequestInit): Promise<CollectionPredictionBatchResponse[]> => {
+
+  return orvalFetcher<CollectionPredictionBatchResponse[]>(getListPredictionBatchesApiV1DatasetCollectionsCollectionIdPredictionBatchesGetUrl(collectionId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getListPredictionBatchesApiV1DatasetCollectionsCollectionIdPredictionBatchesGetQueryKey = (collectionId: MaybeRef<string>,) => {
+    return ['api','v1','dataset-collections',collectionId,'prediction-batches'] as const;
+    }
+
+
+export const getListPredictionBatchesApiV1DatasetCollectionsCollectionIdPredictionBatchesGetQueryOptions = <TData = Awaited<ReturnType<typeof listPredictionBatchesApiV1DatasetCollectionsCollectionIdPredictionBatchesGet>>, TError = ErrorType<HTTPValidationError>>(collectionId: MaybeRef<string>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listPredictionBatchesApiV1DatasetCollectionsCollectionIdPredictionBatchesGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  getListPredictionBatchesApiV1DatasetCollectionsCollectionIdPredictionBatchesGetQueryKey(collectionId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPredictionBatchesApiV1DatasetCollectionsCollectionIdPredictionBatchesGet>>> = ({ signal }) => listPredictionBatchesApiV1DatasetCollectionsCollectionIdPredictionBatchesGet(unref(collectionId), { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: computed(() => !!(unref(collectionId))), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listPredictionBatchesApiV1DatasetCollectionsCollectionIdPredictionBatchesGet>>, TError, TData>
+}
+
+export type ListPredictionBatchesApiV1DatasetCollectionsCollectionIdPredictionBatchesGetQueryResult = NonNullable<Awaited<ReturnType<typeof listPredictionBatchesApiV1DatasetCollectionsCollectionIdPredictionBatchesGet>>>
+export type ListPredictionBatchesApiV1DatasetCollectionsCollectionIdPredictionBatchesGetQueryError = ErrorType<HTTPValidationError>
+
+
+/**
+ * @summary List Prediction Batches
+ */
+
+export function useListPredictionBatchesApiV1DatasetCollectionsCollectionIdPredictionBatchesGet<TData = Awaited<ReturnType<typeof listPredictionBatchesApiV1DatasetCollectionsCollectionIdPredictionBatchesGet>>, TError = ErrorType<HTTPValidationError>>(
+ collectionId: MaybeRef<string>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listPredictionBatchesApiV1DatasetCollectionsCollectionIdPredictionBatchesGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+
+  ): UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListPredictionBatchesApiV1DatasetCollectionsCollectionIdPredictionBatchesGetQueryOptions(collectionId,options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = unref(queryOptions).queryKey as DataTag<QueryKey, TData, TError>;
+
+  return query;
+}
+
+
+
+
+/**
+ * @summary Retry Prediction Batch
+ */
+export const getRetryPredictionBatchApiV1DatasetCollectionsCollectionIdPredictionBatchesBatchIdRetryPostUrl = (collectionId: string,
+    batchId: string,) => {
+
+
+  return `/api/v1/dataset-collections/${collectionId}/prediction-batches/${batchId}/retry`
+}
+
+export const retryPredictionBatchApiV1DatasetCollectionsCollectionIdPredictionBatchesBatchIdRetryPost = async (collectionId: string,
+    batchId: string, options?: RequestInit): Promise<CollectionPredictionBatchResponse> => {
+
+  return orvalFetcher<CollectionPredictionBatchResponse>(getRetryPredictionBatchApiV1DatasetCollectionsCollectionIdPredictionBatchesBatchIdRetryPostUrl(collectionId,batchId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getRetryPredictionBatchApiV1DatasetCollectionsCollectionIdPredictionBatchesBatchIdRetryPostMutationOptions = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof retryPredictionBatchApiV1DatasetCollectionsCollectionIdPredictionBatchesBatchIdRetryPost>>, TError,{collectionId: string;batchId: string}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+): UseMutationOptions<Awaited<ReturnType<typeof retryPredictionBatchApiV1DatasetCollectionsCollectionIdPredictionBatchesBatchIdRetryPost>>, TError,{collectionId: string;batchId: string}, TContext> => {
+
+const mutationKey = ['retryPredictionBatchApiV1DatasetCollectionsCollectionIdPredictionBatchesBatchIdRetryPost'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof retryPredictionBatchApiV1DatasetCollectionsCollectionIdPredictionBatchesBatchIdRetryPost>>, {collectionId: string;batchId: string}> = (props) => {
+          const {collectionId,batchId} = props ?? {};
+
+          return  retryPredictionBatchApiV1DatasetCollectionsCollectionIdPredictionBatchesBatchIdRetryPost(collectionId,batchId,requestOptions)
+        }
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RetryPredictionBatchApiV1DatasetCollectionsCollectionIdPredictionBatchesBatchIdRetryPostMutationResult = NonNullable<Awaited<ReturnType<typeof retryPredictionBatchApiV1DatasetCollectionsCollectionIdPredictionBatchesBatchIdRetryPost>>>
+
+    export type RetryPredictionBatchApiV1DatasetCollectionsCollectionIdPredictionBatchesBatchIdRetryPostMutationError = ErrorType<HTTPValidationError>
+
+    /**
+ * @summary Retry Prediction Batch
+ */
+export const useRetryPredictionBatchApiV1DatasetCollectionsCollectionIdPredictionBatchesBatchIdRetryPost = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof retryPredictionBatchApiV1DatasetCollectionsCollectionIdPredictionBatchesBatchIdRetryPost>>, TError,{collectionId: string;batchId: string}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+): UseMutationReturnType<
+        Awaited<ReturnType<typeof retryPredictionBatchApiV1DatasetCollectionsCollectionIdPredictionBatchesBatchIdRetryPost>>,
+        TError,
+        {collectionId: string;batchId: string},
+        TContext
+      > => {
+
+      const mutationOptions = getRetryPredictionBatchApiV1DatasetCollectionsCollectionIdPredictionBatchesBatchIdRetryPostMutationOptions(options);
 
       return useMutation(mutationOptions);
     }
@@ -4104,6 +4789,83 @@ export const useGlobalAgentChatApiV1AgentChatPost = <TError = ErrorType<HTTPVali
 
       return useMutation(mutationOptions);
     }
+
+/**
+ * @summary List Automation Runs
+ */
+export const getListAutomationRunsApiV1AutomationsGetUrl = (params?: ListAutomationRunsApiV1AutomationsGetParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  return normalizedParams.size ? `/api/v1/automations?${normalizedParams.toString()}` : `/api/v1/automations`
+}
+
+export const listAutomationRunsApiV1AutomationsGet = async (params?: ListAutomationRunsApiV1AutomationsGetParams, options?: RequestInit): Promise<PaginatedResponseAutomationRunOverviewResponse> => {
+
+  return orvalFetcher<PaginatedResponseAutomationRunOverviewResponse>(getListAutomationRunsApiV1AutomationsGetUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getListAutomationRunsApiV1AutomationsGetQueryKey = (params?: MaybeRef<ListAutomationRunsApiV1AutomationsGetParams>,) => {
+    return ['api','v1','automations', ...(params ? [params]: [])] as const;
+    }
+
+
+export const getListAutomationRunsApiV1AutomationsGetQueryOptions = <TData = Awaited<ReturnType<typeof listAutomationRunsApiV1AutomationsGet>>, TError = ErrorType<HTTPValidationError>>(params?: MaybeRef<ListAutomationRunsApiV1AutomationsGetParams>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listAutomationRunsApiV1AutomationsGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  getListAutomationRunsApiV1AutomationsGetQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listAutomationRunsApiV1AutomationsGet>>> = ({ signal }) => listAutomationRunsApiV1AutomationsGet(unref(params), { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAutomationRunsApiV1AutomationsGet>>, TError, TData>
+}
+
+export type ListAutomationRunsApiV1AutomationsGetQueryResult = NonNullable<Awaited<ReturnType<typeof listAutomationRunsApiV1AutomationsGet>>>
+export type ListAutomationRunsApiV1AutomationsGetQueryError = ErrorType<HTTPValidationError>
+
+
+/**
+ * @summary List Automation Runs
+ */
+
+export function useListAutomationRunsApiV1AutomationsGet<TData = Awaited<ReturnType<typeof listAutomationRunsApiV1AutomationsGet>>, TError = ErrorType<HTTPValidationError>>(
+ params?: MaybeRef<ListAutomationRunsApiV1AutomationsGetParams>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listAutomationRunsApiV1AutomationsGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+
+  ): UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListAutomationRunsApiV1AutomationsGetQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = unref(queryOptions).queryKey as DataTag<QueryKey, TData, TError>;
+
+  return query;
+}
+
+
+
 
 /**
  * @summary Register
@@ -11391,6 +12153,1071 @@ export const useScBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPo
       > => {
 
       const mutationOptions = getScBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPostMutationOptions(options);
+
+      return useMutation(mutationOptions);
+    }
+
+/**
+ * @summary List Source Providers
+ */
+export const getListSourceProvidersApiV1SourceConnectorsProvidersGetUrl = () => {
+
+
+  return `/api/v1/source-connectors/providers`
+}
+
+export const listSourceProvidersApiV1SourceConnectorsProvidersGet = async ( options?: RequestInit): Promise<SourceProviderDescriptorResponse[]> => {
+
+  return orvalFetcher<SourceProviderDescriptorResponse[]>(getListSourceProvidersApiV1SourceConnectorsProvidersGetUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getListSourceProvidersApiV1SourceConnectorsProvidersGetQueryKey = () => {
+    return ['api','v1','source-connectors','providers'] as const;
+    }
+
+
+export const getListSourceProvidersApiV1SourceConnectorsProvidersGetQueryOptions = <TData = Awaited<ReturnType<typeof listSourceProvidersApiV1SourceConnectorsProvidersGet>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listSourceProvidersApiV1SourceConnectorsProvidersGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  getListSourceProvidersApiV1SourceConnectorsProvidersGetQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listSourceProvidersApiV1SourceConnectorsProvidersGet>>> = ({ signal }) => listSourceProvidersApiV1SourceConnectorsProvidersGet({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listSourceProvidersApiV1SourceConnectorsProvidersGet>>, TError, TData>
+}
+
+export type ListSourceProvidersApiV1SourceConnectorsProvidersGetQueryResult = NonNullable<Awaited<ReturnType<typeof listSourceProvidersApiV1SourceConnectorsProvidersGet>>>
+export type ListSourceProvidersApiV1SourceConnectorsProvidersGetQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List Source Providers
+ */
+
+export function useListSourceProvidersApiV1SourceConnectorsProvidersGet<TData = Awaited<ReturnType<typeof listSourceProvidersApiV1SourceConnectorsProvidersGet>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listSourceProvidersApiV1SourceConnectorsProvidersGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+
+  ): UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListSourceProvidersApiV1SourceConnectorsProvidersGetQueryOptions(options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = unref(queryOptions).queryKey as DataTag<QueryKey, TData, TError>;
+
+  return query;
+}
+
+
+
+
+/**
+ * @summary List Source Connectors
+ */
+export const getListSourceConnectorsApiV1SourceConnectorsGetUrl = () => {
+
+
+  return `/api/v1/source-connectors`
+}
+
+export const listSourceConnectorsApiV1SourceConnectorsGet = async ( options?: RequestInit): Promise<SourceConnectorResponse[]> => {
+
+  return orvalFetcher<SourceConnectorResponse[]>(getListSourceConnectorsApiV1SourceConnectorsGetUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getListSourceConnectorsApiV1SourceConnectorsGetQueryKey = () => {
+    return ['api','v1','source-connectors'] as const;
+    }
+
+
+export const getListSourceConnectorsApiV1SourceConnectorsGetQueryOptions = <TData = Awaited<ReturnType<typeof listSourceConnectorsApiV1SourceConnectorsGet>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listSourceConnectorsApiV1SourceConnectorsGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  getListSourceConnectorsApiV1SourceConnectorsGetQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listSourceConnectorsApiV1SourceConnectorsGet>>> = ({ signal }) => listSourceConnectorsApiV1SourceConnectorsGet({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listSourceConnectorsApiV1SourceConnectorsGet>>, TError, TData>
+}
+
+export type ListSourceConnectorsApiV1SourceConnectorsGetQueryResult = NonNullable<Awaited<ReturnType<typeof listSourceConnectorsApiV1SourceConnectorsGet>>>
+export type ListSourceConnectorsApiV1SourceConnectorsGetQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List Source Connectors
+ */
+
+export function useListSourceConnectorsApiV1SourceConnectorsGet<TData = Awaited<ReturnType<typeof listSourceConnectorsApiV1SourceConnectorsGet>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listSourceConnectorsApiV1SourceConnectorsGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+
+  ): UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListSourceConnectorsApiV1SourceConnectorsGetQueryOptions(options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = unref(queryOptions).queryKey as DataTag<QueryKey, TData, TError>;
+
+  return query;
+}
+
+
+
+
+/**
+ * @summary Create Source Connector
+ */
+export const getCreateSourceConnectorApiV1SourceConnectorsPostUrl = () => {
+
+
+  return `/api/v1/source-connectors`
+}
+
+export const createSourceConnectorApiV1SourceConnectorsPost = async (bodyCreateSourceConnectorApiV1SourceConnectorsPost: BodyCreateSourceConnectorApiV1SourceConnectorsPost, options?: RequestInit): Promise<SourceConnectorResponse> => {
+
+  return orvalFetcher<SourceConnectorResponse>(getCreateSourceConnectorApiV1SourceConnectorsPostUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      bodyCreateSourceConnectorApiV1SourceConnectorsPost,)
+  }
+);}
+
+
+
+
+export const getCreateSourceConnectorApiV1SourceConnectorsPostMutationOptions = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createSourceConnectorApiV1SourceConnectorsPost>>, TError,{data: BodyType<BodyCreateSourceConnectorApiV1SourceConnectorsPost>}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+): UseMutationOptions<Awaited<ReturnType<typeof createSourceConnectorApiV1SourceConnectorsPost>>, TError,{data: BodyType<BodyCreateSourceConnectorApiV1SourceConnectorsPost>}, TContext> => {
+
+const mutationKey = ['createSourceConnectorApiV1SourceConnectorsPost'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createSourceConnectorApiV1SourceConnectorsPost>>, {data: BodyType<BodyCreateSourceConnectorApiV1SourceConnectorsPost>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createSourceConnectorApiV1SourceConnectorsPost(data,requestOptions)
+        }
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateSourceConnectorApiV1SourceConnectorsPostMutationResult = NonNullable<Awaited<ReturnType<typeof createSourceConnectorApiV1SourceConnectorsPost>>>
+    export type CreateSourceConnectorApiV1SourceConnectorsPostMutationBody = BodyType<BodyCreateSourceConnectorApiV1SourceConnectorsPost>
+    export type CreateSourceConnectorApiV1SourceConnectorsPostMutationError = ErrorType<HTTPValidationError>
+
+    /**
+ * @summary Create Source Connector
+ */
+export const useCreateSourceConnectorApiV1SourceConnectorsPost = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createSourceConnectorApiV1SourceConnectorsPost>>, TError,{data: BodyType<BodyCreateSourceConnectorApiV1SourceConnectorsPost>}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+): UseMutationReturnType<
+        Awaited<ReturnType<typeof createSourceConnectorApiV1SourceConnectorsPost>>,
+        TError,
+        {data: BodyType<BodyCreateSourceConnectorApiV1SourceConnectorsPost>},
+        TContext
+      > => {
+
+      const mutationOptions = getCreateSourceConnectorApiV1SourceConnectorsPostMutationOptions(options);
+
+      return useMutation(mutationOptions);
+    }
+
+/**
+ * @summary Create Import Profile
+ */
+export const getCreateImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPostUrl = (connectorId: string,) => {
+
+
+  return `/api/v1/source-connectors/${connectorId}/import-profiles`
+}
+
+export const createImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPost = async (connectorId: string,
+    bodyCreateImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPost: BodyCreateImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPost, options?: RequestInit): Promise<ImportProfileVersionResponse> => {
+
+  return orvalFetcher<ImportProfileVersionResponse>(getCreateImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPostUrl(connectorId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      bodyCreateImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPost,)
+  }
+);}
+
+
+
+
+export const getCreateImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPostMutationOptions = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPost>>, TError,{connectorId: string;data: BodyType<BodyCreateImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPost>}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+): UseMutationOptions<Awaited<ReturnType<typeof createImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPost>>, TError,{connectorId: string;data: BodyType<BodyCreateImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPost>}, TContext> => {
+
+const mutationKey = ['createImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPost'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPost>>, {connectorId: string;data: BodyType<BodyCreateImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPost>}> = (props) => {
+          const {connectorId,data} = props ?? {};
+
+          return  createImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPost(connectorId,data,requestOptions)
+        }
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPostMutationResult = NonNullable<Awaited<ReturnType<typeof createImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPost>>>
+    export type CreateImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPostMutationBody = BodyType<BodyCreateImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPost>
+    export type CreateImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPostMutationError = ErrorType<HTTPValidationError>
+
+    /**
+ * @summary Create Import Profile
+ */
+export const useCreateImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPost = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPost>>, TError,{connectorId: string;data: BodyType<BodyCreateImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPost>}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+): UseMutationReturnType<
+        Awaited<ReturnType<typeof createImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPost>>,
+        TError,
+        {connectorId: string;data: BodyType<BodyCreateImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPost>},
+        TContext
+      > => {
+
+      const mutationOptions = getCreateImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPostMutationOptions(options);
+
+      return useMutation(mutationOptions);
+    }
+
+/**
+ * @summary List Import Profiles
+ */
+export const getListImportProfilesApiV1SourceConnectorsConnectorIdImportProfilesGetUrl = (connectorId: string,) => {
+
+
+  return `/api/v1/source-connectors/${connectorId}/import-profiles`
+}
+
+export const listImportProfilesApiV1SourceConnectorsConnectorIdImportProfilesGet = async (connectorId: string, options?: RequestInit): Promise<ImportProfileVersionResponse[]> => {
+
+  return orvalFetcher<ImportProfileVersionResponse[]>(getListImportProfilesApiV1SourceConnectorsConnectorIdImportProfilesGetUrl(connectorId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getListImportProfilesApiV1SourceConnectorsConnectorIdImportProfilesGetQueryKey = (connectorId: MaybeRef<string>,) => {
+    return ['api','v1','source-connectors',connectorId,'import-profiles'] as const;
+    }
+
+
+export const getListImportProfilesApiV1SourceConnectorsConnectorIdImportProfilesGetQueryOptions = <TData = Awaited<ReturnType<typeof listImportProfilesApiV1SourceConnectorsConnectorIdImportProfilesGet>>, TError = ErrorType<HTTPValidationError>>(connectorId: MaybeRef<string>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listImportProfilesApiV1SourceConnectorsConnectorIdImportProfilesGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  getListImportProfilesApiV1SourceConnectorsConnectorIdImportProfilesGetQueryKey(connectorId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listImportProfilesApiV1SourceConnectorsConnectorIdImportProfilesGet>>> = ({ signal }) => listImportProfilesApiV1SourceConnectorsConnectorIdImportProfilesGet(unref(connectorId), { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: computed(() => !!(unref(connectorId))), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listImportProfilesApiV1SourceConnectorsConnectorIdImportProfilesGet>>, TError, TData>
+}
+
+export type ListImportProfilesApiV1SourceConnectorsConnectorIdImportProfilesGetQueryResult = NonNullable<Awaited<ReturnType<typeof listImportProfilesApiV1SourceConnectorsConnectorIdImportProfilesGet>>>
+export type ListImportProfilesApiV1SourceConnectorsConnectorIdImportProfilesGetQueryError = ErrorType<HTTPValidationError>
+
+
+/**
+ * @summary List Import Profiles
+ */
+
+export function useListImportProfilesApiV1SourceConnectorsConnectorIdImportProfilesGet<TData = Awaited<ReturnType<typeof listImportProfilesApiV1SourceConnectorsConnectorIdImportProfilesGet>>, TError = ErrorType<HTTPValidationError>>(
+ connectorId: MaybeRef<string>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listImportProfilesApiV1SourceConnectorsConnectorIdImportProfilesGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+
+  ): UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListImportProfilesApiV1SourceConnectorsConnectorIdImportProfilesGetQueryOptions(connectorId,options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = unref(queryOptions).queryKey as DataTag<QueryKey, TData, TError>;
+
+  return query;
+}
+
+
+
+
+/**
+ * @summary Create Membership Rule
+ */
+export const getCreateMembershipRuleApiV1DatasetCollectionsCollectionIdMembershipRulesPostUrl = (collectionId: string,) => {
+
+
+  return `/api/v1/dataset-collections/${collectionId}/membership-rules`
+}
+
+export const createMembershipRuleApiV1DatasetCollectionsCollectionIdMembershipRulesPost = async (collectionId: string,
+    createMembershipRuleRequest: CreateMembershipRuleRequest, options?: RequestInit): Promise<MembershipRuleResponse> => {
+
+  return orvalFetcher<MembershipRuleResponse>(getCreateMembershipRuleApiV1DatasetCollectionsCollectionIdMembershipRulesPostUrl(collectionId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      createMembershipRuleRequest,)
+  }
+);}
+
+
+
+
+export const getCreateMembershipRuleApiV1DatasetCollectionsCollectionIdMembershipRulesPostMutationOptions = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createMembershipRuleApiV1DatasetCollectionsCollectionIdMembershipRulesPost>>, TError,{collectionId: string;data: BodyType<CreateMembershipRuleRequest>}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+): UseMutationOptions<Awaited<ReturnType<typeof createMembershipRuleApiV1DatasetCollectionsCollectionIdMembershipRulesPost>>, TError,{collectionId: string;data: BodyType<CreateMembershipRuleRequest>}, TContext> => {
+
+const mutationKey = ['createMembershipRuleApiV1DatasetCollectionsCollectionIdMembershipRulesPost'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createMembershipRuleApiV1DatasetCollectionsCollectionIdMembershipRulesPost>>, {collectionId: string;data: BodyType<CreateMembershipRuleRequest>}> = (props) => {
+          const {collectionId,data} = props ?? {};
+
+          return  createMembershipRuleApiV1DatasetCollectionsCollectionIdMembershipRulesPost(collectionId,data,requestOptions)
+        }
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateMembershipRuleApiV1DatasetCollectionsCollectionIdMembershipRulesPostMutationResult = NonNullable<Awaited<ReturnType<typeof createMembershipRuleApiV1DatasetCollectionsCollectionIdMembershipRulesPost>>>
+    export type CreateMembershipRuleApiV1DatasetCollectionsCollectionIdMembershipRulesPostMutationBody = BodyType<CreateMembershipRuleRequest>
+    export type CreateMembershipRuleApiV1DatasetCollectionsCollectionIdMembershipRulesPostMutationError = ErrorType<HTTPValidationError>
+
+    /**
+ * @summary Create Membership Rule
+ */
+export const useCreateMembershipRuleApiV1DatasetCollectionsCollectionIdMembershipRulesPost = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createMembershipRuleApiV1DatasetCollectionsCollectionIdMembershipRulesPost>>, TError,{collectionId: string;data: BodyType<CreateMembershipRuleRequest>}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+): UseMutationReturnType<
+        Awaited<ReturnType<typeof createMembershipRuleApiV1DatasetCollectionsCollectionIdMembershipRulesPost>>,
+        TError,
+        {collectionId: string;data: BodyType<CreateMembershipRuleRequest>},
+        TContext
+      > => {
+
+      const mutationOptions = getCreateMembershipRuleApiV1DatasetCollectionsCollectionIdMembershipRulesPostMutationOptions(options);
+
+      return useMutation(mutationOptions);
+    }
+
+/**
+ * @summary List Membership Rules
+ */
+export const getListMembershipRulesApiV1DatasetCollectionsCollectionIdMembershipRulesGetUrl = (collectionId: string,) => {
+
+
+  return `/api/v1/dataset-collections/${collectionId}/membership-rules`
+}
+
+export const listMembershipRulesApiV1DatasetCollectionsCollectionIdMembershipRulesGet = async (collectionId: string, options?: RequestInit): Promise<MembershipRuleResponse[]> => {
+
+  return orvalFetcher<MembershipRuleResponse[]>(getListMembershipRulesApiV1DatasetCollectionsCollectionIdMembershipRulesGetUrl(collectionId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getListMembershipRulesApiV1DatasetCollectionsCollectionIdMembershipRulesGetQueryKey = (collectionId: MaybeRef<string>,) => {
+    return ['api','v1','dataset-collections',collectionId,'membership-rules'] as const;
+    }
+
+
+export const getListMembershipRulesApiV1DatasetCollectionsCollectionIdMembershipRulesGetQueryOptions = <TData = Awaited<ReturnType<typeof listMembershipRulesApiV1DatasetCollectionsCollectionIdMembershipRulesGet>>, TError = ErrorType<HTTPValidationError>>(collectionId: MaybeRef<string>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listMembershipRulesApiV1DatasetCollectionsCollectionIdMembershipRulesGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  getListMembershipRulesApiV1DatasetCollectionsCollectionIdMembershipRulesGetQueryKey(collectionId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listMembershipRulesApiV1DatasetCollectionsCollectionIdMembershipRulesGet>>> = ({ signal }) => listMembershipRulesApiV1DatasetCollectionsCollectionIdMembershipRulesGet(unref(collectionId), { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: computed(() => !!(unref(collectionId))), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listMembershipRulesApiV1DatasetCollectionsCollectionIdMembershipRulesGet>>, TError, TData>
+}
+
+export type ListMembershipRulesApiV1DatasetCollectionsCollectionIdMembershipRulesGetQueryResult = NonNullable<Awaited<ReturnType<typeof listMembershipRulesApiV1DatasetCollectionsCollectionIdMembershipRulesGet>>>
+export type ListMembershipRulesApiV1DatasetCollectionsCollectionIdMembershipRulesGetQueryError = ErrorType<HTTPValidationError>
+
+
+/**
+ * @summary List Membership Rules
+ */
+
+export function useListMembershipRulesApiV1DatasetCollectionsCollectionIdMembershipRulesGet<TData = Awaited<ReturnType<typeof listMembershipRulesApiV1DatasetCollectionsCollectionIdMembershipRulesGet>>, TError = ErrorType<HTTPValidationError>>(
+ collectionId: MaybeRef<string>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listMembershipRulesApiV1DatasetCollectionsCollectionIdMembershipRulesGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+
+  ): UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListMembershipRulesApiV1DatasetCollectionsCollectionIdMembershipRulesGetQueryOptions(collectionId,options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = unref(queryOptions).queryKey as DataTag<QueryKey, TData, TError>;
+
+  return query;
+}
+
+
+
+
+/**
+ * @summary Create Membership Rule Version
+ */
+export const getCreateMembershipRuleVersionApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdVersionsPostUrl = (collectionId: string,
+    ruleId: string,) => {
+
+
+  return `/api/v1/dataset-collections/${collectionId}/membership-rules/${ruleId}/versions`
+}
+
+export const createMembershipRuleVersionApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdVersionsPost = async (collectionId: string,
+    ruleId: string,
+    createMembershipRuleVersionRequest: CreateMembershipRuleVersionRequest, options?: RequestInit): Promise<MembershipRuleResponse> => {
+
+  return orvalFetcher<MembershipRuleResponse>(getCreateMembershipRuleVersionApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdVersionsPostUrl(collectionId,ruleId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      createMembershipRuleVersionRequest,)
+  }
+);}
+
+
+
+
+export const getCreateMembershipRuleVersionApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdVersionsPostMutationOptions = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createMembershipRuleVersionApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdVersionsPost>>, TError,{collectionId: string;ruleId: string;data: BodyType<CreateMembershipRuleVersionRequest>}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+): UseMutationOptions<Awaited<ReturnType<typeof createMembershipRuleVersionApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdVersionsPost>>, TError,{collectionId: string;ruleId: string;data: BodyType<CreateMembershipRuleVersionRequest>}, TContext> => {
+
+const mutationKey = ['createMembershipRuleVersionApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdVersionsPost'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createMembershipRuleVersionApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdVersionsPost>>, {collectionId: string;ruleId: string;data: BodyType<CreateMembershipRuleVersionRequest>}> = (props) => {
+          const {collectionId,ruleId,data} = props ?? {};
+
+          return  createMembershipRuleVersionApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdVersionsPost(collectionId,ruleId,data,requestOptions)
+        }
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateMembershipRuleVersionApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdVersionsPostMutationResult = NonNullable<Awaited<ReturnType<typeof createMembershipRuleVersionApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdVersionsPost>>>
+    export type CreateMembershipRuleVersionApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdVersionsPostMutationBody = BodyType<CreateMembershipRuleVersionRequest>
+    export type CreateMembershipRuleVersionApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdVersionsPostMutationError = ErrorType<HTTPValidationError>
+
+    /**
+ * @summary Create Membership Rule Version
+ */
+export const useCreateMembershipRuleVersionApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdVersionsPost = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createMembershipRuleVersionApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdVersionsPost>>, TError,{collectionId: string;ruleId: string;data: BodyType<CreateMembershipRuleVersionRequest>}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+): UseMutationReturnType<
+        Awaited<ReturnType<typeof createMembershipRuleVersionApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdVersionsPost>>,
+        TError,
+        {collectionId: string;ruleId: string;data: BodyType<CreateMembershipRuleVersionRequest>},
+        TContext
+      > => {
+
+      const mutationOptions = getCreateMembershipRuleVersionApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdVersionsPostMutationOptions(options);
+
+      return useMutation(mutationOptions);
+    }
+
+/**
+ * @summary Run Membership Discovery
+ */
+export const getRunMembershipDiscoveryApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdRunsPostUrl = (collectionId: string,
+    ruleId: string,) => {
+
+
+  return `/api/v1/dataset-collections/${collectionId}/membership-rules/${ruleId}/runs`
+}
+
+export const runMembershipDiscoveryApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdRunsPost = async (collectionId: string,
+    ruleId: string,
+    runLiveDiscoveryRequest: RunLiveDiscoveryRequest, options?: RequestInit): Promise<DiscoveryRunResponse> => {
+
+  return orvalFetcher<DiscoveryRunResponse>(getRunMembershipDiscoveryApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdRunsPostUrl(collectionId,ruleId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      runLiveDiscoveryRequest,)
+  }
+);}
+
+
+
+
+export const getRunMembershipDiscoveryApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdRunsPostMutationOptions = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runMembershipDiscoveryApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdRunsPost>>, TError,{collectionId: string;ruleId: string;data: BodyType<RunLiveDiscoveryRequest>}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+): UseMutationOptions<Awaited<ReturnType<typeof runMembershipDiscoveryApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdRunsPost>>, TError,{collectionId: string;ruleId: string;data: BodyType<RunLiveDiscoveryRequest>}, TContext> => {
+
+const mutationKey = ['runMembershipDiscoveryApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdRunsPost'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof runMembershipDiscoveryApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdRunsPost>>, {collectionId: string;ruleId: string;data: BodyType<RunLiveDiscoveryRequest>}> = (props) => {
+          const {collectionId,ruleId,data} = props ?? {};
+
+          return  runMembershipDiscoveryApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdRunsPost(collectionId,ruleId,data,requestOptions)
+        }
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RunMembershipDiscoveryApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdRunsPostMutationResult = NonNullable<Awaited<ReturnType<typeof runMembershipDiscoveryApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdRunsPost>>>
+    export type RunMembershipDiscoveryApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdRunsPostMutationBody = BodyType<RunLiveDiscoveryRequest>
+    export type RunMembershipDiscoveryApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdRunsPostMutationError = ErrorType<HTTPValidationError>
+
+    /**
+ * @summary Run Membership Discovery
+ */
+export const useRunMembershipDiscoveryApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdRunsPost = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runMembershipDiscoveryApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdRunsPost>>, TError,{collectionId: string;ruleId: string;data: BodyType<RunLiveDiscoveryRequest>}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+): UseMutationReturnType<
+        Awaited<ReturnType<typeof runMembershipDiscoveryApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdRunsPost>>,
+        TError,
+        {collectionId: string;ruleId: string;data: BodyType<RunLiveDiscoveryRequest>},
+        TContext
+      > => {
+
+      const mutationOptions = getRunMembershipDiscoveryApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdRunsPostMutationOptions(options);
+
+      return useMutation(mutationOptions);
+    }
+
+/**
+ * @summary Preview Membership Backfill
+ */
+export const getPreviewMembershipBackfillApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdBackfillPreviewPostUrl = (collectionId: string,
+    ruleId: string,) => {
+
+
+  return `/api/v1/dataset-collections/${collectionId}/membership-rules/${ruleId}/backfill-preview`
+}
+
+export const previewMembershipBackfillApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdBackfillPreviewPost = async (collectionId: string,
+    ruleId: string,
+    backfillPreviewRequest: BackfillPreviewRequest, options?: RequestInit): Promise<BackfillPreviewResponse> => {
+
+  return orvalFetcher<BackfillPreviewResponse>(getPreviewMembershipBackfillApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdBackfillPreviewPostUrl(collectionId,ruleId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      backfillPreviewRequest,)
+  }
+);}
+
+
+
+
+export const getPreviewMembershipBackfillApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdBackfillPreviewPostMutationOptions = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof previewMembershipBackfillApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdBackfillPreviewPost>>, TError,{collectionId: string;ruleId: string;data: BodyType<BackfillPreviewRequest>}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+): UseMutationOptions<Awaited<ReturnType<typeof previewMembershipBackfillApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdBackfillPreviewPost>>, TError,{collectionId: string;ruleId: string;data: BodyType<BackfillPreviewRequest>}, TContext> => {
+
+const mutationKey = ['previewMembershipBackfillApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdBackfillPreviewPost'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof previewMembershipBackfillApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdBackfillPreviewPost>>, {collectionId: string;ruleId: string;data: BodyType<BackfillPreviewRequest>}> = (props) => {
+          const {collectionId,ruleId,data} = props ?? {};
+
+          return  previewMembershipBackfillApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdBackfillPreviewPost(collectionId,ruleId,data,requestOptions)
+        }
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PreviewMembershipBackfillApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdBackfillPreviewPostMutationResult = NonNullable<Awaited<ReturnType<typeof previewMembershipBackfillApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdBackfillPreviewPost>>>
+    export type PreviewMembershipBackfillApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdBackfillPreviewPostMutationBody = BodyType<BackfillPreviewRequest>
+    export type PreviewMembershipBackfillApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdBackfillPreviewPostMutationError = ErrorType<HTTPValidationError>
+
+    /**
+ * @summary Preview Membership Backfill
+ */
+export const usePreviewMembershipBackfillApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdBackfillPreviewPost = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof previewMembershipBackfillApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdBackfillPreviewPost>>, TError,{collectionId: string;ruleId: string;data: BodyType<BackfillPreviewRequest>}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+): UseMutationReturnType<
+        Awaited<ReturnType<typeof previewMembershipBackfillApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdBackfillPreviewPost>>,
+        TError,
+        {collectionId: string;ruleId: string;data: BodyType<BackfillPreviewRequest>},
+        TContext
+      > => {
+
+      const mutationOptions = getPreviewMembershipBackfillApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdBackfillPreviewPostMutationOptions(options);
+
+      return useMutation(mutationOptions);
+    }
+
+/**
+ * @summary Run Membership Backfill
+ */
+export const getRunMembershipBackfillApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdBackfillsPostUrl = (collectionId: string,
+    ruleId: string,) => {
+
+
+  return `/api/v1/dataset-collections/${collectionId}/membership-rules/${ruleId}/backfills`
+}
+
+export const runMembershipBackfillApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdBackfillsPost = async (collectionId: string,
+    ruleId: string,
+    backfillRangeRequest: BackfillRangeRequest, options?: RequestInit): Promise<DiscoveryRunResponse> => {
+
+  return orvalFetcher<DiscoveryRunResponse>(getRunMembershipBackfillApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdBackfillsPostUrl(collectionId,ruleId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      backfillRangeRequest,)
+  }
+);}
+
+
+
+
+export const getRunMembershipBackfillApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdBackfillsPostMutationOptions = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runMembershipBackfillApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdBackfillsPost>>, TError,{collectionId: string;ruleId: string;data: BodyType<BackfillRangeRequest>}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+): UseMutationOptions<Awaited<ReturnType<typeof runMembershipBackfillApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdBackfillsPost>>, TError,{collectionId: string;ruleId: string;data: BodyType<BackfillRangeRequest>}, TContext> => {
+
+const mutationKey = ['runMembershipBackfillApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdBackfillsPost'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof runMembershipBackfillApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdBackfillsPost>>, {collectionId: string;ruleId: string;data: BodyType<BackfillRangeRequest>}> = (props) => {
+          const {collectionId,ruleId,data} = props ?? {};
+
+          return  runMembershipBackfillApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdBackfillsPost(collectionId,ruleId,data,requestOptions)
+        }
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RunMembershipBackfillApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdBackfillsPostMutationResult = NonNullable<Awaited<ReturnType<typeof runMembershipBackfillApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdBackfillsPost>>>
+    export type RunMembershipBackfillApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdBackfillsPostMutationBody = BodyType<BackfillRangeRequest>
+    export type RunMembershipBackfillApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdBackfillsPostMutationError = ErrorType<HTTPValidationError>
+
+    /**
+ * @summary Run Membership Backfill
+ */
+export const useRunMembershipBackfillApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdBackfillsPost = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runMembershipBackfillApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdBackfillsPost>>, TError,{collectionId: string;ruleId: string;data: BodyType<BackfillRangeRequest>}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+): UseMutationReturnType<
+        Awaited<ReturnType<typeof runMembershipBackfillApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdBackfillsPost>>,
+        TError,
+        {collectionId: string;ruleId: string;data: BodyType<BackfillRangeRequest>},
+        TContext
+      > => {
+
+      const mutationOptions = getRunMembershipBackfillApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdBackfillsPostMutationOptions(options);
+
+      return useMutation(mutationOptions);
+    }
+
+/**
+ * @summary Suppress Source Member
+ */
+export const getSuppressSourceMemberApiV1DatasetCollectionsCollectionIdMembershipSuppressionsPostUrl = (collectionId: string,) => {
+
+
+  return `/api/v1/dataset-collections/${collectionId}/membership-suppressions`
+}
+
+export const suppressSourceMemberApiV1DatasetCollectionsCollectionIdMembershipSuppressionsPost = async (collectionId: string,
+    suppressSourceMemberRequest: SuppressSourceMemberRequest, options?: RequestInit): Promise<MembershipSuppressionResponse> => {
+
+  return orvalFetcher<MembershipSuppressionResponse>(getSuppressSourceMemberApiV1DatasetCollectionsCollectionIdMembershipSuppressionsPostUrl(collectionId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      suppressSourceMemberRequest,)
+  }
+);}
+
+
+
+
+export const getSuppressSourceMemberApiV1DatasetCollectionsCollectionIdMembershipSuppressionsPostMutationOptions = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof suppressSourceMemberApiV1DatasetCollectionsCollectionIdMembershipSuppressionsPost>>, TError,{collectionId: string;data: BodyType<SuppressSourceMemberRequest>}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+): UseMutationOptions<Awaited<ReturnType<typeof suppressSourceMemberApiV1DatasetCollectionsCollectionIdMembershipSuppressionsPost>>, TError,{collectionId: string;data: BodyType<SuppressSourceMemberRequest>}, TContext> => {
+
+const mutationKey = ['suppressSourceMemberApiV1DatasetCollectionsCollectionIdMembershipSuppressionsPost'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof suppressSourceMemberApiV1DatasetCollectionsCollectionIdMembershipSuppressionsPost>>, {collectionId: string;data: BodyType<SuppressSourceMemberRequest>}> = (props) => {
+          const {collectionId,data} = props ?? {};
+
+          return  suppressSourceMemberApiV1DatasetCollectionsCollectionIdMembershipSuppressionsPost(collectionId,data,requestOptions)
+        }
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SuppressSourceMemberApiV1DatasetCollectionsCollectionIdMembershipSuppressionsPostMutationResult = NonNullable<Awaited<ReturnType<typeof suppressSourceMemberApiV1DatasetCollectionsCollectionIdMembershipSuppressionsPost>>>
+    export type SuppressSourceMemberApiV1DatasetCollectionsCollectionIdMembershipSuppressionsPostMutationBody = BodyType<SuppressSourceMemberRequest>
+    export type SuppressSourceMemberApiV1DatasetCollectionsCollectionIdMembershipSuppressionsPostMutationError = ErrorType<HTTPValidationError>
+
+    /**
+ * @summary Suppress Source Member
+ */
+export const useSuppressSourceMemberApiV1DatasetCollectionsCollectionIdMembershipSuppressionsPost = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof suppressSourceMemberApiV1DatasetCollectionsCollectionIdMembershipSuppressionsPost>>, TError,{collectionId: string;data: BodyType<SuppressSourceMemberRequest>}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+): UseMutationReturnType<
+        Awaited<ReturnType<typeof suppressSourceMemberApiV1DatasetCollectionsCollectionIdMembershipSuppressionsPost>>,
+        TError,
+        {collectionId: string;data: BodyType<SuppressSourceMemberRequest>},
+        TContext
+      > => {
+
+      const mutationOptions = getSuppressSourceMemberApiV1DatasetCollectionsCollectionIdMembershipSuppressionsPostMutationOptions(options);
+
+      return useMutation(mutationOptions);
+    }
+
+/**
+ * @summary Clear Membership Suppression
+ */
+export const getClearMembershipSuppressionApiV1DatasetCollectionsCollectionIdMembershipSuppressionsSuppressionIdDeleteUrl = (collectionId: string,
+    suppressionId: string,) => {
+
+
+  return `/api/v1/dataset-collections/${collectionId}/membership-suppressions/${suppressionId}`
+}
+
+export const clearMembershipSuppressionApiV1DatasetCollectionsCollectionIdMembershipSuppressionsSuppressionIdDelete = async (collectionId: string,
+    suppressionId: string, options?: RequestInit): Promise<MembershipSuppressionResponse> => {
+
+  return orvalFetcher<MembershipSuppressionResponse>(getClearMembershipSuppressionApiV1DatasetCollectionsCollectionIdMembershipSuppressionsSuppressionIdDeleteUrl(collectionId,suppressionId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getClearMembershipSuppressionApiV1DatasetCollectionsCollectionIdMembershipSuppressionsSuppressionIdDeleteMutationOptions = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof clearMembershipSuppressionApiV1DatasetCollectionsCollectionIdMembershipSuppressionsSuppressionIdDelete>>, TError,{collectionId: string;suppressionId: string}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+): UseMutationOptions<Awaited<ReturnType<typeof clearMembershipSuppressionApiV1DatasetCollectionsCollectionIdMembershipSuppressionsSuppressionIdDelete>>, TError,{collectionId: string;suppressionId: string}, TContext> => {
+
+const mutationKey = ['clearMembershipSuppressionApiV1DatasetCollectionsCollectionIdMembershipSuppressionsSuppressionIdDelete'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof clearMembershipSuppressionApiV1DatasetCollectionsCollectionIdMembershipSuppressionsSuppressionIdDelete>>, {collectionId: string;suppressionId: string}> = (props) => {
+          const {collectionId,suppressionId} = props ?? {};
+
+          return  clearMembershipSuppressionApiV1DatasetCollectionsCollectionIdMembershipSuppressionsSuppressionIdDelete(collectionId,suppressionId,requestOptions)
+        }
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ClearMembershipSuppressionApiV1DatasetCollectionsCollectionIdMembershipSuppressionsSuppressionIdDeleteMutationResult = NonNullable<Awaited<ReturnType<typeof clearMembershipSuppressionApiV1DatasetCollectionsCollectionIdMembershipSuppressionsSuppressionIdDelete>>>
+
+    export type ClearMembershipSuppressionApiV1DatasetCollectionsCollectionIdMembershipSuppressionsSuppressionIdDeleteMutationError = ErrorType<HTTPValidationError>
+
+    /**
+ * @summary Clear Membership Suppression
+ */
+export const useClearMembershipSuppressionApiV1DatasetCollectionsCollectionIdMembershipSuppressionsSuppressionIdDelete = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof clearMembershipSuppressionApiV1DatasetCollectionsCollectionIdMembershipSuppressionsSuppressionIdDelete>>, TError,{collectionId: string;suppressionId: string}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+): UseMutationReturnType<
+        Awaited<ReturnType<typeof clearMembershipSuppressionApiV1DatasetCollectionsCollectionIdMembershipSuppressionsSuppressionIdDelete>>,
+        TError,
+        {collectionId: string;suppressionId: string},
+        TContext
+      > => {
+
+      const mutationOptions = getClearMembershipSuppressionApiV1DatasetCollectionsCollectionIdMembershipSuppressionsSuppressionIdDeleteMutationOptions(options);
+
+      return useMutation(mutationOptions);
+    }
+
+/**
+ * @summary Get Discovery Run
+ */
+export const getGetDiscoveryRunApiV1DiscoveryRunsRunIdGetUrl = (runId: string,) => {
+
+
+  return `/api/v1/discovery-runs/${runId}`
+}
+
+export const getDiscoveryRunApiV1DiscoveryRunsRunIdGet = async (runId: string, options?: RequestInit): Promise<DiscoveryRunResponse> => {
+
+  return orvalFetcher<DiscoveryRunResponse>(getGetDiscoveryRunApiV1DiscoveryRunsRunIdGetUrl(runId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getGetDiscoveryRunApiV1DiscoveryRunsRunIdGetQueryKey = (runId: MaybeRef<string>,) => {
+    return ['api','v1','discovery-runs',runId] as const;
+    }
+
+
+export const getGetDiscoveryRunApiV1DiscoveryRunsRunIdGetQueryOptions = <TData = Awaited<ReturnType<typeof getDiscoveryRunApiV1DiscoveryRunsRunIdGet>>, TError = ErrorType<HTTPValidationError>>(runId: MaybeRef<string>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDiscoveryRunApiV1DiscoveryRunsRunIdGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  getGetDiscoveryRunApiV1DiscoveryRunsRunIdGetQueryKey(runId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getDiscoveryRunApiV1DiscoveryRunsRunIdGet>>> = ({ signal }) => getDiscoveryRunApiV1DiscoveryRunsRunIdGet(unref(runId), { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: computed(() => !!(unref(runId))), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getDiscoveryRunApiV1DiscoveryRunsRunIdGet>>, TError, TData>
+}
+
+export type GetDiscoveryRunApiV1DiscoveryRunsRunIdGetQueryResult = NonNullable<Awaited<ReturnType<typeof getDiscoveryRunApiV1DiscoveryRunsRunIdGet>>>
+export type GetDiscoveryRunApiV1DiscoveryRunsRunIdGetQueryError = ErrorType<HTTPValidationError>
+
+
+/**
+ * @summary Get Discovery Run
+ */
+
+export function useGetDiscoveryRunApiV1DiscoveryRunsRunIdGet<TData = Awaited<ReturnType<typeof getDiscoveryRunApiV1DiscoveryRunsRunIdGet>>, TError = ErrorType<HTTPValidationError>>(
+ runId: MaybeRef<string>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDiscoveryRunApiV1DiscoveryRunsRunIdGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+
+  ): UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetDiscoveryRunApiV1DiscoveryRunsRunIdGetQueryOptions(runId,options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = unref(queryOptions).queryKey as DataTag<QueryKey, TData, TError>;
+
+  return query;
+}
+
+
+
+
+/**
+ * @summary Retry Failed Discovery Items
+ */
+export const getRetryFailedDiscoveryItemsApiV1DiscoveryRunsRunIdRetryFailedPostUrl = (runId: string,) => {
+
+
+  return `/api/v1/discovery-runs/${runId}/retry-failed`
+}
+
+export const retryFailedDiscoveryItemsApiV1DiscoveryRunsRunIdRetryFailedPost = async (runId: string, options?: RequestInit): Promise<DiscoveryRunResponse> => {
+
+  return orvalFetcher<DiscoveryRunResponse>(getRetryFailedDiscoveryItemsApiV1DiscoveryRunsRunIdRetryFailedPostUrl(runId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getRetryFailedDiscoveryItemsApiV1DiscoveryRunsRunIdRetryFailedPostMutationOptions = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof retryFailedDiscoveryItemsApiV1DiscoveryRunsRunIdRetryFailedPost>>, TError,{runId: string}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+): UseMutationOptions<Awaited<ReturnType<typeof retryFailedDiscoveryItemsApiV1DiscoveryRunsRunIdRetryFailedPost>>, TError,{runId: string}, TContext> => {
+
+const mutationKey = ['retryFailedDiscoveryItemsApiV1DiscoveryRunsRunIdRetryFailedPost'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof retryFailedDiscoveryItemsApiV1DiscoveryRunsRunIdRetryFailedPost>>, {runId: string}> = (props) => {
+          const {runId} = props ?? {};
+
+          return  retryFailedDiscoveryItemsApiV1DiscoveryRunsRunIdRetryFailedPost(runId,requestOptions)
+        }
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RetryFailedDiscoveryItemsApiV1DiscoveryRunsRunIdRetryFailedPostMutationResult = NonNullable<Awaited<ReturnType<typeof retryFailedDiscoveryItemsApiV1DiscoveryRunsRunIdRetryFailedPost>>>
+
+    export type RetryFailedDiscoveryItemsApiV1DiscoveryRunsRunIdRetryFailedPostMutationError = ErrorType<HTTPValidationError>
+
+    /**
+ * @summary Retry Failed Discovery Items
+ */
+export const useRetryFailedDiscoveryItemsApiV1DiscoveryRunsRunIdRetryFailedPost = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof retryFailedDiscoveryItemsApiV1DiscoveryRunsRunIdRetryFailedPost>>, TError,{runId: string}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+): UseMutationReturnType<
+        Awaited<ReturnType<typeof retryFailedDiscoveryItemsApiV1DiscoveryRunsRunIdRetryFailedPost>>,
+        TError,
+        {runId: string},
+        TContext
+      > => {
+
+      const mutationOptions = getRetryFailedDiscoveryItemsApiV1DiscoveryRunsRunIdRetryFailedPostMutationOptions(options);
 
       return useMutation(mutationOptions);
     }

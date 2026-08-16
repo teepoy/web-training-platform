@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Generic, TypeAlias, TypeVar
 
 from pydantic import BaseModel, Field
 
+from app.modules.datasets.domain.entities import (
+    DatasetRevision,
+    DatasetRevisionOperation,
+)
 from app.modules.datasets.domain.status import DatasetTrainDisabledReason
 from app.modules.datasets.views.image_input.v1.schemas import (
     ImageInputV1Row as ImageInputV1Row,
@@ -62,6 +67,39 @@ class UpdateLabelSpaceRequest(BaseModel):
 
 class UpdateDatasetRequest(BaseModel):
     name: str = Field(min_length=1, max_length=255)
+
+
+class DatasetRevisionResponse(BaseModel):
+    id: str
+    dataset_id: str
+    revision_number: int
+    manifest_uri: str
+    provenance: dict[str, object]
+    operation: DatasetRevisionOperation
+    operation_ref: str | None
+    is_reproducible: bool = Field(
+        description=(
+            "False while Dataset Revisions are lightweight audit records over "
+            "current data rather than immutable snapshots"
+        )
+    )
+    created_by: str
+    created_at: datetime
+
+    @classmethod
+    def from_domain(cls, revision: DatasetRevision) -> DatasetRevisionResponse:
+        return cls(
+            id=revision.id,
+            dataset_id=revision.dataset_id,
+            revision_number=revision.revision_number,
+            manifest_uri=revision.manifest_uri,
+            provenance=revision.provenance,
+            operation=revision.operation,
+            operation_ref=revision.operation_ref,
+            is_reproducible=revision.is_reproducible,
+            created_by=revision.created_by,
+            created_at=revision.created_at,
+        )
 
 
 class CreateSampleRequest(BaseModel):

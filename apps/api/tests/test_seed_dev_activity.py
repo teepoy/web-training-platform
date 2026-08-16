@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
 from sqlalchemy import func, select
@@ -119,3 +121,105 @@ def test_dev_showcase_items_share_collection_compatible_metadata_shape() -> None
     assert "label" not in review
     assert len(balanced["image_uris"]) == 1
     assert len(review["image_uris"]) == 3
+
+
+class _SeedResponse:
+    def __init__(self, body: Any) -> None:
+        self._body = body
+
+    def raise_for_status(self) -> None:
+        return None
+
+    def json(self) -> Any:
+        return self._body
+
+
+class _AutomationSeedClient:
+    def __init__(self, *, existing: bool = False) -> None:
+        self.existing = existing
+        self.posts: list[tuple[str, dict[str, Any]]] = []
+
+    def get(self, path: str, **_: Any) -> _SeedResponse:
+        if path == "/api/v1/source-connectors":
+            return _SeedResponse(
+                [
+                    {
+                        "id": "connector-dev",
+                        "name": "Dev SC Upstream",
+                        "provider_id": "sc",
+                    }
+                ]
+                if self.existing
+                else []
+            )
+        if path.endswith("/membership-rules"):
+            return _SeedResponse(
+                [
+                    {
+                        "name": "New SC inspections with defects",
+                        "active_version": {"connector_id": "connector-dev"},
+                    }
+                ]
+                if self.existing
+                else []
+            )
+        raise AssertionError(f"Unexpected GET {path}")
+
+    def post(self, path: str, *, json: dict[str, Any]) -> _SeedResponse:
+        self.posts.append((path, json))
+        if path == "/api/v1/source-connectors":
+            return _SeedResponse(
+                {
+                    "id": "connector-dev",
+                    "name": "Dev SC Upstream",
+                    "provider_id": "sc",
+                }
+            )
+        if path.endswith("/import-profiles"):
+            return _SeedResponse({"id": "profile-dev"})
+        if path.endswith("/membership-rules"):
+            return _SeedResponse({"id": "rule-dev"})
+        raise AssertionError(f"Unexpected POST {path}")
+
+
+def test_dev_showcase_seeds_manual_only_membership_rule() -> None:
+    from seedmaker import SeedRunner
+    from seedmaker.datasets.dev_showcase import _ensure_source_membership_rule
+
+    client = _AutomationSeedClient()
+    _ensure_source_membership_rule(
+        cast(SeedRunner, SimpleNamespace(client=client)),
+        {"id": "collection-dev"},
+    )
+
+    assert [path for path, _ in client.posts] == [
+        "/api/v1/source-connectors",
+        "/api/v1/source-connectors/connector-dev/import-profiles",
+        "/api/v1/dataset-collections/collection-dev/membership-rules",
+    ]
+    rule_payload = client.posts[-1][1]
+    assert rule_payload["condition"] == {
+        "kind": "group",
+        "combinator": "all",
+        "children": [
+            {
+                "kind": "predicate",
+                "field": "defects",
+                "operator": "gte",
+                "value": 1,
+            }
+        ],
+    }
+
+
+def test_dev_showcase_reuses_existing_membership_rule() -> None:
+    from seedmaker import SeedRunner
+    from seedmaker.datasets.dev_showcase import _ensure_source_membership_rule
+
+    client = _AutomationSeedClient(existing=True)
+    _ensure_source_membership_rule(
+        cast(SeedRunner, SimpleNamespace(client=client)),
+        {"id": "collection-dev"},
+    )
+
+    assert client.posts == []

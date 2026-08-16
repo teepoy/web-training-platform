@@ -14,6 +14,7 @@ COPY pyproject.toml uv.lock ./
 COPY apps/api/pyproject.toml apps/api/pyproject.toml
 COPY libs/protos/pyproject.toml libs/protos/pyproject.toml
 COPY libs/ml/pyproject.toml libs/ml/pyproject.toml
+COPY libs/sampling-rules/pyproject.toml libs/sampling-rules/pyproject.toml
 COPY services/sc-upstream/pyproject.toml services/sc-upstream/pyproject.toml
 
 COPY libs/protos/ libs/protos/
@@ -24,6 +25,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --package finetune-api --no-dev --no-install-workspace
 
 COPY apps/api/ apps/api/
+COPY libs/sampling-rules/ libs/sampling-rules/
 
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --package finetune-api --no-dev

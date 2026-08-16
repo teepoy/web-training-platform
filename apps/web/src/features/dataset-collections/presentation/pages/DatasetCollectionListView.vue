@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, h, reactive, ref, watch } from "vue";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
+import { refDebounced } from "@vueuse/core";
 import { useRouter } from "vue-router";
 import {
   NButton,
@@ -18,6 +19,7 @@ import {
   useMessage,
   type DataTableColumns,
   type DataTableRowKey,
+  type DataTableSortState,
   type PaginationProps,
 } from "naive-ui";
 import {
@@ -42,9 +44,35 @@ const queryClient = useQueryClient();
 const message = useMessage();
 const orgStore = useOrgStore();
 const authStore = useAuthStore();
-const { creatorFilter, isReady: creatorFilterReady } = useDefaultCreatorFilter(
-  () => orgStore.currentOrgId,
-  () => authStore.user?.id,
+const props = withDefaults(
+  defineProps<{
+    embedded?: boolean;
+    search?: string;
+    creatorId?: string | null;
+  }>(),
+  {
+    embedded: false,
+    search: "",
+    creatorId: null,
+  },
+);
+const debouncedSearch = refDebounced(
+  computed(() => props.search),
+  250,
+);
+const { creatorFilter: localCreatorFilter, isReady: localCreatorFilterReady } =
+  useDefaultCreatorFilter(
+    () => orgStore.currentOrgId,
+    () => authStore.user?.id,
+  );
+const creatorFilter = computed({
+  get: () => (props.embedded ? props.creatorId : localCreatorFilter.value),
+  set: (value: string | null) => {
+    localCreatorFilter.value = value;
+  },
+});
+const creatorFilterReady = computed(() =>
+  props.embedded ? authStore.user !== null : localCreatorFilterReady.value,
 );
 const createVisible = ref(false);
 const name = ref("");
@@ -52,6 +80,11 @@ const description = ref("");
 const targetViewId = ref<string | null>(null);
 const selectedDatasetIds = ref<string[]>([]);
 const checkedCollectionIds = ref<DataTableRowKey[]>([]);
+const sorter = ref<DataTableSortState | null>({
+  columnKey: "updated_at",
+  order: "descend",
+  sorter: true,
+});
 const batchDeletePending = ref(false);
 const pagination = reactive<PaginationProps>({
   page: 1,
@@ -84,6 +117,9 @@ const collectionsQuery = useQuery({
       pagination.page,
       pagination.pageSize,
       creatorFilter.value,
+      debouncedSearch.value,
+      sorter.value?.columnKey ?? "updated_at",
+      sorter.value?.order ?? "descend",
     ]),
   ),
   queryFn: () =>
@@ -91,6 +127,9 @@ const collectionsQuery = useQuery({
       offset: ((pagination.page ?? 1) - 1) * (pagination.pageSize ?? 20),
       limit: pagination.pageSize ?? 20,
       creator_id: creatorFilter.value ?? undefined,
+      q: debouncedSearch.value.trim() || undefined,
+      sort_by: collectionSortField(sorter.value?.columnKey),
+      sort_order: sorter.value?.order === "ascend" ? "asc" : "desc",
     }),
   enabled: computed(() => !!orgStore.currentOrgId && creatorFilterReady.value),
 });
@@ -100,6 +139,19 @@ const datasetsQuery = useQuery({
   enabled: computed(() => !!orgStore.currentOrgId),
 });
 const collections = computed(() => collectionsQuery.data.value?.items ?? []);
+
+function collectionSortField(columnKey: DataTableSortState["columnKey"] | undefined) {
+  if (columnKey === "name" || columnKey === "creator" || columnKey === "created_at") {
+    return columnKey;
+  }
+  return "updated_at" as const;
+}
+
+function handleSorterChange(value: DataTableSortState | DataTableSortState[] | null): void {
+  sorter.value = Array.isArray(value) ? (value[0] ?? null) : value;
+  pagination.page = 1;
+  checkedCollectionIds.value = [];
+}
 const tablePagination = computed(() =>
   (pagination.itemCount ?? 0) > (pagination.pageSize ?? 20) ? pagination : false,
 );
@@ -119,7 +171,7 @@ watch(
   { immediate: true },
 );
 
-watch(creatorFilter, () => {
+watch([creatorFilter, debouncedSearch], () => {
   pagination.page = 1;
   checkedCollectionIds.value = [];
 });
@@ -137,9 +189,11 @@ const creatorOptions = computed(() => {
 });
 
 const emptyDescription = computed(() =>
-  creatorFilter.value
-    ? "You have not created any dataset collections yet"
-    : "No dataset collections have been created yet",
+  debouncedSearch.value.trim()
+    ? "No dataset collections match this search"
+    : creatorFilter.value
+      ? "You have not created any dataset collections yet"
+      : "No dataset collections have been created yet",
 );
 
 const targetViewOptions = computed(() => {
@@ -275,7 +329,7 @@ const columns: DataTableColumns<DatasetCollectionResponse> = [
     type: "selection",
     disabled: (row) => row.created_by !== authStore.user?.id,
   },
-  { title: "Name", key: "name", minWidth: 180 },
+  { title: "Name", key: "name", minWidth: 180, sorter: true },
   { title: "Target view", key: "target_view_id", minWidth: 160 },
   {
     title: "Definition",
@@ -284,8 +338,9 @@ const columns: DataTableColumns<DatasetCollectionResponse> = [
   },
   {
     title: "Creator",
-    key: "created_by",
+    key: "creator",
     minWidth: 130,
+    sorter: true,
     render: (row) =>
       row.created_by === authStore.user?.id
         ? authStore.user?.name || authStore.user?.email || "You"
@@ -300,6 +355,7 @@ const columns: DataTableColumns<DatasetCollectionResponse> = [
     title: "Updated",
     key: "updated_at",
     width: 180,
+    sorter: true,
     render: (row) => new Date(row.updated_at).toLocaleString(),
   },
   {
@@ -324,7 +380,7 @@ const columns: DataTableColumns<DatasetCollectionResponse> = [
 
 <template>
   <div class="collection-list-page">
-    <div class="collection-list-header">
+    <div v-if="!props.embedded" class="collection-list-header">
       <div>
         <h1>Dataset Collections</h1>
         <NText depth="3">Dynamically compose existing datasets without changing them.</NText>
@@ -334,8 +390,14 @@ const columns: DataTableColumns<DatasetCollectionResponse> = [
       </NButton>
     </div>
 
+    <div v-else class="collection-list-embedded-actions">
+      <NButton type="primary" :disabled="!orgStore.currentOrgId" @click="openCreate">
+        New collection
+      </NButton>
+    </div>
+
     <NCard>
-      <div class="collection-list-filters">
+      <div v-if="!props.embedded" class="collection-list-filters">
         <NSelect
           v-model:value="creatorFilter"
           size="small"
@@ -376,9 +438,11 @@ const columns: DataTableColumns<DatasetCollectionResponse> = [
         :row-key="(row: DatasetCollectionResponse) => row.id"
         :row-props="collectionRowProps"
         :checked-row-keys="checkedCollectionIds"
+        :sorter="sorter"
         :scroll-x="820"
         remote
         @update:checked-row-keys="checkedCollectionIds = $event"
+        @update:sorter="handleSorterChange"
       >
         <template #empty>
           <NEmpty :description="emptyDescription">
@@ -432,8 +496,8 @@ const columns: DataTableColumns<DatasetCollectionResponse> = [
         />
       </NFormItem>
       <NText depth="3">
-        Linked datasets remain standalone. Save the current setup as a fixed snapshot before using
-        it for review, training, or prediction.
+        Linked datasets remain standalone. Save the current setup before using it for review,
+        training, or prediction; member data is read when each run starts.
       </NText>
       <template #footer>
         <NSpace justify="end">
@@ -464,6 +528,11 @@ const columns: DataTableColumns<DatasetCollectionResponse> = [
   align-items: flex-end;
   justify-content: space-between;
   gap: 16px;
+}
+
+.collection-list-embedded-actions {
+  display: flex;
+  justify-content: flex-end;
 }
 
 h1 {

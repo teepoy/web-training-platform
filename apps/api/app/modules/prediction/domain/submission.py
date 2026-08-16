@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import StrEnum
 
 from app.shared.domain.data_source import RuntimeDataSourceRef
 
@@ -8,6 +9,11 @@ from app.shared.domain.data_source import RuntimeDataSourceRef
 def _require_identifier(value: str, field_name: str) -> None:
     if not value.strip():
         raise ValueError(f"{field_name} must not be empty")
+
+
+class PredictionSubmissionOrigin(StrEnum):
+    MANUAL = "manual"
+    AUTOMATION = "automation"
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,6 +29,9 @@ class PredictionJobCommand:
     sample_ids: tuple[str, ...] | None = None
     prompt: str | None = None
     predictor_id: str | None = None
+    collection_prediction_batch_id: str | None = None
+    collection_member_id: str | None = None
+    submission_origin: PredictionSubmissionOrigin = PredictionSubmissionOrigin.MANUAL
 
     def __post_init__(self) -> None:
         for field_name in (
@@ -40,6 +49,13 @@ class PredictionJobCommand:
                 raise ValueError("sample_ids must not contain empty IDs")
         if self.predictor_id is not None:
             _require_identifier(self.predictor_id, "predictor_id")
+        for field_name in (
+            "collection_prediction_batch_id",
+            "collection_member_id",
+        ):
+            value = getattr(self, field_name)
+            if value is not None:
+                _require_identifier(value, field_name)
 
     @property
     def data_source(self) -> RuntimeDataSourceRef:

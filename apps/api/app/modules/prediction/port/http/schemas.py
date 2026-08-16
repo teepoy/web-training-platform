@@ -94,6 +94,13 @@ class PredictionResultResponse(BaseModel):
 class PredictionJobResponse(BaseModel):
     id: str
     dataset_id: str | None
+    dataset_revision_id: str | None = Field(
+        default=None,
+        description=(
+            "Dataset Revision observed at submission time; audit-only and does "
+            "not select the runtime input"
+        ),
+    )
     collection_id: str | None = None
     collection_revision_id: str | None = None
     model_id: str

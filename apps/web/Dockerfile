@@ -57,6 +57,7 @@ COPY --from=build /app/apps/web/dist /usr/share/nginx/html
 
 # Copy nginx config
 COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --chmod=755 apps/web/docker/40-runtime-config.sh /docker-entrypoint.d/40-runtime-config.sh
 
 EXPOSE 80
 

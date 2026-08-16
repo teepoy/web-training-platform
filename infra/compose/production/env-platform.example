@@ -31,6 +31,11 @@ PREFECT_DATABASE_URL=postgresql+asyncpg://finetune:<password>@postgres:5432/pref
 PREFECT_UI_URL=https://prefect.example.com
 PREFECT_SERVER_API_AUTH_STRING=<prefect-user>:<strong-prefect-password>
 
+# Optional operator-console links shown only under Admin > Infrastructure.
+# Configure only HTTPS endpoints protected by an authentication proxy or VPN.
+OPERATOR_PREFECT_UI_URL=https://prefect-admin.example.com
+OPERATOR_MINIO_CONSOLE_URL=https://minio-admin.example.com
+
 # MinIO / S3 (all buckets)
 MINIO_ENDPOINT=minio:9000
 MINIO_ACCESS_KEY=<access-key>

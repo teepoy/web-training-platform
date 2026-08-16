@@ -10,10 +10,10 @@ import { createDataset, cleanupTestArtifacts } from "../../seed";
 
 test("dataset list renders current table surface @mock", async ({ authedPage }) => {
   const listPage = new DatasetListPage(authedPage);
-  await listPage.goto("/datasets");
+  await listPage.goto("/library");
   await listPage.waitForLoaded();
 
-  await expect(authedPage.getByRole("heading", { name: "Datasets" })).toBeVisible();
+  await expect(authedPage.getByRole("heading", { name: "Library" })).toBeVisible();
   await expect(authedPage.getByText("flowers-dataset")).toBeVisible();
   await expect(authedPage.getByRole("button", { name: "View", exact: true })).toBeVisible();
   await expect(authedPage.getByRole("button", { name: "Import Dataset" })).toHaveCount(0);
@@ -41,15 +41,15 @@ test("dataset search and creator filters apply before pagination @mock", async (
     }),
   ]);
   const listPage = new DatasetListPage(authedPage);
-  await listPage.goto("/datasets");
+  await listPage.goto("/library");
   await listPage.waitForLoaded();
 
-  await authedPage.getByPlaceholder("Search datasets").fill("alpha");
+  await authedPage.getByPlaceholder("Search Library").fill("alpha");
   await expect(authedPage.getByText("Alpha Flowers")).toBeVisible();
   await expect(authedPage.getByText("Beta Flowers")).toHaveCount(0);
 
-  await authedPage.getByPlaceholder("Search datasets").clear();
-  await authedPage.locator(".dataset-list-creator").click();
+  await authedPage.getByPlaceholder("Search Library").clear();
+  await authedPage.locator(".library-creator").click();
   await authedPage.getByText("Bob", { exact: true }).last().click();
   await expect(authedPage.getByText("Beta Flowers")).toBeVisible();
   await expect(authedPage.getByText("Alpha Flowers")).toHaveCount(0);
@@ -61,7 +61,7 @@ test("row view button navigates to dataset detail @mock", async ({ authedPage, a
   await apiMocks.datasets.mockGetDataset(datasetId);
 
   const listPage = new DatasetListPage(authedPage);
-  await listPage.goto("/datasets");
+  await listPage.goto("/library");
   await listPage.waitForLoaded();
   await listPage.expectDatasetVisible(dataset.name!);
 
@@ -79,9 +79,10 @@ test("non-creator hides owner-only row actions @mock", async ({ authedPage, apiM
   });
 
   const listPage = new DatasetListPage(authedPage);
-  await listPage.goto("/datasets");
+  await listPage.goto("/library");
   await listPage.waitForLoaded();
-  await authedPage.locator(".dataset-list-creator .n-base-clear").click();
+  await authedPage.locator(".library-creator").click();
+  await authedPage.getByText("All creators", { exact: true }).last().click();
   await listPage.expectDatasetVisible("flowers-dataset");
 
   await listPage.expectPublicControlsHidden();
@@ -98,13 +99,13 @@ test("selects and deletes multiple owned datasets without opening a row @mock", 
     makeFlowerDataset({ id: "dataset-bulk-2", name: "Bulk Flowers Two" }),
   ]);
   const listPage = new DatasetListPage(authedPage);
-  await listPage.goto("/datasets");
+  await listPage.goto("/library");
   await listPage.waitForLoaded();
 
   const rowCheckboxes = authedPage.getByRole("checkbox");
   await rowCheckboxes.nth(1).check();
   await rowCheckboxes.nth(2).check();
-  await expect(authedPage).toHaveURL(/\/datasets$/);
+  await expect(authedPage).toHaveURL(/\/library(?:\?.*)?$/);
   await expect(authedPage.getByText("2 datasets selected")).toBeVisible();
 
   authedPage.once("dialog", (dialog) => dialog.accept());
@@ -133,7 +134,7 @@ test("API-created dataset appears in live list @live", async ({
 
   try {
     const listPage = new DatasetListPage(page);
-    await listPage.goto("/datasets");
+    await listPage.goto("/library");
     await listPage.waitForLoaded();
     await listPage.expectDatasetVisible(name);
   } finally {

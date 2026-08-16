@@ -13,6 +13,11 @@ from injector import inject
 from app.shared.api.schemas import ArtifactRef, CreatorSummary, Model
 from app.shared.application.compatibility import validate_upload_metadata
 from app.modules.models.domain.repository import ModelRepository
+from app.modules.models.domain.repository import (
+    ModelSortField,
+    ModelSourceType,
+    SortDirection,
+)
 from app.modules.runtime.catalog import runtime_catalog
 from app.shared.domain.protocols import ArtifactStorage
 
@@ -37,6 +42,9 @@ class ModelService:
         job_id: str | None = None,
         query: str | None = None,
         creator_id: str | None = None,
+        source_type: ModelSourceType | None = None,
+        sort_by: ModelSortField = "created_at",
+        sort_order: SortDirection = "desc",
     ) -> list[Model]:
         return await self.repository.list_models(
             org_id=org_id,
@@ -44,6 +52,9 @@ class ModelService:
             job_id=job_id,
             query=query,
             creator_id=creator_id,
+            source_type=source_type,
+            sort_by=sort_by,
+            sort_order=sort_order,
         )
 
     async def list_models_paginated(
@@ -56,6 +67,9 @@ class ModelService:
         limit: int | None = 50,
         query: str | None = None,
         creator_id: str | None = None,
+        source_type: ModelSourceType | None = None,
+        sort_by: ModelSortField = "created_at",
+        sort_order: SortDirection = "desc",
     ) -> tuple[list[Model], int]:
         return await self.repository.list_models_paginated(
             org_id=org_id,
@@ -65,6 +79,9 @@ class ModelService:
             limit=limit,
             query=query,
             creator_id=creator_id,
+            source_type=source_type,
+            sort_by=sort_by,
+            sort_order=sort_order,
         )
 
     async def list_model_creators(self, org_id: str) -> list[CreatorSummary]:

@@ -12,6 +12,7 @@ from app.modules.datasets.domain.repository import (
 )
 from app.modules.datasets.port.local import (
     DatasetDeletionGuardPort,
+    DatasetRevisionReaderPort,
     IDatasetService,
     SampleSimilarityPort,
 )
@@ -68,9 +69,16 @@ def get_dataset_deletion_guard(request: Request) -> DatasetDeletionGuardPort:
     return resolve(request, DatasetDeletionGuardPort)
 
 
+def get_dataset_revision_reader(request: Request) -> DatasetRevisionReaderPort:
+    return resolve(request, DatasetRevisionReaderPort)
+
+
 DatasetServiceDep = Annotated[IDatasetService, Depends(get_dataset_service)]
 DatasetDeletionGuardDep = Annotated[
     DatasetDeletionGuardPort, Depends(get_dataset_deletion_guard)
+]
+DatasetRevisionReaderDep = Annotated[
+    DatasetRevisionReaderPort, Depends(get_dataset_revision_reader)
 ]
 LabelStudioClientDep = Annotated[LabelStudioClient, Depends(get_label_studio_client)]
 SampleSimilarityDep = Annotated[SampleSimilarityPort, Depends(get_sample_similarity)]

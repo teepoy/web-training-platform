@@ -123,6 +123,13 @@ class TrainingJob(BaseModel):
     # ON DELETE SET NULL, so read models must preserve that state instead of
     # failing every job-list query after a dataset is removed.
     dataset_id: str | None
+    dataset_revision_id: str | None = Field(
+        default=None,
+        description=(
+            "Dataset Revision observed when the job was submitted; audit-only and "
+            "does not select the runtime input"
+        ),
+    )
     collection_id: str | None = None
     collection_revision_id: str | None = None
     trainer_id: str
@@ -242,6 +249,13 @@ class PredictionJob(BaseModel):
     # See TrainingJob.dataset_id: prediction history is retained after the
     # source dataset is deleted.
     dataset_id: str | None
+    dataset_revision_id: str | None = Field(
+        default=None,
+        description=(
+            "Dataset Revision observed when the job was submitted; audit-only and "
+            "does not select the runtime input"
+        ),
+    )
     collection_id: str | None = None
     collection_revision_id: str | None = None
     model_id: str

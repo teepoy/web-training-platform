@@ -256,7 +256,7 @@ test("map selection filters the table and continuously accumulates exclusions @m
   await expect(authedPage.getByTestId("sc-global-filter-trigger")).toHaveText("Global Filter (2)");
 });
 
-test("Review Sampling manages rules and applies the SQL pipeline from Reclassify @mock", async ({
+test("Review Sampling manages rules and sends the backend sampling program from Reclassify @mock", async ({
   authedPage,
 }) => {
   await mockScDataset(authedPage, DATASET_ID, {
@@ -272,6 +272,12 @@ test("Review Sampling manages rules and applies the SQL pipeline from Reclassify
     description?: string;
     sql: string;
     parameters?: unknown[];
+    sampling?: {
+      seed: number;
+      program: {
+        total: { enabled: boolean; limit: number };
+      };
+    };
   }> = [];
   authedPage.on("request", (request) => {
     if (!request.url().includes(`/api/v1/sc/data/datasets/${DATASET_ID}/query`)) return;
@@ -353,9 +359,12 @@ test("Review Sampling manages rules and applies the SQL pipeline from Reclassify
     (body) => body.description === "sc-workbench.selection.sampling-program",
   );
   expect(samplingRequests).toHaveLength(1);
-  expect(samplingRequests[0]?.sql).toContain('WITH "__sc_sampling_base" AS');
-  expect(samplingRequests[0]?.sql).toContain('ORDER BY HASH("map_id", ?)');
-  expect(samplingRequests[0]?.parameters).toContain(42);
+  expect(samplingRequests[0]?.sql).toBe('SELECT "map_id" FROM samples');
+  expect(samplingRequests[0]?.parameters).toEqual([]);
+  expect(samplingRequests[0]?.sampling).toMatchObject({
+    seed: 42,
+    program: { total: { enabled: true, limit: 200 } },
+  });
 
   await page.clearRandomFilterButton.click();
   await expect(page.randomFilterButton).toHaveText("Random Filter");

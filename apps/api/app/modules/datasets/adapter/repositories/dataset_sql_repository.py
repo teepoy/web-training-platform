@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from datetime import datetime, timezone
 from typing import cast
 
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -12,6 +12,7 @@ from app.shared.db.registry import (
     AnnotationORM,
     AnnotationVersionORM,
     DatasetORM,
+    DatasetRevisionORM,
     OrganizationORM,
     PlatformPredictionORM,
     PredictionCollectionItemORM,
@@ -21,6 +22,11 @@ from app.shared.db.registry import (
     SampleORM,
     UserORM,
 )
+from app.modules.datasets.domain.entities import (
+    DatasetRevision,
+    DatasetRevisionOperation,
+)
+from app.modules.datasets.domain.repository import DatasetSortField, SortDirection
 from app.shared.api.schemas import (
     Annotation,
     CreatorSummary,
@@ -43,6 +49,21 @@ def _utcnow() -> datetime:
 def _like_pattern(value: str) -> str:
     escaped = value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
     return f"%{escaped}%"
+
+
+def _to_dataset_revision(row: DatasetRevisionORM) -> DatasetRevision:
+    return DatasetRevision(
+        id=row.id,
+        dataset_id=row.dataset_id,
+        revision_number=row.revision_number,
+        manifest_uri=row.manifest_uri,
+        provenance=cast(dict[str, object], row.provenance),
+        operation=DatasetRevisionOperation(row.operation),
+        operation_ref=row.operation_ref,
+        is_reproducible=row.is_reproducible,
+        created_by=row.created_by,
+        created_at=row.created_at,
+    )
 
 
 def _dataset_conditions(
@@ -128,6 +149,201 @@ class DatasetSqlRepository:
             }
         )
 
+    async def get_current_revision(
+        self,
+        dataset_id: str,
+        org_id: str,
+    ) -> DatasetRevision | None:
+        async with self.session_factory() as session:
+            row = (
+                await session.execute(
+                    select(DatasetRevisionORM)
+                    .join(DatasetORM, DatasetORM.id == DatasetRevisionORM.dataset_id)
+                    .where(
+                        DatasetRevisionORM.dataset_id == dataset_id,
+                        or_(
+                            DatasetORM.org_id == org_id, DatasetORM.is_public.is_(True)
+                        ),
+                    )
+                    .order_by(DatasetRevisionORM.revision_number.desc())
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+            return None if row is None else _to_dataset_revision(row)
+
+    async def list_current_revisions(
+        self,
+        dataset_ids: tuple[str, ...],
+        org_id: str,
+    ) -> dict[str, DatasetRevision]:
+        unique_ids = tuple(dict.fromkeys(dataset_ids))
+        if not unique_ids:
+            return {}
+        latest = (
+            select(
+                DatasetRevisionORM.dataset_id.label("dataset_id"),
+                func.max(DatasetRevisionORM.revision_number).label("revision_number"),
+            )
+            .where(DatasetRevisionORM.dataset_id.in_(unique_ids))
+            .group_by(DatasetRevisionORM.dataset_id)
+            .subquery()
+        )
+        async with self.session_factory() as session:
+            rows = (
+                (
+                    await session.execute(
+                        select(DatasetRevisionORM)
+                        .join(
+                            latest,
+                            and_(
+                                latest.c.dataset_id == DatasetRevisionORM.dataset_id,
+                                latest.c.revision_number
+                                == DatasetRevisionORM.revision_number,
+                            ),
+                        )
+                        .join(
+                            DatasetORM,
+                            DatasetORM.id == DatasetRevisionORM.dataset_id,
+                        )
+                        .where(
+                            DatasetRevisionORM.dataset_id.in_(unique_ids),
+                            or_(
+                                DatasetORM.org_id == org_id,
+                                DatasetORM.is_public.is_(True),
+                            ),
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        return {row.dataset_id: _to_dataset_revision(row) for row in rows}
+
+    async def get_revision(
+        self,
+        dataset_id: str,
+        revision_id: str,
+        org_id: str,
+    ) -> DatasetRevision | None:
+        async with self.session_factory() as session:
+            row = (
+                await session.execute(
+                    select(DatasetRevisionORM)
+                    .join(DatasetORM, DatasetORM.id == DatasetRevisionORM.dataset_id)
+                    .where(
+                        DatasetRevisionORM.id == revision_id,
+                        DatasetRevisionORM.dataset_id == dataset_id,
+                        or_(
+                            DatasetORM.org_id == org_id, DatasetORM.is_public.is_(True)
+                        ),
+                    )
+                )
+            ).scalar_one_or_none()
+            return None if row is None else _to_dataset_revision(row)
+
+    async def publish_revision(
+        self,
+        *,
+        revision_id: str,
+        dataset_id: str,
+        org_id: str,
+        manifest_uri: str,
+        provenance: dict[str, object],
+        operation: DatasetRevisionOperation,
+        operation_ref: str | None,
+        created_by: str,
+    ) -> DatasetRevision:
+        async with self.session_factory() as session:
+            dataset = (
+                await session.execute(
+                    select(DatasetORM)
+                    .where(
+                        DatasetORM.id == dataset_id,
+                        DatasetORM.org_id == org_id,
+                    )
+                    .with_for_update()
+                )
+            ).scalar_one_or_none()
+            if dataset is None:
+                raise LookupError(f"Dataset {dataset_id!r} not found")
+            if operation == DatasetRevisionOperation.LEGACY_BASELINE:
+                existing = (
+                    await session.execute(
+                        select(DatasetRevisionORM)
+                        .where(DatasetRevisionORM.dataset_id == dataset_id)
+                        .order_by(DatasetRevisionORM.revision_number.desc())
+                        .limit(1)
+                    )
+                ).scalar_one_or_none()
+                if existing is not None:
+                    return _to_dataset_revision(existing)
+            current_number = await session.scalar(
+                select(func.max(DatasetRevisionORM.revision_number)).where(
+                    DatasetRevisionORM.dataset_id == dataset_id
+                )
+            )
+            row = DatasetRevisionORM(
+                id=revision_id,
+                dataset_id=dataset_id,
+                revision_number=int(current_number or 0) + 1,
+                manifest_uri=manifest_uri,
+                provenance=provenance,
+                operation=operation.value,
+                operation_ref=operation_ref,
+                is_reproducible=False,
+                created_by=created_by,
+                created_at=_utcnow(),
+            )
+            session.add(row)
+            await session.commit()
+            return _to_dataset_revision(row)
+
+    async def list_revisions(
+        self,
+        dataset_id: str,
+        org_id: str,
+        *,
+        limit: int,
+        offset: int,
+    ) -> list[DatasetRevision]:
+        async with self.session_factory() as session:
+            rows = (
+                (
+                    await session.execute(
+                        select(DatasetRevisionORM)
+                        .join(
+                            DatasetORM,
+                            DatasetORM.id == DatasetRevisionORM.dataset_id,
+                        )
+                        .where(
+                            DatasetRevisionORM.dataset_id == dataset_id,
+                            or_(
+                                DatasetORM.org_id == org_id,
+                                DatasetORM.is_public.is_(True),
+                            ),
+                        )
+                        .order_by(DatasetRevisionORM.revision_number.desc())
+                        .offset(offset)
+                        .limit(limit)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            return [_to_dataset_revision(row) for row in rows]
+
+    async def count_revisions(self, dataset_id: str, org_id: str) -> int:
+        async with self.session_factory() as session:
+            count = await session.scalar(
+                select(func.count(DatasetRevisionORM.id))
+                .join(DatasetORM, DatasetORM.id == DatasetRevisionORM.dataset_id)
+                .where(
+                    DatasetRevisionORM.dataset_id == dataset_id,
+                    or_(DatasetORM.org_id == org_id, DatasetORM.is_public.is_(True)),
+                )
+            )
+            return int(count or 0)
+
     async def list_datasets(
         self,
         org_id: str | None = None,
@@ -136,13 +352,28 @@ class DatasetSqlRepository:
         offset: int = 0,
         query: str | None = None,
         creator_id: str | None = None,
+        sort_by: DatasetSortField = "created_at",
+        sort_order: SortDirection = "desc",
     ) -> list[Dataset]:
         async with self.session_factory() as session:
+            sort_columns = {
+                "name": DatasetORM.name,
+                "dataset_type": DatasetORM.dataset_type,
+                "creator": func.coalesce(
+                    UserORM.name, UserORM.email, DatasetORM.created_by
+                ),
+                "created_at": DatasetORM.created_at,
+            }
+            sort_column = sort_columns[sort_by]
+            order = sort_column.asc() if sort_order == "asc" else sort_column.desc()
+            id_order = (
+                DatasetORM.id.asc() if sort_order == "asc" else DatasetORM.id.desc()
+            )
             stmt = (
                 select(DatasetORM, OrganizationORM.name, UserORM.name, UserORM.email)
                 .outerjoin(OrganizationORM, OrganizationORM.id == DatasetORM.org_id)
                 .outerjoin(UserORM, UserORM.id == DatasetORM.created_by)
-                .order_by(DatasetORM.created_at.desc(), DatasetORM.id.desc())
+                .order_by(order.nulls_last(), id_order)
             )
             stmt = stmt.where(
                 *_dataset_conditions(

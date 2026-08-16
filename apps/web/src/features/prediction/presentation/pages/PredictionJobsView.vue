@@ -43,13 +43,10 @@
 
     <n-modal
       v-model:show="showModal"
-      preset="dialog"
-      title="Start Prediction"
-      positive-text="Start"
-      negative-text="Cancel"
-      :loading="runMutation.isPending.value"
-      @positive-click="onSubmit"
-      @negative-click="onCancel"
+      preset="card"
+      title="Choose a model for prediction"
+      class="model-picker-modal"
+      :style="{ width: 'min(960px, calc(100vw - 32px))' }"
     >
       <n-form
         ref="formRef"
@@ -68,21 +65,49 @@
               filterable
             />
           </n-form-item>
-          <n-form-item label="Model" path="model_id">
-            <n-empty
-              v-if="!modelsLoading && modelOptions.length === 0"
-              description="No models are available for prediction"
-            />
-            <n-select
-              v-else
-              v-model:value="formModel.model_id"
-              :options="modelOptions"
-              :loading="modelsLoading"
-              placeholder="Select a model"
-              filterable
-              remote
-              @search="modelSearch = $event"
-            />
+          <n-form-item label="Model" path="model_id" label-placement="top">
+            <div class="model-picker">
+              <n-text depth="3">
+                Search and page through the complete model history. Newest models are shown first.
+              </n-text>
+              <div class="model-picker-filters">
+                <n-input
+                  v-model:value="modelSearch"
+                  clearable
+                  placeholder="Search model name, ID, source, trainer, or creator"
+                />
+                <n-select
+                  v-model:value="modelSourceType"
+                  clearable
+                  :options="modelSourceOptions"
+                  placeholder="All training sources"
+                />
+                <n-select
+                  v-model:value="modelCreatorId"
+                  clearable
+                  filterable
+                  :options="modelCreatorOptions"
+                  placeholder="All creators"
+                />
+              </div>
+              <n-data-table
+                :columns="modelPickerColumns"
+                :data="availableModels"
+                :loading="modelsLoading"
+                :pagination="modelPagination"
+                :row-key="(row: ModelResponse) => row.id"
+                :checked-row-keys="formModel.model_id ? [formModel.model_id] : []"
+                :row-props="modelRowProps"
+                :scroll-x="820"
+                remote
+                size="small"
+                @update:checked-row-keys="selectModel"
+              >
+                <template #empty>
+                  <n-empty description="No models match these filters" />
+                </template>
+              </n-data-table>
+            </div>
           </n-form-item>
         </template>
         <template v-else>
@@ -91,6 +116,26 @@
           </div>
         </template>
       </n-form>
+      <template #footer>
+        <n-space justify="space-between" align="center">
+          <n-text depth="3">
+            {{
+              selectedModel ? `Selected: ${modelDisplayName(selectedModel)}` : "Select one model"
+            }}
+          </n-text>
+          <n-space>
+            <n-button @click="onCancel">Cancel</n-button>
+            <n-button
+              type="primary"
+              :disabled="!formModel.model_id || !formModel.dataset_id"
+              :loading="runMutation.isPending.value"
+              @click="onSubmit"
+            >
+              Start with selected model
+            </n-button>
+          </n-space>
+        </n-space>
+      </template>
     </n-modal>
 
     <TaskInsightModal v-model:show="insightVisible" :task="selectedTask" :handoff-enabled="false" />
@@ -98,14 +143,22 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, h, provide, watch } from "vue";
+import { ref, computed, h, provide, reactive, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { refDebounced } from "@vueuse/core";
-import type { DataTableColumns, FormInst, FormRules, SelectOption } from "naive-ui";
-import { useMessage, NButton, NTag } from "naive-ui";
+import type {
+  DataTableColumns,
+  DataTableRowKey,
+  FormInst,
+  FormRules,
+  PaginationProps,
+  SelectOption,
+} from "naive-ui";
+import { useMessage, NButton, NTag, NText } from "naive-ui";
 import { useOrgStore } from "@/features/auth/application/org";
 import {
+  useListModelCreatorsApiV1ModelsCreatorsGet,
   useListModelsApiV1ModelsGet,
   useRunPredictionsApiV1PredictionsRunPost,
 } from "@/generated/orval/endpoints/api";
@@ -129,6 +182,12 @@ const router = useRouter();
 const message = useMessage();
 const qc = useQueryClient();
 const orgStore = useOrgStore();
+const showModal = ref(false);
+const formRef = ref<FormInst | null>(null);
+const formModel = ref({
+  dataset_id: props.datasetId ?? null,
+  model_id: null as string | null,
+});
 provide(
   TASK_INSIGHT_ORG_ID_KEY,
   computed(() => orgStore.currentOrgId),
@@ -169,9 +228,30 @@ function predictionJobRowKey(row: PredictionJob): string {
 
 const modelSearch = ref("");
 const debouncedModelSearch = refDebounced(modelSearch, 250);
+const modelSourceType = ref<"dataset" | "collection" | null>(null);
+const modelCreatorId = ref<string | null>(null);
+const modelPagination = reactive<PaginationProps>({
+  page: 1,
+  pageSize: 20,
+  itemCount: 0,
+  showSizePicker: true,
+  pageSizes: [10, 20, 50, 100],
+  onUpdatePage: (page: number) => {
+    modelPagination.page = page;
+  },
+  onUpdatePageSize: (pageSize: number) => {
+    modelPagination.pageSize = pageSize;
+    modelPagination.page = 1;
+  },
+});
 const modelListParams = computed(() => ({
-  limit: 50,
+  offset: ((modelPagination.page ?? 1) - 1) * (modelPagination.pageSize ?? 20),
+  limit: modelPagination.pageSize ?? 20,
   q: debouncedModelSearch.value.trim() || undefined,
+  source_type: modelSourceType.value ?? undefined,
+  creator_id: modelCreatorId.value ?? undefined,
+  sort_by: "created_at" as const,
+  sort_order: "desc" as const,
 }));
 const { data: modelsPage, isLoading: modelsLoading } = useListModelsApiV1ModelsGet(
   modelListParams,
@@ -182,22 +262,113 @@ const { data: modelsPage, isLoading: modelsLoading } = useListModelsApiV1ModelsG
           "models",
           "prediction-launcher",
           debouncedModelSearch.value.trim(),
+          modelSourceType.value,
+          modelCreatorId.value,
+          modelPagination.page,
+          modelPagination.pageSize,
         ]),
       ),
-      enabled: computed(() => !!orgStore.currentOrgId),
-      refetchInterval: 5000,
+      enabled: computed(() => !!orgStore.currentOrgId && showModal.value),
     },
   },
 );
 
-const modelOptions = computed<SelectOption[]>(() =>
-  ((modelsPage.value?.items ?? []) as ModelResponse[]).map((model) => ({
-    label: [model.name?.trim() || model.id.slice(0, 8), model.dataset_name, model.creator_name]
-      .filter(Boolean)
-      .join(" · "),
-    value: model.id,
-  })),
+const availableModels = computed<ModelResponse[]>(
+  () => (modelsPage.value?.items ?? []) as ModelResponse[],
 );
+const selectedModelRecord = ref<ModelResponse | null>(null);
+const selectedModel = computed(
+  () =>
+    availableModels.value.find((model) => model.id === formModel.value.model_id) ??
+    (selectedModelRecord.value?.id === formModel.value.model_id ? selectedModelRecord.value : null),
+);
+
+watch(
+  () => modelsPage.value?.total ?? 0,
+  (total) => {
+    modelPagination.itemCount = total;
+  },
+  { immediate: true },
+);
+
+watch([debouncedModelSearch, modelSourceType, modelCreatorId], () => {
+  modelPagination.page = 1;
+});
+
+const modelSourceOptions: SelectOption[] = [
+  { label: "Dataset", value: "dataset" },
+  { label: "Collection", value: "collection" },
+];
+const { data: modelCreators } = useListModelCreatorsApiV1ModelsCreatorsGet({
+  query: {
+    queryKey: computed(() => orgScopedQueryKey(orgStore.currentOrgId, ["models", "creators"])),
+    enabled: computed(() => !!orgStore.currentOrgId && showModal.value),
+  },
+});
+const modelCreatorOptions = computed<SelectOption[]>(() =>
+  (modelCreators.value ?? []).map((creator) => ({ label: creator.name, value: creator.id })),
+);
+
+function modelDisplayName(model: ModelResponse): string {
+  return model.name?.trim() || model.id.slice(0, 8);
+}
+
+function modelSourceName(model: ModelResponse): string {
+  if (model.dataset_id) return `Dataset · ${model.dataset_name?.trim() || model.dataset_id}`;
+  if (model.collection_id) {
+    return `Collection · ${model.collection_name?.trim() || model.collection_id}`;
+  }
+  return "Unknown source";
+}
+
+const modelPickerColumns = computed<DataTableColumns<ModelResponse>>(() => [
+  { type: "selection", multiple: false, width: 42 },
+  {
+    title: "Model",
+    key: "name",
+    minWidth: 180,
+    render: (model) =>
+      h("div", {}, [
+        h(NText, { strong: true }, { default: () => modelDisplayName(model) }),
+        h("div", { class: "model-picker-id" }, model.id),
+      ]),
+  },
+  {
+    title: "Training source",
+    key: "source",
+    minWidth: 190,
+    render: (model) => modelSourceName(model),
+  },
+  { title: "Trainer", key: "trainer_name", minWidth: 130 },
+  {
+    title: "Creator",
+    key: "creator_name",
+    minWidth: 130,
+    render: (model) => model.creator_name?.trim() || model.created_by,
+  },
+  {
+    title: "Created",
+    key: "created_at",
+    width: 170,
+    render: (model) => (model.created_at ? new Date(model.created_at).toLocaleString() : "—"),
+  },
+]);
+
+function selectModel(keys: DataTableRowKey[]): void {
+  formModel.value.model_id = keys.length ? String(keys[keys.length - 1]) : null;
+  selectedModelRecord.value =
+    availableModels.value.find((model) => model.id === formModel.value.model_id) ?? null;
+}
+
+function modelRowProps(model: ModelResponse): Record<string, unknown> {
+  return {
+    style: { cursor: "pointer" },
+    onClick: () => {
+      formModel.value.model_id = model.id;
+      selectedModelRecord.value = model;
+    },
+  };
+}
 
 type TagType = "default" | "info" | "success" | "error" | "warning";
 
@@ -273,14 +444,8 @@ const columns = computed<DataTableColumns<PredictionJob>>(() => {
     : baseColumns;
 });
 
-const showModal = ref(false);
 const insightVisible = ref(false);
 const selectedTask = ref<TaskTrackerSummary | null>(null);
-const formRef = ref<FormInst | null>(null);
-const formModel = ref({
-  dataset_id: props.datasetId ?? null,
-  model_id: null as string | null,
-});
 
 watch(
   () => props.datasetId,
@@ -326,12 +491,17 @@ function onSubmit() {
 }
 
 function onCancel() {
+  showModal.value = false;
   resetForm();
 }
 
 function resetForm() {
   formModel.value = { dataset_id: props.datasetId ?? null, model_id: null };
+  selectedModelRecord.value = null;
   modelSearch.value = "";
+  modelSourceType.value = null;
+  modelCreatorId.value = null;
+  modelPagination.page = 1;
   formRef.value?.restoreValidation();
 }
 
@@ -395,6 +565,28 @@ function predictionTaskSummary(row: PredictionJob): TaskTrackerSummary {
   margin: 0 0 2px;
 }
 
+.model-picker {
+  display: grid;
+  gap: 12px;
+  width: 100%;
+}
+
+.model-picker-filters {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) 190px 190px;
+  gap: 8px;
+}
+
+.model-picker-id {
+  max-width: 190px;
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--n-text-color-3);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 @media (max-width: 640px) {
   .embedded-section-header {
     align-items: stretch;
@@ -403,6 +595,10 @@ function predictionTaskSummary(row: PredictionJob): TaskTrackerSummary {
 
   .embedded-section-header :deep(.n-button) {
     width: 100%;
+  }
+
+  .model-picker-filters {
+    grid-template-columns: 1fr;
   }
 }
 </style>

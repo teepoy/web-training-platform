@@ -4,6 +4,7 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
+import type { DatasetCollectionResponseDefaultModelId } from './datasetCollectionResponseDefaultModelId';
 
 export interface DatasetCollectionResponse {
   id: string;
@@ -19,4 +20,6 @@ export interface DatasetCollectionResponse {
   created_by: string;
   created_at: string;
   updated_at: string;
+  default_model_id: DatasetCollectionResponseDefaultModelId;
+  model_binding_version: number;
 }

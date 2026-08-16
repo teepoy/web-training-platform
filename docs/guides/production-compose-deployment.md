@@ -82,7 +82,20 @@ aliases such as `postgres`, `minio`, and `prefect-server`.
 
 The manifests intentionally publish no host ports. Run a TLS reverse proxy on
 the `finetune-prod` network and route public hostnames to `web:80`, `api:8000`,
-`prefect-server:4200`, `label-studio:8080`, and `grafana:3000` as needed.
+`prefect-server:4200`, `label-studio:8080`, and `grafana:3000` as needed. If
+operators need the MinIO console, expose `minio:9001` through a separate
+TLS-protected, authenticated admin hostname or a private VPN/tunnel. Keep the
+MinIO API on `minio:9000` private unless an external S3 client explicitly
+requires access; neither MinIO endpoint is published by the supplied manifests.
+
+The application does not create or guess operator-console addresses. To show a
+link under `Admin > Infrastructure`, configure `OPERATOR_PREFECT_UI_URL` and/or
+`OPERATOR_MINIO_CONSOLE_URL` in the platform environment. These optional values
+must be HTTPS URLs. Leave either value empty to hide its launch action. The
+target still needs its own authorization, enforced by an authenticated reverse
+proxy or a private VPN; being an application administrator does not grant
+Prefect or MinIO access. Label Studio remains a contextual action on supported
+Dataset pages and is not added to the global application or Admin navigation.
 
 For workstation acceptance of production-built images, use the local
 pre-release overlays instead of adding ports or build directives to these
@@ -227,6 +240,11 @@ The supplied platform manifest requires credentials for the SC patch and review
 buckets. Public URLs such as `PREFECT_UI_URL` and
 `LABEL_STUDIO_EXTERNAL_URL` must use externally reachable HTTPS hostnames, not
 `localhost`.
+
+`OPERATOR_PREFECT_UI_URL` and `OPERATOR_MINIO_CONSOLE_URL` are optional public
+operator-console URLs consumed by the web container at startup. They are not
+service-discovery endpoints and must never contain credentials. The web image
+rejects configured values that are not HTTPS or contain unsafe URL characters.
 
 Prefer managed PostgreSQL and S3-compatible object storage where available. In
 that case, omit local `postgres` and `minio` services and use provider endpoints.

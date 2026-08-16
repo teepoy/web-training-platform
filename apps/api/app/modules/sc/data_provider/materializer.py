@@ -352,7 +352,9 @@ class ScDataMaterializer:
             )
         )
         artifact_task: asyncio.Task[Path] | None = None
+        observed_source_task: asyncio.Task[pl.LazyFrame] | None = None
         reviews_task: asyncio.Task[pl.DataFrame] | None = None
+        observed_resolution = collection_revision.source_resolution == "observed"
 
         with tempfile.TemporaryDirectory(prefix="sc-collection-workbench-") as tmp:
             artifact_path = Path(tmp) / "revision.parquet"
@@ -373,6 +375,47 @@ class ScDataMaterializer:
                         name=f"sc-collection-artifact-{revision_id}",
                     )
                 return await artifact_task
+
+            async def load_observed_source() -> pl.LazyFrame:
+                nonlocal observed_source_task
+                if observed_source_task is None:
+
+                    async def load() -> pl.LazyFrame:
+                        async def load_member(
+                            dataset_id: str,
+                            snapshot: dict[str, object],
+                        ) -> pl.LazyFrame:
+                            rows = cast(
+                                pl.LazyFrame,
+                                await storages[dataset_id].list_samples(
+                                    return_lazyframe=True,
+                                    with_labels=False,
+                                    with_predictions=False,
+                                ),
+                            )
+                            return _observed_collection_member_lazyframe(
+                                rows,
+                                dataset_id=dataset_id,
+                                member_id=str(snapshot.get("member_id", "")),
+                            )
+
+                        member_frames = await asyncio.gather(
+                            *(
+                                load_member(dataset_id, snapshot)
+                                for dataset_id, snapshot in zip(
+                                    source_dataset_ids,
+                                    collection_revision.source_snapshot,
+                                    strict=True,
+                                )
+                            )
+                        )
+                        return pl.concat(member_frames, how="diagonal_relaxed")
+
+                    observed_source_task = asyncio.create_task(
+                        load(),
+                        name=f"sc-collection-observed-source-{revision_id}",
+                    )
+                return await observed_source_task
 
             async def load_reviews() -> pl.DataFrame:
                 nonlocal reviews_task
@@ -402,8 +445,11 @@ class ScDataMaterializer:
                 return await reviews_task
 
             async def build_samples_base(path: Path) -> None:
-                source_path = await load_artifact_path()
-                source = pl.scan_parquet(source_path)
+                source = (
+                    await load_observed_source()
+                    if observed_resolution
+                    else pl.scan_parquet(await load_artifact_path())
+                )
                 reviews = await load_reviews()
                 await _sink_lazyframe(
                     _normalize_dataset_base_lazyframe(
@@ -415,8 +461,12 @@ class ScDataMaterializer:
                 )
 
             async def build_review_images() -> pa.Table:
-                source_path = await load_artifact_path()
-                identities = pl.scan_parquet(source_path).select(
+                source = (
+                    await load_observed_source()
+                    if observed_resolution
+                    else pl.scan_parquet(await load_artifact_path())
+                )
+                identities = source.select(
                     pl.col("source_dataset_id").cast(pl.Utf8),
                     pl.col("defect_id").cast(pl.Int32, strict=False),
                     pl.col("row_key").cast(pl.Utf8),
@@ -436,8 +486,8 @@ class ScDataMaterializer:
                         f"{_SAMPLES_BASE_FORMAT_VERSION}"
                     ),
                     scope=scope.cache_name,
-                    revision=0,
-                    revision_tracked=False,
+                    revision=revision if observed_resolution else 0,
+                    revision_tracked=observed_resolution,
                     builder=build_samples_base,
                 ),
                 self._cache.get_or_build(
@@ -446,8 +496,8 @@ class ScDataMaterializer:
                         f"{_REVIEW_IMAGES_FORMAT_VERSION}"
                     ),
                     scope=scope.cache_name,
-                    revision=0,
-                    revision_tracked=False,
+                    revision=revision if observed_resolution else 0,
+                    revision_tracked=observed_resolution,
                     builder=build_review_images,
                 ),
             )
@@ -750,6 +800,25 @@ def _prefix_overlay_sample_ids(
             separator="::",
         ).alias("sample_id")
     )
+
+
+def _observed_collection_member_lazyframe(
+    rows: pl.LazyFrame,
+    *,
+    dataset_id: str,
+    member_id: str,
+) -> pl.LazyFrame:
+    names = set(rows.collect_schema().names())
+    if "sample_id" not in names:
+        raise ValueError(f"Dataset '{dataset_id}' does not expose sample_id")
+    source_sample = pl.col("sample_id").cast(pl.Utf8)
+    row_key = pl.concat_str([pl.lit(dataset_id), source_sample], separator="::")
+    return rows.with_columns(
+        source_sample.alias("source_sample_id"),
+        pl.lit(dataset_id).alias("source_dataset_id"),
+        pl.lit(member_id).alias("collection_member_id"),
+        row_key.alias("row_key"),
+    ).with_columns(pl.col("row_key").alias("sample_id"))
 
 
 def _combined_fingerprint(parts: list[str]) -> str:

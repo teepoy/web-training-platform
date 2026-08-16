@@ -51,49 +51,6 @@
                   <n-button text @click="uiStore.toggleDarkMode">{{
                     uiStore.darkMode ? "☀" : "🌙"
                   }}</n-button>
-                  <!-- External service links -->
-                  <template v-if="isAdmin">
-                    <n-button
-                      tag="a"
-                      :href="labelStudioUrl"
-                      target="_blank"
-                      text
-                      type="primary"
-                      size="small"
-                    >
-                      Label Studio ↗
-                    </n-button>
-                    <n-button
-                      tag="a"
-                      :href="prefectUrl"
-                      target="_blank"
-                      text
-                      type="primary"
-                      size="small"
-                    >
-                      Prefect ↗
-                    </n-button>
-                    <n-button
-                      tag="a"
-                      :href="minioUrl"
-                      target="_blank"
-                      text
-                      type="primary"
-                      size="small"
-                    >
-                      MinIO ↗
-                    </n-button>
-                    <n-button
-                      tag="a"
-                      :href="pgAdminUrl"
-                      target="_blank"
-                      text
-                      type="primary"
-                      size="small"
-                    >
-                      pgAdmin ↗
-                    </n-button>
-                  </template>
                   <n-dropdown
                     trigger="click"
                     :options="avatarDropdownOptions"
@@ -130,7 +87,7 @@
 import { computed, h, onMounted, watch, type Component } from "vue";
 import { useRouter, useRoute, RouterView } from "vue-router";
 import { darkTheme, NIcon, type GlobalThemeOverrides, type MenuOption } from "naive-ui";
-import { AlbumsOutline, CubeOutline, ImagesOutline, LayersOutline } from "@vicons/ionicons5";
+import { AlbumsOutline, CubeOutline, ImagesOutline, PulseOutline } from "@vicons/ionicons5";
 import { useQueryClient } from "@tanstack/vue-query";
 import { useMediaQuery } from "@vueuse/core";
 import VxeUI from "vxe-pc-ui";
@@ -187,22 +144,21 @@ const themeOverrides: GlobalThemeOverrides = {
 
 const activeRoute = computed(() => {
   const p = route.path;
-  if (p.startsWith("/datasets")) return "/datasets";
-  if (p.startsWith("/dataset-collections")) return "/dataset-collections";
+  if (
+    p.startsWith("/library") ||
+    p.startsWith("/datasets") ||
+    p.startsWith("/dataset-collections")
+  ) {
+    return "/library";
+  }
   if (p.startsWith("/models")) return "/models";
   if (p.startsWith("/sc")) return "/sc";
-  if (p.startsWith("/sensors")) return "/sensors";
+  if (p.startsWith("/automations")) return "/automations";
   return p;
 });
 
 // Check if current user is an admin (superadmin)
 const isAdmin = computed(() => authStore.user?.is_superadmin ?? false);
-
-// External service URLs - these can be configured via environment variables in production
-const labelStudioUrl = "http://localhost:8080";
-const prefectUrl = "http://localhost:4200";
-const minioUrl = "http://localhost:9001";
-const pgAdminUrl = "http://localhost:5050";
 
 function renderMenuIcon(icon: Component) {
   return () => h(NIcon, null, { default: () => h(icon) });
@@ -210,13 +166,9 @@ function renderMenuIcon(icon: Component) {
 
 const menuOptions: MenuOption[] = [
   { label: "Patch", key: "/sc", icon: renderMenuIcon(ImagesOutline) },
-  { label: "Datasets", key: "/datasets", icon: renderMenuIcon(AlbumsOutline) },
-  {
-    label: "Collections",
-    key: "/dataset-collections",
-    icon: renderMenuIcon(LayersOutline),
-  },
+  { label: "Library", key: "/library", icon: renderMenuIcon(AlbumsOutline) },
   { label: "Models", key: "/models", icon: renderMenuIcon(CubeOutline) },
+  { label: "Automations", key: "/automations", icon: renderMenuIcon(PulseOutline) },
 ];
 
 const userInitials = computed(() => authStore.user?.name?.slice(0, 2).toUpperCase() ?? "LU");

@@ -798,8 +798,13 @@ describe("SQL workbench data source", () => {
     });
   });
 
-  it("compiles the complete sampling rule pipeline into one scoped SQL query", async () => {
-    let requestBody: { description: string; sql: string; parameters: unknown[] } | null = null;
+  it("sends the candidate query with a structured sampling program", async () => {
+    let requestBody: {
+      description: string;
+      sql: string;
+      parameters: unknown[];
+      sampling?: { seed: number; program: Record<string, unknown> };
+    } | null = null;
     server.use(
       http.post(QUERY_URL, async ({ request }) => {
         requestBody = (await request.json()) as typeof requestBody;
@@ -836,15 +841,21 @@ describe("SQL workbench data source", () => {
     ).resolves.toEqual([8, 2, 5]);
 
     expect(requestBody?.description).toBe("sc-workbench.selection.sampling-program");
-    expect(requestBody?.sql).toContain('WITH "__sc_sampling_base" AS');
-    expect(requestBody?.sql).toContain('"__sc_sampling_conditional_ranked" AS');
-    expect(requestBody?.sql).toContain('"__sc_sampling_group_ranked" AS');
-    expect(requestBody?.sql).toContain('ROW_NUMBER() OVER (PARTITION BY "class_number"');
-    expect(requestBody?.sql).toContain('ORDER BY HASH("map_id", ?), "map_id" LIMIT ?');
-    expect(requestBody?.parameters).toEqual(["4", 0, 42, 2, 42, "1", 2, "2", 1, 0, 42, 3]);
+    expect(requestBody?.sql).toBe(
+      'SELECT "map_id", "rough_bin", "class_number" FROM samples WHERE "images" > ?',
+    );
+    expect(requestBody?.parameters).toEqual([0]);
+    expect(requestBody?.sampling).toEqual({
+      seed: 42,
+      program: {
+        conditional: program.conditional,
+        group: program.group,
+        total: program.total,
+      },
+    });
   });
 
-  it("applies sample ratios to each group population and uses Others as the CASE fallback", () => {
+  it("keeps ratio and Others semantics in the structured backend program", () => {
     const program = createDefaultScSamplingProgram();
     program.group = {
       enabled: true,
@@ -857,9 +868,16 @@ describe("SQL workbench data source", () => {
 
     const compiled = compileScSamplingSelection([], program, 42);
 
-    expect(compiled.sql).toContain('WHEN "class_number" IS NOT DISTINCT FROM ? THEN ROUND');
-    expect(compiled.sql).toContain('ELSE ROUND("__group_population" * ? / 100.0) END');
-    expect(compiled.parameters).toEqual([42, "1", 2, 5, 42, 200]);
+    expect(compiled.sql).toBe('SELECT "map_id", "class_number" FROM samples');
+    expect(compiled.parameters).toEqual([]);
+    expect(compiled.sampling).toEqual({
+      seed: 42,
+      program: {
+        conditional: program.conditional,
+        group: program.group,
+        total: program.total,
+      },
+    });
   });
 
   it("accepts only valid invalidations for its own scope", () => {

@@ -10,6 +10,11 @@ from app.shared.db.models.datasets import DatasetORM
 from app.shared.db.models.dataset_collections import DatasetCollectionORM
 from app.shared.db.models.training import TrainingJobORM
 from app.shared.db.models.auth import UserORM
+from app.modules.models.domain.repository import (
+    ModelSortField,
+    ModelSourceType,
+    SortDirection,
+)
 
 
 def _assert_str(value: str | None) -> str:
@@ -37,6 +42,7 @@ def _model_conditions(
     job_id: str | None,
     query: str | None,
     creator_id: str | None,
+    source_type: ModelSourceType | None,
 ) -> list[ColumnElement[bool]]:
     conditions: list[ColumnElement[bool]] = [
         ArtifactORM.kind == "model",
@@ -48,6 +54,10 @@ def _model_conditions(
         conditions.append(ArtifactORM.job_id == job_id)
     if creator_id is not None:
         conditions.append(TrainingJobORM.created_by == creator_id)
+    if source_type == "dataset":
+        conditions.append(TrainingJobORM.dataset_id.is_not(None))
+    elif source_type == "collection":
+        conditions.append(TrainingJobORM.collection_id.is_not(None))
     normalized_query = query.strip() if query is not None else ""
     if normalized_query:
         pattern = _like_pattern(normalized_query)
@@ -81,6 +91,9 @@ class ModelArtifactRepository:
         job_id: str | None = None,
         query: str | None = None,
         creator_id: str | None = None,
+        source_type: ModelSourceType | None = None,
+        sort_by: ModelSortField = "created_at",
+        sort_order: SortDirection = "desc",
     ) -> list[Model]:
         models, _ = await self.list_models_paginated(
             org_id=org_id,
@@ -90,6 +103,9 @@ class ModelArtifactRepository:
             limit=None,
             query=query,
             creator_id=creator_id,
+            source_type=source_type,
+            sort_by=sort_by,
+            sort_order=sort_order,
         )
         return models
 
@@ -103,6 +119,9 @@ class ModelArtifactRepository:
         limit: int | None = 50,
         query: str | None = None,
         creator_id: str | None = None,
+        source_type: ModelSourceType | None = None,
+        sort_by: ModelSortField = "created_at",
+        sort_order: SortDirection = "desc",
     ) -> tuple[list[Model], int]:
         async with self.session_factory() as session:
             conditions = _model_conditions(
@@ -111,6 +130,21 @@ class ModelArtifactRepository:
                 job_id=job_id,
                 query=query,
                 creator_id=creator_id,
+                source_type=source_type,
+            )
+            sort_columns = {
+                "name": ArtifactORM.name,
+                "source": func.coalesce(DatasetORM.name, DatasetCollectionORM.name),
+                "trainer": TrainingJobORM.trainer_id,
+                "creator": func.coalesce(
+                    UserORM.name, UserORM.email, TrainingJobORM.created_by
+                ),
+                "created_at": ArtifactORM.created_at,
+            }
+            sort_column = sort_columns[sort_by]
+            order = sort_column.asc() if sort_order == "asc" else sort_column.desc()
+            id_order = (
+                ArtifactORM.id.asc() if sort_order == "asc" else ArtifactORM.id.desc()
             )
 
             joins = (
@@ -145,10 +179,7 @@ class ModelArtifactRepository:
                 )
                 .outerjoin(UserORM, UserORM.id == TrainingJobORM.created_by)
                 .where(*conditions)
-                .order_by(
-                    ArtifactORM.created_at.desc().nulls_last(),
-                    ArtifactORM.id.desc(),
-                )
+                .order_by(order.nulls_last(), id_order)
                 .offset(offset)
             )
             if limit is not None:
@@ -190,6 +221,7 @@ class ModelArtifactRepository:
                 job_id=None,
                 query=None,
                 creator_id=None,
+                source_type=None,
             )
             stmt = (
                 select(
@@ -274,6 +306,9 @@ class ModelArtifactRepository:
                 created_by=job.created_by,
                 creator_name=_creator_name(job.created_by, user_name, user_email),
             )
+
+    async def get_org_model(self, artifact_id: str, org_id: str) -> Model | None:
+        return await self.get_model(artifact_id, org_id, include_public=False)
 
     async def rename_model(
         self, artifact_id: str, org_id: str, name: str

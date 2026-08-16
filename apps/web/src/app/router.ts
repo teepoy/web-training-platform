@@ -4,15 +4,16 @@ import { useAuthStore } from "@/features/auth/application/store";
 import { sandboxRoutes } from "@/features/sandbox/router";
 import AdminLayout from "@/app/layouts/AdminLayout.vue";
 import SettingsLayout from "@/app/layouts/SettingsLayout.vue";
+import { adminRoutes } from "@/features/admin/router";
+import { automationRoutes } from "@/features/automations/router";
 import { authRoutes } from "@/features/auth/router";
 import { dashboardRoutes } from "@/features/dashboard/router";
 import { datasetRoutes } from "@/features/datasets/router";
 import { datasetCollectionRoutes } from "@/features/dataset-collections/router";
+import { libraryRoutes } from "@/features/library/router";
 import { modelRoutes } from "@/features/models/router";
 import { predictionRoutes } from "@/features/prediction/router";
 import { scRoutes } from "@/features/sc/router";
-import { scheduleRoutes } from "@/features/schedules/router";
-import { sensorRoutes } from "@/features/sensors/router";
 import { taskTrackerRoutes } from "@/features/task_tracker/router";
 import { trainingRoutes } from "@/features/training/router";
 
@@ -25,13 +26,13 @@ export const router = createRouter({
     ...authRoutes,
     ...dashboardRoutes,
     ...taskTrackerRoutes,
+    ...automationRoutes,
+    ...libraryRoutes,
     ...datasetRoutes,
     ...datasetCollectionRoutes,
     ...modelRoutes,
     ...trainingRoutes,
     ...predictionRoutes,
-    ...scheduleRoutes,
-    ...sensorRoutes,
     ...scRoutes,
     {
       path: "/admin",
@@ -42,6 +43,7 @@ export const router = createRouter({
           path: "dashboard",
           component: () => import("@/features/dashboard/presentation/pages/DashboardView.vue"),
         },
+        ...adminRoutes,
       ],
     },
     {
@@ -66,18 +68,18 @@ router.beforeEach((to) => {
   const isAuthRoute = AUTH_ROUTES.includes(to.path);
 
   if (to.path.startsWith("/admin") && !authStore.user?.is_superadmin) {
-    return "/datasets";
+    return "/library";
   }
 
   if (!authStore.authEnabled) {
     if (isAuthRoute) {
-      return "/datasets";
+      return "/library";
     }
     return true;
   }
 
   if (isAuthRoute && token) {
-    return "/datasets";
+    return "/library";
   }
 
   if (!isAuthRoute && !token) {

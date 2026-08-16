@@ -13,6 +13,7 @@ from app.modules.storage.port.local import (
 )
 from app.modules.storage.domain.data_plane import DataPlaneSchemaRegistry
 from app.modules.datasets.domain.repository import DatasetRepository
+from app.modules.datasets.port.local import DatasetRevisionPublisherPort
 from app.modules.sc.adapter.batch_reader import ScBatchReader
 from app.modules.sc.app.services.sc_plot_points_service import ScPlotPointsService
 from app.modules.sc.app.services.sc_import_service import ScImportService
@@ -42,6 +43,7 @@ def init_sc(
     storage_factory: DatasetStorageFactoryPort,
     sparse_import_factory: SparseImportWriterFactoryPort,
     schema_registry: DataPlaneSchemaRegistry,
+    revision_publisher: DatasetRevisionPublisherPort,
     dataset_payload_store: DatasetPayloadStore | None = None,
     upstream_reader: ScUpstreamReader | None = None,
     image_fetcher: ScImageFetcher | None = None,
@@ -88,6 +90,7 @@ def init_sc(
     svc = ScImportService(
         repository=repository,
         payload_store=dataset_payload_store,
+        revision_publisher=revision_publisher,
         upstream_reader=upstream_reader,
         sparse_import_factory=sparse_import_factory,
         import_batch_rows=shared.config.sc.pipeline.import_batch_rows,
@@ -127,6 +130,7 @@ class ScModule(Module):
         storage_factory: DatasetStorageFactoryPort,
         sparse_import_factory: SparseImportWriterFactoryPort,
         schema_registry: DataPlaneSchemaRegistryPort,
+        revision_publisher: DatasetRevisionPublisherPort,
     ) -> ScContext:
         return init_sc(
             shared,
@@ -135,6 +139,7 @@ class ScModule(Module):
             storage_factory=storage_factory,
             sparse_import_factory=sparse_import_factory,
             schema_registry=cast(DataPlaneSchemaRegistry, schema_registry),
+            revision_publisher=revision_publisher,
         )
 
     @provider

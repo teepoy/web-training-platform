@@ -7,15 +7,22 @@
     :checked-row-keys="checkedRowKeys"
     :bordered="false"
     :pagination="pagination"
+    :sorter="sorter"
     remote
     style="cursor: pointer"
     @update:checked-row-keys="handleCheckedRowKeysChange"
+    @update:sorter="handleSorterChange"
   />
 </template>
 
 <script setup lang="ts" generic="TDataset extends DatasetListItem">
 import { computed } from "vue";
-import type { DataTableColumns, DataTableRowKey, PaginationProps } from "naive-ui";
+import type {
+  DataTableColumns,
+  DataTableRowKey,
+  DataTableSortState,
+  PaginationProps,
+} from "naive-ui";
 
 import type { DatasetListItem } from "../../../datasets/types";
 
@@ -27,6 +34,8 @@ const props = defineProps<{
   rowCheckable?: (row: TDataset) => boolean;
   onUpdateCheckedRowKeys?: (keys: DataTableRowKey[]) => void;
   pagination?: false | PaginationProps;
+  sorter?: DataTableSortState | null;
+  onUpdateSorter?: (sorter: DataTableSortState | null) => void;
 }>();
 
 const tableColumns = computed<DataTableColumns<TDataset>>(() => {
@@ -57,5 +66,9 @@ function rowProps(row: TDataset) {
 
 function handleCheckedRowKeysChange(keys: DataTableRowKey[]): void {
   props.onUpdateCheckedRowKeys?.(keys);
+}
+
+function handleSorterChange(sorter: DataTableSortState | DataTableSortState[] | null): void {
+  props.onUpdateSorter?.(Array.isArray(sorter) ? (sorter[0] ?? null) : sorter);
 }
 </script>

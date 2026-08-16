@@ -4,9 +4,14 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
+import type { ListCollectionsApiV1DatasetCollectionsGetSortBy } from './listCollectionsApiV1DatasetCollectionsGetSortBy';
+import type { ListCollectionsApiV1DatasetCollectionsGetSortOrder } from './listCollectionsApiV1DatasetCollectionsGetSortOrder';
 
 export type ListCollectionsApiV1DatasetCollectionsGetParams = {
 offset?: number;
 limit?: number;
 creator_id?: string | null;
+q?: string | null;
+sort_by?: ListCollectionsApiV1DatasetCollectionsGetSortBy;
+sort_order?: ListCollectionsApiV1DatasetCollectionsGetSortOrder;
 };

@@ -20,9 +20,9 @@ from sampling_rules.models import (
     SamplingProgram,
     SamplingResult,
     Scalar,
-    TotalLimitRule,
 )
 from sampling_rules.planner import plan_group_quota
+from sampling_rules.validation import validate_sampling_program
 
 RowT = TypeVar("RowT", bound=Mapping[str, object])
 DEFAULT_SAMPLING_SEED = 42
@@ -103,40 +103,6 @@ def _group_for(row: Mapping[str, object], group_by: tuple[str, ...]) -> GroupKey
     return cast(GroupKey, tuple(_read_path(row, path) for path in group_by))
 
 
-def _validate_program(program: SamplingProgram) -> None:
-    rank = {
-        ExtraFilterRule: 0,
-        ConditionalLimitRule: 1,
-        GroupQuotaRule: 2,
-        TotalLimitRule: 3,
-    }
-    previous = -1
-    group_rule_count = 0
-    total_limit: TotalLimitRule | None = None
-    for rule in program.rules:
-        current = rank[type(rule)]
-        if current < previous:
-            raise InvalidSamplingRuleError(
-                "rules must follow extra_filter -> conditional_limit -> "
-                "group_selection -> total_limit order"
-            )
-        previous = current
-        if isinstance(rule, GroupQuotaRule):
-            group_rule_count += 1
-        if isinstance(rule, TotalLimitRule):
-            if total_limit is not None:
-                raise InvalidSamplingRuleError(
-                    "sampling programs allow only one total limit rule"
-                )
-            total_limit = rule
-    if group_rule_count > 1:
-        raise InvalidSamplingRuleError(
-            "sampling programs allow only one group selection rule"
-        )
-    if total_limit is not None and total_limit.limit < 0:
-        raise InvalidSamplingRuleError("total limits cannot be negative")
-
-
 def _random_cap(rows: Sequence[RowT], limit: int, rng: random.Random) -> list[RowT]:
     if limit < 0:
         raise InvalidSamplingRuleError("limits cannot be negative")
@@ -153,7 +119,7 @@ def execute_sampling(
 ) -> SamplingResult[RowT]:
     """Apply composable rules, then use seeded random draws for every reduction."""
 
-    _validate_program(program)
+    validate_sampling_program(program)
     rng = random.Random(seed)
     current = list(rows)
     stages: list[RuleStage] = []

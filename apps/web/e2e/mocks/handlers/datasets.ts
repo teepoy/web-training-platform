@@ -35,6 +35,8 @@ export async function mockListDatasets(page: Page, datasets?: Dataset[]): Promis
     }
     const query = url.searchParams.get("q")?.trim().toLocaleLowerCase();
     const creatorId = url.searchParams.get("creator_id");
+    const sortBy = url.searchParams.get("sort_by") ?? "created_at";
+    const sortOrder = url.searchParams.get("sort_order") ?? "desc";
     const filtered = body.filter((dataset) => {
       if (creatorId && dataset.created_by !== creatorId) return false;
       if (!query) return true;
@@ -48,6 +50,26 @@ export async function mockListDatasets(page: Page, datasets?: Dataset[]): Promis
       ]
         .filter(Boolean)
         .some((value) => String(value).toLocaleLowerCase().includes(query));
+    });
+    filtered.sort((left, right) => {
+      const leftValue =
+        sortBy === "creator"
+          ? left.creator_name || left.created_by
+          : sortBy === "dataset_type"
+            ? left.dataset_type
+            : sortBy === "name"
+              ? left.name
+              : left.created_at;
+      const rightValue =
+        sortBy === "creator"
+          ? right.creator_name || right.created_by
+          : sortBy === "dataset_type"
+            ? right.dataset_type
+            : sortBy === "name"
+              ? right.name
+              : right.created_at;
+      const result = String(leftValue ?? "").localeCompare(String(rightValue ?? ""));
+      return sortOrder === "asc" ? result : -result;
     });
     const offset = Number(url.searchParams.get("offset") ?? 0);
     const limit = Number(url.searchParams.get("limit") ?? filtered.length);

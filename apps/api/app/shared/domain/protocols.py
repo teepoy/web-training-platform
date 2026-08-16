@@ -136,6 +136,7 @@ class PrefectClient(Protocol):
         path: str | None = None,
         parameters: dict[str, object] | None = None,
         tags: list[str] | None = None,
+        work_queue_name: str | None = None,
     ) -> dict[str, Any]: ...
 
     async def create_deployment(
@@ -163,6 +164,14 @@ class PrefectClient(Protocol):
     async def resolve_existing_flow_id(self, flow_name: str) -> str | None: ...
 
     async def get_work_pool(self, name: str) -> dict[str, Any]: ...
+
+    async def ensure_work_queue(
+        self,
+        work_pool_name: str,
+        name: str,
+        *,
+        priority: int,
+    ) -> dict[str, Any]: ...
 
     async def list_work_queues(
         self, work_pool_name: str | None = None

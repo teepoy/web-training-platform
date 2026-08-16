@@ -27,25 +27,19 @@ test("model search and creator filters apply before pagination @mock", async ({
   await expect(authedPage.getByText("Beta Model")).toHaveCount(0);
 
   await authedPage.getByPlaceholder("Search models").clear();
-  await authedPage.locator(".models-creator").click();
+  const creatorHeader = authedPage.getByRole("columnheader", { name: /Creator/ });
+  await creatorHeader.locator("[data-data-table-filter]").click();
   await authedPage.getByText("Bob", { exact: true }).last().click();
+  await authedPage.getByRole("button", { name: "Confirm" }).click();
   await expect(authedPage.getByText("Beta Model")).toBeVisible();
   await expect(authedPage.getByText("Alpha Model")).toHaveCount(0);
 });
 
-test("model training sources link to their real dataset or collection @mock", async ({
+test("model Collection sources link to Collection detail @mock", async ({
   authedPage,
   apiMocks,
 }) => {
   await apiMocks.prediction.mockListModels([
-    makeModel({
-      id: "model-dataset-source",
-      name: "Dataset Model",
-      dataset_id: "dataset-source-1",
-      dataset_name: "Source Dataset",
-      collection_id: null,
-      collection_name: null,
-    }),
     makeModel({
       id: "model-collection-source",
       name: "Collection Model",
@@ -59,6 +53,19 @@ test("model training sources link to their real dataset or collection @mock", as
   await authedPage.goto("/models");
   await authedPage.getByRole("button", { name: "Collection · Source Collection" }).click();
   await expect(authedPage).toHaveURL(/\/dataset-collections\/collection-source-1$/);
+});
+
+test("model Dataset sources link to Dataset detail @mock", async ({ authedPage, apiMocks }) => {
+  await apiMocks.prediction.mockListModels([
+    makeModel({
+      id: "model-dataset-source",
+      name: "Dataset Model",
+      dataset_id: "dataset-source-1",
+      dataset_name: "Source Dataset",
+      collection_id: null,
+      collection_name: null,
+    }),
+  ]);
 
   await authedPage.goto("/models");
   await authedPage.getByRole("button", { name: "Dataset · Source Dataset" }).click();

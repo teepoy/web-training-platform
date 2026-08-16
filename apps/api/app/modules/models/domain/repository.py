@@ -1,8 +1,12 @@
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Literal, Protocol
 
 from app.shared.api.schemas import ArtifactRef, CreatorSummary, Model
+
+ModelSortField = Literal["name", "source", "trainer", "creator", "created_at"]
+ModelSourceType = Literal["dataset", "collection"]
+SortDirection = Literal["asc", "desc"]
 
 
 class ModelRepository(Protocol):
@@ -13,6 +17,9 @@ class ModelRepository(Protocol):
         job_id: str | None = None,
         query: str | None = None,
         creator_id: str | None = None,
+        source_type: ModelSourceType | None = None,
+        sort_by: ModelSortField = "created_at",
+        sort_order: SortDirection = "desc",
     ) -> list[Model]: ...
 
     async def list_models_paginated(
@@ -25,6 +32,9 @@ class ModelRepository(Protocol):
         limit: int | None = 50,
         query: str | None = None,
         creator_id: str | None = None,
+        source_type: ModelSourceType | None = None,
+        sort_by: ModelSortField = "created_at",
+        sort_order: SortDirection = "desc",
     ) -> tuple[list[Model], int]: ...
 
     async def list_model_creators(self, org_id: str) -> list[CreatorSummary]: ...

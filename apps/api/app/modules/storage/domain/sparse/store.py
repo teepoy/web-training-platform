@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 from collections import OrderedDict
 from pathlib import Path
 
@@ -87,6 +88,14 @@ class DatasetPayloadStore:
         return f"datasets/{org_id}/{dataset_id}/manifest.json"
 
     @staticmethod
+    def get_revision_manifest_key(
+        dataset_id: str,
+        org_id: str,
+        revision_id: str,
+    ) -> str:
+        return f"datasets/{org_id}/{dataset_id}/revisions/{revision_id}/manifest.json"
+
+    @staticmethod
     def get_index_key(dataset_id: str, org_id: str) -> str:
         return f"datasets/{org_id}/{dataset_id}/index/sample-index.parquet"
 
@@ -104,6 +113,22 @@ class DatasetPayloadStore:
         self._cache_manifest((manifest.dataset_id, org_id), manifest, len(data))
         self._remember_scheme_from_uri(uri, key)
         return uri
+
+    async def put_revision_manifest_document(
+        self,
+        *,
+        dataset_id: str,
+        org_id: str,
+        revision_id: str,
+        document: dict[str, object],
+    ) -> str:
+        """Archive a logical revision document without copying dataset payloads."""
+        key = self.get_revision_manifest_key(dataset_id, org_id, revision_id)
+        return await self._storage.put_bytes(
+            object_name=key,
+            data=json.dumps(document, indent=2, sort_keys=True).encode("utf-8"),
+            content_type="application/json",
+        )
 
     async def get_manifest(self, dataset_id: str, org_id: str) -> DatasetManifest:
         """Read and parse the manifest stored under the canonical key."""

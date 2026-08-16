@@ -5,10 +5,21 @@ from typing import Protocol
 from fastapi import UploadFile
 
 from app.shared.api.schemas import ArtifactRef, CreatorSummary, Model
+from app.modules.models.domain.repository import (
+    ModelSortField,
+    ModelSourceType,
+    SortDirection,
+)
 
 
 class ModelCatalogPort(Protocol):
     async def get_model(
+        self,
+        artifact_id: str,
+        org_id: str,
+    ) -> Model | None: ...
+
+    async def get_org_model(
         self,
         artifact_id: str,
         org_id: str,
@@ -29,6 +40,9 @@ class ModelManagementPort(Protocol):
         job_id: str | None = None,
         query: str | None = None,
         creator_id: str | None = None,
+        source_type: ModelSourceType | None = None,
+        sort_by: ModelSortField = "created_at",
+        sort_order: SortDirection = "desc",
     ) -> list[Model]: ...
 
     async def list_models_paginated(
@@ -41,6 +55,9 @@ class ModelManagementPort(Protocol):
         limit: int | None = 50,
         query: str | None = None,
         creator_id: str | None = None,
+        source_type: ModelSourceType | None = None,
+        sort_by: ModelSortField = "created_at",
+        sort_order: SortDirection = "desc",
     ) -> tuple[list[Model], int]: ...
 
     async def list_model_creators(self, org_id: str) -> list[CreatorSummary]: ...

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import tempfile
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+import logging
 from pathlib import Path
 from typing import cast
 
@@ -12,12 +14,17 @@ import polars as pl
 from app.modules.dataset_collections.port.local import (
     DatasetCollectionRevisionReaderPort,
 )
+from app.modules.datasets.port.local import DatasetRevisionReaderPort
 from app.modules.runtime.domain.context import (
     PredictionRuntimeContext,
     TrainingRuntimeContext,
 )
 from app.modules.storage.port.local import DatasetStorageFactoryPort
+from app.modules.storage.domain.storage_agg import DatasetStorageAgg
 from app.shared.api.schemas import Dataset
+
+
+_logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,6 +38,7 @@ class ScRuntimeSource:
     collection_id: str | None
     collection_revision_id: str | None
     source_dataset_ids: tuple[str, ...]
+    resolved_dataset_revision_ids: tuple[str, ...] = ()
 
 
 @asynccontextmanager
@@ -69,8 +77,8 @@ async def open_sc_runtime_source(
             view_types=tuple(dataset.view_types),
             dataset_type=dataset.dataset_type,
             dataset_id=source.dataset_id,
-            collection_id=None,
-            collection_revision_id=None,
+            collection_id=source.collection_id,
+            collection_revision_id=source.collection_revision_id,
             source_dataset_ids=(source.dataset_id,),
         )
         return
@@ -100,6 +108,66 @@ async def open_sc_runtime_source(
         if isinstance(raw_label_space, list)
         else ()
     )
+    if revision.source_resolution == "observed":
+        storage_factory = app_context.injector.get(DatasetStorageFactoryPort)
+        storages = await asyncio.gather(
+            *(
+                storage_factory.open(dataset_id, org_id)
+                for dataset_id in source_dataset_ids
+            )
+        )
+        frames = await asyncio.gather(
+            *(
+                _observed_member_rows(
+                    storage,
+                    dataset_id=dataset_id,
+                    member_id=str(snapshot.get("member_id", "")),
+                    with_labels=with_labels,
+                    with_predictions=with_predictions,
+                )
+                for storage, dataset_id, snapshot in zip(
+                    storages,
+                    source_dataset_ids,
+                    revision.source_snapshot,
+                    strict=True,
+                )
+            )
+        )
+        dataset_revision_reader = app_context.injector.get(DatasetRevisionReaderPort)
+        launch_revisions = await asyncio.gather(
+            *(
+                dataset_revision_reader.resolve_or_create_baseline(
+                    dataset_id=dataset_id,
+                    org_id=org_id,
+                    created_by=runtime_ctx.created_by,
+                )
+                for dataset_id in source_dataset_ids
+            )
+        )
+        resolved_revision_ids = tuple(item.id for item in launch_revisions)
+        _logger.info(
+            "Resolved observed Collection runtime source collection_revision=%s "
+            "dataset_revisions=%s reproducible=false",
+            revision.id,
+            resolved_revision_ids,
+        )
+        rows = pl.concat(frames, how="diagonal_relaxed")
+        if runtime_ctx.sample_ids is not None:
+            rows = rows.filter(pl.col("sample_id").is_in(runtime_ctx.sample_ids))
+        yield ScRuntimeSource(
+            rows=rows,
+            source_identity=source.identity,
+            label_space=label_space,
+            view_types=(revision.target_view_id,),
+            dataset_type="image_sc_collection",
+            dataset_id=None,
+            collection_id=source.collection_id,
+            collection_revision_id=revision.id,
+            source_dataset_ids=source_dataset_ids,
+            resolved_dataset_revision_ids=resolved_revision_ids,
+        )
+        return
+
     with tempfile.TemporaryDirectory(prefix="sc-collection-runtime-") as tmp:
         data_path = Path(tmp) / "data.parquet"
         await app_context.shared.artifact_storage.get_file(
@@ -120,6 +188,35 @@ async def open_sc_runtime_source(
             collection_revision_id=revision.id,
             source_dataset_ids=source_dataset_ids,
         )
+
+
+async def _observed_member_rows(
+    storage: DatasetStorageAgg,
+    *,
+    dataset_id: str,
+    member_id: str,
+    with_labels: bool,
+    with_predictions: bool,
+) -> pl.LazyFrame:
+    rows = cast(
+        pl.LazyFrame,
+        await storage.list_samples(
+            return_lazyframe=True,
+            with_labels=with_labels,
+            with_predictions=with_predictions,
+        ),
+    )
+    rows = _normalize_storage_rows(rows)
+    if "sample_id" not in rows.collect_schema().names():
+        raise ValueError(f"Dataset '{dataset_id}' does not expose sample_id")
+    source_sample = pl.col("sample_id").cast(pl.String)
+    row_key = pl.concat_str([pl.lit(dataset_id), source_sample], separator="::")
+    return rows.with_columns(
+        source_sample.alias("source_sample_id"),
+        pl.lit(dataset_id).alias("source_dataset_id"),
+        pl.lit(member_id).alias("collection_member_id"),
+        row_key.alias("row_key"),
+    ).with_columns(pl.col("row_key").alias("sample_id"))
 
 
 def decode_collection_row_key(

@@ -101,7 +101,7 @@ async function handleSubmit() {
     });
     await authStore.oauthLogin(loginResp.access_token);
     await orgStore.fetchOrganizations();
-    router.replace("/datasets");
+    router.replace("/library");
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Registration failed";
     message.error(msg);

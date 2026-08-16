@@ -5,6 +5,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { TrainingJobDatasetId } from './trainingJobDatasetId';
+import type { TrainingJobDatasetRevisionId } from './trainingJobDatasetRevisionId';
 import type { TrainingJobCollectionId } from './trainingJobCollectionId';
 import type { TrainingJobCollectionRevisionId } from './trainingJobCollectionRevisionId';
 import type { JobStatus } from './jobStatus';
@@ -15,6 +16,8 @@ import type { ArtifactRef } from './artifactRef';
 export interface TrainingJob {
   id?: string;
   dataset_id: TrainingJobDatasetId;
+  /** Dataset Revision observed when the job was submitted; audit-only and does not select the runtime input */
+  dataset_revision_id?: TrainingJobDatasetRevisionId;
   collection_id?: TrainingJobCollectionId;
   collection_revision_id?: TrainingJobCollectionRevisionId;
   trainer_id: string;

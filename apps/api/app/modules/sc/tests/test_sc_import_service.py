@@ -6,6 +6,11 @@ from pathlib import Path
 import polars as pl
 import pytest
 
+from app.modules.datasets.domain.entities import (
+    DatasetRevision,
+    DatasetRevisionOperation,
+)
+from app.modules.datasets.port.local import DatasetRevisionPublisherPort
 from app.modules.sc.domain.models import ScInspectionRecord
 
 
@@ -98,6 +103,43 @@ class _MockPayloadStore:
 
     async def delete_object(self, uri: str) -> None:
         del uri
+
+
+class _MockRevisionPublisher:
+    def __init__(self) -> None:
+        self.publications: list[dict[str, object]] = []
+
+    async def publish_sparse_revision(
+        self,
+        *,
+        dataset_id: str,
+        org_id: str,
+        operation: DatasetRevisionOperation,
+        created_by: str,
+        provenance: dict[str, object] | None = None,
+        operation_ref: str | None = None,
+    ) -> DatasetRevision:
+        publication: dict[str, object] = {
+            "dataset_id": dataset_id,
+            "org_id": org_id,
+            "operation": operation,
+            "created_by": created_by,
+            "provenance": provenance or {},
+        }
+        if operation_ref is not None:
+            publication["operation_ref"] = operation_ref
+        self.publications.append(publication)
+        return DatasetRevision(
+            id="revision-test",
+            dataset_id=dataset_id,
+            revision_number=1,
+            manifest_uri="memory://revision-test/manifest.json",
+            operation=operation,
+            operation_ref=operation_ref,
+            created_by=created_by,
+            created_at=datetime.now(timezone.utc),
+            provenance=provenance or {},
+        )
 
 
 class _MockUpstream:
@@ -210,7 +252,12 @@ class _MockUpstream:
         return pl.LazyFrame([])
 
 
-def _make_service(upstream_reader=None, repository=None, payload_store=None):
+def _make_service(
+    upstream_reader=None,
+    repository=None,
+    payload_store=None,
+    revision_publisher: DatasetRevisionPublisherPort | None = None,
+):
     from app.modules.storage.adapter.sparse.import_operator import (
         SparseImportOperatorFactory,
     )
@@ -220,10 +267,41 @@ def _make_service(upstream_reader=None, repository=None, payload_store=None):
         sparse_import_factory=SparseImportOperatorFactory(),
         repository=repository or _MockRepository(),
         payload_store=payload_store or _MockPayloadStore(),
+        revision_publisher=revision_publisher or _MockRevisionPublisher(),
         upstream_reader=upstream_reader or _MockUpstream(row_count=1000),
         import_batch_rows=25_000,
         index_row_group_rows=65_536,
     )
+
+
+@pytest.mark.asyncio
+async def test_completed_sc_import_publishes_initial_dataset_revision() -> None:
+    publisher = _MockRevisionPublisher()
+    service = _make_service(
+        upstream_reader=_MockUpstream(row_count=20),
+        revision_publisher=publisher,
+    )
+
+    status = await service.submit_import(
+        source_inspection_time="2024-01-15T08:30:00",
+        source_wafer_key=7,
+        dataset_name="Revision publication",
+        org_id="test-org",
+        created_by="test-user",
+    )
+
+    assert status.status == "completed"
+    assert len(publisher.publications) == 1
+    publication = publisher.publications[0]
+    assert publication["dataset_id"] == status.dataset_id
+    assert publication["org_id"] == "test-org"
+    assert publication["operation"] == "initial_import"
+    assert publication["created_by"] == "test-user"
+    assert publication["provenance"] == {
+        "source_connector": "sc",
+        "source_inspection_time": "2024-01-15T08:30:00",
+        "source_wafer_key": 7,
+    }
 
 
 @pytest.mark.asyncio

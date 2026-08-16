@@ -18,7 +18,7 @@ test("redirects unauthenticated users to login @mock", async ({ page }) => {
   await expect(page.getByTestId("login-email")).toBeVisible();
 });
 
-test("logs in and shows datasets list @mock", async ({ page, apiMocks }) => {
+test("logs in and shows the Library @mock", async ({ page, apiMocks }) => {
   // Uses plain page (no authedPage) — no pre-seeded token.
   // apiMocks.mockCoreApi wires up routes (login, me, orgs, datasets).
   await apiMocks.core.mockCoreApi();
@@ -31,8 +31,8 @@ test("logs in and shows datasets list @mock", async ({ page, apiMocks }) => {
   await loginPage.fillPassword("password123");
   await loginPage.submit();
 
-  await expect(page).toHaveURL(/\/datasets$/);
-  await expect(page.getByRole("heading", { name: "Datasets" })).toBeVisible();
+  await expect(page).toHaveURL(/\/library$/);
+  await expect(page.getByRole("heading", { name: "Library" })).toBeVisible();
   await expect(page.getByText("flowers-dataset")).toBeVisible();
 });
 
@@ -56,7 +56,7 @@ test.describe("Auth Flow — without existing session", () => {
 
     await page.getByRole("button", { name: "Create Account" }).click();
 
-    await expect(page).toHaveURL(/\/datasets/);
+    await expect(page).toHaveURL(/\/library/);
     await expect(page.getByTestId("nav-avatar")).toBeVisible();
   });
 
@@ -68,7 +68,7 @@ test.describe("Auth Flow — without existing session", () => {
     await page.getByPlaceholder("Password").fill("seed1234");
     await page.getByRole("button", { name: "Sign In" }).click();
 
-    await expect(page).toHaveURL(/\/datasets/);
+    await expect(page).toHaveURL(/\/library/);
     await expect(page.getByTestId("nav-avatar")).toBeVisible();
   });
 

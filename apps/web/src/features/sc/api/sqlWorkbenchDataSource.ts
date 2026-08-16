@@ -267,36 +267,9 @@ function compileScFilterExpression(
 interface CompiledSamplingSelection {
   sql: string;
   parameters: ScDataParameter[];
-}
-
-function samplingValuePredicate(
-  field: string,
-  value: string,
-  allowedColumns: ReadonlySet<string>,
-): CompiledWhere {
-  const column = quotedColumn(field, allowedColumns);
-  if (isScMissingFilterValue(field, value)) {
-    return { sql: `${column} IS NULL`, parameters: [] };
-  }
-  return { sql: `${column} IS NOT DISTINCT FROM ?`, parameters: [value] };
-}
-
-function samplingTargetExpression(program: ScSamplingProgram, amount: number): CompiledWhere {
-  if (program.group.unit === "count") {
-    return {
-      sql: "?",
-      parameters: [amount],
-    };
-  }
-  const rounding =
-    program.group.rounding === "floor"
-      ? "FLOOR"
-      : program.group.rounding === "ceil"
-        ? "CEIL"
-        : "ROUND";
-  return {
-    sql: `${rounding}("__group_population" * ? / 100.0)`,
-    parameters: [amount],
+  sampling: {
+    seed: number;
+    program: Pick<ScSamplingProgram, "conditional" | "group" | "total">;
   };
 }
 
@@ -322,80 +295,21 @@ export function compileScSamplingSelection(
   const baseColumns = [...new Set(selectedFields)]
     .map((field) => quotedColumn(field, allowedColumns))
     .join(", ");
-  const ctes: string[] = [];
-  const parameters: ScDataParameter[] = [];
-  let source = '"__sc_sampling_base"';
-
-  if (program.conditional.enabled) {
-    const predicate = samplingValuePredicate(
-      program.conditional.field,
-      program.conditional.value,
-      allowedColumns,
-    );
-    ctes.push(
-      `"__sc_sampling_base" AS (` +
-        `SELECT ${baseColumns}, ${predicate.sql} AS "__conditional_match" ` +
-        `FROM samples${compiledWhere.sql})`,
-    );
-    parameters.push(...predicate.parameters, ...compiledWhere.parameters);
-    ctes.push(
-      `"__sc_sampling_conditional_ranked" AS (` +
-        `SELECT *, ROW_NUMBER() OVER (` +
-        `PARTITION BY "__conditional_match" ORDER BY HASH("map_id", ?), "map_id"` +
-        `) AS "__conditional_rank" FROM ${source})`,
-    );
-    parameters.push(seed);
-    ctes.push(
-      `"__sc_sampling_conditional" AS (` +
-        `SELECT * FROM "__sc_sampling_conditional_ranked" ` +
-        `WHERE NOT "__conditional_match" OR "__conditional_rank" <= ?)`,
-    );
-    parameters.push(program.conditional.limit);
-    source = '"__sc_sampling_conditional"';
-  } else {
-    ctes.push(
-      `"__sc_sampling_base" AS (` + `SELECT ${baseColumns} FROM samples${compiledWhere.sql})`,
-    );
-    parameters.push(...compiledWhere.parameters);
-  }
-
-  if (program.group.enabled) {
-    const groupColumn = quotedColumn(program.group.field, allowedColumns);
-    ctes.push(
-      `"__sc_sampling_group_ranked" AS (` +
-        `SELECT *, ` +
-        `ROW_NUMBER() OVER (PARTITION BY ${groupColumn} ` +
-        `ORDER BY HASH("map_id", ?), "map_id") AS "__group_rank", ` +
-        `COUNT(*) OVER (PARTITION BY ${groupColumn}) AS "__group_population" ` +
-        `FROM ${source})`,
-    );
-    parameters.push(seed);
-
-    const branches = program.group.targets.map((target) => {
-      const predicate = samplingValuePredicate(program.group.field, target.value, allowedColumns);
-      const targetExpression = samplingTargetExpression(program, target.amount);
-      parameters.push(...predicate.parameters, ...targetExpression.parameters);
-      return `WHEN ${predicate.sql} THEN ${targetExpression.sql}`;
-    });
-    const othersExpression = samplingTargetExpression(program, program.group.othersAmount);
-    parameters.push(...othersExpression.parameters);
-    ctes.push(
-      `"__sc_sampling_grouped" AS (` +
-        `SELECT * FROM "__sc_sampling_group_ranked" ` +
-        `WHERE "__group_rank" <= CASE ${branches.join(" ")} ELSE ${othersExpression.sql} END)`,
-    );
-    source = '"__sc_sampling_grouped"';
-  }
-
-  let sql =
-    `WITH ${ctes.join(", ")} SELECT "map_id" AS "defect_id" FROM ${source} ` +
-    `ORDER BY HASH("map_id", ?), "map_id"`;
-  parameters.push(seed);
-  if (program.total.enabled) {
-    sql += " LIMIT ?";
-    parameters.push(program.total.limit);
-  }
-  return { sql, parameters };
+  return {
+    sql: `SELECT ${baseColumns} FROM samples${compiledWhere.sql}`,
+    parameters: compiledWhere.parameters,
+    sampling: {
+      seed,
+      program: {
+        conditional: { ...program.conditional },
+        group: {
+          ...program.group,
+          targets: program.group.targets.map((target) => ({ ...target })),
+        },
+        total: { ...program.total },
+      },
+    },
+  };
 }
 
 function filtersFromTableFilter(
@@ -833,6 +747,8 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
         "sc-workbench.selection.sampling-program",
         compiled.sql,
         compiled.parameters,
+        undefined,
+        compiled.sampling,
       );
       return Array.from({ length: result.table.numRows }, (_, index) =>
         numeric(result.table.getChild("defect_id")?.get(index)),
@@ -916,6 +832,7 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
     sql: string,
     parameters: ScDataParameter[],
     signal?: AbortSignal,
+    sampling?: CompiledSamplingSelection["sampling"],
   ): Promise<ScArrowQueryResult & { ipc: Uint8Array }> {
     if (this.closed) throw new Error("SC workbench data source is closed");
     const controller = new AbortController();
@@ -930,7 +847,12 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
             this.queryUrl,
             {
               method: "POST",
-              body: JSON.stringify({ description, sql, parameters }),
+              body: JSON.stringify({
+                description,
+                sql,
+                parameters,
+                ...(sampling ? { sampling } : {}),
+              }),
               signal: controller.signal,
             },
             QUERY_TIMEOUT_MS,

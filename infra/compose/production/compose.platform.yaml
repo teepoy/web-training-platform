@@ -197,6 +197,9 @@ services:
 
   web:
     image: ${FINETUNE_WEB_IMAGE:?Set FINETUNE_WEB_IMAGE to an immutable tag}
+    environment:
+      OPERATOR_PREFECT_UI_URL: ${OPERATOR_PREFECT_UI_URL:-}
+      OPERATOR_MINIO_CONSOLE_URL: ${OPERATOR_MINIO_CONSOLE_URL:-}
     deploy:
       resources:
         limits:

@@ -6,6 +6,14 @@ from sampling_rules.errors import (
     MissingFieldError,
     SamplingRuleError,
 )
+from sampling_rules.duckdb_engine import (
+    CompiledDuckDbSampling,
+    DuckDbSamplingExecution,
+    DuckDbSamplingSource,
+    compile_duckdb_sampling,
+    enrich_duckdb_sampling_source,
+    execute_duckdb_sampling,
+)
 from sampling_rules.models import (
     Condition,
     ConditionalLimitRule,
@@ -53,7 +61,10 @@ from sampling_rules.spatial import (
     compute_dynamic_adders,
     compute_dynamic_clusters,
     enrich_rows_with_dynamic_spatial_features,
+    validate_dynamic_adder_config,
+    validate_dynamic_cluster_config,
 )
+from sampling_rules.validation import validate_sampling_program
 
 __all__ = [
     "Condition",
@@ -61,6 +72,7 @@ __all__ = [
     "ConditionOperator",
     "ConditionSet",
     "DEFAULT_SAMPLING_SEED",
+    "CompiledDuckDbSampling",
     "DYNAMIC_ADDER_DISTANCE_FIELD",
     "DYNAMIC_ADDER_FIELD",
     "DYNAMIC_ADDER_REFERENCE_INDEX_FIELD",
@@ -74,6 +86,8 @@ __all__ = [
     "DynamicAdderResult",
     "DynamicClusterConfig",
     "DynamicClusterResult",
+    "DuckDbSamplingExecution",
+    "DuckDbSamplingSource",
     "ExtraFilterRule",
     "GroupQuota",
     "GroupQuotaRule",
@@ -98,10 +112,16 @@ __all__ = [
     "clustered_ratio_program",
     "compute_dynamic_adders",
     "compute_dynamic_clusters",
+    "compile_duckdb_sampling",
+    "enrich_duckdb_sampling_source",
     "enrich_rows_with_dynamic_spatial_features",
     "execute_sampling",
+    "execute_duckdb_sampling",
     "per_die_cap_program",
     "plan_group_quota",
     "prediction_log_quota_program",
     "sample",
+    "validate_dynamic_adder_config",
+    "validate_dynamic_cluster_config",
+    "validate_sampling_program",
 ]

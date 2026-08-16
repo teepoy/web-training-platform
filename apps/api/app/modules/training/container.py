@@ -32,6 +32,7 @@ from app.modules.training.port.local import (
     TrainingReadinessPort,
 )
 from app.modules.datasets.port.dataset_reader import DatasetReader
+from app.modules.datasets.port.local import DatasetRevisionReaderPort
 from app.modules.storage.port.local import DatasetStorageFactoryPort
 from app.shared.application.artifacts import ArtifactService
 from app.shared.context import SharedInfra
@@ -100,6 +101,7 @@ def init_training(
     dataset_reader: DatasetReader,
     storage_factory: DatasetStorageFactoryPort,
     collection_revisions: DatasetCollectionRevisionReaderPort,
+    dataset_revisions: DatasetRevisionReaderPort,
 ) -> TrainingContext:
     kube_client = (
         _build_kubeflow_client(shared.config)
@@ -139,6 +141,7 @@ def init_training(
         dataset_reader=dataset_reader,
         prefect_client=shared.prefect_client,
         collection_revisions=collection_revisions,
+        dataset_revisions=dataset_revisions,
         status_reconciler=status_reconciler,
     )
     return TrainingContext(
@@ -161,12 +164,14 @@ class TrainingModule(Module):
         dataset_reader: DatasetReader,
         storage_factory: DatasetStorageFactoryPort,
         collection_revisions: DatasetCollectionRevisionReaderPort,
+        dataset_revisions: DatasetRevisionReaderPort,
     ) -> TrainingContext:
         return init_training(
             shared,
             dataset_reader=dataset_reader,
             storage_factory=storage_factory,
             collection_revisions=collection_revisions,
+            dataset_revisions=dataset_revisions,
         )
 
     @provider

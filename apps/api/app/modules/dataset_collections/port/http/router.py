@@ -11,10 +11,21 @@ from app.modules.dataset_collections.domain.errors import (
     DatasetCollectionPermissionError,
     DatasetCollectionValidationError,
 )
+from app.modules.dataset_collections.domain.repository import (
+    CollectionSortField,
+    SortDirection,
+)
 from app.modules.dataset_collections.port.http.deps import (
+    CollectionModelManagementDep,
+    CollectionSnapshotPublishingDep,
     DatasetCollectionServiceDep,
 )
 from app.modules.dataset_collections.port.http.schemas import (
+    CollectionPredictionBatchResponse,
+    CollectionPredictionCoverageResponse,
+    CollectionSnapshotRefreshResponse,
+    CollectionSnapshotUpdateStatusResponse,
+    CreateCollectionPredictionBatchRequest,
     CreateDatasetCollectionRequest,
     CreateDatasetCollectionRevisionRequest,
     DatasetCollectionMemberResponse,
@@ -23,6 +34,7 @@ from app.modules.dataset_collections.port.http.schemas import (
     DatasetCollectionRevisionResponse,
     LinkDatasetCollectionMembersRequest,
     ReplaceDatasetCollectionMembersRequest,
+    UpdateCollectionDefaultModelRequest,
     UpdateDatasetCollectionRequest,
 )
 from app.shared.api.schemas import Organization, PaginatedResponse, User
@@ -77,12 +89,18 @@ async def list_collections(
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=200),
     creator_id: str | None = Query(default=None, max_length=255),
+    q: str | None = Query(default=None, max_length=200),
+    sort_by: CollectionSortField = Query(default="updated_at"),
+    sort_order: SortDirection = Query(default="desc"),
 ) -> PaginatedResponse[DatasetCollectionResponse]:
     collections, total = await service.list_collections(
         org.id,
         offset=offset,
         limit=limit,
         creator_id=creator_id,
+        query=q,
+        sort_by=sort_by,
+        sort_order=sort_order,
     )
     return PaginatedResponse(
         items=[DatasetCollectionResponse.from_domain(item) for item in collections],
@@ -103,6 +121,55 @@ async def get_collection(
     except DatasetCollectionNotFoundError as exc:
         raise _http_error(exc) from exc
     return DatasetCollectionResponse.from_domain(collection)
+
+
+@router.get(
+    "/{collection_id}/snapshot-update-status",
+    response_model=CollectionSnapshotUpdateStatusResponse,
+)
+async def get_snapshot_update_status(
+    collection_id: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    org: Annotated[Organization, Depends(get_current_org)],
+    service: DatasetCollectionServiceDep,
+) -> CollectionSnapshotUpdateStatusResponse:
+    del current_user
+    try:
+        status = await service.get_snapshot_update_status(collection_id, org.id)
+    except (
+        DatasetCollectionNotFoundError,
+        DatasetCollectionValidationError,
+    ) as exc:
+        raise _http_error(exc) from exc
+    return CollectionSnapshotUpdateStatusResponse.from_domain(status)
+
+
+@router.post(
+    "/{collection_id}/refresh-snapshot",
+    response_model=CollectionSnapshotRefreshResponse,
+)
+async def refresh_snapshot(
+    collection_id: str,
+    payload: CreateDatasetCollectionRevisionRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    org: Annotated[Organization, Depends(get_current_org)],
+    service: DatasetCollectionServiceDep,
+) -> CollectionSnapshotRefreshResponse:
+    try:
+        result = await service.refresh_snapshot(
+            collection_id,
+            org.id,
+            actor_id=current_user.id,
+            expected_definition_version=payload.expected_definition_version,
+        )
+    except (
+        DatasetCollectionConflictError,
+        DatasetCollectionNotFoundError,
+        DatasetCollectionPermissionError,
+        DatasetCollectionValidationError,
+    ) as exc:
+        raise _http_error(exc) from exc
+    return CollectionSnapshotRefreshResponse.from_domain(result)
 
 
 @router.patch("/{collection_id}", response_model=DatasetCollectionResponse)
@@ -249,6 +316,138 @@ async def unlink_member(
     return DatasetCollectionMembershipResponse.from_domain(collection, members)
 
 
+@router.patch(
+    "/{collection_id}/default-model",
+    response_model=DatasetCollectionResponse,
+)
+async def update_default_model(
+    collection_id: str,
+    payload: UpdateCollectionDefaultModelRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    org: Annotated[Organization, Depends(get_current_org)],
+    service: CollectionModelManagementDep,
+) -> DatasetCollectionResponse:
+    try:
+        collection = await service.set_default_model(
+            collection_id,
+            org.id,
+            actor_id=current_user.id,
+            expected_binding_version=payload.expected_binding_version,
+            model_id=payload.model_id,
+        )
+    except (
+        DatasetCollectionConflictError,
+        DatasetCollectionNotFoundError,
+        DatasetCollectionPermissionError,
+        DatasetCollectionValidationError,
+    ) as exc:
+        raise _http_error(exc) from exc
+    return DatasetCollectionResponse.from_domain(collection)
+
+
+@router.get(
+    "/{collection_id}/prediction-coverage",
+    response_model=list[CollectionPredictionCoverageResponse],
+)
+async def list_prediction_coverage(
+    collection_id: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    org: Annotated[Organization, Depends(get_current_org)],
+    service: CollectionModelManagementDep,
+    snapshot_id: str | None = Query(default=None, min_length=1, max_length=64),
+) -> list[CollectionPredictionCoverageResponse]:
+    del current_user
+    try:
+        coverage = await service.list_coverage(
+            collection_id, org.id, snapshot_id=snapshot_id
+        )
+    except (DatasetCollectionNotFoundError, DatasetCollectionValidationError) as exc:
+        raise _http_error(exc) from exc
+    return [CollectionPredictionCoverageResponse.from_domain(item) for item in coverage]
+
+
+@router.post(
+    "/{collection_id}/prediction-batches",
+    response_model=CollectionPredictionBatchResponse,
+)
+async def create_prediction_batch(
+    collection_id: str,
+    payload: CreateCollectionPredictionBatchRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    org: Annotated[Organization, Depends(get_current_org)],
+    service: CollectionModelManagementDep,
+) -> CollectionPredictionBatchResponse:
+    try:
+        batch, items = await service.create_reconciliation_batch(
+            collection_id,
+            org.id,
+            actor_id=current_user.id,
+            snapshot_id=payload.snapshot_id,
+            expected_default_model_id=payload.expected_default_model_id,
+            request_id=payload.request_id,
+            dataset_ids=tuple(payload.dataset_ids),
+        )
+    except (
+        DatasetCollectionConflictError,
+        DatasetCollectionNotFoundError,
+        DatasetCollectionPermissionError,
+        DatasetCollectionValidationError,
+    ) as exc:
+        raise _http_error(exc) from exc
+    return CollectionPredictionBatchResponse.from_domain(batch, items)
+
+
+@router.get(
+    "/{collection_id}/prediction-batches",
+    response_model=list[CollectionPredictionBatchResponse],
+)
+async def list_prediction_batches(
+    collection_id: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    org: Annotated[Organization, Depends(get_current_org)],
+    service: CollectionModelManagementDep,
+) -> list[CollectionPredictionBatchResponse]:
+    del current_user
+    try:
+        batches = await service.list_batches(collection_id, org.id)
+    except DatasetCollectionNotFoundError as exc:
+        raise _http_error(exc) from exc
+    return [
+        CollectionPredictionBatchResponse.from_domain(batch, items)
+        for batch, items in batches
+    ]
+
+
+@router.post(
+    "/{collection_id}/prediction-batches/{batch_id}/retry",
+    response_model=CollectionPredictionBatchResponse,
+)
+async def retry_prediction_batch(
+    collection_id: str,
+    batch_id: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    org: Annotated[Organization, Depends(get_current_org)],
+    service: CollectionModelManagementDep,
+) -> CollectionPredictionBatchResponse:
+    try:
+        batch, items = await service.retry_batch(
+            batch_id,
+            org.id,
+            actor_id=current_user.id,
+        )
+        if batch.collection_id != collection_id:
+            raise DatasetCollectionNotFoundError(
+                "Collection prediction batch not found"
+            )
+    except (
+        DatasetCollectionNotFoundError,
+        DatasetCollectionPermissionError,
+        DatasetCollectionValidationError,
+    ) as exc:
+        raise _http_error(exc) from exc
+    return CollectionPredictionBatchResponse.from_domain(batch, items)
+
+
 @router.post(
     "/{collection_id}/revisions",
     response_model=DatasetCollectionRevisionResponse,
@@ -258,7 +457,7 @@ async def create_revision(
     payload: CreateDatasetCollectionRevisionRequest,
     current_user: Annotated[User, Depends(get_current_user)],
     org: Annotated[Organization, Depends(get_current_org)],
-    service: DatasetCollectionServiceDep,
+    service: CollectionSnapshotPublishingDep,
 ) -> DatasetCollectionRevisionResponse:
     try:
         revision = await service.create_revision(

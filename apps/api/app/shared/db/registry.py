@@ -7,5 +7,6 @@ from app.shared.db.models.datasets import *  # noqa: F401,F403
 from app.shared.db.models.dataset_collections import *  # noqa: F401,F403
 from app.shared.db.models.schedules import *  # noqa: F401,F403
 from app.shared.db.models.sensors import *  # noqa: F401,F403
+from app.shared.db.models.source_discovery import *  # noqa: F401,F403
 from app.shared.db.models.prediction import *  # noqa: F401,F403
 from app.shared.db.models.training import *  # noqa: F401,F403

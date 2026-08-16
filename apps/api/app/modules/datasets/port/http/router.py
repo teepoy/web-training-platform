@@ -20,6 +20,7 @@ from fastapi.responses import StreamingResponse
 from app.modules.datasets.port.http.deps import (
     ArtifactLookupRepositoryDep,
     DatasetDeletionGuardDep,
+    DatasetRevisionReaderDep,
     DatasetServiceDep,
     LabelStudioClientDep,
     RedisEventPublisherDep,
@@ -33,6 +34,11 @@ from app.modules.datasets.port.http.deps import (
 from app.modules.datasets.app.services.dataset_deletion_guard import (
     DatasetDeletionConflictError,
 )
+from app.modules.datasets.app.services.dataset_revision_service import (
+    DatasetNotFoundError,
+    DatasetRevisionNotFoundError,
+)
+from app.modules.datasets.domain.repository import DatasetSortField, SortDirection
 from app.modules.storage.adapter.factory import DatasetStorageFactory
 from app.modules.datasets.domain.sample_row import BulkSampleRow
 from app.modules.storage.domain.storage_agg import DatasetStorageAgg
@@ -54,6 +60,7 @@ from app.modules.datasets.port.http.schemas import (
     BulkCreateSampleResponse,
     CreateAnnotationRequest,
     CreateDatasetRequest,
+    DatasetRevisionResponse,
     DatasetStatusResponse,
     CreateSampleRequest,
     LatestAnnotation,
@@ -318,6 +325,8 @@ async def list_datasets(
     offset: int = Query(default=0, ge=0),
     q: str | None = Query(default=None, max_length=200),
     creator_id: str | None = Query(default=None, max_length=255),
+    sort_by: DatasetSortField = Query(default="created_at"),
+    sort_order: SortDirection = Query(default="desc"),
 ) -> PaginatedResponse[Dataset]:
     datasets = await repo.list_datasets(
         org_id=org.id,
@@ -325,6 +334,8 @@ async def list_datasets(
         offset=offset,
         query=q,
         creator_id=creator_id,
+        sort_by=sort_by,
+        sort_order=sort_order,
     )
     total = await repo.count_datasets(
         org_id=org.id,
@@ -356,6 +367,52 @@ async def get_dataset(
     if dataset is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
     return service.to_response(dataset)
+
+
+@router.get(
+    "/datasets/{dataset_id}/revisions/current",
+    response_model=DatasetRevisionResponse,
+)
+async def get_current_dataset_revision(
+    dataset_id: str,
+    revisions: DatasetRevisionReaderDep,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+) -> DatasetRevisionResponse:
+    try:
+        revision = await revisions.get_current(dataset_id, org.id)
+    except DatasetNotFoundError:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    except DatasetRevisionNotFoundError:
+        raise HTTPException(status_code=404, detail="Dataset revision not found")
+    return DatasetRevisionResponse.from_domain(revision)
+
+
+@router.get(
+    "/datasets/{dataset_id}/revisions",
+    response_model=PaginatedResponse[DatasetRevisionResponse],
+)
+async def list_dataset_revisions(
+    dataset_id: str,
+    revisions: DatasetRevisionReaderDep,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+) -> PaginatedResponse[DatasetRevisionResponse]:
+    try:
+        items, total = await revisions.list_history(
+            dataset_id,
+            org.id,
+            limit=limit,
+            offset=offset,
+        )
+    except DatasetNotFoundError:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    return PaginatedResponse(
+        items=[DatasetRevisionResponse.from_domain(item) for item in items],
+        total=total,
+    )
 
 
 @router.get(

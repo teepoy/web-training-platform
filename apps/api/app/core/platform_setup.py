@@ -15,6 +15,7 @@ from app.modules.auth.app.services.dev_auth_context import prepare_dev_auth_cont
 from app.shared.infrastructure.prefect.deployments import (
     platform_prefect_deployment_specs,
     prefect_work_pool_names,
+    prefect_work_queue_specs,
     required_prefect_deployment_names,
 )
 from app.shared.context import SharedInfra, build_shared_infra
@@ -97,13 +98,18 @@ async def prepare_prefect(shared: SharedInfra) -> None:
     client = shared.prefect_client
     for pool_name in sorted(prefect_work_pool_names()):
         await client.ensure_work_pool(pool_name, "process")
+    for pool_name, queue_name, priority in prefect_work_queue_specs():
+        await client.ensure_work_queue(pool_name, queue_name, priority=priority)
     for spec in platform_prefect_deployment_specs():
         await client.ensure_deployment(
-            deployment_name=spec["deployment_name"],
-            flow_name=spec["flow_name"],
-            work_pool_name=spec["work_pool_name"],
-            entrypoint=spec["entrypoint"],
-            path=spec["path"],
+            deployment_name=str(spec["deployment_name"]),
+            flow_name=str(spec["flow_name"]),
+            work_pool_name=str(spec["work_pool_name"]),
+            entrypoint=str(spec["entrypoint"]),
+            path=str(spec["path"]),
+            work_queue_name=(
+                str(spec["work_queue_name"]) if "work_queue_name" in spec else None
+            ),
         )
     await validate_prefect(shared)
 
@@ -117,6 +123,19 @@ async def validate_prefect(shared: SharedInfra) -> None:
             raise RuntimeError(
                 f"Prefect work pool {pool_name!r} has type {pool_type!r}, "
                 "expected 'process'"
+            )
+
+    for pool_name, queue_name, priority in prefect_work_queue_specs():
+        queue = await client.get_work_queue_by_name(queue_name, pool_name)
+        if queue is None:
+            raise RuntimeError(
+                f"Required Prefect work queue {queue_name!r} is missing from "
+                f"pool {pool_name!r}"
+            )
+        if queue.get("priority") != priority:
+            raise RuntimeError(
+                f"Prefect work queue {queue_name!r} has priority "
+                f"{queue.get('priority')!r}, expected {priority}"
             )
 
     owned_specs = {
@@ -133,7 +152,7 @@ async def validate_prefect(shared: SharedInfra) -> None:
         if spec is None:
             continue
         deployment = await client.get_deployment(deployment_id)
-        flow_id = await client.resolve_existing_flow_id(spec["flow_name"])
+        flow_id = await client.resolve_existing_flow_id(str(spec["flow_name"]))
         if flow_id is None:
             raise RuntimeError(
                 f"Required Prefect flow {spec['flow_name']!r} is missing"
@@ -144,6 +163,8 @@ async def validate_prefect(shared: SharedInfra) -> None:
             "entrypoint": spec["entrypoint"],
             "path": spec["path"],
         }
+        if "work_queue_name" in spec:
+            expected["work_queue_name"] = spec["work_queue_name"]
         actual = {key: deployment.get(key) for key in expected}
         if actual != expected:
             raise RuntimeError(

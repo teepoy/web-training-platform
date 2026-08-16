@@ -1,13 +1,19 @@
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Literal, Protocol
 
 from app.modules.dataset_collections.domain.models import (
+    CollectionPredictionBatch,
+    CollectionPredictionBatchItem,
+    CollectionPredictionObservation,
     DatasetCollection,
     DatasetCollectionMember,
     DatasetCollectionRevision,
     NewCollectionMember,
 )
+
+CollectionSortField = Literal["name", "creator", "created_at", "updated_at"]
+SortDirection = Literal["asc", "desc"]
 
 
 class DatasetCollectionRepository(Protocol):
@@ -22,6 +28,9 @@ class DatasetCollectionRepository(Protocol):
         offset: int,
         limit: int,
         creator_id: str | None = None,
+        query: str | None = None,
+        sort_by: CollectionSortField = "updated_at",
+        sort_order: SortDirection = "desc",
     ) -> tuple[list[DatasetCollection], int]: ...
 
     async def get_collection(
@@ -36,6 +45,15 @@ class DatasetCollectionRepository(Protocol):
         name: str | None,
         description: str | None,
     ) -> DatasetCollection | None: ...
+
+    async def set_default_model(
+        self,
+        collection_id: str,
+        org_id: str,
+        *,
+        expected_binding_version: int,
+        model_id: str | None,
+    ) -> DatasetCollection: ...
 
     async def delete_collection(
         self, collection_id: str, org_id: str
@@ -90,6 +108,58 @@ class DatasetCollectionRepository(Protocol):
     async def get_revision(
         self, collection_id: str, revision_id: str, org_id: str
     ) -> DatasetCollectionRevision | None: ...
+
+    async def get_current_revision(
+        self, collection_id: str, org_id: str
+    ) -> DatasetCollectionRevision | None: ...
+
+    async def list_prediction_observations(
+        self,
+        collection_id: str,
+        org_id: str,
+        dataset_ids: tuple[str, ...],
+    ) -> list[CollectionPredictionObservation]: ...
+
+    async def create_or_get_prediction_batch(
+        self,
+        batch: CollectionPredictionBatch,
+        items: tuple[CollectionPredictionBatchItem, ...],
+        org_id: str,
+    ) -> tuple[
+        CollectionPredictionBatch, list[CollectionPredictionBatchItem], bool
+    ]: ...
+
+    async def get_prediction_batch(
+        self,
+        batch_id: str,
+        org_id: str,
+    ) -> (
+        tuple[CollectionPredictionBatch, list[CollectionPredictionBatchItem]] | None
+    ): ...
+
+    async def list_prediction_batches(
+        self,
+        collection_id: str,
+        org_id: str,
+    ) -> list[
+        tuple[CollectionPredictionBatch, list[CollectionPredictionBatchItem]]
+    ]: ...
+
+    async def update_prediction_batch_item(
+        self,
+        item_id: str,
+        *,
+        prediction_job_id: str | None,
+        status: str,
+        error_detail: str | None,
+        increment_attempt: bool,
+    ) -> CollectionPredictionBatchItem: ...
+
+    async def update_prediction_batch_status(
+        self,
+        batch_id: str,
+        status: str,
+    ) -> None: ...
 
     async def next_revision_number(self, collection_id: str, org_id: str) -> int: ...
 

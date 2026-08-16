@@ -87,6 +87,23 @@ def test_list_datasets_applies_search_and_creator_before_pagination() -> None:
         )
 
 
+def test_list_datasets_sorts_before_pagination() -> None:
+    with TestClient(app) as c:
+        create_dataset(c, name="Zulu dataset")
+        create_dataset(c, name="Alpha dataset")
+
+        response = c.get(
+            "/api/v1/datasets?sort_by=name&sort_order=asc&limit=1&offset=0"
+        )
+
+        assert response.status_code == 200
+        assert response.json()["total"] == 2
+        assert [item["name"] for item in response.json()["items"]] == [
+            "Alpha dataset"
+        ]
+        assert c.get("/api/v1/datasets?sort_by=unknown").status_code == 422
+
+
 def test_rename_dataset_requires_creator() -> None:
     with TestClient(app) as c:
         dataset_id = create_dataset(c, name="owner-only-rename")

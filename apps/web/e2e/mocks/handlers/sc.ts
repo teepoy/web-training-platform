@@ -21,6 +21,7 @@ export interface ScInspectionOverrides {
   images?: number;
   device?: string;
   total?: number;
+  datasets?: Array<{ id: string; name: string }>;
 }
 
 export async function mockScInspections(
@@ -44,6 +45,7 @@ export async function mockScInspections(
     defects: overrides?.defects ?? 50,
     images: overrides?.images ?? 100,
     device: overrides?.device ?? "DEV-A001",
+    datasets: overrides?.datasets ?? [],
   };
 
   await page.route("**/api/v1/sc/inspections*", async (route) => {
@@ -213,11 +215,17 @@ export async function mockScDataProvider(
       description?: string;
       sql: string;
       parameters: unknown[];
+      sampling?: {
+        seed: number;
+        program: { total: { enabled: boolean; limit: number } };
+      };
     };
     const sql = request.sql;
     let columns: Record<string, Array<number | string | null>>;
     if (request.description === "sc-workbench.selection.sampling-program") {
-      const limit = Number(request.parameters.at(-1) ?? 200);
+      const limit = request.sampling?.program.total.enabled
+        ? request.sampling.program.total.limit
+        : 200;
       columns = { defect_id: (rows.defect_id ?? []).slice(0, limit) };
     } else if (sql.includes('AS "group_key"')) {
       columns = { group_key: [0, 1, 2], group_count: [334, 333, 333] };

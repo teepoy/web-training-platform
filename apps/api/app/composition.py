@@ -9,6 +9,7 @@ from injector import Binder, Injector, Module, provider, singleton
 from app.core.config import AppConfig
 from app.core.settings.container import SettingsContext, SettingsModule
 from app.modules.agent.container import AgentContext, AgentModule
+from app.modules.automations.container import AutomationsModule
 from app.modules.auth.container import AuthContext, AuthModule
 from app.modules.dashboard.container import DashboardContext, DashboardModule
 from app.modules.dataset_collections.container import (
@@ -23,6 +24,7 @@ from app.modules.models.container import ModelsContext, ModelsModule
 from app.modules.prediction.container import PredictionContext, PredictionModule
 from app.modules.sc.container import ScContext, ScModule
 from app.modules.storage.container import StorageContext, StorageModule
+from app.modules.source_discovery.container import SourceDiscoveryModule
 from app.modules.training.container import TrainingContext, TrainingModule
 from app.modules.datasets.adapter.repositories.dataset_sql_repository import (
     DatasetSqlRepository,
@@ -176,7 +178,9 @@ def build_app_context(cfg: AppConfig) -> AppContext:
             JobsModule(),
             DashboardModule(),
             AgentModule(),
+            AutomationsModule(),
             ScModule(),
+            SourceDiscoveryModule(),
         ]
     )
     ctx.injector = injector

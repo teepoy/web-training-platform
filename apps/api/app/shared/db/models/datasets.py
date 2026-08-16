@@ -2,7 +2,18 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, JSON, DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.shared.db.base import Base
@@ -36,6 +47,41 @@ class DatasetORM(Base):
     ls_project_id: Mapped[str] = mapped_column(String(255), nullable=False)
     storage_mode: Mapped[str] = mapped_column(
         String(64), nullable=False, default="db_full", server_default="db_full"
+    )
+
+
+class DatasetRevisionORM(Base):
+    __tablename__ = "dataset_revisions"
+    __table_args__ = (
+        CheckConstraint(
+            "revision_number > 0",
+            name="ck_dataset_revisions_number_positive",
+        ),
+        UniqueConstraint(
+            "dataset_id",
+            "revision_number",
+            name="uq_dataset_revisions_number",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    dataset_id: Mapped[str] = mapped_column(
+        ForeignKey("datasets.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    revision_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    manifest_uri: Mapped[str] = mapped_column(Text, nullable=False)
+    provenance: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    operation: Mapped[str] = mapped_column(String(64), nullable=False)
+    operation_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    is_reproducible: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="0",
+    )
+    created_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, nullable=False
     )
 
 

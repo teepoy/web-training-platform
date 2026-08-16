@@ -12,19 +12,25 @@
       </div>
     </header>
 
+    <nav class="tabs" aria-label="Collection sections">
+      <button class="active">Overview</button><button>Data</button><button>Models</button
+      ><button>Snapshots</button><button>Activity</button>
+    </nav>
+
     <section class="snapshot-explainer">
       <strong>What is a snapshot?</strong>
       <span>
-        A revision is a fixed snapshot of the linked datasets and rules. Runs use a snapshot so
-        their input stays reproducible when the collection changes later.
+        It saves the linked datasets and rules plus the Dataset change numbers observed now. It does
+        not copy member data; runs read current Dataset data when they start.
       </span>
     </section>
 
     <section class="summary">
       View contract · Current setup v4 · 3 linked datasets · Snapshot r3
     </section>
-    <section class="panel">Linked datasets</section>
-    <section class="panel">Saved snapshots (revisions)</section>
+    <section class="panel muted">
+      The remaining content is split across Data, Models, Snapshots, and Activity.
+    </section>
   </main>
 </template>
 
@@ -77,6 +83,8 @@ button.primary {
 }
 
 .snapshot-explainer,
+.models-panel,
+.warning,
 .summary,
 .panel {
   padding: 18px;
@@ -85,11 +93,53 @@ button.primary {
   border-radius: 12px;
 }
 
+.tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid #dfe3e9;
+}
+
+.tabs button {
+  border: 0;
+  border-radius: 8px 8px 0 0;
+}
+
+.tabs button.active {
+  color: #4057bd;
+  box-shadow: inset 0 -2px #5267c9;
+}
+
+.muted {
+  color: #6a7280;
+  font-weight: 400;
+}
+
 .snapshot-explainer {
   display: grid;
   gap: 4px;
   border-color: #cad3fa;
   background: #f2f5ff;
+}
+
+.models-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.models-panel > div {
+  display: grid;
+  gap: 4px;
+}
+
+.models-panel span {
+  color: #6a7280;
+}
+
+.warning {
+  color: #8a4b08;
+  border-color: #f0c98b;
+  background: #fff8e8;
 }
 
 .panel {

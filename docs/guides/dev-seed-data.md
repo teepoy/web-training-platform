@@ -11,23 +11,25 @@ benchmarks.
 | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Datasets                | 180 labeled classification samples, 96 mixed labeled/unlabeled multi-image samples, one empty classification dataset, and one 2,500-row sparse SC inspection dataset |
 | SC annotations          | Labels on the first 96 SC samples, spread across three classes                                                                                                       |
-| Collections             | A two-dataset classification collection and a one-dataset SC collection, each with a ready pinned revision                                                           |
+| Collections             | A two-dataset classification collection and a one-dataset SC collection with saved snapshots, plus one empty dynamic SC Collection for automation tests              |
 | Training and prediction | Four training jobs and four prediction jobs covering completed, failed, and cancelled states, with event histories                                                   |
 | Models                  | Two metadata-only JSON model display fixtures plus metrics artifacts                                                                                                 |
-| Schedules               | Two paused dataset-export schedules                                                                                                                                  |
-| Sensors                 | Four disabled subscriptions covering dataset-size and timer sensors for train and predict workflows                                                                  |
+| Membership automation   | One manual-only SC rule with a typed `defects >= 1` condition, a 10-record run cap, and a 2,500-row per-Dataset import cap                                           |
+| Legacy execution data   | Two paused schedules and four disabled sensor subscriptions retained for backend compatibility tests; they are not ordinary-user navigation                          |
 
 The model fixtures have `seed_fixture: true` and `runnable: false` metadata and
 are named as display fixtures. The seeded jobs have no external execution IDs.
-`seed-dev` does not submit training or prediction jobs, run a schedule, or enable
-a sensor subscription.
+`seed-dev` does not run the membership rule, submit training or prediction jobs,
+run a schedule, or enable a sensor subscription. The dynamic Collection stays
+empty until a developer explicitly previews and starts Discovery or Backfill.
 
 ## Repeatability
 
 The SC upstream fixture uses the fixed inspection time
 `2026-08-01T04:00:00`. A matching SQLite fixture is reused, including its
 inspection identity, so running the command on another day does not invalidate
-the imported sparse dataset. Fixed dataset names and activity IDs are reused;
+the imported sparse dataset. Fixed dataset, Collection, connector, rule, and
+activity names are reused;
 owned event rows are replaced instead of duplicated. Existing classification
 samples are only topped up to the requested count and are never deleted.
 

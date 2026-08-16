@@ -10,9 +10,10 @@ extra filter
   -> seeded random result
 ```
 
-The library deliberately does not own persistence, dataset storage, or API models. It
-accepts ordinary mappings, produces an inspectable sampling plan, and performs a
-seeded draw.
+The library deliberately does not own persistence, dataset storage, or API models.
+It owns sampling semantics and provides a production DuckDB compiler/executor for
+table-first inputs. The original mapping-based executor remains available for
+explicitly bounded callers.
 
 The four rule forms are:
 
@@ -44,6 +45,19 @@ The library can derive runtime-only fields before executing the rule pipeline:
   `dynamic_adder`, `dynamic_cluster`, `dynamic_cluster_id`, match-distance, and
   cluster-audit fields so Extra filter, conditional limit, and group quota rules
   can consume them normally.
+- `enrich_duckdb_sampling_source(...)` provides the production table-first path.
+  It accepts the current relation plus an optional registered Arrow/reference
+  relation and returns another `DuckDbSamplingSource` that can be passed directly
+  to `execute_duckdb_sampling(...)`. Radius-sized grid cells bound spatial join
+  candidates, and DBSCAN core components use a keyed recursive CTE rather than
+  materializing Python rows.
+
+The table engine supports `ANY_REFERENCE` adder semantics. `ONE_TO_ONE` is
+explicitly rejected there because its result depends on sequential input order
+and consuming matches one row at a time; it remains available only through the
+bounded row API. A production caller that requires one-to-one matching must
+provide a separate, explicitly ordered matching operation rather than silently
+receiving different semantics.
 
 Spatial radii use the same unit as the chosen coordinate columns. SC wafer
 coordinates are nanometers, so UI values of 50 µm and 500 µm must be passed as
@@ -138,14 +152,54 @@ result = sample(rows, program=program)
 The default seed is fixed at `42`, matching SC Review Sampling. Use
 `execute_sampling(...)` when a UI or service also needs the per-rule audit plan.
 
+## DuckDB table execution
+
+`compile_duckdb_sampling(...)` turns a `SamplingProgram` and a trusted relational
+source into one parameterized query. A source can select from a DuckDB table/view
+or from an explicitly registered Arrow Table, Dataset, Scanner,
+RecordBatchReader, or dataframe. `execute_duckdb_sampling(...)` returns an Arrow
+`RecordBatchReader` and requires an explicit batch size.
+
+```python
+import duckdb
+import pyarrow as pa
+
+from sampling_rules import (
+    DuckDbSamplingSource,
+    SamplingProgram,
+    TotalLimitRule,
+    execute_duckdb_sampling,
+)
+
+connection = duckdb.connect(":memory:")
+connection.register(
+    "candidates",
+    pa.table({"row_key": ["a", "b", "c"]}),
+)
+execution = execute_duckdb_sampling(
+    connection,
+    DuckDbSamplingSource.relation(
+        "candidates",
+        identity_field="row_key",
+        output_field="selected_id",
+    ),
+    program=SamplingProgram(rules=(TotalLimitRule(limit=2),)),
+    seed=42,
+    batch_rows=10_000,
+)
+selected = execution.reader.read_all()
+```
+
 ## SC Review Sampling integration
 
 The production SC Reclassify view exposes the same ordered rule forms through
-`ReviewSamplingModal.vue`. Because SC inspection datasets can contain hundreds of
-thousands of rows, the web data source compiles enabled conditional, group, and
-total stages into one scoped DuckDB query and returns only the sampled defect IDs.
-The optional sampling Extra filter remains the shared first stage, and the
-selected cohort stays frontend workbench state rather than a server-side column.
+`ReviewSamplingModal.vue`. The web data source sends only a scoped candidate query
+and structured program. The SC data-provider maps that transport shape to
+`SamplingProgram`, and this package compiles conditional, group, and total stages
+into the production DuckDB query. Only sampled defect IDs are returned.
 
-The Python package remains useful for bounded in-memory callers and rule semantics;
-it does not own the SC data-provider endpoint or persistence.
+The optional sampling Extra filter remains part of the candidate query, and the
+selected cohort stays frontend workbench state rather than a server-side column.
+Dynamic spatial fields now have a DuckDB overlay in the library; the remaining SC
+integration work is to expose the reference-layer and radius configuration in the
+transport/UI and compose that overlay before compiling the sampling program.

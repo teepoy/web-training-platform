@@ -23,15 +23,16 @@ class RuntimeDataSourceRef:
         normalized_collection_id = _clean(collection_id)
         normalized_revision_id = _clean(collection_revision_id)
         if normalized_dataset_id is not None:
-            if (
-                normalized_collection_id is not None
-                or normalized_revision_id is not None
-            ):
+            if (normalized_collection_id is None) != (normalized_revision_id is None):
                 raise ValueError(
-                    "dataset_id is mutually exclusive with collection_id and "
-                    "collection_revision_id"
+                    "collection_id and collection_revision_id must be provided together"
                 )
-            return cls(kind="dataset", dataset_id=normalized_dataset_id)
+            return cls(
+                kind="dataset",
+                dataset_id=normalized_dataset_id,
+                collection_id=normalized_collection_id,
+                collection_revision_id=normalized_revision_id,
+            )
         if normalized_collection_id is None or normalized_revision_id is None:
             raise ValueError(
                 "provide dataset_id or both collection_id and collection_revision_id"

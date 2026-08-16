@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from sqlalchemy import (
+    Boolean,
     JSON,
     CheckConstraint,
     DateTime,
@@ -44,6 +45,15 @@ class DatasetCollectionORM(Base):
     duplicate_policy: Mapped[str] = mapped_column(String(64), nullable=False)
     missing_data_policy: Mapped[str] = mapped_column(String(64), nullable=False)
     definition_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    default_model_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("artifacts.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+    model_binding_version: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default="0"
     )
     created_by: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -154,6 +164,24 @@ class DatasetCollectionRevisionORM(Base):
     label_counts: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     manifest_uri: Mapped[str | None] = mapped_column(Text, nullable=True)
     provenance_uri: Mapped[str | None] = mapped_column(Text, nullable=True)
+    manifest_format: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+        default="legacy_materialized_v1",
+        server_default="legacy_materialized_v1",
+    )
+    source_resolution: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="legacy_materialized",
+        server_default="legacy_materialized",
+    )
+    reproducibility_capability: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default="1",
+    )
     trigger_kind: Mapped[str] = mapped_column(String(64), nullable=False)
     trigger_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_by: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -162,3 +190,99 @@ class DatasetCollectionRevisionORM(Base):
     )
     error_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
     error_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class CollectionPredictionBatchORM(Base):
+    __tablename__ = "collection_prediction_batches"
+    __table_args__ = (
+        UniqueConstraint(
+            "collection_id",
+            "kind",
+            "request_id",
+            name="uq_collection_prediction_batches_request",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    collection_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("dataset_collections.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    collection_revision_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("dataset_collection_revisions.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    model_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("artifacts.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    request_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    created_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
+class CollectionPredictionBatchItemORM(Base):
+    __tablename__ = "collection_prediction_batch_items"
+    __table_args__ = (
+        UniqueConstraint(
+            "batch_id",
+            "dataset_id",
+            name="uq_collection_prediction_batch_items_dataset",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    batch_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("collection_prediction_batches.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    member_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("dataset_collection_members.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    dataset_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("datasets.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    dataset_revision_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("dataset_revisions.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    prediction_job_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("prediction_jobs.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    attempt_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    error_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )

@@ -1,7 +1,14 @@
 # Dataset Summary, Collection Stack, and Dynamic Collection
 
-Status: dataset-collection MVP implemented; summary and automation sections are proposals
-Date: 2026-08-05
+Status: partially superseded by ADR 0003 and ADR 0014
+Date: 2026-08-15
+
+The retained Collection Snapshot contract is now a composite logical manifest
+with `observed` source semantics and `reproducibility_capability=false`.
+Any section below that describes an archived full `data.parquet` or
+`provenance.parquet` per Collection revision is historical implementation
+context, not the target architecture. See ADR 0003, ADR 0014, and
+`contextual-collection-automation-plan.md` for the accepted design.
 
 ## 1. Scope
 
@@ -29,8 +36,9 @@ This document does not amend `CORE_DESIGNS.md`.
 The current implementation includes:
 
 - collection resources with audited, optimistic-lock link/unlink membership;
-- synchronous immutable revision materialization with data and provenance
-  Parquet artifacts;
+- immutable Collection audit revisions backed by a versioned composite manifest
+  that records one observed Dataset Revision per member without copying member
+  rows;
 - dataset-or-collection-revision inputs for training, prediction, and
   train-and-predict;
 - prediction fanout to each physical source dataset;
@@ -271,17 +279,19 @@ explicit dataset choice; it must not silently select the newest dataset.
 
 #### `dataset_collection_revisions`
 
-| Field                                                     | Notes                                                                                                 |
-| --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `id`, `collection_id`, `revision_number`                  | Immutable collection snapshot identity.                                                               |
-| `definition_version`, `definition_hash`                   | Exact definition that was resolved.                                                                   |
-| `target_view_contract`, `target_schema_version`           | Frozen compatibility boundary.                                                                        |
-| `status`                                                  | `pending`, `ready`, or `failed`.                                                                      |
-| `source_snapshot`                                         | Source dataset IDs, storage modes, manifest/version refs, filters, mappings, and source fingerprints. |
-| `row_count`, `label_counts`                               | Revision summary when ready; label counts describe the frozen label snapshot used by runtime.         |
-| `manifest_uri`, `provenance_uri`                          | Resolved collection manifest and row provenance sidecar.                                              |
-| `trigger_kind`, `trigger_ref`, `created_by`, `created_at` | Audit and automation provenance.                                                                      |
-| `error_code`, `error_detail`                              | Explicit failure result.                                                                              |
+| Field                                                     | Notes                                                                                                                 |
+| --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `id`, `collection_id`, `revision_number`                  | Immutable collection snapshot identity.                                                                               |
+| `definition_version`, `definition_hash`                   | Exact definition that was resolved.                                                                                   |
+| `target_view_contract`, `target_schema_version`           | Frozen compatibility boundary.                                                                                        |
+| `status`                                                  | `pending`, `ready`, or `failed`.                                                                                      |
+| `source_snapshot`                                         | Member IDs plus observed Dataset Revision IDs/numbers/canonical refs and definition/filter/mapping/sampling versions. |
+| `row_count`, `label_counts`                               | Optional aggregate summary derived without copying all member rows.                                                   |
+| `manifest_uri`, `manifest_format`                         | Versioned composite logical manifest. New Snapshots use `collection-composite-observed.v1`.                           |
+| `source_resolution`, `reproducibility_capability`         | New Snapshots are `observed` and explicitly not reproducible.                                                         |
+| `provenance_uri`                                          | Legacy full-materialization sidecar only; null for new composite Snapshots.                                           |
+| `trigger_kind`, `trigger_ref`, `created_by`, `created_at` | Audit and automation provenance.                                                                                      |
+| `error_code`, `error_detail`                              | Explicit failure result.                                                                                              |
 
 #### `dataset_collection_refresh_runs`
 
@@ -382,10 +392,11 @@ synthesize an inspection-scoped preview key, but preview keys are not accepted
 by collection, annotation, training, or prediction APIs.
 
 The workbench transport and the runtime view are different contracts. The
-workbench may expose provenance/display columns. A runtime collection manifest
-keeps the trainer's exact canonical view schema and uses `row_key` as the
-manifest-local `sample_id`; the sidecar maps it back to the physical sample
-ref. This does not add undeclared columns to a trainer view.
+retained composite manifest does not contain a second copy of runtime rows.
+When a runtime needs a unified table, it resolves each member's current data at
+execution start, records the observed Dataset Revision references in launch
+provenance, and derives a job-scoped disposable view. That cache namespaces row
+identity by member Dataset, can be rebuilt, and is not Snapshot truth.
 
 ### 4.4 Compatibility rules
 
@@ -408,34 +419,24 @@ fallback to another view contract, schema version, or storage path.
 
 ### 4.5 Composition and provenance
 
-Collection materialization is bulk/table-first:
+Collection publication is metadata-first:
 
-1. open every source through `DatasetStorageFactory`;
-2. resolve its registered view materializer;
-3. obtain stable source manifest refs;
-4. compose with LazyFrame/Arrow scans, projections, joins, and streaming
-   writers;
-5. write canonical job/revision shards for the exact target view;
-6. write a provenance sidecar keyed by output row identity;
-7. persist the immutable collection revision manifest.
+1. resolve or lazily create one audit Dataset Revision for every member;
+2. record each observed Dataset Revision ID, revision number, and canonical
+   reference;
+3. pin the Collection definition version and deterministic filter, mapping,
+   and sampling plan versions;
+4. persist one versioned composite JSON manifest and its compact summary;
+5. publish the database revision only after that manifest is durable.
 
-The provenance sidecar includes at least:
+The Snapshot does not scan and re-archive every sample. Row provenance is
+derived from the Dataset state resolved at execution start plus namespaced
+sample identity. Publication failure deletes the
+uncommitted manifest and leaves the previous ready Snapshot usable.
 
-```text
-output_row_id
-source_dataset_id
-source_sample_id
-source_manifest_fingerprint
-member_id
-```
-
-This keeps platform provenance available without adding undeclared columns to
-the trainer's canonical view schema.
-
-A ready revision pins its source refs. Dataset deletion must either be rejected
-while a retained revision references it or follow an explicitly accepted
-revision-retention policy. It must not silently make a historical training job
-irreproducible.
+A new observed revision retains audit source refs but does not preserve member
+data. Dataset deletion still checks Collection references; historical
+reproducibility is not promised by this first implementation.
 
 ### 4.6 Classify/read contract
 
@@ -447,13 +448,11 @@ POST /api/v1/sc/data/collections/{collection_id}/revisions/{revision_id}/query
 GET  /api/v1/sc/data/collections/{collection_id}/revisions/{revision_id}/events
 ```
 
-`ScDataScope(kind="collection")` downloads the pinned revision artifact,
-opens every source overlay through `DatasetStorageFactory`, projects a
-compatible workbench schema, adds the identity columns above, and composes the
-sources with LazyFrame/Arrow union. It does not instantiate storage
-implementations or read shards ad hoc. Link/unlink changes therefore become
-visible after a new ready revision is created; an already-open historical
-revision does not drift.
+`ScDataScope(kind="collection")` resolves the composite manifest and opens each
+member's current storage at workbench/runtime start. It may compose a
+LazyFrame/Arrow union inside a disposable cache and records that the resolution
+is current-data/observed; it never retains that union as another archived
+Snapshot.
 
 The DuckDB `samples` view, pagination CTEs, annotation overlay, prediction
 overlay, gallery, and annotation drafts use `row_key`. `defect_id` remains a
@@ -530,9 +529,10 @@ Predictions consequently remain visible from standalone member datasets. The
 job retains its collection revision provenance even though result rows are
 owned by physical source storage.
 
-The revision stores a provenance sidecar next to its materialized data. A
-future data-plane manifest schema can expose the collection-revision source and
-sidecar directly without changing trainer input contracts.
+The revision stores member-level observed provenance in its composite manifest.
+Runtime row provenance is derived from the current Dataset state at execution
+start and namespaced sample identity; no retained full provenance sidecar is
+created for new Snapshots.
 
 ## 5. Collection UI
 
@@ -787,11 +787,21 @@ DELETE /api/v1/dataset-collections/{id}/members/{member_id}
 POST   /api/v1/dataset-collections/{id}/revisions
 GET    /api/v1/dataset-collections/{id}/revisions
 GET    /api/v1/dataset-collections/{id}/revisions/{revision_id}
+GET    /api/v1/dataset-collections/{id}/snapshot-update-status
+POST   /api/v1/dataset-collections/{id}/refresh-snapshot
 
 POST   /api/v1/training-jobs
 POST   /api/v1/training-jobs/train-and-predict
 POST   /api/v1/predictions/run
 ```
+
+`snapshot-update-status` compares the current ready Snapshot's observed member
+Revision IDs with all current Dataset Revisions in one batch read. It never
+creates missing legacy baselines as a read side effect. `refresh-snapshot` is
+creator-only, advances directly to every member's latest observed Revision,
+and returns `unchanged` when the resolved definition and Revision set already
+match. A Dataset-Revision-only refresh does not dispatch incremental prediction
+or training.
 
 Dataset summary, import batches/source resolution, combined collection
 annotations/query/events, and refresh-binding endpoints described elsewhere in
@@ -856,20 +866,30 @@ the exact source shape; historical direct-dataset jobs may have a null
 `dataset_id` after source deletion. A future migration can add a database check
 that also accounts for that historical tombstone shape.
 
-One future collection data-plane manifest shape could replace the v1 top-level
-dataset assumption with:
+The retained Collection manifest uses the following source shape; a runtime
+may resolve its members into its operation-specific data-plane input:
 
 ```json
 {
-  "source": {
-    "kind": "collection_revision",
-    "collection_id": "col_123",
-    "revision_id": "colrev_7"
-  },
-  "provenance": {
-    "uri": "s3://.../provenance.parquet",
-    "key_column": "output_row_id"
-  }
+  "manifest_format": "collection-composite-observed.v1",
+  "collection_id": "col_123",
+  "collection_revision_id": "colrev_7",
+  "definition_version": 4,
+  "source_resolution": "observed",
+  "reproducibility": { "capability": false },
+  "members": [
+    {
+      "member_id": "member_1",
+      "source_dataset_id": "dataset_1",
+      "dataset_revision_id": "dsrev_3",
+      "dataset_revision_number": 3,
+      "dataset_revision_manifest_uri": "s3://.../manifest.json",
+      "dataset_revision_binding": "observed",
+      "filter_version": "sha256:...",
+      "mapping_version": "sha256:...",
+      "sampling_version": "sha256:..."
+    }
+  ]
 }
 ```
 

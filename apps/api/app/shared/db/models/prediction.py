@@ -118,6 +118,11 @@ class PredictionJobORM(Base):
     dataset_id: Mapped[str | None] = mapped_column(
         ForeignKey("datasets.id", ondelete="SET NULL"), nullable=True
     )
+    dataset_revision_id: Mapped[str | None] = mapped_column(
+        ForeignKey("dataset_revisions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     dataset_collection_id: Mapped[str | None] = mapped_column(
         ForeignKey("dataset_collections.id", ondelete="RESTRICT"),
         nullable=True,

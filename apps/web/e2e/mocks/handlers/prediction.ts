@@ -90,8 +90,13 @@ export async function mockListModels(page: Page, models?: ModelResponse[]): Prom
     }
     const query = url.searchParams.get("q")?.trim().toLocaleLowerCase();
     const creatorId = url.searchParams.get("creator_id");
+    const sourceType = url.searchParams.get("source_type");
+    const sortBy = url.searchParams.get("sort_by") ?? "created_at";
+    const sortOrder = url.searchParams.get("sort_order") ?? "desc";
     const filtered = body.filter((model) => {
       if (creatorId && model.created_by !== creatorId) return false;
+      if (sourceType === "dataset" && !model.dataset_id) return false;
+      if (sourceType === "collection" && !model.collection_id) return false;
       if (!query) return true;
       return [
         model.id,
@@ -106,6 +111,30 @@ export async function mockListModels(page: Page, models?: ModelResponse[]): Prom
       ]
         .filter(Boolean)
         .some((value) => String(value).toLocaleLowerCase().includes(query));
+    });
+    filtered.sort((left, right) => {
+      const leftValue =
+        sortBy === "name"
+          ? left.name
+          : sortBy === "creator"
+            ? left.creator_name
+            : sortBy === "source"
+              ? left.dataset_name || left.collection_name
+              : sortBy === "trainer"
+                ? left.trainer_name
+                : left.created_at;
+      const rightValue =
+        sortBy === "name"
+          ? right.name
+          : sortBy === "creator"
+            ? right.creator_name
+            : sortBy === "source"
+              ? right.dataset_name || right.collection_name
+              : sortBy === "trainer"
+                ? right.trainer_name
+                : right.created_at;
+      const result = String(leftValue ?? "").localeCompare(String(rightValue ?? ""));
+      return sortOrder === "asc" ? result : -result;
     });
     const offset = Number(url.searchParams.get("offset") ?? 0);
     const limit = Number(url.searchParams.get("limit") ?? filtered.length);

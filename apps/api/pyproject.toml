@@ -41,6 +41,7 @@ dependencies = [
   "pyarrow==24.0.0",
   "polars>=1.0.0",
   "redis>=5.0",
+  "sampling-rules",
   "sqlglot==28.5.0",
   "nest-asyncio>=1.6.0",
   "async-lru>=2.3.0",
@@ -54,6 +55,7 @@ sc-runtime = ["ml-library"]
 [tool.uv.sources]
 proto-stubs = { workspace = true }
 ml-library = { workspace = true }
+sampling-rules = { workspace = true }
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "app"]

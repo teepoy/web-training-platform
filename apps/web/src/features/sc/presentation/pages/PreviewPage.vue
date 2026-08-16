@@ -67,7 +67,8 @@ function openInspectionInNewTab(row: InspectionSummaryItem): void {
 }
 
 function openDataset(datasetId: string): void {
-  void router.push(`/datasets/${datasetId}`);
+  const target = router.resolve(`/datasets/${datasetId}`);
+  window.open(target.href, "_blank", "noopener");
 }
 
 async function createDataset(row: InspectionSummaryItem): Promise<void> {
@@ -135,16 +136,6 @@ async function buildCollection(): Promise<void> {
         <div class="sc-preview-tab-bar">
           <div class="sc-preview-title">Summary</div>
           <div class="sc-preview-toolbar">
-            <NButton
-              size="small"
-              type="primary"
-              :disabled="selectedInspections.length === 0"
-              @click="openCollectionModal"
-            >
-              Build collection{{
-                selectedInspections.length ? ` (${selectedInspections.length})` : ""
-              }}
-            </NButton>
             <NButton size="small" quaternary @click="router.push('/sc/handbook')">
               Handbook
             </NButton>
@@ -177,6 +168,7 @@ async function buildCollection(): Promise<void> {
             @row-click="openInspectionInNewTab"
             @open-dataset="openDataset"
             @create-dataset="createDataset"
+            @build-collection="openCollectionModal"
           />
         </div>
       </div>

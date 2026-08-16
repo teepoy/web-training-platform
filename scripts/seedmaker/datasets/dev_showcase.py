@@ -18,6 +18,9 @@ EMPTY_DATASET_NAME = "Dev Classification - Empty"
 SC_DATASET_NAME = "Dev SC Inspection - Sparse"
 CLASSIFICATION_COLLECTION_NAME = "Dev Classification Bundle"
 SC_COLLECTION_NAME = "Dev SC Inspection Bundle"
+DYNAMIC_SC_COLLECTION_NAME = "Dev SC Dynamic Collection"
+SC_SOURCE_CONNECTOR_NAME = "Dev SC Upstream"
+SC_MEMBERSHIP_RULE_NAME = "New SC inspections with defects"
 
 COMMON_METADATA_SCHEMA = {
     "source": {"type": "string", "description": "Development fixture source."},
@@ -59,7 +62,7 @@ def run(args: Any, runner: SeedRunner) -> int:
     if sc_annotations > sc_samples:
         raise ValueError("--sc-annotations cannot exceed --sc-samples")
 
-    print("[6/12] Seeding classification datasets ...")
+    print("[6/13] Seeding classification datasets ...")
     balanced = _ensure_dataset(
         runner,
         name=BALANCED_DATASET_NAME,
@@ -106,7 +109,7 @@ def run(args: Any, runner: SeedRunner) -> int:
         metadata_schema=COMMON_METADATA_SCHEMA,
     )
 
-    print("[7/12] Importing the current SC inspection ...")
+    print("[7/13] Importing the current SC inspection ...")
     inspection = _latest_inspection(runner, args.sc_inspection_time)
     sc_dataset = _ensure_sc_dataset(
         runner,
@@ -121,7 +124,7 @@ def run(args: Any, runner: SeedRunner) -> int:
         actual_sc_annotations,
     )
 
-    print("[8/12] Seeding dataset collections and revisions ...")
+    print("[8/13] Seeding dataset collections and revisions ...")
     classification_collection, classification_revision = _ensure_collection(
         runner,
         name=CLASSIFICATION_COLLECTION_NAME,
@@ -132,26 +135,38 @@ def run(args: Any, runner: SeedRunner) -> int:
     sc_collection, sc_revision = _ensure_collection(
         runner,
         name=SC_COLLECTION_NAME,
-        description="Pinned revision of the imported development inspection.",
+        description="Saved membership snapshot for the development inspection.",
         target_view_id="patch_image_v1",
         dataset_ids=(str(sc_dataset["id"]),),
     )
 
-    print("[9/12] Seeding safe, paused schedules ...")
+    print("[9/13] Seeding a safe Source membership rule ...")
+    dynamic_collection = _ensure_draft_collection(
+        runner,
+        name=DYNAMIC_SC_COLLECTION_NAME,
+        description=(
+            "Empty Collection for manual Discovery and Backfill testing. "
+            "seed-dev never runs the rule."
+        ),
+        target_view_id="patch_image_v1",
+    )
+    _ensure_source_membership_rule(runner, dynamic_collection)
+
+    print("[10/13] Seeding safe, paused schedules ...")
     _ensure_schedules(
         runner,
         classification_dataset_id=str(balanced["id"]),
         sc_dataset_id=str(sc_dataset["id"]),
     )
 
-    print("[10/12] Seeding disabled sensor subscriptions ...")
+    print("[11/13] Seeding disabled sensor subscriptions ...")
     _ensure_sensor_subscriptions(
         runner,
         classification_dataset_id=str(balanced["id"]),
         sc_dataset_id=str(sc_dataset["id"]),
     )
 
-    print("[11/12] Seeding non-executing job and model activity ...")
+    print("[12/13] Seeding non-executing job and model activity ...")
     activity = asyncio.run(
         _seed_activity(
             DevActivityContext(
@@ -167,21 +182,24 @@ def run(args: Any, runner: SeedRunner) -> int:
         )
     )
 
-    print("[12/12] Development seed summary")
+    print("[13/13] Development seed summary")
     print(
         "  Datasets: 4 "
         f"({classification_samples + review_samples + actual_sc_samples} samples; "
         "1 intentionally empty)"
     )
     print(
-        f"  Collections: 2 (current revisions: {classification_revision['id']}, "
-        f"{sc_revision['id']})"
+        f"  Collections: 3 (current revisions: {classification_revision['id']}, "
+        f"{sc_revision['id']}; dynamic draft: {dynamic_collection['id']})"
     )
     print(
         f"  Activity: {activity.training_jobs} training jobs, "
         f"{activity.prediction_jobs} prediction jobs, {activity.models} models"
     )
-    print("  Automation: 2 paused schedules, 4 disabled sensor subscriptions")
+    print(
+        "  Automation: 1 manual-only membership rule, 2 paused schedules, "
+        "4 disabled sensor subscriptions"
+    )
     print(f"  Empty-state dataset: {empty['id']}")
     return 0
 
@@ -528,6 +546,116 @@ def _ensure_collection(
     else:
         print(f"  Reusing collection revision: {name} r{revision['revision_number']}")
     return collection, revision
+
+
+def _ensure_draft_collection(
+    runner: SeedRunner,
+    *,
+    name: str,
+    description: str,
+    target_view_id: str,
+) -> dict[str, Any]:
+    response = runner.client.get(
+        "/api/v1/dataset-collections",
+        params={"limit": 200},
+    )
+    response.raise_for_status()
+    collection = _find_by_name(response.json(), name)
+    if collection is None:
+        response = runner.client.post(
+            "/api/v1/dataset-collections",
+            json={
+                "name": name,
+                "description": description,
+                "target_view_id": target_view_id,
+                "duplicate_policy": "keep_all",
+                "missing_data_policy": "fail",
+            },
+        )
+        response.raise_for_status()
+        collection = response.json()
+        print(f"  Created dynamic Collection: {name}")
+    elif collection.get("target_view_id") != target_view_id:
+        raise RuntimeError(
+            f"collection {name!r} uses {collection.get('target_view_id')!r}, "
+            f"expected {target_view_id!r}"
+        )
+    return collection
+
+
+def _ensure_source_membership_rule(
+    runner: SeedRunner,
+    collection: dict[str, Any],
+) -> None:
+    response = runner.client.get("/api/v1/source-connectors")
+    response.raise_for_status()
+    connector = _find_by_name(response.json(), SC_SOURCE_CONNECTOR_NAME)
+    if connector is None:
+        response = runner.client.post(
+            "/api/v1/source-connectors",
+            json={
+                "provider_id": "sc",
+                "name": SC_SOURCE_CONNECTOR_NAME,
+                "config": {},
+            },
+        )
+        response.raise_for_status()
+        connector = response.json()
+        print(f"  Created Source connector: {SC_SOURCE_CONNECTOR_NAME}")
+    elif connector.get("provider_id") != "sc":
+        raise RuntimeError(
+            f"source connector {SC_SOURCE_CONNECTOR_NAME!r} uses provider "
+            f"{connector.get('provider_id')!r}, expected 'sc'"
+        )
+
+    rules_response = runner.client.get(
+        f"/api/v1/dataset-collections/{collection['id']}/membership-rules"
+    )
+    rules_response.raise_for_status()
+    rule = _find_by_name(rules_response.json(), SC_MEMBERSHIP_RULE_NAME)
+    if rule is not None:
+        version = rule.get("active_version", {})
+        if version.get("connector_id") != connector["id"]:
+            raise RuntimeError(
+                f"membership rule {SC_MEMBERSHIP_RULE_NAME!r} uses a different "
+                "Source connector"
+            )
+        print(f"  Reusing membership rule: {SC_MEMBERSHIP_RULE_NAME}")
+        return
+
+    profile_response = runner.client.post(
+        f"/api/v1/source-connectors/{connector['id']}/import-profiles",
+        json={
+            "name": "Dev SC inspection import",
+            "settings": {"label_space": list(SC_LABELS)},
+            "max_records_per_run": 10,
+            "max_rows_per_dataset": 2500,
+        },
+    )
+    profile_response.raise_for_status()
+    profile = profile_response.json()
+    rule_response = runner.client.post(
+        f"/api/v1/dataset-collections/{collection['id']}/membership-rules",
+        json={
+            "name": SC_MEMBERSHIP_RULE_NAME,
+            "connector_id": connector["id"],
+            "import_profile_version_id": profile["id"],
+            "condition": {
+                "kind": "group",
+                "combinator": "all",
+                "children": [
+                    {
+                        "kind": "predicate",
+                        "field": "defects",
+                        "operator": "gte",
+                        "value": 1,
+                    }
+                ],
+            },
+        },
+    )
+    rule_response.raise_for_status()
+    print(f"  Created membership rule: {SC_MEMBERSHIP_RULE_NAME}")
 
 
 def _ensure_schedules(

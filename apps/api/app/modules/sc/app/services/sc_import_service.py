@@ -10,6 +10,8 @@ from injector import inject
 import polars as pl
 import pyarrow as pa
 
+from app.modules.datasets.domain.entities import DatasetRevisionOperation
+from app.modules.datasets.port.local import DatasetRevisionPublisherPort
 from app.modules.sc.domain.entities.sc_import import ScImportStatus
 from app.modules.sc.domain.models import _coerce_naive_to_upstream_tz
 from app.modules.sc.domain.upstream_reader import ScUpstreamReader
@@ -177,6 +179,7 @@ class ScImportService:
         sparse_import_factory: SparseImportWriterFactoryPort,
         repository: ScImportRepository,
         payload_store: ScImportPayloadStore,
+        revision_publisher: DatasetRevisionPublisherPort,
         upstream_reader: ScUpstreamReader,
         import_batch_rows: int,
         index_row_group_rows: int,
@@ -187,6 +190,7 @@ class ScImportService:
             raise ValueError("index_row_group_rows must be greater than zero")
         self._repo = repository
         self._payload_store = payload_store
+        self._revision_publisher = revision_publisher
         self._upstream = upstream_reader
         self._sparse_import_factory = sparse_import_factory
         self._import_batch_rows = import_batch_rows
@@ -267,6 +271,17 @@ class ScImportService:
                 int(imported_count_raw)
                 if isinstance(imported_count_raw, (int, float))
                 else 0
+            )
+            await self._revision_publisher.publish_sparse_revision(
+                dataset_id=dataset.id,
+                org_id=org_id,
+                operation=DatasetRevisionOperation.INITIAL_IMPORT,
+                created_by=created_by,
+                provenance={
+                    "source_connector": "sc",
+                    "source_inspection_time": source_inspection_time,
+                    "source_wafer_key": source_wafer_key,
+                },
             )
             completed_status = ScImportStatus(
                 status="completed",

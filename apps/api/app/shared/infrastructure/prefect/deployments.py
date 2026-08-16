@@ -10,15 +10,22 @@ class PrefectDeploymentSpec:
     work_pool_name: str
     entrypoint: str
     path: str = ""
+    work_queue_name: str | None = None
+    work_queue_priority: int | None = None
 
-    def as_dict(self) -> dict[str, str]:
-        return {
+    def as_dict(self) -> dict[str, str | int]:
+        result: dict[str, str | int] = {
             "deployment_name": self.deployment_name,
             "flow_name": self.flow_name,
             "work_pool_name": self.work_pool_name,
             "entrypoint": self.entrypoint,
             "path": self.path,
         }
+        if self.work_queue_name is not None:
+            result["work_queue_name"] = self.work_queue_name
+        if self.work_queue_priority is not None:
+            result["work_queue_priority"] = self.work_queue_priority
+        return result
 
 
 TRAIN_RUNTIME_DEPLOYMENT = PrefectDeploymentSpec(
@@ -38,6 +45,16 @@ PREDICTION_RUNTIME_DEPLOYMENT = PrefectDeploymentSpec(
     flow_name="prediction-predict-job",
     work_pool_name="default-gpu",
     entrypoint="app.modules.prediction.flows.predict_job:predict_job_flow",
+    work_queue_name="prediction-manual",
+    work_queue_priority=1,
+)
+PREDICTION_AUTOMATION_RUNTIME_DEPLOYMENT = PrefectDeploymentSpec(
+    deployment_name="predict-job-batch-automation-deployment",
+    flow_name="prediction-predict-job",
+    work_pool_name="default-gpu",
+    entrypoint="app.modules.prediction.flows.predict_job:predict_job_flow",
+    work_queue_name="prediction-automation",
+    work_queue_priority=10,
 )
 TIMER_SENSOR_DEPLOYMENT = PrefectDeploymentSpec(
     deployment_name="timer-sensor",
@@ -64,6 +81,7 @@ _RUNTIME_DEPLOYMENTS = (
     TRAIN_RUNTIME_DEPLOYMENT,
     TRAIN_AND_PREDICT_RUNTIME_DEPLOYMENT,
     PREDICTION_RUNTIME_DEPLOYMENT,
+    PREDICTION_AUTOMATION_RUNTIME_DEPLOYMENT,
 )
 _CPU_DEPLOYMENTS = (
     TIMER_SENSOR_DEPLOYMENT,
@@ -77,11 +95,11 @@ _PLATFORM_DEPLOYMENTS = (*_RUNTIME_DEPLOYMENTS, *_CPU_DEPLOYMENTS)
 _SCHEDULABLE_DEPLOYMENTS = (DRAIN_DATASET_DEPLOYMENT,)
 
 
-def runtime_prefect_deployment_specs() -> list[dict[str, str]]:
+def runtime_prefect_deployment_specs() -> list[dict[str, str | int]]:
     return [spec.as_dict() for spec in _RUNTIME_DEPLOYMENTS]
 
 
-def platform_prefect_deployment_specs() -> list[dict[str, str]]:
+def platform_prefect_deployment_specs() -> list[dict[str, str | int]]:
     """Return every repository-owned Prefect deployment."""
 
     return [spec.as_dict() for spec in _PLATFORM_DEPLOYMENTS]
@@ -110,9 +128,20 @@ def prefect_work_pool_names() -> set[str]:
     return {spec.work_pool_name for spec in _PLATFORM_DEPLOYMENTS}
 
 
+def prefect_work_queue_specs() -> tuple[tuple[str, str, int], ...]:
+    """Return repository-owned queues as pool/name/priority tuples."""
+
+    return tuple(
+        (spec.work_pool_name, spec.work_queue_name, spec.work_queue_priority)
+        for spec in _PLATFORM_DEPLOYMENTS
+        if spec.work_queue_name is not None and spec.work_queue_priority is not None
+    )
+
+
 __all__ = [
     "DATASET_SIZE_SENSOR_DEPLOYMENT",
     "DRAIN_DATASET_DEPLOYMENT",
+    "PREDICTION_AUTOMATION_RUNTIME_DEPLOYMENT",
     "PREDICTION_RUNTIME_DEPLOYMENT",
     "PrefectDeploymentSpec",
     "TIMER_SENSOR_DEPLOYMENT",
@@ -121,6 +150,7 @@ __all__ = [
     "get_schedulable_prefect_deployment",
     "platform_prefect_deployment_specs",
     "prefect_work_pool_names",
+    "prefect_work_queue_specs",
     "required_prefect_deployment_names",
     "runtime_prefect_deployment_specs",
     "schedulable_prefect_deployment_specs",

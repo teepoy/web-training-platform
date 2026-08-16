@@ -7,12 +7,20 @@ from injector import Module, provider, singleton
 from app.modules.dataset_collections.adapter.repositories import (
     DatasetCollectionSqlRepository,
 )
-from app.modules.dataset_collections.app.services import DatasetCollectionService
+from app.modules.dataset_collections.app.services import (
+    CollectionModelAutomationService,
+    CollectionSnapshotPublishingService,
+    DatasetCollectionService,
+)
 from app.modules.dataset_collections.domain.repository import (
     DatasetCollectionRepository,
 )
 from app.modules.dataset_collections.port.local import (
     CollectionDatasetUsagePort,
+    CollectionAutomationAdmissionPort,
+    CollectionModelManagementPort,
+    CollectionPredictionAutomationPort,
+    CollectionSnapshotPublishingPort,
     DatasetCollectionManagementPort,
     DatasetCollectionRevisionReaderPort,
 )
@@ -65,7 +73,35 @@ class DatasetCollectionsModule(Module):
 
     @provider
     @singleton
+    def provide_automation_admission(
+        self, service: DatasetCollectionService
+    ) -> CollectionAutomationAdmissionPort:
+        return service
+
+    @provider
+    @singleton
     def provide_revision_reader(
         self, service: DatasetCollectionService
     ) -> DatasetCollectionRevisionReaderPort:
+        return service
+
+    @provider
+    @singleton
+    def provide_model_management(
+        self, service: CollectionModelAutomationService
+    ) -> CollectionModelManagementPort:
+        return service
+
+    @provider
+    @singleton
+    def provide_prediction_automation(
+        self, service: CollectionModelAutomationService
+    ) -> CollectionPredictionAutomationPort:
+        return service
+
+    @provider
+    @singleton
+    def provide_snapshot_publishing(
+        self, service: CollectionSnapshotPublishingService
+    ) -> CollectionSnapshotPublishingPort:
         return service

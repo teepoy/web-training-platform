@@ -16,6 +16,10 @@ from app.modules.storage.port.local import (
     SparseImportWriterFactoryPort as SparseImportWriterFactoryPort,
     SparseImportWriterPort as SparseImportWriterPort,
 )
+from app.modules.datasets.domain.entities import (
+    DatasetRevision,
+    DatasetRevisionOperation,
+)
 from app.modules.datasets.domain.status import DatasetStatus
 from app.shared.api.schemas import Annotation, Dataset
 from app.shared.infrastructure.label_studio.read_repository import LsReadRepository
@@ -75,3 +79,49 @@ class DatasetDeletionGuardPort(Protocol):
     """Prevent deletion while runtime jobs still depend on a dataset."""
 
     async def ensure_deletable(self, *, dataset_id: str, org_id: str) -> None: ...
+
+
+class DatasetRevisionReaderPort(Protocol):
+    async def get_current(self, dataset_id: str, org_id: str) -> DatasetRevision: ...
+
+    async def list_current(
+        self, dataset_ids: tuple[str, ...], org_id: str
+    ) -> dict[str, DatasetRevision]: ...
+
+    async def get_revision(
+        self,
+        *,
+        dataset_id: str,
+        revision_id: str,
+        org_id: str,
+    ) -> DatasetRevision: ...
+
+    async def resolve_or_create_baseline(
+        self,
+        *,
+        dataset_id: str,
+        org_id: str,
+        created_by: str,
+    ) -> DatasetRevision: ...
+
+    async def list_history(
+        self,
+        dataset_id: str,
+        org_id: str,
+        *,
+        limit: int,
+        offset: int,
+    ) -> tuple[list[DatasetRevision], int]: ...
+
+
+class DatasetRevisionPublisherPort(Protocol):
+    async def publish_sparse_revision(
+        self,
+        *,
+        dataset_id: str,
+        org_id: str,
+        operation: DatasetRevisionOperation,
+        created_by: str,
+        provenance: dict[str, object] | None = None,
+        operation_ref: str | None = None,
+    ) -> DatasetRevision: ...

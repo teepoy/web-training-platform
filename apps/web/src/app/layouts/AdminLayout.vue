@@ -18,9 +18,18 @@
       />
     </n-layout-sider>
     <n-layout vertical>
-      <n-layout-header bordered style="height: 48px; display: flex; align-items: center; padding: 0 16px; justify-content: space-between">
+      <n-layout-header
+        bordered
+        style="
+          height: 48px;
+          display: flex;
+          align-items: center;
+          padding: 0 16px;
+          justify-content: space-between;
+        "
+      >
         <span style="font-weight: 600">Admin</span>
-        <n-button text type="primary" @click="router.push('/datasets')">← Back to App</n-button>
+        <n-button text type="primary" @click="router.push('/library')">← Back to App</n-button>
       </n-layout-header>
       <n-layout-content style="padding: 24px; overflow-y: auto">
         <RouterView />
@@ -30,17 +39,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { useRouter, useRoute, RouterView } from 'vue-router'
+import { computed, ref } from "vue";
+import { RouterView, useRoute, useRouter } from "vue-router";
 
-const router = useRouter()
-const route = useRoute()
+const router = useRouter();
+const route = useRoute();
 
-const collapsed = ref(false)
+const collapsed = ref(false);
 
 const menuOptions = [
-  { label: 'Dashboard', key: '/admin/dashboard' },
-]
+  { label: "Dashboard", key: "/admin/dashboard" },
+  { label: "Infrastructure", key: "/admin/infrastructure" },
+];
 
-const activeRoute = computed(() => route.path)
+const activeRoute = computed(() => route.path);
 </script>

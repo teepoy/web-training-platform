@@ -4,13 +4,9 @@ import asyncio
 import hashlib
 import json
 import logging
-import tempfile
 from datetime import datetime, timezone
-from pathlib import Path
-from typing import cast
 from uuid import uuid4
 
-import polars as pl
 from injector import inject
 
 from app.modules.dataset_collections.domain.errors import (
@@ -19,22 +15,30 @@ from app.modules.dataset_collections.domain.errors import (
     DatasetCollectionValidationError,
 )
 from app.modules.dataset_collections.domain.models import (
+    CollectionSnapshotRefreshResult,
+    CollectionSnapshotMemberUpdate,
+    CollectionSnapshotUpdateStatus,
     DatasetCollection,
     DatasetCollectionMember,
     DatasetCollectionRevision,
     NewCollectionMember,
 )
 from app.modules.dataset_collections.domain.repository import (
+    CollectionSortField,
     DatasetCollectionRepository,
+    SortDirection,
 )
+from app.modules.datasets.domain.entities import DatasetRevision
 from app.modules.datasets.port.dataset_reader import DatasetReader
-from app.modules.storage.port.local import DatasetStorageFactoryPort
+from app.modules.datasets.port.local import DatasetRevisionReaderPort
 from app.modules.types.catalog import get_view_meta
 from app.shared.api.schemas import Dataset
 from app.shared.domain.protocols import ArtifactStorage
 
 
 _logger = logging.getLogger(__name__)
+
+_COMPOSITE_MANIFEST_FORMAT = "collection-composite-observed.v1"
 
 
 def _utcnow() -> datetime:
@@ -47,12 +51,12 @@ class DatasetCollectionService:
         self,
         repository: DatasetCollectionRepository,
         dataset_reader: DatasetReader,
-        storage_factory: DatasetStorageFactoryPort,
+        dataset_revision_reader: DatasetRevisionReaderPort,
         artifact_storage: ArtifactStorage,
     ) -> None:
         self._repository = repository
         self._dataset_reader = dataset_reader
-        self._storage_factory = storage_factory
+        self._dataset_revision_reader = dataset_revision_reader
         self._artifact_storage = artifact_storage
 
     async def create_collection(
@@ -108,9 +112,18 @@ class DatasetCollectionService:
         offset: int,
         limit: int,
         creator_id: str | None = None,
+        query: str | None = None,
+        sort_by: CollectionSortField = "updated_at",
+        sort_order: SortDirection = "desc",
     ) -> tuple[list[DatasetCollection], int]:
         return await self._repository.list_collections(
-            org_id, offset=offset, limit=limit, creator_id=creator_id
+            org_id,
+            offset=offset,
+            limit=limit,
+            creator_id=creator_id,
+            query=query,
+            sort_by=sort_by,
+            sort_order=sort_order,
         )
 
     async def get_collection(
@@ -180,8 +193,43 @@ class DatasetCollectionService:
     ) -> tuple[DatasetCollection, list[DatasetCollectionMember]]:
         collection = await self.get_collection(collection_id, org_id)
         self._require_owner(collection, actor_id)
+        return await self._admit_members(
+            collection,
+            org_id=org_id,
+            actor_id=actor_id,
+            expected_definition_version=expected_definition_version,
+            members=members,
+        )
+
+    async def admit_members_for_automation(
+        self,
+        collection_id: str,
+        org_id: str,
+        *,
+        actor_id: str,
+        expected_definition_version: int,
+        members: tuple[NewCollectionMember, ...],
+    ) -> tuple[DatasetCollection, list[DatasetCollectionMember]]:
+        collection = await self.get_collection(collection_id, org_id)
+        return await self._admit_members(
+            collection,
+            org_id=org_id,
+            actor_id=actor_id,
+            expected_definition_version=expected_definition_version,
+            members=members,
+        )
+
+    async def _admit_members(
+        self,
+        collection: DatasetCollection,
+        *,
+        org_id: str,
+        actor_id: str,
+        expected_definition_version: int,
+        members: tuple[NewCollectionMember, ...],
+    ) -> tuple[DatasetCollection, list[DatasetCollectionMember]]:
         self._validate_supported_member_specs(members)
-        existing = await self._repository.list_active_members(collection_id, org_id)
+        existing = await self._repository.list_active_members(collection.id, org_id)
         existing_ids = {item.source_dataset_id for item in existing}
         requested_ids = {item.source_dataset_id for item in members}
         duplicated = sorted(existing_ids & requested_ids)
@@ -201,7 +249,7 @@ class DatasetCollectionService:
             )
         )
         return await self._repository.link_members(
-            collection_id,
+            collection.id,
             org_id,
             expected_definition_version=expected_definition_version,
             members=members,
@@ -219,6 +267,24 @@ class DatasetCollectionService:
     ) -> tuple[DatasetCollection, list[DatasetCollectionMember]]:
         collection = await self.get_collection(collection_id, org_id)
         self._require_owner(collection, actor_id)
+        return await self._repository.unlink_member(
+            collection_id,
+            member_id,
+            org_id,
+            expected_definition_version=expected_definition_version,
+            actor_id=actor_id,
+        )
+
+    async def unlink_member_for_automation(
+        self,
+        collection_id: str,
+        member_id: str,
+        org_id: str,
+        *,
+        actor_id: str,
+        expected_definition_version: int,
+    ) -> tuple[DatasetCollection, list[DatasetCollectionMember]]:
+        await self.get_collection(collection_id, org_id)
         return await self._repository.unlink_member(
             collection_id,
             member_id,
@@ -263,6 +329,128 @@ class DatasetCollectionService:
     ) -> DatasetCollectionRevision:
         collection = await self.get_collection(collection_id, org_id)
         self._require_owner(collection, actor_id)
+        return await self._publish_snapshot(
+            collection,
+            org_id=org_id,
+            actor_id=actor_id,
+            expected_definition_version=expected_definition_version,
+            trigger_kind=trigger_kind,
+            trigger_ref=trigger_ref,
+        )
+
+    async def get_snapshot_update_status(
+        self,
+        collection_id: str,
+        org_id: str,
+    ) -> CollectionSnapshotUpdateStatus:
+        await self.get_collection(collection_id, org_id)
+        snapshot = await self._repository.get_current_revision(collection_id, org_id)
+        if snapshot is None:
+            return CollectionSnapshotUpdateStatus(
+                snapshot_id=None,
+                snapshot_revision_number=None,
+                update_available=False,
+                outdated_member_count=0,
+                members=(),
+            )
+        entries = tuple(
+            _snapshot_revision_entry(item) for item in snapshot.source_snapshot
+        )
+        dataset_ids = tuple(entry[1] for entry in entries)
+        current_revisions = await self._dataset_revision_reader.list_current(
+            dataset_ids,
+            org_id,
+        )
+        members = tuple(
+            CollectionSnapshotMemberUpdate(
+                member_id=member_id,
+                dataset_id=dataset_id,
+                observed_dataset_revision_id=observed_id,
+                observed_dataset_revision_number=observed_number,
+                current_dataset_revision_id=(
+                    current_revisions[dataset_id].id
+                    if dataset_id in current_revisions
+                    else None
+                ),
+                current_dataset_revision_number=(
+                    current_revisions[dataset_id].revision_number
+                    if dataset_id in current_revisions
+                    else None
+                ),
+                update_available=(
+                    dataset_id in current_revisions
+                    and current_revisions[dataset_id].id != observed_id
+                ),
+            )
+            for member_id, dataset_id, observed_id, observed_number in entries
+        )
+        outdated_member_count = sum(item.update_available for item in members)
+        return CollectionSnapshotUpdateStatus(
+            snapshot_id=snapshot.id,
+            snapshot_revision_number=snapshot.revision_number,
+            update_available=outdated_member_count > 0,
+            outdated_member_count=outdated_member_count,
+            members=members,
+        )
+
+    async def refresh_snapshot(
+        self,
+        collection_id: str,
+        org_id: str,
+        *,
+        actor_id: str,
+        expected_definition_version: int,
+    ) -> CollectionSnapshotRefreshResult:
+        collection = await self.get_collection(collection_id, org_id)
+        self._require_owner(collection, actor_id)
+        current = await self._repository.get_current_revision(collection_id, org_id)
+        snapshot = await self._publish_snapshot(
+            collection,
+            org_id=org_id,
+            actor_id=actor_id,
+            expected_definition_version=expected_definition_version,
+            trigger_kind="dataset_revision_refresh",
+            trigger_ref=current.id if current is not None else None,
+        )
+        return CollectionSnapshotRefreshResult(
+            outcome=(
+                "unchanged"
+                if current is not None and snapshot.id == current.id
+                else "refreshed"
+            ),
+            snapshot=snapshot,
+        )
+
+    async def publish_snapshot_for_automation(
+        self,
+        collection_id: str,
+        org_id: str,
+        *,
+        actor_id: str,
+        expected_definition_version: int,
+        trigger_kind: str,
+        trigger_ref: str | None,
+    ) -> DatasetCollectionRevision:
+        collection = await self.get_collection(collection_id, org_id)
+        return await self._publish_snapshot(
+            collection,
+            org_id=org_id,
+            actor_id=actor_id,
+            expected_definition_version=expected_definition_version,
+            trigger_kind=trigger_kind,
+            trigger_ref=trigger_ref,
+        )
+
+    async def _publish_snapshot(
+        self,
+        collection: DatasetCollection,
+        *,
+        org_id: str,
+        actor_id: str,
+        expected_definition_version: int,
+        trigger_kind: str,
+        trigger_ref: str | None,
+    ) -> DatasetCollectionRevision:
         if collection.definition_version != expected_definition_version:
             from app.modules.dataset_collections.domain.errors import (
                 DatasetCollectionConflictError,
@@ -272,7 +460,7 @@ class DatasetCollectionService:
                 "definition_version_conflict",
                 "Collection definition changed; reload before creating a revision",
             )
-        members = await self.list_members(collection_id, org_id)
+        members = await self.list_members(collection.id, org_id)
         if not members:
             raise DatasetCollectionValidationError(
                 "no_active_members",
@@ -280,6 +468,11 @@ class DatasetCollectionService:
             )
         datasets = await self._datasets_for_member_ids(
             tuple(item.source_dataset_id for item in members), org_id
+        )
+        dataset_revisions = await self._dataset_revisions_for_members(
+            members,
+            org_id=org_id,
+            actor_id=actor_id,
         )
         definition_payload = {
             "collection_id": collection.id,
@@ -296,6 +489,9 @@ class DatasetCollectionService:
                     "filter_spec": member.filter_spec,
                     "label_mapping": member.label_mapping,
                     "sampling_spec": member.sampling_spec,
+                    "dataset_revision_id": dataset_revisions[
+                        member.source_dataset_id
+                    ].id,
                 }
                 for member in members
             ],
@@ -307,43 +503,66 @@ class DatasetCollectionService:
                 separators=(",", ":"),
             ).encode("utf-8")
         ).hexdigest()
-        revision_id = str(uuid4())
-        (
-            data_uri,
-            provenance_uri,
-            row_count,
-            label_counts,
-        ) = await self._materialize_revision(
-            collection=collection,
-            revision_id=revision_id,
-            members=members,
-            datasets=datasets,
-        )
         snapshot: tuple[dict[str, object], ...] = tuple(
-            cast(
-                dict[str, object],
-                {
-                    "member_id": member.id,
-                    "source_dataset_id": member.source_dataset_id,
-                    "position": member.position,
-                    "storage_mode": datasets[
-                        member.source_dataset_id
-                    ].storage_mode.value,
-                    "dataset_type": datasets[member.source_dataset_id].dataset_type,
-                    "view_types": list(datasets[member.source_dataset_id].view_types),
-                    "label_space": list(
-                        datasets[member.source_dataset_id].task_spec.label_space
-                    ),
-                },
+            self._snapshot_member(
+                collection=collection,
+                member=member,
+                dataset=datasets[member.source_dataset_id],
+                dataset_revision=dataset_revisions[member.source_dataset_id],
             )
             for member in members
+        )
+        row_count = await self._snapshot_row_count(tuple(dataset_revisions.values()))
+        current = await self._repository.get_current_revision(collection.id, org_id)
+        if current is not None and current.definition_hash == definition_hash:
+            return current
+
+        revision_id = str(uuid4())
+        revision_number = await self._repository.next_revision_number(
+            collection.id, org_id
+        )
+        manifest_payload = {
+            "manifest_format": _COMPOSITE_MANIFEST_FORMAT,
+            "collection_id": collection.id,
+            "collection_revision_id": revision_id,
+            "collection_revision_number": revision_number,
+            "definition_version": collection.definition_version,
+            "definition_hash": definition_hash,
+            "target": {
+                "view_id": collection.target_view_id,
+                "view_contract": collection.target_view_contract,
+                "schema_version": collection.target_schema_version,
+            },
+            "duplicate_policy": collection.duplicate_policy,
+            "missing_data_policy": collection.missing_data_policy,
+            "source_resolution": "observed",
+            "reproducibility": {
+                "capability": False,
+                "reason": (
+                    "Dataset Revision references are audit observations; runtimes "
+                    "resolve each member's current data when execution starts"
+                ),
+            },
+            "rule_versions": [],
+            "members": list(snapshot),
+            "summary": {"row_count": row_count, "label_counts": {}},
+        }
+        manifest_uri = await self._artifact_storage.put_bytes(
+            (
+                f"dataset-collections/{collection.id}/revisions/"
+                f"{revision_id}/manifest.json"
+            ),
+            json.dumps(
+                manifest_payload,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8"),
+            "application/json",
         )
         revision = DatasetCollectionRevision(
             id=revision_id,
             collection_id=collection.id,
-            revision_number=await self._repository.next_revision_number(
-                collection.id, org_id
-            ),
+            revision_number=revision_number,
             definition_version=collection.definition_version,
             definition_hash=definition_hash,
             target_view_id=collection.target_view_id,
@@ -352,15 +571,18 @@ class DatasetCollectionService:
             status="ready",
             source_snapshot=snapshot,
             row_count=row_count,
-            label_counts=label_counts,
-            manifest_uri=data_uri,
-            provenance_uri=provenance_uri,
+            label_counts={},
+            manifest_uri=manifest_uri,
+            provenance_uri=None,
             trigger_kind=trigger_kind,
             trigger_ref=trigger_ref,
             created_by=actor_id,
             created_at=_utcnow(),
             error_code=None,
             error_detail=None,
+            manifest_format=_COMPOSITE_MANIFEST_FORMAT,
+            source_resolution="observed",
+            reproducibility_capability=False,
         )
         try:
             return await self._repository.create_revision(
@@ -370,8 +592,7 @@ class DatasetCollectionService:
             )
         except Exception:
             await asyncio.gather(
-                self._artifact_storage.delete(data_uri),
-                self._artifact_storage.delete(provenance_uri),
+                self._artifact_storage.delete(manifest_uri),
                 return_exceptions=True,
             )
             raise
@@ -437,107 +658,87 @@ class DatasetCollectionService:
             datasets[dataset_id] = dataset
         return datasets
 
-    async def _materialize_revision(
+    async def _dataset_revisions_for_members(
         self,
+        members: list[DatasetCollectionMember],
+        *,
+        org_id: str,
+        actor_id: str,
+    ) -> dict[str, DatasetRevision]:
+        dataset_ids = tuple(member.source_dataset_id for member in members)
+        current = await self._dataset_revision_reader.list_current(dataset_ids, org_id)
+        missing = tuple(
+            member for member in members if member.source_dataset_id not in current
+        )
+        baselines = await asyncio.gather(
+            *(
+                self._dataset_revision_reader.resolve_or_create_baseline(
+                    dataset_id=member.source_dataset_id,
+                    org_id=org_id,
+                    created_by=actor_id,
+                )
+                for member in missing
+            )
+        )
+        return {
+            **current,
+            **{
+                member.source_dataset_id: revision
+                for member, revision in zip(missing, baselines, strict=True)
+            },
+        }
+
+    async def _snapshot_row_count(
+        self,
+        revisions: tuple[DatasetRevision, ...],
+    ) -> int | None:
+        documents = await asyncio.gather(
+            *(
+                self._artifact_storage.get_bytes(revision.manifest_uri)
+                for revision in revisions
+            )
+        )
+        counts: list[int] = []
+        for raw in documents:
+            document = json.loads(raw)
+            artifact = document.get("artifact")
+            if not isinstance(artifact, dict):
+                return None
+            count = artifact.get("row_count")
+            if not isinstance(count, int) or isinstance(count, bool) or count < 0:
+                return None
+            counts.append(count)
+        return sum(counts)
+
+    @staticmethod
+    def _snapshot_member(
         *,
         collection: DatasetCollection,
-        revision_id: str,
-        members: list[DatasetCollectionMember],
-        datasets: dict[str, Dataset],
-    ) -> tuple[str, str, int, dict[str, int]]:
-        frames: list[pl.LazyFrame] = []
-        expected_columns: tuple[str, ...] | None = None
-        for member in members:
-            dataset = datasets[member.source_dataset_id]
-            storage = await self._storage_factory.open(dataset.id, collection.org_id)
-            rows = cast(
-                pl.LazyFrame,
-                await storage.list_samples(
-                    return_lazyframe=True,
-                    with_labels=True,
-                    with_predictions=False,
-                ),
-            )
-            rows = _normalize_storage_rows(rows)
-            columns = tuple(rows.collect_schema().names())
-            if "sample_id" not in columns:
-                raise DatasetCollectionValidationError(
-                    "missing_sample_identity",
-                    f"Dataset '{dataset.id}' does not expose sample_id",
-                )
-            if expected_columns is None:
-                expected_columns = columns
-            elif columns != expected_columns:
-                raise DatasetCollectionValidationError(
-                    "incompatible_schema",
-                    "Collection members do not expose an identical storage view schema",
-                )
-            source_sample = pl.col("sample_id").cast(pl.String)
-            row_key = pl.concat_str([pl.lit(dataset.id), source_sample], separator="::")
-            frames.append(
-                rows.with_columns(
-                    source_sample.alias("source_sample_id"),
-                    pl.lit(dataset.id).alias("source_dataset_id"),
-                    pl.lit(member.id).alias("collection_member_id"),
-                    row_key.alias("row_key"),
-                ).with_columns(pl.col("row_key").alias("sample_id"))
-            )
-        combined = pl.concat(frames, how="vertical")
-        with tempfile.TemporaryDirectory(prefix="dataset-collection-revision-") as tmp:
-            root = Path(tmp)
-            data_path = root / "data.parquet"
-            provenance_path = root / "provenance.parquet"
-            await asyncio.to_thread(
-                combined.sink_parquet,
-                data_path,
-                compression="zstd",
-                maintain_order=True,
-            )
-            await asyncio.to_thread(
-                combined.select(
-                    pl.col("row_key").alias("output_row_id"),
-                    "source_dataset_id",
-                    "source_sample_id",
-                    "collection_member_id",
-                ).sink_parquet,
-                provenance_path,
-                compression="zstd",
-                maintain_order=True,
-            )
-            summary = pl.scan_parquet(data_path)
-            row_count = int(
-                (await summary.select(pl.len().alias("count")).collect_async()).item()
-            )
-            label_counts: dict[str, int] = {}
-            if "label" in summary.collect_schema().names():
-                counts = (
-                    summary.filter(pl.col("label").is_not_null())
-                    .group_by("label")
-                    .agg(pl.len().alias("count"))
-                    .collect_async()
-                )
-                counts = await counts
-                label_counts = {
-                    str(label): int(count) for label, count in counts.iter_rows()
-                }
-            data_uri = await self._artifact_storage.put_file(
-                f"dataset-collections/{collection.id}/revisions/{revision_id}/data.parquet",
-                str(data_path),
-                "application/vnd.apache.parquet",
-            )
-            try:
-                provenance_uri = await self._artifact_storage.put_file(
-                    f"dataset-collections/{collection.id}/revisions/{revision_id}/provenance.parquet",
-                    str(provenance_path),
-                    "application/vnd.apache.parquet",
-                )
-            except Exception:
-                await asyncio.gather(
-                    self._artifact_storage.delete(data_uri),
-                    return_exceptions=True,
-                )
-                raise
-        return data_uri, provenance_uri, row_count, label_counts
+        member: DatasetCollectionMember,
+        dataset: Dataset,
+        dataset_revision: DatasetRevision,
+    ) -> dict[str, object]:
+        return {
+            "member_id": member.id,
+            "source_dataset_id": member.source_dataset_id,
+            "position": member.position,
+            "dataset_revision_id": dataset_revision.id,
+            "dataset_revision_number": dataset_revision.revision_number,
+            "dataset_revision_manifest_uri": dataset_revision.manifest_uri,
+            "dataset_revision_binding": "observed",
+            "dataset_revision_reproducible": False,
+            "collection_definition_version": collection.definition_version,
+            "filter_version": _plan_version(member.filter_spec),
+            "filter_spec": member.filter_spec,
+            "mapping_version": _plan_version(member.label_mapping),
+            "label_mapping": member.label_mapping,
+            "sampling_version": _plan_version(member.sampling_spec),
+            "sampling_spec": member.sampling_spec,
+            "storage_mode": dataset.storage_mode.value,
+            "dataset_type": dataset.dataset_type,
+            "view_types": list(dataset.view_types),
+            "label_space": list(dataset.task_spec.label_space),
+        }
 
     @staticmethod
     def _validate_positions(positions: tuple[int, ...]) -> None:
@@ -568,27 +769,37 @@ class DatasetCollectionService:
             )
 
 
-def _normalize_storage_rows(rows: pl.LazyFrame) -> pl.LazyFrame:
-    schema = rows.collect_schema()
-    columns = schema.names()
-    if "sample_id" in columns:
-        return rows
-    if "id" not in columns:
-        return rows
-    expressions: list[pl.Expr] = [pl.col("id").cast(pl.String).alias("sample_id")]
-    expressions.extend(
-        pl.col(column)
-        for column in columns
-        if column not in {"id", "dataset_id", "metadata_json"}
-    )
-    metadata_dtype = schema.get("metadata_json")
-    if isinstance(metadata_dtype, pl.Struct):
-        # Collection provenance uses the platform sample identity.  An SC
-        # upstream ``sample_id`` in metadata must not shadow that identity.
-        existing = set(columns) | {"sample_id"}
-        expressions.extend(
-            pl.col("metadata_json").struct.field(field.name).alias(field.name)
-            for field in metadata_dtype.fields
-            if field.name not in existing
+def _plan_version(plan: dict[str, object] | dict[str, str]) -> str:
+    return hashlib.sha256(
+        json.dumps(plan, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+
+def _snapshot_revision_entry(
+    item: dict[str, object],
+) -> tuple[str, str, str | None, int | None]:
+    member_id = item.get("member_id")
+    dataset_id = item.get("source_dataset_id")
+    if not isinstance(member_id, str) or not member_id:
+        raise DatasetCollectionValidationError(
+            "invalid_snapshot_provenance",
+            "Snapshot member provenance is missing member_id",
         )
-    return rows.select(expressions)
+    if not isinstance(dataset_id, str) or not dataset_id:
+        raise DatasetCollectionValidationError(
+            "invalid_snapshot_provenance",
+            "Snapshot member provenance is missing source_dataset_id",
+        )
+    observed_id = item.get("dataset_revision_id")
+    observed_number = item.get("dataset_revision_number")
+    return (
+        member_id,
+        dataset_id,
+        observed_id if isinstance(observed_id, str) and observed_id else None,
+        (
+            observed_number
+            if isinstance(observed_number, int)
+            and not isinstance(observed_number, bool)
+            else None
+        ),
+    )

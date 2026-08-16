@@ -10,7 +10,10 @@ export const datasetCollectionRoutes: RouteRecordRaw[] = [
   {
     path: "/dataset-collections",
     name: "dataset-collections",
-    component: () => import("./presentation/pages/DatasetCollectionListView.vue"),
+    redirect: (to) => ({
+      path: "/library",
+      query: { ...to.query, tab: "collections" },
+    }),
   },
   {
     path: "/dataset-collections/:collectionId",

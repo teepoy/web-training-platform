@@ -8,13 +8,15 @@
       :row-checkable="(row) => row.created_by === currentUserId"
       :on-update-checked-row-keys="(keys) => emit('update:checked-row-keys', keys)"
       :pagination="pagination"
+      :sorter="sorter"
+      :on-update-sorter="(value) => emit('update:sorter', value)"
     />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from "vue";
-import type { DataTableRowKey } from "naive-ui";
+import type { DataTableRowKey, DataTableSortState } from "naive-ui";
 import { DatasetTable } from "@/shared";
 import { buildDatasetColumns } from "@/features/datasets/application/surface";
 import { resolveDatasetTaskType } from "@/features/datasets/presentation/pages/registry";
@@ -27,6 +29,7 @@ const props = defineProps<{
   isSuperadmin: boolean;
   checkedRowKeys?: DataTableRowKey[];
   pagination?: false | import("naive-ui").PaginationProps;
+  sorter?: DataTableSortState | null;
 }>();
 
 const emit = defineEmits<{
@@ -35,6 +38,7 @@ const emit = defineEmits<{
   rename: [row: DatasetListItem];
   delete: [row: DatasetListItem];
   "update:checked-row-keys": [keys: DataTableRowKey[]];
+  "update:sorter": [sorter: DataTableSortState | null];
 }>();
 
 const columns = computed(() =>

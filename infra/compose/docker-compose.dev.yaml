@@ -100,6 +100,7 @@ x-api-runtime: &api-runtime
   volumes:
     - ../../apps/api:/app/apps/api
     - ../../libs/protos:/app/libs/protos
+    - ../../libs/sampling-rules:/app/libs/sampling-rules
   environment:
     <<: *platform-environment
     UVICORN_TIMEOUT_KEEP_ALIVE: "120"
@@ -137,7 +138,7 @@ services:
       [
         "/bin/sh",
         "-lc",
-        "cd /app/apps/api && exec uv run --no-dev --frozen uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/apps/api --reload-dir /app/libs/protos --timeout-keep-alive $${UVICORN_TIMEOUT_KEEP_ALIVE:-120} --timeout-graceful-shutdown $${UVICORN_TIMEOUT_GRACEFUL_SHUTDOWN:-600} --timeout-worker-healthcheck $${UVICORN_TIMEOUT_WORKER_HEALTHCHECK:-60}",
+        "cd /app/apps/api && exec uv run --no-dev --frozen uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/apps/api --reload-dir /app/libs/protos --reload-dir /app/libs/sampling-rules --timeout-keep-alive $${UVICORN_TIMEOUT_KEEP_ALIVE:-120} --timeout-graceful-shutdown $${UVICORN_TIMEOUT_GRACEFUL_SHUTDOWN:-600} --timeout-worker-healthcheck $${UVICORN_TIMEOUT_WORKER_HEALTHCHECK:-60}",
       ]
     ports:
       - "8000:8000"
@@ -160,7 +161,7 @@ services:
       [
         "/bin/sh",
         "-lc",
-        "cd /app/apps/api && exec /app/.venv/bin/uvicorn app.sc_data_provider_main:app --host 0.0.0.0 --port 8001 --reload --reload-dir /app/apps/api --reload-dir /app/libs/protos --timeout-keep-alive $${UVICORN_TIMEOUT_KEEP_ALIVE:-120} --timeout-graceful-shutdown $${UVICORN_TIMEOUT_GRACEFUL_SHUTDOWN:-600} --timeout-worker-healthcheck $${UVICORN_TIMEOUT_WORKER_HEALTHCHECK:-60}",
+        "cd /app/apps/api && exec /app/.venv/bin/uvicorn app.sc_data_provider_main:app --host 0.0.0.0 --port 8001 --reload --reload-dir /app/apps/api --reload-dir /app/libs/protos --reload-dir /app/libs/sampling-rules --timeout-keep-alive $${UVICORN_TIMEOUT_KEEP_ALIVE:-120} --timeout-graceful-shutdown $${UVICORN_TIMEOUT_GRACEFUL_SHUTDOWN:-600} --timeout-worker-healthcheck $${UVICORN_TIMEOUT_WORKER_HEALTHCHECK:-60}",
       ]
     deploy:
       resources:
@@ -169,6 +170,7 @@ services:
     volumes:
       - ../../apps/api:/app/apps/api
       - ../../libs/protos:/app/libs/protos
+      - ../../libs/sampling-rules:/app/libs/sampling-rules
       - sc-data-provider-cache:/var/cache/sc-data-provider
     ports:
       - "8001:8001"

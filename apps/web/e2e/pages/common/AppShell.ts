@@ -21,17 +21,17 @@ export class AppShell extends BasePage {
    */
   async waitForLoaded(): Promise<void> {
     // The Naive UI n-menu renders menuitem roles with recognizable labels.
-    await this.page.getByRole("menuitem", { name: "Datasets" }).waitFor();
+    await this.page.getByRole("menuitem", { name: "Library" }).waitFor();
   }
 
   // ── Sidebar navigation ──────────────────────────────────────────
 
   /**
-   * Navigate to **Datasets** by clicking the sidebar menu item.
+   * Navigate to the data-resource **Library** by clicking the sidebar menu item.
    */
   async gotoDatasets(): Promise<void> {
-    await this.page.getByRole("menuitem", { name: "Datasets" }).click();
-    await this.page.waitForURL("**/datasets");
+    await this.page.getByRole("menuitem", { name: "Library" }).click();
+    await this.page.waitForURL("**/library");
   }
 
   /**

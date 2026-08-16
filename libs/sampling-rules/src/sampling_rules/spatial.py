@@ -80,6 +80,34 @@ class DynamicClusterResult:
         return self.cluster_id > 0
 
 
+def validate_dynamic_adder_config(config: DynamicAdderConfig) -> float:
+    """Validate shared row/table adder semantics and return the radius."""
+
+    _validate_coordinate_fields(config.x_field, config.y_field)
+    radius = _validate_radius(config.radius)
+    if not isinstance(config.match_mode, AdderMatchMode):
+        raise InvalidSamplingRuleError(
+            "dynamic adder match_mode must be any_reference or one_to_one"
+        )
+    return radius
+
+
+def validate_dynamic_cluster_config(config: DynamicClusterConfig) -> float:
+    """Validate shared row/table cluster semantics and return the radius."""
+
+    _validate_coordinate_fields(config.x_field, config.y_field)
+    radius = _validate_radius(config.radius)
+    if (
+        isinstance(config.minimum_points, bool)
+        or not isinstance(config.minimum_points, int)
+        or config.minimum_points < 2
+    ):
+        raise InvalidSamplingRuleError(
+            "dynamic cluster minimum_points must be an integer of at least two"
+        )
+    return radius
+
+
 def _read_coordinate(row: Mapping[str, object], path: str) -> float:
     current: object = row
     for part in path.split("."):
@@ -104,13 +132,17 @@ def _coordinates(
     x_field: str,
     y_field: str,
 ) -> tuple[tuple[float, float], ...]:
+    _validate_coordinate_fields(x_field, y_field)
+    return tuple(
+        (_read_coordinate(row, x_field), _read_coordinate(row, y_field)) for row in rows
+    )
+
+
+def _validate_coordinate_fields(x_field: str, y_field: str) -> None:
     if not x_field.strip() or not y_field.strip():
         raise InvalidSamplingRuleError(
             "dynamic spatial calculations require non-empty x and y fields"
         )
-    return tuple(
-        (_read_coordinate(row, x_field), _read_coordinate(row, y_field)) for row in rows
-    )
 
 
 def _validate_radius(radius: float) -> float:
@@ -179,11 +211,7 @@ def compute_dynamic_adders(
     significant in that mode. ``ANY_REFERENCE`` performs independent matching.
     """
 
-    radius = _validate_radius(config.radius)
-    if not isinstance(config.match_mode, AdderMatchMode):
-        raise InvalidSamplingRuleError(
-            "dynamic adder match_mode must be any_reference or one_to_one"
-        )
+    radius = validate_dynamic_adder_config(config)
     current_points = _coordinates(
         current_rows,
         x_field=config.x_field,
@@ -241,15 +269,7 @@ def compute_dynamic_clusters(
     cluster ID ``0``. A point on the inclusive radius boundary is a neighbor.
     """
 
-    radius = _validate_radius(config.radius)
-    if (
-        isinstance(config.minimum_points, bool)
-        or not isinstance(config.minimum_points, int)
-        or config.minimum_points < 2
-    ):
-        raise InvalidSamplingRuleError(
-            "dynamic cluster minimum_points must be an integer of at least two"
-        )
+    radius = validate_dynamic_cluster_config(config)
     points = _coordinates(rows, x_field=config.x_field, y_field=config.y_field)
     spatial_index = _SpatialIndex(points, radius)
     radius_squared = radius * radius

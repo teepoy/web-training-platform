@@ -25,8 +25,74 @@ def test_query_parameters_accept_scalars_and_homogeneous_arrays() -> None:
     assert request.parameters == [[1, 2, 3]]
 
 
+def test_query_accepts_a_bounded_structured_sampling_program() -> None:
+    request = ScSqlQueryRequest.model_validate(
+        {
+            "description": "sc-workbench.selection.sampling-program",
+            "sql": "SELECT map_id, class_number FROM samples",
+            "parameters": [],
+            "sampling": {
+                "seed": 42,
+                "program": {
+                    "conditional": {
+                        "enabled": False,
+                        "field": "class_number",
+                        "value": "",
+                        "limit": 50,
+                    },
+                    "group": {
+                        "enabled": True,
+                        "field": "class_number",
+                        "unit": "ratio",
+                        "targets": [{"value": "1", "amount": 2}],
+                        "othersAmount": 5,
+                        "rounding": "nearest",
+                    },
+                    "total": {"enabled": True, "limit": 200},
+                },
+            },
+        }
+    )
+
+    assert request.sampling is not None
+    assert request.sampling.program.group.others_amount == 5
+
+
+def test_query_rejects_an_unbounded_sampling_program() -> None:
+    with pytest.raises(ValidationError, match="enabled group rule or total limit"):
+        ScSqlQueryRequest.model_validate(
+            {
+                "description": "sc-workbench.selection.sampling-program",
+                "sql": "SELECT map_id FROM samples",
+                "parameters": [],
+                "sampling": {
+                    "seed": 42,
+                    "program": {
+                        "conditional": {
+                            "enabled": False,
+                            "field": "class_number",
+                            "value": "",
+                            "limit": 50,
+                        },
+                        "group": {
+                            "enabled": False,
+                            "field": "class_number",
+                            "unit": "count",
+                            "targets": [],
+                            "othersAmount": 0,
+                            "rounding": "nearest",
+                        },
+                        "total": {"enabled": False, "limit": 200},
+                    },
+                },
+            }
+        )
+
+
 @pytest.mark.parametrize("parameter", [[], [1, "2"], [True, 1]])
-def test_query_parameters_reject_untyped_or_mixed_arrays(parameter: list[object]) -> None:
+def test_query_parameters_reject_untyped_or_mixed_arrays(
+    parameter: list[object],
+) -> None:
     with pytest.raises(ValidationError):
         ScSqlQueryRequest.model_validate(
             {
@@ -60,12 +126,12 @@ def test_sample_table_descriptor_is_versioned_and_has_unique_columns() -> None:
 
     assert descriptor.version == "sc.sample-table.v1"
     assert len(keys) == len(set(keys))
-    assert next(column for column in descriptor.columns if column.key == "final_class").visibility == (
-        "filter_only"
-    )
-    assert next(column for column in descriptor.columns if column.key == "map_id").visibility == (
-        "internal"
-    )
+    assert next(
+        column for column in descriptor.columns if column.key == "final_class"
+    ).visibility == ("filter_only")
+    assert next(
+        column for column in descriptor.columns if column.key == "map_id"
+    ).visibility == ("internal")
 
 
 def test_dataset_materializer_preserves_dynamic_metadata_columns() -> None:
@@ -93,7 +159,9 @@ def test_dataset_materializer_preserves_dynamic_metadata_columns() -> None:
         }
     )
 
-    row = _normalize_dataset_base_lazyframe(source, review_images).collect().to_dicts()[0]
+    row = (
+        _normalize_dataset_base_lazyframe(source, review_images).collect().to_dicts()[0]
+    )
 
     assert row["upstream_images"] == 7
     assert row["images"] == 0

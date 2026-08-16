@@ -114,6 +114,7 @@ test("Predict tab shows Start Prediction button and opens modal with model selec
 
   await page.gotoPredictTab();
   await page.waitForPredictTabLoaded();
+  await expect(authedPage).toHaveURL(new RegExp(`/datasets/${datasetId}#predict$`));
 
   await expect(authedPage.getByText("Prediction runs", { exact: true })).toBeVisible();
   await expect(authedPage.getByText("Prediction Jobs", { exact: true })).not.toBeVisible();
@@ -126,10 +127,55 @@ test("Predict tab shows Start Prediction button and opens modal with model selec
   await expect(authedPage.getByRole("dialog")).toBeVisible();
 
   const dialog = authedPage.getByRole("dialog");
-  await expect(dialog.getByText("Model", { exact: true })).toBeVisible();
-  await expect(dialog.getByText("Select a model")).toBeVisible();
-  await dialog.locator(".n-select").click();
-  await expect(authedPage.getByText("Demo Model", { exact: false }).last()).toBeVisible();
+  await expect(dialog.getByRole("columnheader", { name: "Model" })).toBeVisible();
+  await expect(dialog.getByPlaceholder(/Search model name/)).toBeVisible();
+  await expect(dialog.getByText("Demo Model", { exact: true })).toBeVisible();
+  await dialog.getByText("Demo Model", { exact: true }).click();
+  await expect(dialog.getByRole("button", { name: "Start with selected model" })).toBeEnabled();
+});
+
+test("Dataset detail restores the selected tab from the URL hash @mock", async ({
+  authedPage,
+  apiMocks,
+}) => {
+  await apiMocks.datasets.mockGetDataset(datasetId, {
+    task_spec: { task_type: "classification", label_space: ["rose", "tulip"] },
+  });
+  await apiMocks.datasets.mockDatasetStatus(datasetId);
+  await apiMocks.prediction.mockListPredictionJobs([]);
+  await apiMocks.prediction.mockListModels([]);
+
+  await authedPage.goto(`/datasets/${datasetId}#predict`);
+
+  await expect(authedPage.getByText("Prediction runs", { exact: true })).toBeVisible();
+  await expect(authedPage).toHaveURL(new RegExp(`/datasets/${datasetId}#predict$`));
+});
+
+test("Prediction model picker can page to older models @mock", async ({ authedPage, apiMocks }) => {
+  const page = new DatasetDetailPage(authedPage);
+  await apiMocks.datasets.mockGetDataset(datasetId, {
+    task_spec: { task_type: "classification", label_space: ["rose", "tulip"] },
+  });
+  await apiMocks.datasets.mockDatasetStatus(datasetId);
+  await apiMocks.prediction.mockListPredictionJobs([]);
+  await apiMocks.prediction.mockListModels([
+    makeModel({ id: "old-model", name: "Historical baseline", created_at: "2020-01-01T00:00:00Z" }),
+    ...Array.from({ length: 20 }, (_, index) =>
+      makeModel({
+        id: `new-model-${index}`,
+        name: `Recent model ${index}`,
+        created_at: `2026-01-${String(index + 1).padStart(2, "0")}T00:00:00Z`,
+      }),
+    ),
+  ]);
+
+  await page.gotoDetail(datasetId);
+  await page.gotoPredictTab();
+  await page.getStartPredictionButton().click();
+  const dialog = authedPage.getByRole("dialog");
+  await dialog.locator(".n-pagination-item").filter({ hasText: "2" }).click();
+
+  await expect(dialog.getByText("Historical baseline", { exact: true })).toBeVisible();
 });
 
 test("Predict tab only shows prediction jobs for the current dataset @mock", async ({

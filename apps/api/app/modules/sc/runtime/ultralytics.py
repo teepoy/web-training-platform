@@ -127,6 +127,24 @@ async def yolo_sc_train(ctx: TrainingRuntimeContext) -> RuntimeEventStream:
         with_labels=True,
         with_predictions=ctx.sample_filter is not None,
     ) as source:
+        if source.collection_revision_id is not None:
+            await training_repository.add_event(
+                TrainingEvent(
+                    job_id=ctx.job_id,
+                    ts=datetime.now(UTC),
+                    level="info",
+                    message="resolved observed Collection input",
+                    payload={
+                        "source_resolution": "observed",
+                        "reproducibility_capability": False,
+                        "collection_revision_id": source.collection_revision_id,
+                        "source_dataset_ids": list(source.source_dataset_ids),
+                        "resolved_dataset_revision_ids": list(
+                            source.resolved_dataset_revision_ids
+                        ),
+                    },
+                )
+            )
         if source.dataset_type not in {"image_sc", "image_sc_collection"}:
             raise ValueError(f"SC trainer {ctx.trainer_id!r} requires image_sc data")
         if SC_PATCH_IMAGE_V1.view_id not in source.view_types:
@@ -208,7 +226,23 @@ async def yolo_sc_train(ctx: TrainingRuntimeContext) -> RuntimeEventStream:
                         object_name=f"models/{ctx.job_id}/checkpoint.pt",
                         content_type="application/octet-stream",
                     ),
-                    metadata=_model_metadata(ctx, dict(output.metadata)),
+                    metadata=_model_metadata(
+                        ctx,
+                        {
+                            **dict(output.metadata),
+                            **(
+                                {
+                                    "source_resolution": "observed",
+                                    "reproducibility_capability": False,
+                                    "resolved_dataset_revision_ids": list(
+                                        source.resolved_dataset_revision_ids
+                                    ),
+                                }
+                                if source.collection_revision_id is not None
+                                else {}
+                            ),
+                        },
+                    ),
                     name="checkpoint.pt",
                     format="pytorch",
                 )
@@ -280,6 +314,12 @@ async def yolo_sc_predictor(ctx: PredictionRuntimeContext) -> RuntimeEventStream
             "dataset_id": source.dataset_id,
             "collection_id": source.collection_id,
             "collection_revision_id": source.collection_revision_id,
+            "source_resolution": (
+                "observed" if source.collection_revision_id is not None else "current"
+            ),
+            "reproducibility_capability": False,
+            "source_dataset_ids": list(source.source_dataset_ids),
+            "resolved_dataset_revision_ids": list(source.resolved_dataset_revision_ids),
             "total_samples": total_samples,
             "successful": 0,
             "failed": 0,

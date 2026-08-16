@@ -28,6 +28,9 @@ export interface DatasetCollectionRevisionResponse {
   label_counts: DatasetCollectionRevisionResponseLabelCounts;
   manifest_uri: DatasetCollectionRevisionResponseManifestUri;
   provenance_uri: DatasetCollectionRevisionResponseProvenanceUri;
+  manifest_format: string;
+  source_resolution: string;
+  reproducibility_capability: boolean;
   trigger_kind: string;
   trigger_ref: DatasetCollectionRevisionResponseTriggerRef;
   created_by: string;

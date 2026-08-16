@@ -203,6 +203,28 @@ paths:
                 maxLength: 255
               - type: "null"
             title: Creator Id
+        - name: sort_by
+          in: query
+          required: false
+          schema:
+            enum:
+              - name
+              - dataset_type
+              - creator
+              - created_at
+            type: string
+            default: created_at
+            title: Sort By
+        - name: sort_order
+          in: query
+          required: false
+          schema:
+            enum:
+              - asc
+              - desc
+            type: string
+            default: desc
+            title: Sort Order
       responses:
         "200":
           description: Successful Response
@@ -304,6 +326,75 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Dataset"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /api/v1/datasets/{dataset_id}/revisions/current:
+    get:
+      tags:
+        - datasets
+      summary: Get Current Dataset Revision
+      operationId: get_current_dataset_revision_api_v1_datasets__dataset_id__revisions_current_get
+      parameters:
+        - name: dataset_id
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Dataset Id
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatasetRevisionResponse"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /api/v1/datasets/{dataset_id}/revisions:
+    get:
+      tags:
+        - datasets
+      summary: List Dataset Revisions
+      operationId: list_dataset_revisions_api_v1_datasets__dataset_id__revisions_get
+      parameters:
+        - name: dataset_id
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Dataset Id
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            maximum: 200
+            minimum: 1
+            default: 50
+            title: Limit
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+            title: Offset
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedResponse_DatasetRevisionResponse_"
         "422":
           description: Validation Error
           content:
@@ -1211,6 +1302,37 @@ paths:
                 maxLength: 255
               - type: "null"
             title: Creator Id
+        - name: q
+          in: query
+          required: false
+          schema:
+            anyOf:
+              - type: string
+                maxLength: 200
+              - type: "null"
+            title: Q
+        - name: sort_by
+          in: query
+          required: false
+          schema:
+            enum:
+              - name
+              - creator
+              - created_at
+              - updated_at
+            type: string
+            default: updated_at
+            title: Sort By
+        - name: sort_order
+          in: query
+          required: false
+          schema:
+            enum:
+              - asc
+              - desc
+            type: string
+            default: desc
+            title: Sort Order
       responses:
         "200":
           description: Successful Response
@@ -1296,6 +1418,64 @@ paths:
       responses:
         "204":
           description: Successful Response
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /api/v1/dataset-collections/{collection_id}/snapshot-update-status:
+    get:
+      tags:
+        - dataset-collections
+      summary: Get Snapshot Update Status
+      operationId: get_snapshot_update_status_api_v1_dataset_collections__collection_id__snapshot_update_status_get
+      parameters:
+        - name: collection_id
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Collection Id
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollectionSnapshotUpdateStatusResponse"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /api/v1/dataset-collections/{collection_id}/refresh-snapshot:
+    post:
+      tags:
+        - dataset-collections
+      summary: Refresh Snapshot
+      operationId: refresh_snapshot_api_v1_dataset_collections__collection_id__refresh_snapshot_post
+      parameters:
+        - name: collection_id
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Collection Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDatasetCollectionRevisionRequest"
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollectionSnapshotRefreshResponse"
         "422":
           description: Validation Error
           content:
@@ -1427,6 +1607,171 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/DatasetCollectionMembershipResponse"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /api/v1/dataset-collections/{collection_id}/default-model:
+    patch:
+      tags:
+        - dataset-collections
+      summary: Update Default Model
+      operationId: update_default_model_api_v1_dataset_collections__collection_id__default_model_patch
+      parameters:
+        - name: collection_id
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Collection Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCollectionDefaultModelRequest"
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatasetCollectionResponse"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /api/v1/dataset-collections/{collection_id}/prediction-coverage:
+    get:
+      tags:
+        - dataset-collections
+      summary: List Prediction Coverage
+      operationId: list_prediction_coverage_api_v1_dataset_collections__collection_id__prediction_coverage_get
+      parameters:
+        - name: collection_id
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Collection Id
+        - name: snapshot_id
+          in: query
+          required: false
+          schema:
+            anyOf:
+              - type: string
+                minLength: 1
+                maxLength: 64
+              - type: "null"
+            title: Snapshot Id
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CollectionPredictionCoverageResponse"
+                title: Response List Prediction Coverage Api V1 Dataset Collections  Collection
+                  Id  Prediction Coverage Get
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /api/v1/dataset-collections/{collection_id}/prediction-batches:
+    post:
+      tags:
+        - dataset-collections
+      summary: Create Prediction Batch
+      operationId: create_prediction_batch_api_v1_dataset_collections__collection_id__prediction_batches_post
+      parameters:
+        - name: collection_id
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Collection Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCollectionPredictionBatchRequest"
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollectionPredictionBatchResponse"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+    get:
+      tags:
+        - dataset-collections
+      summary: List Prediction Batches
+      operationId: list_prediction_batches_api_v1_dataset_collections__collection_id__prediction_batches_get
+      parameters:
+        - name: collection_id
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Collection Id
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CollectionPredictionBatchResponse"
+                title: Response List Prediction Batches Api V1 Dataset Collections  Collection
+                  Id  Prediction Batches Get
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /api/v1/dataset-collections/{collection_id}/prediction-batches/{batch_id}/retry:
+    post:
+      tags:
+        - dataset-collections
+      summary: Retry Prediction Batch
+      operationId: retry_prediction_batch_api_v1_dataset_collections__collection_id__prediction_batches__batch_id__retry_post
+      parameters:
+        - name: collection_id
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Collection Id
+        - name: batch_id
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Batch Id
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollectionPredictionBatchResponse"
         "422":
           description: Validation Error
           content:
@@ -1722,6 +2067,70 @@ paths:
           content:
             application/json:
               schema: {}
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /api/v1/automations:
+    get:
+      tags:
+        - automations
+      summary: List Automation Runs
+      operationId: list_automation_runs_api_v1_automations_get
+      parameters:
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+            title: Offset
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            maximum: 200
+            minimum: 1
+            default: 50
+            title: Limit
+        - name: status
+          in: query
+          required: false
+          schema:
+            anyOf:
+              - type: string
+                maxLength: 32
+              - type: "null"
+            title: Status
+        - name: kind
+          in: query
+          required: false
+          schema:
+            anyOf:
+              - type: string
+                maxLength: 32
+              - type: "null"
+            title: Kind
+        - name: q
+          in: query
+          required: false
+          schema:
+            anyOf:
+              - type: string
+                maxLength: 200
+              - type: "null"
+            title: Q
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedResponse_AutomationRunOverviewResponse_"
         "422":
           description: Validation Error
           content:
@@ -2220,6 +2629,40 @@ paths:
                 maxLength: 255
               - type: "null"
             title: Creator Id
+        - name: source_type
+          in: query
+          required: false
+          schema:
+            anyOf:
+              - enum:
+                  - dataset
+                  - collection
+                type: string
+              - type: "null"
+            title: Source Type
+        - name: sort_by
+          in: query
+          required: false
+          schema:
+            enum:
+              - name
+              - source
+              - trainer
+              - creator
+              - created_at
+            type: string
+            default: created_at
+            title: Sort By
+        - name: sort_order
+          in: query
+          required: false
+          schema:
+            enum:
+              - asc
+              - desc
+            type: string
+            default: desc
+            title: Sort Order
       responses:
         "200":
           description: Successful Response
@@ -5399,6 +5842,453 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HTTPValidationError"
+  /api/v1/source-connectors/providers:
+    get:
+      tags:
+        - source-discovery
+      summary: List Source Providers
+      operationId: list_source_providers_api_v1_source_connectors_providers_get
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/SourceProviderDescriptorResponse"
+                type: array
+                title: Response List Source Providers Api V1 Source Connectors Providers
+                  Get
+  /api/v1/source-connectors:
+    get:
+      tags:
+        - source-discovery
+      summary: List Source Connectors
+      operationId: list_source_connectors_api_v1_source_connectors_get
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/SourceConnectorResponse"
+                type: array
+                title: Response List Source Connectors Api V1 Source Connectors Get
+    post:
+      tags:
+        - source-discovery
+      summary: Create Source Connector
+      operationId: create_source_connector_api_v1_source_connectors_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Body_create_source_connector_api_v1_source_connectors_post"
+        required: true
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SourceConnectorResponse"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /api/v1/source-connectors/{connector_id}/import-profiles:
+    post:
+      tags:
+        - source-discovery
+      summary: Create Import Profile
+      operationId: create_import_profile_api_v1_source_connectors__connector_id__import_profiles_post
+      parameters:
+        - name: connector_id
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Connector Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Body_create_import_profile_api_v1_source_connectors__connector_id__import_profiles_post"
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportProfileVersionResponse"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+    get:
+      tags:
+        - source-discovery
+      summary: List Import Profiles
+      operationId: list_import_profiles_api_v1_source_connectors__connector_id__import_profiles_get
+      parameters:
+        - name: connector_id
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Connector Id
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ImportProfileVersionResponse"
+                title: Response List Import Profiles Api V1 Source Connectors  Connector
+                  Id  Import Profiles Get
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /api/v1/dataset-collections/{collection_id}/membership-rules:
+    post:
+      tags:
+        - source-discovery
+      summary: Create Membership Rule
+      operationId: create_membership_rule_api_v1_dataset_collections__collection_id__membership_rules_post
+      parameters:
+        - name: collection_id
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Collection Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMembershipRuleRequest"
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MembershipRuleResponse"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+    get:
+      tags:
+        - source-discovery
+      summary: List Membership Rules
+      operationId: list_membership_rules_api_v1_dataset_collections__collection_id__membership_rules_get
+      parameters:
+        - name: collection_id
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Collection Id
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MembershipRuleResponse"
+                title: Response List Membership Rules Api V1 Dataset Collections  Collection
+                  Id  Membership Rules Get
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /api/v1/dataset-collections/{collection_id}/membership-rules/{rule_id}/versions:
+    post:
+      tags:
+        - source-discovery
+      summary: Create Membership Rule Version
+      operationId: create_membership_rule_version_api_v1_dataset_collections__collection_id__membership_rules__rule_id__versions_post
+      parameters:
+        - name: collection_id
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Collection Id
+        - name: rule_id
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Rule Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMembershipRuleVersionRequest"
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MembershipRuleResponse"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /api/v1/dataset-collections/{collection_id}/membership-rules/{rule_id}/runs:
+    post:
+      tags:
+        - source-discovery
+      summary: Run Membership Discovery
+      operationId: run_membership_discovery_api_v1_dataset_collections__collection_id__membership_rules__rule_id__runs_post
+      parameters:
+        - name: collection_id
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Collection Id
+        - name: rule_id
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Rule Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RunLiveDiscoveryRequest"
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiscoveryRunResponse"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /api/v1/dataset-collections/{collection_id}/membership-rules/{rule_id}/backfill-preview:
+    post:
+      tags:
+        - source-discovery
+      summary: Preview Membership Backfill
+      operationId: preview_membership_backfill_api_v1_dataset_collections__collection_id__membership_rules__rule_id__backfill_preview_post
+      parameters:
+        - name: collection_id
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Collection Id
+        - name: rule_id
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Rule Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BackfillPreviewRequest"
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BackfillPreviewResponse"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /api/v1/dataset-collections/{collection_id}/membership-rules/{rule_id}/backfills:
+    post:
+      tags:
+        - source-discovery
+      summary: Run Membership Backfill
+      operationId: run_membership_backfill_api_v1_dataset_collections__collection_id__membership_rules__rule_id__backfills_post
+      parameters:
+        - name: collection_id
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Collection Id
+        - name: rule_id
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Rule Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BackfillRangeRequest"
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiscoveryRunResponse"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /api/v1/dataset-collections/{collection_id}/membership-suppressions:
+    post:
+      tags:
+        - source-discovery
+      summary: Suppress Source Member
+      operationId: suppress_source_member_api_v1_dataset_collections__collection_id__membership_suppressions_post
+      parameters:
+        - name: collection_id
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Collection Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SuppressSourceMemberRequest"
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MembershipSuppressionResponse"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /api/v1/dataset-collections/{collection_id}/membership-suppressions/{suppression_id}:
+    delete:
+      tags:
+        - source-discovery
+      summary: Clear Membership Suppression
+      operationId: clear_membership_suppression_api_v1_dataset_collections__collection_id__membership_suppressions__suppression_id__delete
+      parameters:
+        - name: collection_id
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Collection Id
+        - name: suppression_id
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Suppression Id
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MembershipSuppressionResponse"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /api/v1/discovery-runs/{run_id}:
+    get:
+      tags:
+        - source-discovery
+      summary: Get Discovery Run
+      operationId: get_discovery_run_api_v1_discovery_runs__run_id__get
+      parameters:
+        - name: run_id
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Run Id
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiscoveryRunResponse"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /api/v1/discovery-runs/{run_id}/retry-failed:
+    post:
+      tags:
+        - source-discovery
+      summary: Retry Failed Discovery Items
+      operationId: retry_failed_discovery_items_api_v1_discovery_runs__run_id__retry_failed_post
+      parameters:
+        - name: run_id
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Run Id
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiscoveryRunResponse"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
   /health:
     get:
       summary: Health
@@ -5669,6 +6559,165 @@ components:
         - uri
         - kind
       title: ArtifactRef
+    AutomationRunOverviewResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        run_source:
+          type: string
+          title: Run Source
+        target_type:
+          type: string
+          title: Target Type
+        target_id:
+          type: string
+          title: Target Id
+        target_label:
+          type: string
+          title: Target Label
+        recipe_kind:
+          type: string
+          title: Recipe Kind
+        status:
+          type: string
+          title: Status
+        started_at:
+          type: string
+          format: date-time
+          title: Started At
+        completed_at:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: "null"
+          title: Completed At
+        needs_attention:
+          type: boolean
+          title: Needs Attention
+        retry_supported:
+          type: boolean
+          title: Retry Supported
+        detail:
+          anyOf:
+            - type: string
+            - type: "null"
+          title: Detail
+      type: object
+      required:
+        - id
+        - run_source
+        - target_type
+        - target_id
+        - target_label
+        - recipe_kind
+        - status
+        - started_at
+        - completed_at
+        - needs_attention
+        - retry_supported
+        - detail
+      title: AutomationRunOverviewResponse
+    BackfillPreviewRequest:
+      properties:
+        start_utc:
+          type: string
+          format: date-time
+          title: Start Utc
+        end_utc:
+          type: string
+          format: date-time
+          title: End Utc
+        timezone:
+          type: string
+          maxLength: 128
+          minLength: 1
+          title: Timezone
+        representative_limit:
+          type: integer
+          maximum: 20.0
+          minimum: 1.0
+          title: Representative Limit
+      type: object
+      required:
+        - start_utc
+        - end_utc
+        - timezone
+        - representative_limit
+      title: BackfillPreviewRequest
+    BackfillPreviewResponse:
+      properties:
+        as_of_utc:
+          type: string
+          format: date-time
+          title: As Of Utc
+        matched_count:
+          type: integer
+          title: Matched Count
+        representative_records:
+          items:
+            $ref: "#/components/schemas/SourceRecordResponse"
+          type: array
+          title: Representative Records
+      type: object
+      required:
+        - as_of_utc
+        - matched_count
+        - representative_records
+      title: BackfillPreviewResponse
+    BackfillRangeRequest:
+      properties:
+        start_utc:
+          type: string
+          format: date-time
+          title: Start Utc
+        end_utc:
+          type: string
+          format: date-time
+          title: End Utc
+        timezone:
+          type: string
+          maxLength: 128
+          minLength: 1
+          title: Timezone
+      type: object
+      required:
+        - start_utc
+        - end_utc
+        - timezone
+      title: BackfillRangeRequest
+    Body_create_import_profile_api_v1_source_connectors__connector_id__import_profiles_post:
+      properties:
+        payload:
+          $ref: "#/components/schemas/CreateImportProfileRequest"
+        current_user:
+          anyOf:
+            - $ref: "#/components/schemas/User"
+            - type: "null"
+        org:
+          anyOf:
+            - $ref: "#/components/schemas/Organization"
+            - type: "null"
+      type: object
+      required:
+        - payload
+      title: Body_create_import_profile_api_v1_source_connectors__connector_id__import_profiles_post
+    Body_create_source_connector_api_v1_source_connectors_post:
+      properties:
+        payload:
+          $ref: "#/components/schemas/CreateSourceConnectorRequest"
+        current_user:
+          anyOf:
+            - $ref: "#/components/schemas/User"
+            - type: "null"
+        org:
+          anyOf:
+            - $ref: "#/components/schemas/Organization"
+            - type: "null"
+      type: object
+      required:
+        - payload
+      title: Body_create_source_connector_api_v1_source_connectors_post
     Body_import_parquet_api_v1_plugins_import_parquet_import_post:
       properties:
         file:
@@ -5823,6 +6872,264 @@ components:
         - message
       title: ChatRequest
       description: User message sent to the agent.
+    CollectionPredictionBatchItemResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        batch_id:
+          type: string
+          title: Batch Id
+        member_id:
+          type: string
+          title: Member Id
+        dataset_id:
+          type: string
+          title: Dataset Id
+        dataset_revision_id:
+          type: string
+          title: Dataset Revision Id
+        prediction_job_id:
+          anyOf:
+            - type: string
+            - type: "null"
+          title: Prediction Job Id
+        status:
+          type: string
+          title: Status
+        attempt_count:
+          type: integer
+          title: Attempt Count
+        error_detail:
+          anyOf:
+            - type: string
+            - type: "null"
+          title: Error Detail
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        updated_at:
+          type: string
+          format: date-time
+          title: Updated At
+      type: object
+      required:
+        - id
+        - batch_id
+        - member_id
+        - dataset_id
+        - dataset_revision_id
+        - prediction_job_id
+        - status
+        - attempt_count
+        - error_detail
+        - created_at
+        - updated_at
+      title: CollectionPredictionBatchItemResponse
+    CollectionPredictionBatchResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        collection_id:
+          type: string
+          title: Collection Id
+        collection_revision_id:
+          type: string
+          title: Collection Revision Id
+        model_id:
+          type: string
+          title: Model Id
+        kind:
+          type: string
+          title: Kind
+        request_id:
+          type: string
+          title: Request Id
+        status:
+          type: string
+          title: Status
+        created_by:
+          type: string
+          title: Created By
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        updated_at:
+          type: string
+          format: date-time
+          title: Updated At
+        items:
+          items:
+            $ref: "#/components/schemas/CollectionPredictionBatchItemResponse"
+          type: array
+          title: Items
+      type: object
+      required:
+        - id
+        - collection_id
+        - collection_revision_id
+        - model_id
+        - kind
+        - request_id
+        - status
+        - created_by
+        - created_at
+        - updated_at
+        - items
+      title: CollectionPredictionBatchResponse
+    CollectionPredictionCoverageResponse:
+      properties:
+        member_id:
+          type: string
+          title: Member Id
+        dataset_id:
+          type: string
+          title: Dataset Id
+        expected_dataset_revision_id:
+          type: string
+          title: Expected Dataset Revision Id
+        status:
+          type: string
+          title: Status
+        default_model_id:
+          anyOf:
+            - type: string
+            - type: "null"
+          title: Default Model Id
+        latest_prediction_job_id:
+          anyOf:
+            - type: string
+            - type: "null"
+          title: Latest Prediction Job Id
+        latest_prediction_model_id:
+          anyOf:
+            - type: string
+            - type: "null"
+          title: Latest Prediction Model Id
+        latest_prediction_dataset_revision_id:
+          anyOf:
+            - type: string
+            - type: "null"
+          title: Latest Prediction Dataset Revision Id
+        latest_prediction_status:
+          anyOf:
+            - type: string
+            - type: "null"
+          title: Latest Prediction Status
+        active_prediction_job_id:
+          anyOf:
+            - type: string
+            - type: "null"
+          title: Active Prediction Job Id
+        active_prediction_status:
+          anyOf:
+            - type: string
+            - type: "null"
+          title: Active Prediction Status
+      type: object
+      required:
+        - member_id
+        - dataset_id
+        - expected_dataset_revision_id
+        - status
+        - default_model_id
+        - latest_prediction_job_id
+        - latest_prediction_model_id
+        - latest_prediction_dataset_revision_id
+        - latest_prediction_status
+        - active_prediction_job_id
+        - active_prediction_status
+      title: CollectionPredictionCoverageResponse
+    CollectionSnapshotMemberUpdateResponse:
+      properties:
+        member_id:
+          type: string
+          title: Member Id
+        dataset_id:
+          type: string
+          title: Dataset Id
+        observed_dataset_revision_id:
+          anyOf:
+            - type: string
+            - type: "null"
+          title: Observed Dataset Revision Id
+        observed_dataset_revision_number:
+          anyOf:
+            - type: integer
+            - type: "null"
+          title: Observed Dataset Revision Number
+        current_dataset_revision_id:
+          anyOf:
+            - type: string
+            - type: "null"
+          title: Current Dataset Revision Id
+        current_dataset_revision_number:
+          anyOf:
+            - type: integer
+            - type: "null"
+          title: Current Dataset Revision Number
+        update_available:
+          type: boolean
+          title: Update Available
+      type: object
+      required:
+        - member_id
+        - dataset_id
+        - observed_dataset_revision_id
+        - observed_dataset_revision_number
+        - current_dataset_revision_id
+        - current_dataset_revision_number
+        - update_available
+      title: CollectionSnapshotMemberUpdateResponse
+    CollectionSnapshotRefreshResponse:
+      properties:
+        outcome:
+          type: string
+          enum:
+            - refreshed
+            - unchanged
+          title: Outcome
+        snapshot:
+          $ref: "#/components/schemas/DatasetCollectionRevisionResponse"
+      type: object
+      required:
+        - outcome
+        - snapshot
+      title: CollectionSnapshotRefreshResponse
+    CollectionSnapshotUpdateStatusResponse:
+      properties:
+        snapshot_id:
+          anyOf:
+            - type: string
+            - type: "null"
+          title: Snapshot Id
+        snapshot_revision_number:
+          anyOf:
+            - type: integer
+            - type: "null"
+          title: Snapshot Revision Number
+        update_available:
+          type: boolean
+          title: Update Available
+        outdated_member_count:
+          type: integer
+          title: Outdated Member Count
+        members:
+          items:
+            $ref: "#/components/schemas/CollectionSnapshotMemberUpdateResponse"
+          type: array
+          title: Members
+      type: object
+      required:
+        - snapshot_id
+        - snapshot_revision_number
+        - update_available
+        - outdated_member_count
+        - members
+      title: CollectionSnapshotUpdateStatusResponse
     CreateAnnotationRequest:
       properties:
         dataset_id:
@@ -5852,6 +7159,37 @@ components:
         - sample_id
         - label
       title: CreateAnnotationRequest
+    CreateCollectionPredictionBatchRequest:
+      properties:
+        snapshot_id:
+          type: string
+          maxLength: 64
+          minLength: 1
+          title: Snapshot Id
+        expected_default_model_id:
+          type: string
+          maxLength: 64
+          minLength: 1
+          title: Expected Default Model Id
+        request_id:
+          type: string
+          maxLength: 128
+          minLength: 1
+          title: Request Id
+        dataset_ids:
+          items:
+            type: string
+          type: array
+          minItems: 1
+          title: Dataset Ids
+      additionalProperties: false
+      type: object
+      required:
+        - snapshot_id
+        - expected_default_model_id
+        - request_id
+        - dataset_ids
+      title: CreateCollectionPredictionBatchRequest
     CreateDatasetCollectionRequest:
       properties:
         name:
@@ -5915,6 +7253,79 @@ components:
       required:
         - name
       title: CreateDatasetRequest
+    CreateImportProfileRequest:
+      properties:
+        name:
+          type: string
+          maxLength: 255
+          minLength: 1
+          title: Name
+        settings:
+          additionalProperties:
+            $ref: "#/components/schemas/JsonValue"
+          type: object
+          title: Settings
+        max_records_per_run:
+          type: integer
+          exclusiveMinimum: 0.0
+          title: Max Records Per Run
+        max_rows_per_dataset:
+          type: integer
+          exclusiveMinimum: 0.0
+          title: Max Rows Per Dataset
+      type: object
+      required:
+        - name
+        - settings
+        - max_records_per_run
+        - max_rows_per_dataset
+      title: CreateImportProfileRequest
+    CreateMembershipRuleRequest:
+      properties:
+        name:
+          type: string
+          maxLength: 255
+          minLength: 1
+          title: Name
+        connector_id:
+          type: string
+          maxLength: 64
+          minLength: 1
+          title: Connector Id
+        import_profile_version_id:
+          type: string
+          maxLength: 64
+          minLength: 1
+          title: Import Profile Version Id
+        condition:
+          $ref: "#/components/schemas/FilterGroupRequest"
+      type: object
+      required:
+        - name
+        - connector_id
+        - import_profile_version_id
+        - condition
+      title: CreateMembershipRuleRequest
+    CreateMembershipRuleVersionRequest:
+      properties:
+        connector_id:
+          type: string
+          maxLength: 64
+          minLength: 1
+          title: Connector Id
+        import_profile_version_id:
+          type: string
+          maxLength: 64
+          minLength: 1
+          title: Import Profile Version Id
+        condition:
+          $ref: "#/components/schemas/FilterGroupRequest"
+      type: object
+      required:
+        - connector_id
+        - import_profile_version_id
+        - condition
+      title: CreateMembershipRuleVersionRequest
     CreateOrgRequest:
       properties:
         name:
@@ -6008,6 +7419,29 @@ components:
         - flow_name
         - cron
       title: CreateScheduleRequest
+    CreateSourceConnectorRequest:
+      properties:
+        provider_id:
+          type: string
+          maxLength: 64
+          minLength: 1
+          title: Provider Id
+        name:
+          type: string
+          maxLength: 255
+          minLength: 1
+          title: Name
+        config:
+          additionalProperties:
+            $ref: "#/components/schemas/JsonValue"
+          type: object
+          title: Config
+      type: object
+      required:
+        - provider_id
+        - name
+        - config
+      title: CreateSourceConnectorRequest
     CreateSubscriptionRequest:
       properties:
         workflow_type:
@@ -6392,6 +7826,14 @@ components:
           type: string
           format: date-time
           title: Updated At
+        default_model_id:
+          anyOf:
+            - type: string
+            - type: "null"
+          title: Default Model Id
+        model_binding_version:
+          type: integer
+          title: Model Binding Version
       type: object
       required:
         - id
@@ -6407,6 +7849,8 @@ components:
         - created_by
         - created_at
         - updated_at
+        - default_model_id
+        - model_binding_version
       title: DatasetCollectionResponse
     DatasetCollectionRevisionResponse:
       properties:
@@ -6463,6 +7907,15 @@ components:
             - type: string
             - type: "null"
           title: Provenance Uri
+        manifest_format:
+          type: string
+          title: Manifest Format
+        source_resolution:
+          type: string
+          title: Source Resolution
+        reproducibility_capability:
+          type: boolean
+          title: Reproducibility Capability
         trigger_kind:
           type: string
           title: Trigger Kind
@@ -6504,6 +7957,9 @@ components:
         - label_counts
         - manifest_uri
         - provenance_uri
+        - manifest_format
+        - source_resolution
+        - reproducibility_capability
         - trigger_kind
         - trigger_ref
         - created_by
@@ -6511,6 +7967,65 @@ components:
         - error_code
         - error_detail
       title: DatasetCollectionRevisionResponse
+    DatasetRevisionOperation:
+      type: string
+      enum:
+        - initial_import
+        - reimport
+        - annotation_sync
+        - batch_edit
+        - legacy_baseline
+      title: DatasetRevisionOperation
+    DatasetRevisionResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        dataset_id:
+          type: string
+          title: Dataset Id
+        revision_number:
+          type: integer
+          title: Revision Number
+        manifest_uri:
+          type: string
+          title: Manifest Uri
+        provenance:
+          additionalProperties: true
+          type: object
+          title: Provenance
+        operation:
+          $ref: "#/components/schemas/DatasetRevisionOperation"
+        operation_ref:
+          anyOf:
+            - type: string
+            - type: "null"
+          title: Operation Ref
+        is_reproducible:
+          type: boolean
+          title: Is Reproducible
+          description: False while Dataset Revisions are lightweight audit records
+            over current data rather than immutable snapshots
+        created_by:
+          type: string
+          title: Created By
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
+      required:
+        - id
+        - dataset_id
+        - revision_number
+        - manifest_uri
+        - provenance
+        - operation
+        - operation_ref
+        - is_reproducible
+        - created_by
+        - created_at
+      title: DatasetRevisionResponse
     DatasetStatusResponse:
       properties:
         allow_train:
@@ -6552,6 +8067,156 @@ components:
       enum:
         - insufficient_active_classes
       title: DatasetTrainDisabledReason
+    DiscoveryRunItemResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        source_record_key:
+          type: string
+          title: Source Record Key
+        source_version:
+          anyOf:
+            - type: string
+            - type: "null"
+          title: Source Version
+        observed_at:
+          type: string
+          format: date-time
+          title: Observed At
+        status:
+          type: string
+          title: Status
+        dataset_id:
+          anyOf:
+            - type: string
+            - type: "null"
+          title: Dataset Id
+        member_id:
+          anyOf:
+            - type: string
+            - type: "null"
+          title: Member Id
+        error_detail:
+          anyOf:
+            - type: string
+            - type: "null"
+          title: Error Detail
+      type: object
+      required:
+        - id
+        - source_record_key
+        - source_version
+        - observed_at
+        - status
+        - dataset_id
+        - member_id
+        - error_detail
+      title: DiscoveryRunItemResponse
+    DiscoveryRunResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        org_id:
+          type: string
+          title: Org Id
+        collection_id:
+          type: string
+          title: Collection Id
+        rule_id:
+          type: string
+          title: Rule Id
+        rule_version_id:
+          type: string
+          title: Rule Version Id
+        kind:
+          type: string
+          title: Kind
+        status:
+          type: string
+          title: Status
+        as_of_utc:
+          type: string
+          format: date-time
+          title: As Of Utc
+        range_start_utc:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: "null"
+          title: Range Start Utc
+        range_end_utc:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: "null"
+          title: Range End Utc
+        timezone:
+          anyOf:
+            - type: string
+            - type: "null"
+          title: Timezone
+        parent_run_id:
+          anyOf:
+            - type: string
+            - type: "null"
+          title: Parent Run Id
+        snapshot_revision_id:
+          anyOf:
+            - type: string
+            - type: "null"
+          title: Snapshot Revision Id
+        stats:
+          additionalProperties:
+            type: integer
+          type: object
+          title: Stats
+        error_detail:
+          anyOf:
+            - type: string
+            - type: "null"
+          title: Error Detail
+        created_by:
+          type: string
+          title: Created By
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        completed_at:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: "null"
+          title: Completed At
+        items:
+          items:
+            $ref: "#/components/schemas/DiscoveryRunItemResponse"
+          type: array
+          title: Items
+      type: object
+      required:
+        - id
+        - org_id
+        - collection_id
+        - rule_id
+        - rule_version_id
+        - kind
+        - status
+        - as_of_utc
+        - range_start_utc
+        - range_end_utc
+        - timezone
+        - parent_run_id
+        - snapshot_revision_id
+        - stats
+        - error_detail
+        - created_by
+        - created_at
+        - completed_at
+        - items
+      title: DiscoveryRunResponse
     ExportFormatResponse:
       properties:
         format_id:
@@ -6562,6 +8227,75 @@ components:
         - format_id
       title: ExportFormatResponse
       description: Available export format descriptor.
+    FilterCombinator:
+      type: string
+      enum:
+        - all
+        - any
+      title: FilterCombinator
+    FilterGroupRequest:
+      properties:
+        kind:
+          type: string
+          const: group
+          title: Kind
+          default: group
+        combinator:
+          $ref: "#/components/schemas/FilterCombinator"
+        children:
+          items:
+            oneOf:
+              - $ref: "#/components/schemas/FilterPredicateRequest"
+              - $ref: "#/components/schemas/FilterGroupRequest"
+            discriminator:
+              propertyName: kind
+              mapping:
+                group: "#/components/schemas/FilterGroupRequest"
+                predicate: "#/components/schemas/FilterPredicateRequest"
+          type: array
+          title: Children
+      type: object
+      required:
+        - combinator
+        - children
+      title: FilterGroupRequest
+    FilterOperator:
+      type: string
+      enum:
+        - eq
+        - ne
+        - in
+        - not_in
+        - gt
+        - gte
+        - lt
+        - lte
+        - contains
+        - starts_with
+        - is_null
+      title: FilterOperator
+    FilterPredicateRequest:
+      properties:
+        kind:
+          type: string
+          const: predicate
+          title: Kind
+          default: predicate
+        field:
+          type: string
+          maxLength: 128
+          minLength: 1
+          title: Field
+        operator:
+          $ref: "#/components/schemas/FilterOperator"
+        value:
+          $ref: "#/components/schemas/JsonValue"
+      type: object
+      required:
+        - field
+        - operator
+        - value
+      title: FilterPredicateRequest
     GlobalChatRequest:
       properties:
         message:
@@ -6591,6 +8325,58 @@ components:
           title: Detail
       type: object
       title: HTTPValidationError
+    ImportProfileVersionResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        profile_key:
+          type: string
+          title: Profile Key
+        version:
+          type: integer
+          title: Version
+        org_id:
+          type: string
+          title: Org Id
+        connector_id:
+          type: string
+          title: Connector Id
+        name:
+          type: string
+          title: Name
+        settings:
+          additionalProperties:
+            $ref: "#/components/schemas/JsonValue"
+          type: object
+          title: Settings
+        max_records_per_run:
+          type: integer
+          title: Max Records Per Run
+        max_rows_per_dataset:
+          type: integer
+          title: Max Rows Per Dataset
+        created_by:
+          type: string
+          title: Created By
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
+      required:
+        - id
+        - profile_key
+        - version
+        - org_id
+        - connector_id
+        - name
+        - settings
+        - max_records_per_run
+        - max_rows_per_dataset
+        - created_by
+        - created_at
+      title: ImportProfileVersionResponse
     JobQueueStats:
       properties:
         queued:
@@ -6624,6 +8410,7 @@ components:
         - failed
         - cancelled
       title: JobStatus
+    JsonValue: {}
     LatestAnnotation:
       properties:
         id:
@@ -6748,6 +8535,144 @@ components:
         - org_slug
         - role
       title: MembershipResponse
+    MembershipRuleResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        org_id:
+          type: string
+          title: Org Id
+        collection_id:
+          type: string
+          title: Collection Id
+        name:
+          type: string
+          title: Name
+        status:
+          type: string
+          title: Status
+        active_version_id:
+          type: string
+          title: Active Version Id
+        activated_at:
+          type: string
+          format: date-time
+          title: Activated At
+        created_by:
+          type: string
+          title: Created By
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        updated_at:
+          type: string
+          format: date-time
+          title: Updated At
+        active_version:
+          $ref: "#/components/schemas/MembershipRuleVersionResponse"
+      type: object
+      required:
+        - id
+        - org_id
+        - collection_id
+        - name
+        - status
+        - active_version_id
+        - activated_at
+        - created_by
+        - created_at
+        - updated_at
+        - active_version
+      title: MembershipRuleResponse
+    MembershipRuleVersionResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        rule_id:
+          type: string
+          title: Rule Id
+        version:
+          type: integer
+          title: Version
+        connector_id:
+          type: string
+          title: Connector Id
+        import_profile_version_id:
+          type: string
+          title: Import Profile Version Id
+        condition:
+          additionalProperties:
+            $ref: "#/components/schemas/JsonValue"
+          type: object
+          title: Condition
+        created_by:
+          type: string
+          title: Created By
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
+      required:
+        - id
+        - rule_id
+        - version
+        - connector_id
+        - import_profile_version_id
+        - condition
+        - created_by
+        - created_at
+      title: MembershipRuleVersionResponse
+    MembershipSuppressionResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        collection_id:
+          type: string
+          title: Collection Id
+        connector_id:
+          type: string
+          title: Connector Id
+        source_record_key:
+          type: string
+          title: Source Record Key
+        reason:
+          type: string
+          title: Reason
+        created_by:
+          type: string
+          title: Created By
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        cleared_by:
+          anyOf:
+            - type: string
+            - type: "null"
+          title: Cleared By
+        cleared_at:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: "null"
+          title: Cleared At
+      type: object
+      required:
+        - id
+        - collection_id
+        - connector_id
+        - source_record_key
+        - reason
+        - created_by
+        - created_at
+        - cleared_by
+        - cleared_at
+      title: MembershipSuppressionResponse
     ModelResponse:
       properties:
         id:
@@ -6924,6 +8849,26 @@ components:
         - slug
         - created_at
       title: OrgResponse
+    Organization:
+      properties:
+        id:
+          type: string
+          title: Id
+        name:
+          type: string
+          title: Name
+        slug:
+          type: string
+          title: Slug
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
+      required:
+        - name
+        - slug
+      title: Organization
     PaginatedResponse_AnnotationVersionResponse_:
       properties:
         items:
@@ -6939,6 +8884,21 @@ components:
         - items
         - total
       title: PaginatedResponse[AnnotationVersionResponse]
+    PaginatedResponse_AutomationRunOverviewResponse_:
+      properties:
+        items:
+          items:
+            $ref: "#/components/schemas/AutomationRunOverviewResponse"
+          type: array
+          title: Items
+        total:
+          type: integer
+          title: Total
+      type: object
+      required:
+        - items
+        - total
+      title: PaginatedResponse[AutomationRunOverviewResponse]
     PaginatedResponse_DatasetCollectionResponse_:
       properties:
         items:
@@ -6954,6 +8914,21 @@ components:
         - items
         - total
       title: PaginatedResponse[DatasetCollectionResponse]
+    PaginatedResponse_DatasetRevisionResponse_:
+      properties:
+        items:
+          items:
+            $ref: "#/components/schemas/DatasetRevisionResponse"
+          type: array
+          title: Items
+        total:
+          type: integer
+          title: Total
+      type: object
+      required:
+        - items
+        - total
+      title: PaginatedResponse[DatasetRevisionResponse]
     PaginatedResponse_Dataset_:
       properties:
         items:
@@ -7318,6 +9293,13 @@ components:
             - type: string
             - type: "null"
           title: Dataset Id
+        dataset_revision_id:
+          anyOf:
+            - type: string
+            - type: "null"
+          title: Dataset Revision Id
+          description: Dataset Revision observed at submission time; audit-only and
+            does not select the runtime input
         collection_id:
           anyOf:
             - type: string
@@ -7562,6 +9544,16 @@ components:
         - created_at
       title: ReviewActionResponse
       description: Response for a prediction review action.
+    RunLiveDiscoveryRequest:
+      properties:
+        as_of_utc:
+          type: string
+          format: date-time
+          title: As Of Utc
+      type: object
+      required:
+        - as_of_utc
+      title: RunLiveDiscoveryRequest
     RunLogResponse:
       properties:
         id:
@@ -8789,6 +10781,131 @@ components:
       required:
         - sample_id
       title: SimilarityResponse
+    SourceConnectorResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        org_id:
+          type: string
+          title: Org Id
+        provider_id:
+          type: string
+          title: Provider Id
+        name:
+          type: string
+          title: Name
+        enabled:
+          type: boolean
+          title: Enabled
+        created_by:
+          type: string
+          title: Created By
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        updated_at:
+          type: string
+          format: date-time
+          title: Updated At
+      type: object
+      required:
+        - id
+        - org_id
+        - provider_id
+        - name
+        - enabled
+        - created_by
+        - created_at
+        - updated_at
+      title: SourceConnectorResponse
+    SourceFilterFieldResponse:
+      properties:
+        key:
+          type: string
+          title: Key
+        label:
+          type: string
+          title: Label
+        field_type:
+          type: string
+          title: Field Type
+        operators:
+          items:
+            type: string
+          type: array
+          title: Operators
+      type: object
+      required:
+        - key
+        - label
+        - field_type
+        - operators
+      title: SourceFilterFieldResponse
+    SourceProviderDescriptorResponse:
+      properties:
+        provider_id:
+          type: string
+          title: Provider Id
+        display_name:
+          type: string
+          title: Display Name
+        fields:
+          items:
+            $ref: "#/components/schemas/SourceFilterFieldResponse"
+          type: array
+          title: Fields
+        backfill_time_field:
+          anyOf:
+            - type: string
+            - type: "null"
+          title: Backfill Time Field
+        max_condition_depth:
+          type: integer
+          title: Max Condition Depth
+        max_condition_nodes:
+          type: integer
+          title: Max Condition Nodes
+      type: object
+      required:
+        - provider_id
+        - display_name
+        - fields
+        - backfill_time_field
+        - max_condition_depth
+        - max_condition_nodes
+      title: SourceProviderDescriptorResponse
+    SourceRecordResponse:
+      properties:
+        record_key:
+          type: string
+          title: Record Key
+        source_version:
+          anyOf:
+            - type: string
+            - type: "null"
+          title: Source Version
+        observed_at:
+          type: string
+          format: date-time
+          title: Observed At
+        display_name:
+          type: string
+          title: Display Name
+        attributes:
+          additionalProperties:
+            $ref: "#/components/schemas/JsonValue"
+          type: object
+          title: Attributes
+      type: object
+      required:
+        - record_key
+        - source_version
+        - observed_at
+        - display_name
+        - attributes
+      title: SourceRecordResponse
     SparseManifestSummary:
       properties:
         shard_count:
@@ -8904,6 +11021,33 @@ components:
         - shards
         - sample_rows
       title: SparseSummaryResponse
+    SuppressSourceMemberRequest:
+      properties:
+        connector_id:
+          type: string
+          maxLength: 64
+          minLength: 1
+          title: Connector Id
+        source_record_key:
+          type: string
+          maxLength: 512
+          minLength: 1
+          title: Source Record Key
+        expected_definition_version:
+          type: integer
+          minimum: 0.0
+          title: Expected Definition Version
+        reason:
+          type: string
+          maxLength: 2000
+          title: Reason
+      type: object
+      required:
+        - connector_id
+        - source_record_key
+        - expected_definition_version
+        - reason
+      title: SuppressSourceMemberRequest
     SurfaceLayout:
       properties:
         width:
@@ -9619,6 +11763,13 @@ components:
             - type: string
             - type: "null"
           title: Dataset Id
+        dataset_revision_id:
+          anyOf:
+            - type: string
+            - type: "null"
+          title: Dataset Revision Id
+          description: Dataset Revision observed when the job was submitted; audit-only
+            and does not select the runtime input
         collection_id:
           anyOf:
             - type: string
@@ -9688,6 +11839,24 @@ components:
         - dataset_id
         - label
       title: UpdateAnnotationRequest
+    UpdateCollectionDefaultModelRequest:
+      properties:
+        expected_binding_version:
+          type: integer
+          minimum: 0.0
+          title: Expected Binding Version
+        model_id:
+          anyOf:
+            - type: string
+              maxLength: 64
+              minLength: 1
+            - type: "null"
+          title: Model Id
+      additionalProperties: false
+      type: object
+      required:
+        - expected_binding_version
+      title: UpdateCollectionDefaultModelRequest
     UpdateDatasetCollectionRequest:
       properties:
         name:
@@ -9830,6 +11999,44 @@ components:
         - id
         - name
       title: UploadTemplateProfileResponse
+    User:
+      properties:
+        id:
+          type: string
+          title: Id
+        email:
+          type: string
+          title: Email
+        name:
+          type: string
+          title: Name
+        is_superadmin:
+          type: boolean
+          title: Is Superadmin
+          default: false
+        is_active:
+          type: boolean
+          title: Is Active
+          default: true
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        oauth_provider:
+          anyOf:
+            - type: string
+            - type: "null"
+          title: Oauth Provider
+        oauth_provider_id:
+          anyOf:
+            - type: string
+            - type: "null"
+          title: Oauth Provider Id
+      type: object
+      required:
+        - email
+        - name
+      title: User
     UserResponse:
       properties:
         id:

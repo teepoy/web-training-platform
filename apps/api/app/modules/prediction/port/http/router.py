@@ -102,6 +102,7 @@ def _prediction_job_to_response(job) -> PredictionJobResponse:
     return PredictionJobResponse(
         id=job.id,
         dataset_id=job.dataset_id,
+        dataset_revision_id=job.dataset_revision_id,
         collection_id=job.collection_id,
         collection_revision_id=job.collection_revision_id,
         model_id=job.model_id,

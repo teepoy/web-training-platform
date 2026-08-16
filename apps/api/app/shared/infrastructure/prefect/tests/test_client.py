@@ -146,6 +146,70 @@ def test_ensure_deployment_updates_existing_deployment() -> None:
     asyncio.run(run())
 
 
+def test_ensure_work_queue_reconciles_priority() -> None:
+    async def run() -> None:
+        requests: list[tuple[str, str, dict[str, object] | None]] = []
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            body = (
+                json.loads(request.content.decode("utf-8")) if request.content else None
+            )
+            requests.append((request.method, request.url.path, body))
+            if request.url.path == "/api/work_queues/filter":
+                return httpx.Response(
+                    200,
+                    json=[
+                        {
+                            "id": "queue-1",
+                            "name": "prediction-manual",
+                            "priority": 5,
+                        }
+                    ],
+                )
+            if (
+                request.method == "PATCH"
+                and request.url.path
+                == "/api/work_pools/default-gpu/queues/prediction-manual"
+            ):
+                return httpx.Response(204)
+            return httpx.Response(500, json={"unexpected": request.url.path})
+
+        client = PrefectClient("http://prefect.example/api")
+        await client._client.aclose()
+        client._client = httpx.AsyncClient(
+            base_url="http://prefect.example/api",
+            transport=httpx.MockTransport(handler),
+        )
+        try:
+            queue = await client.ensure_work_queue(
+                "default-gpu",
+                "prediction-manual",
+                priority=1,
+            )
+        finally:
+            await client.close()
+
+        assert queue["priority"] == 1
+        assert requests == [
+            (
+                "POST",
+                "/api/work_queues/filter",
+                {
+                    "work_queues": {"name": {"any_": ["prediction-manual"]}},
+                    "limit": 1,
+                    "work_pools": {"name": {"any_": ["default-gpu"]}},
+                },
+            ),
+            (
+                "PATCH",
+                "/api/work_pools/default-gpu/queues/prediction-manual",
+                {"priority": 1},
+            ),
+        ]
+
+    asyncio.run(run())
+
+
 def test_schedule_deployment_operations_use_explicit_runtime_fields() -> None:
     async def run() -> None:
         requests: list[tuple[str, str, dict[str, object] | None]] = []

@@ -8,7 +8,7 @@ from app.modules.dataset_collections.port.local import (
     DatasetCollectionRevisionReaderPort,
 )
 from app.modules.datasets.port.dataset_reader import DatasetReader
-from app.modules.datasets.port.local import IDatasetService
+from app.modules.datasets.port.local import DatasetRevisionReaderPort, IDatasetService
 from app.modules.models.port.local import ModelCatalogPort
 from app.modules.prediction.adapter.repositories.repository import (
     PredictionRepository as SqlPredictionRepository,
@@ -54,6 +54,7 @@ def init_prediction(
     model_catalog: ModelCatalogPort,
     dataset_storage_factory: DatasetStorageFactoryPort,
     collection_revisions: DatasetCollectionRevisionReaderPort,
+    dataset_revisions: DatasetRevisionReaderPort,
 ) -> PredictionContext:
     prediction_repository = SqlPredictionRepository(
         session_factory=shared.session_factory.sessionmaker
@@ -79,6 +80,7 @@ def init_prediction(
         repository=prediction_repository,
         dataset_reader=dataset_reader,
         model_catalog=model_catalog,
+        dataset_revisions=dataset_revisions,
         collection_revisions=collection_revisions,
     )
     return PredictionContext(
@@ -104,6 +106,7 @@ class PredictionModule(Module):
         model_catalog: ModelCatalogPort,
         dataset_storage_factory: DatasetStorageFactoryPort,
         collection_revisions: DatasetCollectionRevisionReaderPort,
+        dataset_revisions: DatasetRevisionReaderPort,
     ) -> PredictionContext:
         return init_prediction(
             shared,
@@ -112,6 +115,7 @@ class PredictionModule(Module):
             model_catalog=model_catalog,
             dataset_storage_factory=dataset_storage_factory,
             collection_revisions=collection_revisions,
+            dataset_revisions=dataset_revisions,
         )
 
     @provider
