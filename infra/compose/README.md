@@ -3,6 +3,8 @@
 For production hardening, split-stack deployment, backup, release, and rollback
 procedures, see
 [`docs/guides/production-compose-deployment.md`](../../docs/guides/production-compose-deployment.md).
+That guide also covers the GitHub Actions quality gate, six-image GHCR build,
+protected pre-release/production deployment, and required self-hosted runner.
 The deployable split manifests are:
 
 - `production/compose.stateful.yaml`

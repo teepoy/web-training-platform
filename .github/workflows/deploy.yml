@@ -1,0 +1,209 @@
+name: Deploy release
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Protected GitHub Environment to deploy
+        required: true
+        type: choice
+        options:
+          - pre-release
+          - production
+      release_ref:
+        description: Full commit SHA or v-prefixed release tag from main
+        required: true
+        type: string
+      backup_confirmed:
+        description: Production database and object-storage backups are verified
+        required: true
+        default: false
+        type: boolean
+
+concurrency:
+  group: deploy-${{ inputs.environment }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  deploy:
+    name: Deploy ${{ inputs.environment }}
+    runs-on: [self-hosted, linux, x64, finetune-deploy]
+    timeout-minutes: 60
+    environment:
+      name: ${{ inputs.environment }}
+    env:
+      RELEASE_PROFILE: ${{ vars.RELEASE_PROFILE }}
+      RELEASE_NETWORK: ${{ vars.RELEASE_NETWORK }}
+      RELEASE_PROJECT: ${{ vars.RELEASE_PROJECT }}
+      RELEASE_STATEFUL_ENV: ${{ vars.RELEASE_STATEFUL_ENV }}
+      RELEASE_PLATFORM_ENV: ${{ vars.RELEASE_PLATFORM_ENV }}
+      RELEASE_IMAGE_ENV: ${{ vars.RELEASE_IMAGE_ENV }}
+      RELEASE_OBSERVABILITY_ENV: ${{ vars.RELEASE_OBSERVABILITY_ENV }}
+      RELEASE_PROFILES: ${{ vars.RELEASE_PROFILES }}
+      RELEASE_HEALTHCHECK_URL: ${{ vars.RELEASE_HEALTHCHECK_URL }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out release
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ inputs.release_ref }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate release source and deployment inputs
+        env:
+          RELEASE_REF: ${{ inputs.release_ref }}
+          TARGET_ENVIRONMENT: ${{ inputs.environment }}
+          BACKUP_CONFIRMED: ${{ inputs.backup_confirmed }}
+        run: |
+          if [[ "$RELEASE_REF" =~ ^[0-9a-f]{40}$ ]]; then
+            :
+          elif [[ "$RELEASE_REF" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            :
+          else
+            echo "release_ref must be a full commit SHA or a semantic v-prefixed tag" >&2
+            exit 1
+          fi
+
+          if ! git show-ref --verify --quiet refs/remotes/origin/main; then
+            echo "checkout did not provide the origin/main reference" >&2
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor HEAD refs/remotes/origin/main; then
+            echo "release_ref must resolve to a commit reachable from origin/main" >&2
+            exit 1
+          fi
+
+          deploy_commit="$(git rev-parse HEAD)"
+          if [[ ${#deploy_commit} -ne 40 ]]; then
+            echo "failed to resolve a full release commit SHA" >&2
+            exit 1
+          fi
+
+          case "$TARGET_ENVIRONMENT" in
+            pre-release) expected_profile=pre-release ;;
+            production)
+              expected_profile=prod
+              if [[ "$BACKUP_CONFIRMED" != "true" ]]; then
+                echo "production deployment requires verified backups" >&2
+                exit 1
+              fi
+              ;;
+            *)
+              echo "unsupported deployment environment: $TARGET_ENVIRONMENT" >&2
+              exit 1
+              ;;
+          esac
+
+          if [[ "$RELEASE_PROFILE" != "$expected_profile" ]]; then
+            echo "RELEASE_PROFILE must be $expected_profile for $TARGET_ENVIRONMENT" >&2
+            exit 1
+          fi
+
+          required_variables=(
+            RELEASE_NETWORK
+            RELEASE_PROJECT
+            RELEASE_STATEFUL_ENV
+            RELEASE_PLATFORM_ENV
+            RELEASE_IMAGE_ENV
+            RELEASE_OBSERVABILITY_ENV
+            RELEASE_HEALTHCHECK_URL
+          )
+          for variable_name in "${required_variables[@]}"; do
+            if [[ -z "${!variable_name:-}" ]]; then
+              echo "missing GitHub Environment variable: $variable_name" >&2
+              exit 1
+            fi
+          done
+
+          env_file_variables=(
+            RELEASE_STATEFUL_ENV
+            RELEASE_PLATFORM_ENV
+            RELEASE_IMAGE_ENV
+            RELEASE_OBSERVABILITY_ENV
+          )
+          for variable_name in "${env_file_variables[@]}"; do
+            if [[ "${!variable_name}" != /* ]]; then
+              echo "$variable_name must be an absolute host path" >&2
+              exit 1
+            fi
+          done
+          if [[ "$RELEASE_IMAGE_ENV" == "$RELEASE_PLATFORM_ENV" ]]; then
+            echo "RELEASE_IMAGE_ENV must not overwrite the secret platform env" >&2
+            exit 1
+          fi
+          if [[ "$RELEASE_HEALTHCHECK_URL" != https://* ]]; then
+            echo "RELEASE_HEALTHCHECK_URL must be an HTTPS API origin" >&2
+            exit 1
+          fi
+
+          echo "DEPLOY_COMMIT=$deploy_commit" >> "$GITHUB_ENV"
+          echo "RELEASE_IMAGE_TAG=sha-$deploy_commit" >> "$GITHUB_ENV"
+          echo "RELEASE_IMAGE_ENV=${RELEASE_IMAGE_ENV}.${deploy_commit}" >> "$GITHUB_ENV"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+
+      - name: Resolve and write immutable image references
+        run: |
+          install -d -m 0755 "$(dirname "$RELEASE_IMAGE_ENV")"
+          repository="${GITHUB_REPOSITORY,,}"
+          if [[ -f "$RELEASE_IMAGE_ENV" ]]; then
+            python3 scripts/write_release_image_env.py \
+              --output "$RELEASE_IMAGE_ENV" \
+              --repository "$repository" \
+              --validate-existing
+            echo "Reusing recorded release digests from $RELEASE_IMAGE_ENV"
+            exit 0
+          fi
+
+          digest_arguments=()
+          components=(api web cpu-worker gpu-worker sc-upstream image-parser)
+          for component in "${components[@]}"; do
+            image="ghcr.io/${repository}-${component}:${RELEASE_IMAGE_TAG}"
+            digest="$(docker buildx imagetools inspect \
+              --format '{{.Manifest.Digest}}' "$image")"
+            digest_arguments+=(--digest "${component}=${digest}")
+          done
+          python3 scripts/write_release_image_env.py \
+            --output "$RELEASE_IMAGE_ENV" \
+            --repository "$repository" \
+            "${digest_arguments[@]}"
+
+      - name: Render and deploy release
+        run: make up-release
+
+      - name: Verify deployed services
+        run: |
+          make ps-release
+          api_origin="${RELEASE_HEALTHCHECK_URL%/}"
+          curl --fail --silent --show-error \
+            --retry 12 --retry-delay 5 --retry-all-errors \
+            "$api_origin/health"
+          curl --fail --silent --show-error \
+            --retry 12 --retry-delay 5 --retry-all-errors \
+            "$api_origin/ready"
+
+      - name: Record deployment summary
+        run: |
+          {
+            echo "## Deployment complete"
+            echo
+            echo "- Environment: ${{ inputs.environment }}"
+            echo "- Commit: \`$DEPLOY_COMMIT\`"
+            echo "- Image tag: \`$RELEASE_IMAGE_TAG\`"
+            echo "- API: $RELEASE_HEALTHCHECK_URL"
+          } >> "$GITHUB_STEP_SUMMARY"

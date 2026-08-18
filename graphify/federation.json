@@ -1,0 +1,354 @@
+{
+  "schema_version": 1,
+  "graphify_version": "0.8.34",
+  "root_context": "architecture-contracts",
+  "output_dir": "graphify-out/contexts",
+  "semantic_overlay": "graphify/architecture-contracts.semantic.json",
+  "bridge_overlay": "graphify/architecture-bridges.json",
+  "noise_labels": ["BaseModel", "BaseSettings", "T", "storage()"],
+  "required_directed_paths": [
+    {
+      "name": "dataset storage to artifact commit",
+      "context": "architecture-contracts",
+      "nodes": [
+        "contract_dataset_storage_agg",
+        "contract_data_plane_manifest",
+        "contract_runtime_callable",
+        "contract_artifact_commit"
+      ]
+    },
+    {
+      "name": "runtime registration to execution",
+      "context": "architecture-contracts",
+      "nodes": [
+        "contract_runtime_router",
+        "contract_runtime_capability_catalog",
+        "contract_prefect_deployment_spec",
+        "contract_runtime_callable"
+      ]
+    },
+    {
+      "name": "backend dto to frontend feature",
+      "context": "architecture-contracts",
+      "nodes": [
+        "contract_backend_transport_dto",
+        "contract_openapi",
+        "contract_generated_web_client",
+        "contract_frontend_feature_consumer"
+      ]
+    },
+    {
+      "name": "sc images to ml lifecycle",
+      "context": "architecture-contracts",
+      "nodes": [
+        "context_sc_domain",
+        "contract_protobuf",
+        "contract_image_parser",
+        "context_ml_lifecycle"
+      ]
+    },
+    {
+      "name": "source admission to collection snapshot",
+      "context": "architecture-contracts",
+      "nodes": [
+        "context_ingestion_automation",
+        "contract_source_admission",
+        "contract_collection_snapshot"
+      ]
+    }
+  ],
+  "global_excludes": [
+    "**/.git/**",
+    "**/.venv/**",
+    "**/__pycache__/**",
+    "**/.pytest_cache/**",
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/tmp/**",
+    "**/graphify-out/**",
+    "**/.DS_Store",
+    "**/*.bak"
+  ],
+  "base_excludes": [
+    "**/tests/**",
+    "**/test_*.py",
+    "**/*.spec.ts",
+    "**/*.spec.tsx",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.design.vue",
+    "**/generated/**",
+    "**/migrations/**",
+    "**/alembic/**",
+    "**/fixtures/**"
+  ],
+  "contexts": [
+    {
+      "name": "architecture-contracts",
+      "description": "Cross-context ports, composition, registries, transports, and architecture decisions.",
+      "aliases": [
+        "architecture",
+        "contract",
+        "composition",
+        "dependency injection",
+        "openapi",
+        "protobuf",
+        "data plane",
+        "runtime registration"
+      ],
+      "roots": [
+        "apps/api/app/modules/runtime",
+        "apps/api/app/shared/application",
+        "apps/api/app/shared/domain",
+        "apps/api/app/shared/sse",
+        "apps/web/src/shared/widgets"
+      ],
+      "include_globs": [
+        "apps/api/app/composition.py",
+        "apps/api/app/sc_data_provider_composition.py",
+        "apps/api/app/registrations.py",
+        "apps/api/app/core/*registry*.py",
+        "apps/api/app/modules/registry.py",
+        "apps/api/app/modules/*/container.py",
+        "apps/api/app/modules/*/port/local/**/*.py",
+        "apps/api/app/modules/*/domain/*registry*.py",
+        "apps/api/app/shared/context.py",
+        "apps/web/src/app/registrations.ts",
+        "apps/web/src/features/datasets/presentation/pages/registry.ts",
+        "apps/web/src/features/datasets/presentation/pages/schema-registry.ts"
+      ],
+      "max_source_files": 280,
+      "max_nodes": 5000,
+      "overlays": {
+        "generated-contracts": {
+          "include_globs": [
+            "apps/web/src/generated/orval/models/artifactRef.ts",
+            "apps/web/src/generated/orval/models/automationRunOverviewResponse.ts",
+            "apps/web/src/generated/orval/models/createTrainingJobRequest.ts",
+            "apps/web/src/generated/orval/models/dataset.ts",
+            "apps/web/src/generated/orval/models/datasetCollectionResponse.ts",
+            "apps/web/src/generated/orval/models/datasetCollectionRevisionResponse.ts",
+            "apps/web/src/generated/orval/models/datasetRevisionResponse.ts",
+            "apps/web/src/generated/orval/models/predictionJobResponse.ts",
+            "apps/web/src/generated/orval/models/runPredictionRequest.ts",
+            "apps/web/src/generated/orval/models/trainingJob.ts",
+            "apps/web/src/features/sc/generated/proto/**/*.ts",
+            "libs/protos/src/proto_stubs/imageparser/v1/service_pb2.py",
+            "libs/protos/src/proto_stubs/imageparser/v1/service_pb2_grpc.py",
+            "libs/protos/src/proto_stubs/sc/v1/sample_pb2.py",
+            "libs/protos/src/proto_stubs/sc/v1/upstream_pb2.py",
+            "libs/protos/src/proto_stubs/sc/v1/upstream_pb2_grpc.py"
+          ]
+        },
+        "tests": {
+          "include_globs": [
+            "apps/api/app/modules/runtime/tests/**/*.py",
+            "apps/web/src/shared/widgets/**/*.spec.ts"
+          ]
+        }
+      }
+    },
+    {
+      "name": "data-resources",
+      "description": "Dataset, storage, Collection, and Library behavior across API and Web.",
+      "aliases": ["dataset", "storage", "collection", "library", "revision", "snapshot"],
+      "roots": [
+        "apps/api/app/modules/datasets",
+        "apps/api/app/modules/storage",
+        "apps/api/app/modules/dataset_collections",
+        "apps/web/src/features/datasets",
+        "apps/web/src/features/library",
+        "apps/web/src/features/dataset-collections"
+      ],
+      "max_source_files": 260,
+      "max_nodes": 5000,
+      "overlays": {
+        "tests": {
+          "roots": [
+            "apps/api/app/modules/datasets/tests",
+            "apps/api/app/modules/storage/tests",
+            "apps/api/app/modules/dataset_collections/tests"
+          ],
+          "include_globs": [
+            "apps/web/src/features/datasets/**/*.spec.ts",
+            "apps/web/src/features/library/**/*.spec.ts",
+            "apps/web/src/features/dataset-collections/**/*.spec.ts"
+          ]
+        },
+        "migrations": {
+          "roots": ["apps/api/alembic/versions"]
+        }
+      }
+    },
+    {
+      "name": "ml-lifecycle",
+      "description": "Model, training, prediction, job dispatch, and ML implementation lifecycle.",
+      "aliases": ["model", "training", "prediction", "runtime", "job", "prefect", "artifact"],
+      "roots": [
+        "apps/api/app/modules/models",
+        "apps/api/app/modules/training",
+        "apps/api/app/modules/prediction",
+        "apps/api/app/modules/runtime",
+        "apps/api/app/modules/types",
+        "apps/api/app/modules/jobs",
+        "apps/web/src/features/models",
+        "apps/web/src/features/training",
+        "apps/web/src/features/prediction",
+        "apps/web/src/features/task_tracker",
+        "libs/ml/src"
+      ],
+      "max_source_files": 280,
+      "max_nodes": 5000,
+      "overlays": {
+        "tests": {
+          "roots": [
+            "apps/api/app/modules/models/tests",
+            "apps/api/app/modules/training/tests",
+            "apps/api/app/modules/prediction/tests",
+            "apps/api/app/modules/runtime/tests",
+            "apps/api/app/modules/jobs/tests",
+            "libs/ml/tests"
+          ],
+          "include_globs": [
+            "apps/web/src/features/models/**/*.spec.ts",
+            "apps/web/src/features/training/**/*.spec.ts",
+            "apps/web/src/features/prediction/**/*.spec.ts",
+            "apps/web/src/features/task_tracker/**/*.spec.ts"
+          ]
+        }
+      }
+    },
+    {
+      "name": "sc-domain",
+      "description": "SC inspection, review sampling, image parsing, upstream access, and SC ML.",
+      "aliases": [
+        "sc",
+        "inspection",
+        "wafer",
+        "review sampling",
+        "image parser",
+        "patch image",
+        "reclassify"
+      ],
+      "roots": [
+        "apps/api/app/modules/sc",
+        "apps/web/src/features/sc",
+        "services/sc-upstream/src",
+        "services/image-parser",
+        "libs/sc-ml/src",
+        "libs/sampling-rules/src"
+      ],
+      "max_source_files": 300,
+      "max_nodes": 5000,
+      "overlays": {
+        "tests": {
+          "roots": [
+            "apps/api/app/modules/sc/tests",
+            "services/sc-upstream/tests",
+            "libs/sc-ml/tests",
+            "libs/sampling-rules/tests"
+          ],
+          "include_globs": ["apps/web/src/features/sc/**/*.spec.ts"]
+        },
+        "generated-contracts": {
+          "roots": [
+            "services/image-parser/gen",
+            "apps/web/src/features/sc/generated/proto",
+            "libs/protos/src/proto_stubs/imageparser",
+            "libs/protos/src/proto_stubs/sc"
+          ]
+        }
+      }
+    },
+    {
+      "name": "ingestion-automation",
+      "description": "Resource automation, discovery, schedules, sensors, and source admission.",
+      "aliases": [
+        "automation",
+        "source discovery",
+        "connector",
+        "backfill",
+        "schedule",
+        "sensor",
+        "admission"
+      ],
+      "roots": [
+        "apps/api/app/modules/automations",
+        "apps/api/app/modules/source_discovery",
+        "apps/api/app/modules/jobs",
+        "apps/web/src/features/automations",
+        "apps/web/src/features/schedules",
+        "apps/web/src/features/sensors"
+      ],
+      "max_source_files": 240,
+      "max_nodes": 5000,
+      "overlays": {
+        "tests": {
+          "roots": [
+            "apps/api/app/modules/automations/tests",
+            "apps/api/app/modules/source_discovery/tests",
+            "apps/api/app/modules/jobs/tests"
+          ],
+          "include_globs": [
+            "apps/web/src/features/automations/**/*.spec.ts",
+            "apps/web/src/features/schedules/**/*.spec.ts",
+            "apps/web/src/features/sensors/**/*.spec.ts"
+          ]
+        }
+      }
+    },
+    {
+      "name": "platform-access",
+      "description": "Authentication, organization context, administration, settings, and dashboard access.",
+      "aliases": ["auth", "organization", "admin", "settings", "dashboard", "permission"],
+      "roots": [
+        "apps/api/app/modules/auth",
+        "apps/api/app/modules/dashboard",
+        "apps/web/src/features/auth",
+        "apps/web/src/features/admin",
+        "apps/web/src/features/dashboard",
+        "apps/web/src/features/settings"
+      ],
+      "include_globs": ["apps/api/app/shared/context.py", "apps/api/app/core/settings/**/*.py"],
+      "max_source_files": 180,
+      "max_nodes": 5000,
+      "overlays": {
+        "tests": {
+          "roots": ["apps/api/app/modules/auth/tests", "apps/api/app/modules/dashboard/tests"],
+          "include_globs": [
+            "apps/web/src/features/auth/**/*.spec.ts",
+            "apps/web/src/features/admin/**/*.spec.ts",
+            "apps/web/src/features/dashboard/**/*.spec.ts",
+            "apps/web/src/features/settings/**/*.spec.ts"
+          ]
+        }
+      }
+    },
+    {
+      "name": "agent-surface",
+      "description": "Agent chat, display surfaces, widgets, descriptors, and frontend registration.",
+      "aliases": ["agent", "widget", "surface", "panel", "descriptor", "registration"],
+      "roots": [
+        "apps/api/app/modules/agent",
+        "apps/web/src/features/agent",
+        "apps/web/src/app",
+        "apps/web/src/shared/widgets"
+      ],
+      "include_globs": [
+        "apps/web/src/shared/components/panel-host/**/*.vue",
+        "apps/web/src/shared/components/agent-chat-drawer/**/*.vue"
+      ],
+      "max_source_files": 180,
+      "max_nodes": 5000,
+      "overlays": {
+        "tests": {
+          "roots": ["apps/api/app/modules/agent/tests"],
+          "include_globs": [
+            "apps/web/src/features/agent/**/*.spec.ts",
+            "apps/web/src/shared/widgets/**/*.spec.ts"
+          ]
+        }
+      }
+    }
+  ]
+}

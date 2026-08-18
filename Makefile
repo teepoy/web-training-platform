@@ -25,6 +25,11 @@ DEV_SEED_REVIEW_SAMPLES ?= 96
 DEV_SEED_SC_ANNOTATIONS ?= 96
 SC_PATCH_ZIP_BUCKET ?= sc-patch-images
 SC_PATCH_ZIP_S3_ENDPOINT ?= http://localhost:9000
+SC_RUNTIME_BENCHMARK_SOURCE_DATASET_NAME ?= Dev SC Inspection - Sparse
+SC_RUNTIME_BENCHMARK_SAMPLES ?= 2500
+SC_RUNTIME_BENCHMARK_MIN_TRAIN_SPS ?=
+SC_RUNTIME_BENCHMARK_MIN_PREDICT_SPS ?= 3000
+GRAPHIFY_MAX_WORKERS ?= 1
 
 DEV_API_HOST_ENV := \
 	APP_CONFIG_PROFILE=dev \
@@ -64,9 +69,11 @@ RELEASE_NETWORK             ?= $(PROD_NETWORK)
 RELEASE_PROJECT             ?= finetune
 RELEASE_STATEFUL_ENV        ?= $(PROD_STATEFUL_ENV)
 RELEASE_PLATFORM_ENV        ?= $(PROD_PLATFORM_ENV)
+RELEASE_IMAGE_ENV           ?=
 RELEASE_OBSERVABILITY_ENV   ?= $(PROD_OBSERVABILITY_ENV)
 RELEASE_PROFILES            ?=
 RELEASE_RUNTIME_ENV         := APP_CONFIG_PROFILE=$(RELEASE_PROFILE) PLATFORM_NETWORK_NAME=$(RELEASE_NETWORK)
+RELEASE_PLATFORM_ENV_FILES  = --env-file $(RELEASE_PLATFORM_ENV) $(if $(strip $(RELEASE_IMAGE_ENV)),--env-file $(RELEASE_IMAGE_ENV))
 
 COMPOSE_PROD_STATEFUL       := infra/compose/production/compose.stateful.yaml
 COMPOSE_PROD_PLATFORM       := infra/compose/production/compose.platform.yaml
@@ -220,6 +227,25 @@ test-web: ## Run frontend unit tests (vitest)
 benchmark-sc-prediction: ## Require >3000 samples/s for bounded SC prediction preprocessing
 	$(UV_RUN_INSTALLED) --package ml-library python libs/ml/benchmarks/sc_prediction_stream_throughput.py --minimum-samples-per-second 3000
 
+.PHONY: benchmark-sc-runtime-data-paths
+benchmark-sc-runtime-data-paths: image-parser-batch-host ## Benchmark real SC train/predict data paths with fake GPU kernels
+	cd $(API_DIR) && $(DEV_API_HOST_ENV) \
+		SC_TRAINING_IMAGE_PARSER_BINARY=$(IMAGE_PARSER_BATCH_BINARY_HOST) \
+		IMAGE_SOURCE_PROFILES_JSON='{"sc_upstream":{"provider":"sc_upstream"}}' \
+		SC_COMPAT_IMAGE_SOURCE_PROFILE=sc_upstream \
+		SC_PATCH_S3_ENDPOINT=$(MINIO_ENDPOINT_HOST) \
+		SC_PATCH_S3_ACCESS_KEY=minioadmin \
+		SC_PATCH_S3_SECRET_KEY=minioadmin \
+		SC_PATCH_S3_BUCKET=$(SC_PATCH_ZIP_BUCKET) \
+		LITELLM_LOCAL_MODEL_COST_MAP=True \
+		$(UV_RUN_INSTALLED) python scripts/benchmark_sc_runtime_data_paths.py \
+			--source-dataset-name '$(SC_RUNTIME_BENCHMARK_SOURCE_DATASET_NAME)' \
+			--samples $(SC_RUNTIME_BENCHMARK_SAMPLES) $(if $(SC_RUNTIME_BENCHMARK_MIN_TRAIN_SPS),--minimum-training-samples-per-second $(SC_RUNTIME_BENCHMARK_MIN_TRAIN_SPS),) $(if $(SC_RUNTIME_BENCHMARK_MIN_PREDICT_SPS),--minimum-prediction-samples-per-second $(SC_RUNTIME_BENCHMARK_MIN_PREDICT_SPS),)
+
+.PHONY: test-release-contract
+test-release-contract: ## Validate immutable release image environment generation
+	python3 -m unittest discover -s scripts/tests -p 'test_write_release_image_env.py'
+
 .PHONY: test-e2e
 test-e2e: ## Run frontend mock e2e tests (Playwright, no live stack required)
 	cd $(WEB_DIR) && pnpm test:e2e
@@ -330,6 +356,28 @@ generate-protos-deps: ## Install locked proto generators into repository-managed
 .PHONY: check-openapi-sync
 check-openapi-sync: ## Check FastAPI route schema against openapi/openapi.yaml
 	cd $(API_DIR) && APP_CONFIG_PROFILE=test $(UV_RUN_INSTALLED) python ../../scripts/check_openapi_sync.py
+
+.PHONY: graphify-list
+graphify-list: ## List bounded Graphify contexts and source counts (ARGS="--files")
+	python3 scripts/graphify_federation.py list $(ARGS)
+
+.PHONY: graphify-check
+graphify-check: ## Validate Graphify context boundaries, overlays, and pinned tool version
+	python3 scripts/graphify_federation.py check $(ARGS)
+
+.PHONY: graphify-build
+graphify-build: ## Rebuild Graphify contexts (ARGS="--context sc-domain")
+	python3 scripts/graphify_federation.py build --max-workers $(GRAPHIFY_MAX_WORKERS) $(ARGS)
+
+.PHONY: graphify-query
+graphify-query: ## Query one graph (CONTEXT=, QUESTION= are required)
+	@test -n "$(CONTEXT)" || (echo "CONTEXT is required" >&2 && exit 2)
+	@test -n "$(QUESTION)" || (echo "QUESTION is required" >&2 && exit 2)
+	python3 scripts/graphify_federation.py query --context "$(CONTEXT)" $(ARGS) "$(QUESTION)"
+
+.PHONY: test-graphify-federation
+test-graphify-federation: ## Test the repeatable Graphify federation tooling
+	python3 -m unittest discover -s scripts/tests -p 'test_graphify_federation.py'
 
 .PHONY: docs-build
 docs-build: ## Build the MkDocs documentation site
@@ -551,6 +599,7 @@ require-release-config:
 	@case "$(RELEASE_PROFILE)" in pre-release|prod) ;; *) echo "ERROR: RELEASE_PROFILE must be pre-release or prod" >&2; exit 1 ;; esac
 	@test -f "$(RELEASE_STATEFUL_ENV)" || { echo "ERROR: missing $(RELEASE_STATEFUL_ENV)" >&2; exit 1; }
 	@test -f "$(RELEASE_PLATFORM_ENV)" || { echo "ERROR: missing $(RELEASE_PLATFORM_ENV)" >&2; exit 1; }
+	@if [ -n "$(RELEASE_IMAGE_ENV)" ] && [ ! -f "$(RELEASE_IMAGE_ENV)" ]; then echo "ERROR: missing $(RELEASE_IMAGE_ENV)" >&2; exit 1; fi
 	@test -f "$(RELEASE_OBSERVABILITY_ENV)" || { echo "ERROR: missing $(RELEASE_OBSERVABILITY_ENV)" >&2; exit 1; }
 
 .PHONY: create-release-network
@@ -560,8 +609,8 @@ create-release-network: require-release-config ## Create the selected release ne
 .PHONY: check-release-config
 check-release-config: require-release-config ## Render one deployed release from canonical manifests
 	$(RELEASE_RUNTIME_ENV) docker compose --env-file $(RELEASE_STATEFUL_ENV) -p $(RELEASE_PROJECT)-stateful -f $(COMPOSE_PROD_STATEFUL) config --quiet
-	$(RELEASE_RUNTIME_ENV) docker compose --env-file $(RELEASE_PLATFORM_ENV) -p $(RELEASE_PROJECT)-platform -f $(COMPOSE_PROD_PLATFORM) --profile '*' config --quiet
-	$(RELEASE_RUNTIME_ENV) docker compose --env-file $(RELEASE_PLATFORM_ENV) -p $(RELEASE_PROJECT)-ops -f $(COMPOSE_PROD_OPS) --profile ops config --quiet
+	$(RELEASE_RUNTIME_ENV) docker compose $(RELEASE_PLATFORM_ENV_FILES) -p $(RELEASE_PROJECT)-platform -f $(COMPOSE_PROD_PLATFORM) --profile '*' config --quiet
+	$(RELEASE_RUNTIME_ENV) docker compose $(RELEASE_PLATFORM_ENV_FILES) -p $(RELEASE_PROJECT)-ops -f $(COMPOSE_PROD_OPS) --profile ops config --quiet
 	$(RELEASE_RUNTIME_ENV) docker compose --env-file $(RELEASE_OBSERVABILITY_ENV) -p $(RELEASE_PROJECT)-observability -f $(COMPOSE_PROD_OBSERVABILITY) --profile '*' config --quiet
 
 .PHONY: up-release-stateful
@@ -570,12 +619,12 @@ up-release-stateful: create-release-network ## Start and wait for deployed state
 
 .PHONY: prepare-release-platform
 prepare-release-platform: create-release-network ## Prepare database, MinIO, and Prefect
-	$(RELEASE_RUNTIME_ENV) docker compose --env-file $(RELEASE_PLATFORM_ENV) -p $(RELEASE_PROJECT)-platform -f $(COMPOSE_PROD_PLATFORM) up -d --wait --wait-timeout 180 prefect-server
-	$(RELEASE_RUNTIME_ENV) docker compose --env-file $(RELEASE_PLATFORM_ENV) -p $(RELEASE_PROJECT)-ops -f $(COMPOSE_PROD_OPS) --profile ops run --rm prepare-platform
+	$(RELEASE_RUNTIME_ENV) docker compose $(RELEASE_PLATFORM_ENV_FILES) -p $(RELEASE_PROJECT)-platform -f $(COMPOSE_PROD_PLATFORM) up -d --wait --wait-timeout 180 prefect-server
+	$(RELEASE_RUNTIME_ENV) docker compose $(RELEASE_PLATFORM_ENV_FILES) -p $(RELEASE_PROJECT)-ops -f $(COMPOSE_PROD_OPS) --profile ops run --rm prepare-platform
 
 .PHONY: up-release-platform
 up-release-platform: create-release-network ## Start and wait for deployed application services
-	$(RELEASE_RUNTIME_ENV) docker compose --env-file $(RELEASE_PLATFORM_ENV) -p $(RELEASE_PROJECT)-platform -f $(COMPOSE_PROD_PLATFORM) $(RELEASE_PROFILES) up -d --wait --wait-timeout 300 $(ARGS)
+	$(RELEASE_RUNTIME_ENV) docker compose $(RELEASE_PLATFORM_ENV_FILES) -p $(RELEASE_PROJECT)-platform -f $(COMPOSE_PROD_PLATFORM) $(RELEASE_PROFILES) up -d --wait --wait-timeout 300 $(ARGS)
 
 .PHONY: up-release-observability
 up-release-observability: create-release-network ## Start deployed observability services
@@ -592,17 +641,17 @@ up-release: require-release-config ## Start a canonical pre-release or productio
 .PHONY: ps-release
 ps-release: require-release-config ## Show all projects for the selected release
 	$(RELEASE_RUNTIME_ENV) docker compose --env-file $(RELEASE_STATEFUL_ENV) -p $(RELEASE_PROJECT)-stateful -f $(COMPOSE_PROD_STATEFUL) ps
-	$(RELEASE_RUNTIME_ENV) docker compose --env-file $(RELEASE_PLATFORM_ENV) -p $(RELEASE_PROJECT)-platform -f $(COMPOSE_PROD_PLATFORM) $(RELEASE_PROFILES) ps
+	$(RELEASE_RUNTIME_ENV) docker compose $(RELEASE_PLATFORM_ENV_FILES) -p $(RELEASE_PROJECT)-platform -f $(COMPOSE_PROD_PLATFORM) $(RELEASE_PROFILES) ps
 	$(RELEASE_RUNTIME_ENV) docker compose --env-file $(RELEASE_OBSERVABILITY_ENV) -p $(RELEASE_PROJECT)-observability -f $(COMPOSE_PROD_OBSERVABILITY) $(RELEASE_PROFILES) ps
 
 .PHONY: logs-release
 logs-release: require-release-config ## Tail selected release platform logs (ARGS="api")
-	$(RELEASE_RUNTIME_ENV) docker compose --env-file $(RELEASE_PLATFORM_ENV) -p $(RELEASE_PROJECT)-platform -f $(COMPOSE_PROD_PLATFORM) $(RELEASE_PROFILES) logs -f $(ARGS)
+	$(RELEASE_RUNTIME_ENV) docker compose $(RELEASE_PLATFORM_ENV_FILES) -p $(RELEASE_PROJECT)-platform -f $(COMPOSE_PROD_PLATFORM) $(RELEASE_PROFILES) logs -f $(ARGS)
 
 .PHONY: down-release
 down-release: require-release-config ## Stop all selected release projects without deleting data
 	@$(RELEASE_RUNTIME_ENV) docker compose --env-file $(RELEASE_OBSERVABILITY_ENV) -p $(RELEASE_PROJECT)-observability -f $(COMPOSE_PROD_OBSERVABILITY) $(RELEASE_PROFILES) down --remove-orphans
-	@$(RELEASE_RUNTIME_ENV) docker compose --env-file $(RELEASE_PLATFORM_ENV) -p $(RELEASE_PROJECT)-platform -f $(COMPOSE_PROD_PLATFORM) $(RELEASE_PROFILES) down --remove-orphans
+	@$(RELEASE_RUNTIME_ENV) docker compose $(RELEASE_PLATFORM_ENV_FILES) -p $(RELEASE_PROJECT)-platform -f $(COMPOSE_PROD_PLATFORM) $(RELEASE_PROFILES) down --remove-orphans
 	@$(RELEASE_RUNTIME_ENV) docker compose --env-file $(RELEASE_STATEFUL_ENV) -p $(RELEASE_PROJECT)-stateful -f $(COMPOSE_PROD_STATEFUL) down --remove-orphans
 
 PRE_RELEASE_DEPLOY_ARGS := RELEASE_PROFILE=pre-release RELEASE_NETWORK=$(PRE_RELEASE_NETWORK) RELEASE_PROJECT=$(PRE_RELEASE_PROJECT) RELEASE_STATEFUL_ENV=$(PRE_RELEASE_STATEFUL_ENV) RELEASE_PLATFORM_ENV=$(PRE_RELEASE_PLATFORM_ENV) RELEASE_OBSERVABILITY_ENV=$(PRE_RELEASE_OBSERVABILITY_ENV)
@@ -784,6 +833,7 @@ help: ## Show this help message
 	@printf '  \033[36m%-16s\033[0m %s\n' "PROD_STATEFUL_ENV" "Path to stateful .env file (default: /srv/finetune/stateful/.env)"
 	@printf '  \033[36m%-16s\033[0m %s\n' "PROD_PLATFORM_ENV" "Path to platform .env file (default: /srv/finetune/platform/.env)"
 	@printf '  \033[36m%-16s\033[0m %s\n' "PROD_OBSERVABILITY_ENV" "Path to observability .env file (default: /srv/finetune/observability/.env)"
+	@printf '  \033[36m%-16s\033[0m %s\n' "RELEASE_IMAGE_ENV" "Optional generated image-digest env loaded after the platform env"
 	@printf '  \033[36m%-16s\033[0m %s\n' "PRE_RELEASE_STATEFUL_ENV" "Deployed pre-release stateful env file"
 	@printf '  \033[36m%-16s\033[0m %s\n' "PRE_RELEASE_PLATFORM_ENV" "Deployed pre-release platform env file"
 	@printf '  \033[36m%-16s\033[0m %s\n' "PRE_RELEASE_OBSERVABILITY_ENV" "Deployed pre-release observability env file"

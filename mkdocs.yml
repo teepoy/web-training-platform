@@ -27,6 +27,7 @@ nav:
       - Extension Guide: guides/extension-guide.md
       - Preview Dataset Mode: guides/preview-dataset-mode.md
       - Export Bundle: guides/export-bundle.md
+      - Graphify Federation: guides/graphify-federation.md
   - Reference:
       - API Endpoints: reference/api-endpoints.md
       - Dataset Model Compatibility: reference/dataset-model-compatibility.md

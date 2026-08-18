@@ -57,3 +57,38 @@ before resizing. Changing
 identity; remove only the named `Dev SC Inspection` showcase fixtures before
 doing that. Use the separate SC benchmark procedures when a 300,000-row dataset
 is required.
+
+## Runtime data-path benchmark
+
+After `make up-dev` and `make seed-dev`, run:
+
+```bash
+make benchmark-sc-runtime-data-paths
+```
+
+This benchmark clones the seeded SC inspection into a temporary Dataset, labels
+every imported row, and invokes the same Runtime callables used by the Prefect
+worker. Training uses the real Dataset reader, offline `image-parser-batch`
+process, and Parquet materializer. Prediction uses the real Dataset reader,
+online image-parser stream, and prediction writeback. Only the GPU Trainer and
+Predictor kernels are replaced: the fake Trainer reads every Parquet row and
+the fake Predictor consumes every resolved image pair. The temporary Dataset
+and fake model artifact are removed after the run.
+
+The JSON result reports setup time separately from training materialization and
+prediction Runtime throughput. The local target enforces the established 3,000
+samples/second prediction requirement; this hardware-sensitive benchmark is not
+part of shared CI. The training threshold and either local threshold can be
+overridden explicitly:
+
+```bash
+make benchmark-sc-runtime-data-paths \
+  SC_RUNTIME_BENCHMARK_SAMPLES=50000 \
+  SC_RUNTIME_BENCHMARK_MIN_TRAIN_SPS=500 \
+  SC_RUNTIME_BENCHMARK_MIN_PREDICT_SPS=3000
+```
+
+The requested count is exact: the command fails instead of silently measuring
+a smaller upstream fixture. For steady-state throughput measurements use at
+least 50,000 rows; the default 2,500-row showcase fixture is intended for UI
+development, not performance characterization.

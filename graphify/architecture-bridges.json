@@ -1,0 +1,380 @@
+{
+  "nodes": [
+    {
+      "id": "context_data_resources",
+      "label": "Data Resources Context",
+      "file_type": "concept",
+      "source_file": "graphify/federation.json",
+      "source_location": null
+    },
+    {
+      "id": "context_ml_lifecycle",
+      "label": "ML Lifecycle Context",
+      "file_type": "concept",
+      "source_file": "graphify/federation.json",
+      "source_location": null
+    },
+    {
+      "id": "context_sc_domain",
+      "label": "SC Domain Context",
+      "file_type": "concept",
+      "source_file": "graphify/federation.json",
+      "source_location": null
+    },
+    {
+      "id": "context_ingestion_automation",
+      "label": "Ingestion and Automation Context",
+      "file_type": "concept",
+      "source_file": "graphify/federation.json",
+      "source_location": null
+    },
+    {
+      "id": "context_platform_access",
+      "label": "Platform Access Context",
+      "file_type": "concept",
+      "source_file": "graphify/federation.json",
+      "source_location": null
+    },
+    {
+      "id": "context_agent_surface",
+      "label": "Agent Surface Context",
+      "file_type": "concept",
+      "source_file": "graphify/federation.json",
+      "source_location": null
+    },
+    {
+      "id": "contract_dataset_storage_agg",
+      "label": "DatasetStorageAgg",
+      "file_type": "concept",
+      "source_file": "CORE_DESIGNS.md",
+      "source_location": "L215"
+    },
+    {
+      "id": "contract_data_plane_manifest",
+      "label": "Data-plane Manifest",
+      "file_type": "concept",
+      "source_file": "docs/architecture/data-plane-manifest-contract.md",
+      "source_location": null
+    },
+    {
+      "id": "contract_runtime_callable",
+      "label": "Registered Runtime Callable",
+      "file_type": "concept",
+      "source_file": "CORE_DESIGNS.md",
+      "source_location": "L344"
+    },
+    {
+      "id": "contract_artifact_commit",
+      "label": "Artifact and Prediction Commit",
+      "file_type": "concept",
+      "source_file": "CORE_DESIGNS.md",
+      "source_location": "L348"
+    },
+    {
+      "id": "contract_runtime_router",
+      "label": "RuntimeRouter",
+      "file_type": "concept",
+      "source_file": "docs/architecture/runtime-registration-contract.md",
+      "source_location": null
+    },
+    {
+      "id": "contract_runtime_capability_catalog",
+      "label": "RuntimeCapabilityCatalog",
+      "file_type": "concept",
+      "source_file": "docs/architecture/runtime-registration-contract.md",
+      "source_location": null
+    },
+    {
+      "id": "contract_prefect_deployment_spec",
+      "label": "PrefectDeploymentSpec",
+      "file_type": "concept",
+      "source_file": "CORE_DESIGNS.md",
+      "source_location": "L336"
+    },
+    {
+      "id": "contract_backend_transport_dto",
+      "label": "Backend Transport DTO",
+      "file_type": "concept",
+      "source_file": "CORE_DESIGNS.md",
+      "source_location": "L377"
+    },
+    {
+      "id": "contract_openapi",
+      "label": "OpenAPI Contract",
+      "file_type": "concept",
+      "source_file": "CORE_DESIGNS.md",
+      "source_location": "L377"
+    },
+    {
+      "id": "contract_generated_web_client",
+      "label": "Generated Web Client",
+      "file_type": "concept",
+      "source_file": "CORE_DESIGNS.md",
+      "source_location": "L382"
+    },
+    {
+      "id": "contract_frontend_feature_consumer",
+      "label": "Frontend Feature Consumer",
+      "file_type": "concept",
+      "source_file": "AGENTS.md",
+      "source_location": null
+    },
+    {
+      "id": "contract_protobuf",
+      "label": "Protobuf Contract",
+      "file_type": "concept",
+      "source_file": "CORE_DESIGNS.md",
+      "source_location": "L29"
+    },
+    {
+      "id": "contract_image_parser",
+      "label": "Image Parser Service",
+      "file_type": "concept",
+      "source_file": "CORE_DESIGNS.md",
+      "source_location": "L237"
+    },
+    {
+      "id": "contract_collection_snapshot",
+      "label": "Collection Snapshot",
+      "file_type": "concept",
+      "source_file": "CORE_DESIGNS.md",
+      "source_location": "L182"
+    },
+    {
+      "id": "contract_source_admission",
+      "label": "Source Admission",
+      "file_type": "concept",
+      "source_file": "CORE_DESIGNS.md",
+      "source_location": "L195"
+    },
+    {
+      "id": "contract_org_context",
+      "label": "Organization Context",
+      "file_type": "concept",
+      "source_file": "CORE_DESIGNS.md",
+      "source_location": "L423"
+    },
+    {
+      "id": "contract_sse_surface",
+      "label": "SSE Display Surface",
+      "file_type": "concept",
+      "source_file": "CORE_DESIGNS.md",
+      "source_location": "L429"
+    }
+  ],
+  "edges": [
+    {
+      "source": "context_data_resources",
+      "target": "contract_dataset_storage_agg",
+      "relation": "owns",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "CORE_DESIGNS.md",
+      "source_location": "L215",
+      "weight": 1.0
+    },
+    {
+      "source": "contract_dataset_storage_agg",
+      "target": "contract_data_plane_manifest",
+      "relation": "materializes",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "CORE_DESIGNS.md",
+      "source_location": "L215",
+      "weight": 1.0
+    },
+    {
+      "source": "contract_data_plane_manifest",
+      "target": "contract_runtime_callable",
+      "relation": "consumed_by",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "CORE_DESIGNS.md",
+      "source_location": "L217",
+      "weight": 1.0
+    },
+    {
+      "source": "contract_runtime_callable",
+      "target": "contract_artifact_commit",
+      "relation": "emits",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "CORE_DESIGNS.md",
+      "source_location": "L348",
+      "weight": 1.0
+    },
+    {
+      "source": "context_ml_lifecycle",
+      "target": "contract_runtime_router",
+      "relation": "owns",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "CORE_DESIGNS.md",
+      "source_location": "L303",
+      "weight": 1.0
+    },
+    {
+      "source": "contract_runtime_router",
+      "target": "contract_runtime_capability_catalog",
+      "relation": "registers_into",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "CORE_DESIGNS.md",
+      "source_location": "L305",
+      "weight": 1.0
+    },
+    {
+      "source": "contract_runtime_capability_catalog",
+      "target": "contract_prefect_deployment_spec",
+      "relation": "dispatches_via",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "CORE_DESIGNS.md",
+      "source_location": "L357",
+      "weight": 1.0
+    },
+    {
+      "source": "contract_prefect_deployment_spec",
+      "target": "contract_runtime_callable",
+      "relation": "executes",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "CORE_DESIGNS.md",
+      "source_location": "L344",
+      "weight": 1.0
+    },
+    {
+      "source": "contract_backend_transport_dto",
+      "target": "contract_openapi",
+      "relation": "exports",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "CORE_DESIGNS.md",
+      "source_location": "L377",
+      "weight": 1.0
+    },
+    {
+      "source": "contract_openapi",
+      "target": "contract_generated_web_client",
+      "relation": "generates",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "CORE_DESIGNS.md",
+      "source_location": "L382",
+      "weight": 1.0
+    },
+    {
+      "source": "contract_generated_web_client",
+      "target": "contract_frontend_feature_consumer",
+      "relation": "consumed_by",
+      "confidence": "INFERRED",
+      "confidence_score": 0.75,
+      "source_file": "AGENTS.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "context_sc_domain",
+      "target": "contract_protobuf",
+      "relation": "uses",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "CORE_DESIGNS.md",
+      "source_location": "L259",
+      "weight": 1.0
+    },
+    {
+      "source": "contract_protobuf",
+      "target": "contract_image_parser",
+      "relation": "connects",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "CORE_DESIGNS.md",
+      "source_location": "L259",
+      "weight": 1.0
+    },
+    {
+      "source": "contract_image_parser",
+      "target": "context_ml_lifecycle",
+      "relation": "feeds",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "CORE_DESIGNS.md",
+      "source_location": "L257",
+      "weight": 1.0
+    },
+    {
+      "source": "context_ingestion_automation",
+      "target": "contract_source_admission",
+      "relation": "owns",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "CORE_DESIGNS.md",
+      "source_location": "L195",
+      "weight": 1.0
+    },
+    {
+      "source": "contract_source_admission",
+      "target": "context_data_resources",
+      "relation": "creates_members_in",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "CORE_DESIGNS.md",
+      "source_location": "L199",
+      "weight": 1.0
+    },
+    {
+      "source": "contract_source_admission",
+      "target": "contract_collection_snapshot",
+      "relation": "publishes",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "CORE_DESIGNS.md",
+      "source_location": "L187",
+      "weight": 1.0
+    },
+    {
+      "source": "context_platform_access",
+      "target": "contract_org_context",
+      "relation": "owns",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "CORE_DESIGNS.md",
+      "source_location": "L423",
+      "weight": 1.0
+    },
+    {
+      "source": "contract_org_context",
+      "target": "context_data_resources",
+      "relation": "authorizes",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "CORE_DESIGNS.md",
+      "source_location": "L423",
+      "weight": 1.0
+    },
+    {
+      "source": "context_agent_surface",
+      "target": "contract_sse_surface",
+      "relation": "uses",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "CORE_DESIGNS.md",
+      "source_location": "L429",
+      "weight": 1.0
+    },
+    {
+      "source": "contract_sse_surface",
+      "target": "contract_backend_transport_dto",
+      "relation": "streams",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "CORE_DESIGNS.md",
+      "source_location": "L430",
+      "weight": 1.0
+    }
+  ],
+  "hyperedges": [],
+  "input_tokens": 0,
+  "output_tokens": 0
+}

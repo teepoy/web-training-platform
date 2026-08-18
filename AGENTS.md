@@ -64,6 +64,14 @@ Prefer `make` targets from the repository root.
 
 Seed dev data with `make seed-dev`. Run smoke tests with `make smoke-tests`.
 
+## Graphify Federation
+
+- The repository Graphify contract lives in `graphify/federation.json`; do not rebuild one monolithic graph from the whole monorepo.
+- Use `make graphify-list` to inspect bounded contexts, `make graphify-build ARGS="--context <name>"` after relevant code changes, and `make graphify-query CONTEXT=<name> QUESTION='...'` for domain-specific questions.
+- `graphify-out/graph.json` is the small `architecture-contracts` navigation graph. Detailed code questions must use the owning context graph under `graphify-out/contexts/`.
+- Tests, migrations, fixtures, and generated transports are opt-in overlays. Do not merge them into the default production-code graphs.
+- When context boundaries or architecture contracts change, update the federation manifest/bridge overlay, run `make graphify-check`, and rebuild the affected context plus `architecture-contracts`.
+
 ## Verification
 
 - **After any code change, run `make lint` first.** It checks only git-diff files (ruff for Python, prettier for web) and is fast enough for every edit cycle.

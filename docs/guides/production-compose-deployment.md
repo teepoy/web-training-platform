@@ -167,6 +167,8 @@ FINETUNE_API_IMAGE=registry.example.com/finetune-api:<release>
 FINETUNE_WEB_IMAGE=registry.example.com/finetune-web:<release>
 FINETUNE_CPU_WORKER_IMAGE=registry.example.com/finetune-cpu-worker:<release>
 FINETUNE_GPU_WORKER_IMAGE=registry.example.com/finetune-gpu-worker:<release>
+SC_UPSTREAM_IMAGE=registry.example.com/finetune-sc-upstream:<release>
+IMAGE_PARSER_IMAGE=registry.example.com/finetune-image-parser:<release>
 PLATFORM_DATA_DIR=/srv/finetune/platform/data
 SC_UPSTREAM_DATA_DIR=/srv/finetune/platform/sc-upstream
 IMAGE_PARSER_DATA_DIR=/srv/finetune/platform/image-parser
@@ -297,7 +299,7 @@ health checks, environment keys, shared environment values, mount targets, and
 other runtime behavior. Credentials, public URLs, database connection strings,
 and the selected application profile remain environment-specific.
 
-Build and publish the four application images from these Dockerfiles:
+Build and publish all six application and runtime images from these Dockerfiles:
 
 | Variable                    | Dockerfile target                                       |
 | --------------------------- | ------------------------------------------------------- |
@@ -305,6 +307,88 @@ Build and publish the four application images from these Dockerfiles:
 | `FINETUNE_WEB_IMAGE`        | `apps/web/Dockerfile`, target `prod`                    |
 | `FINETUNE_CPU_WORKER_IMAGE` | `apps/api/Dockerfile.prefect-worker-cpu`, target `prod` |
 | `FINETUNE_GPU_WORKER_IMAGE` | `apps/api/Dockerfile.prefect-worker-gpu`, target `prod` |
+| `SC_UPSTREAM_IMAGE`         | `services/sc-upstream/Dockerfile`, final target         |
+| `IMAGE_PARSER_IMAGE`        | `services/image-parser/Dockerfile`, final target        |
+
+## Online CI/CD
+
+`.github/workflows/ci.yml` is the release gate. Pull requests run Python and
+web checks, generated-contract drift checks, Compose rendering, and production
+builds for all six images without publishing them. A successful push to `main`
+or a `v*` tag publishes the same six Linux AMD64 images to GHCR. Every image has
+a commit-scoped `sha-<full-40-character-commit>` lookup tag. A version tag such
+as `v1.4.0` is an additional human-readable alias; the workflow never publishes
+or deploys `latest`.
+
+The package names are derived from the GitHub repository:
+
+```text
+ghcr.io/<owner>/<repository>-api
+ghcr.io/<owner>/<repository>-web
+ghcr.io/<owner>/<repository>-cpu-worker
+ghcr.io/<owner>/<repository>-gpu-worker
+ghcr.io/<owner>/<repository>-sc-upstream
+ghcr.io/<owner>/<repository>-image-parser
+```
+
+`.github/workflows/deploy.yml` is a manual, protected delivery workflow. It
+accepts a full commit SHA or a semantic `v*` tag, verifies that the resolved
+commit is reachable from `main`, and always deploys the corresponding immutable
+SHA build. Before Compose runs, each SHA tag is resolved to its registry content
+digest and written as `image@sha256:...`; tag mutation cannot change the deployed
+content. The workflow runs on a dedicated self-hosted Linux AMD64 runner with
+these labels:
+
+```text
+self-hosted, linux, x64, finetune-deploy
+```
+
+Create GitHub Environments named `pre-release` and `production`. Configure
+required reviewers and deployment branch/tag restrictions on `production`, and
+disable self-approval when organizational policy requires it. Define these
+GitHub Environment variables for each environment:
+
+| Variable                    | Pre-release example                                     | Production example                          |
+| --------------------------- | ------------------------------------------------------- | ------------------------------------------- |
+| `RELEASE_PROFILE`           | `pre-release`                                           | `prod`                                      |
+| `RELEASE_NETWORK`           | `finetune-pre-release`                                  | `finetune-prod`                             |
+| `RELEASE_PROJECT`           | `finetune-pre-release`                                  | `finetune`                                  |
+| `RELEASE_STATEFUL_ENV`      | `/srv/finetune-pre-release/stateful/.env`               | `/srv/finetune/stateful/.env`               |
+| `RELEASE_PLATFORM_ENV`      | `/srv/finetune-pre-release/platform/.env`               | `/srv/finetune/platform/.env`               |
+| `RELEASE_IMAGE_ENV`         | `/srv/finetune-pre-release/platform/release-images.env` | `/srv/finetune/platform/release-images.env` |
+| `RELEASE_OBSERVABILITY_ENV` | `/srv/finetune-pre-release/observability/.env`          | `/srv/finetune/observability/.env`          |
+| `RELEASE_PROFILES`          | Empty, or `--profile gpu`                               | Empty, or `--profile gpu`                   |
+| `RELEASE_HEALTHCHECK_URL`   | `https://api.pre-release.finetune.example.com`          | `https://api.finetune.example.com`          |
+
+The three existing service env files remain host-owned secret configuration.
+`RELEASE_IMAGE_ENV` is the base path for separate, non-secret, per-commit files
+generated atomically by the workflow and loaded after the platform env. For
+example, deployment creates `release-images.env.<full-commit-sha>`. A retry or
+rollback reuses the already recorded digests instead of resolving a tag again,
+while image versions can change without rewriting credentials. The deploy runner
+account must be able to create these files, read the three protected env files,
+access Docker and Compose, and pull the repository's GHCR packages. Keep the
+GitHub runner application current (the workflow's pinned checkout action
+requires runner `v2.329.0` or newer). Do not use this persistent runner for
+pull-request jobs or other untrusted code.
+
+Protect `main` and require the CI quality, contract, and image-build jobs before
+merge. The publish/deploy actions are pinned to full action commit SHAs; update
+those pins deliberately after reviewing upstream releases. Public repositories
+also publish GitHub artifact attestations. For a private repository on a GitHub
+plan that supports private attestations, set the repository variable
+`ENABLE_ARTIFACT_ATTESTATIONS=true`.
+
+Run the workflow from GitHub Actions, select the protected environment, and
+enter the accepted commit SHA or release tag. Production additionally requires
+an explicit confirmation that PostgreSQL and object-storage backups have been
+verified. The workflow renders the canonical manifests, performs the existing
+stateful/prepare/platform/observability startup sequence, and checks `/health`
+and `/ready` over HTTPS.
+
+To roll back application images, rerun the deployment workflow with the previous
+accepted commit SHA. Do not use the workflow to downgrade the database; follow
+the migration-specific rollback policy below.
 
 ## Split-Stack Startup
 
