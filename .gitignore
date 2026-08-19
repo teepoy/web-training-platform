@@ -88,6 +88,7 @@ smoke_wafer_e2e_result.json
 /legacy/issues/
 infra/compose/data/
 /dist/
+/artifacts/
 .go-cache
 /.cache/protobuf-tools/
 tmp

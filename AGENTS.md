@@ -64,6 +64,11 @@ Prefer `make` targets from the repository root.
 
 Seed dev data with `make seed-dev`. Run smoke tests with `make smoke-tests`.
 
+The root `Makefile` is the stable entry point and loads focused modules from
+`make/`: `build.mk`, `test.mk`, `lint.mk`, `docker.mk`, `generate.mk`, and
+`release.mk`. Add new targets to the module that owns their workflow; keep the
+root file limited to shared configuration, module includes, and help output.
+
 ## Graphify Federation
 
 - The repository Graphify contract lives in `graphify/federation.json`; do not rebuild one monolithic graph from the whole monorepo.
