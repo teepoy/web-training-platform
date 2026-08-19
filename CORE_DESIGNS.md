@@ -232,15 +232,27 @@ SC Import as Dataset 当前使用 API service 内的 direct sparse import 路径
 
 Dataset image access 必须通过平台后端代理表达。`file_shard_sparse` 中嵌入的图片通过 `/api/v1/samples/{sample_id}/images/{image_id}?dataset_id=...` 读取；对象存储 URI 通过 `/api/v1/images/resolve?uri=...` 读取；SC upstream/mock 图片通过 `/api/v1/sc/images/...` 作为兼容入口。前端 `<img>` / blink table / preview grid 不能携带自定义 header，因此图片 URL 必须显式携带 token 与 org context query 参数。前端不得把 raw image path helper 的返回值直接作为图片源，必须通过共享 authenticated URL helper 或 image adapter 生成最终 URL。
 
-需要在运行时解析 SC patch archive 的 Dataset 必须保存显式的 image source binding：
-稳定 contract 为 `sc.patch_archive.v1`，profile 是部署配置中的不透明名称。Dataset 只保存
-contract/profile，不保存本地或 SMB 绝对路径、对象存储凭据。image-parser 的 provider
-registry 把 profile 映射到 `sc_upstream` 或 `sc_patch_zip_folder`；调用方不得请求根目录，
-provider 之间也不得在失败后隐式 fallback。历史 Dataset 不回填 binding；首次相关写入或
-显式运维迁移前，缺失 binding 的 SC training/prediction 必须失败并说明如何配置。
-Direct SC preview/import 使用 API 部署配置 `sc.upstream_image_source_profile` 绑定 profile，
-public request 与浏览器不得传入或推断这个不透明名称；Source Discovery 则必须从版本化
-Import profile 显式读取 `image_source_profile`，两条路径都不得提供失败 fallback。
+需要在运行时取图的 Dataset 必须保存显式的 image source binding：稳定 contract 为
+`filesystem.image-source.v1`，并保存代码注册的 format ID；Dataset 不保存本地/SMB 绝对
+路径、对象存储凭据、staging 实现、ownership、缓存或清理策略。format 是数据布局/容器
+契约，不是部署 profile。历史 Dataset 不回填新字段，metadata 仍可读；首次相关
+training/prediction 遇到缺失 format 时必须明确失败，不得从旧 profile、扩展名或
+`dataset_type` 推断。Direct SC preview/import 使用 API 配置
+`sc.upstream_image_source_format`；Source Discovery 从版本化 Import profile 显式读取
+`image_source_format`，public request 与浏览器不能选择 source root 或 staging 实现。
+
+图片 source 的通用边界是“已在本机可见的 regular file 或 directory”；SMB 通过挂载目录
+进入同一边界。通用层只负责 rooted path 安全、source ownership、format driver contract
+与稳定 item error，不假定 ZIP、按 defect index 分桶或固定成员命名。路径解析和容器读取
+由代码注册的 format driver 拥有：`filesystem.role-paths.v1` 使用数据行显式提供的
+`role_paths` 相对路径映射，且不要求 SC inspection/wafer/defect identity；
+旧 SC 的 500-defect ZIP 范围和成员命名只存在于可选的
+`sc.legacy-range-zip.v1` driver。format mismatch 必须失败，不得 sniff 或 fallback。
+
+Source Stager 是入口级可选组合，不是 format driver 的隐式能力：关闭表示该入口根本不安装
+stager，要求 source 已是 local file/directory/SMB；远端下载、重试和发布到本地目录由具体
+入口拥有。ownership 固定为 `borrowed`（resolver 永不写删）、`job_owned`（任务退出清理）或
+`shared_cache`（仅 cache policy 清理），不得跨 ownership 复用删除逻辑。
 
 大数据集模式不追求与小数据集完全功能对齐。`file_shard_sparse` 的目标是大规模 ingest、批量预测、稀疏人工修正；不是重建完整 `SampleORM + Label Studio` 流程。
 
@@ -254,23 +266,31 @@ SC 当前只注册 `yolo-sc-v1` 算法，不保留 ResNet compatibility 分支�
 `patch_defective` 与 `patch_template` 两张灰度图：每张独立 resize 到 `128x128`，
 再按 channel 顺序叠成 `[2, 128, 128]`，禁止在空间维纵向或横向拼图。训练固定
 50 epochs；预测模型 batch 固定 256。Training 继续使用可重放、可 shuffle 的
-materialized Parquet/DataLoader。训练物化不得调用共享的线上 image-parser RPC；GPU
-worker 为每个 materialization 启动一个独立的本地 image-parser batch 进程，通过有界、
-顺序的 length-prefixed protobuf frame 按 512 行读取 source profile 对应图片，全部批次完成
-后关闭进程。该进程可复用 image-parser provider 实现和 job-local cache，但不监听端口、不与
-Prediction/Preview 争用线上服务容量，也不得失败后 fallback 到线上 RPC。之后的图片解码、
-灰度转换、resize 和 channel stack 属于算法 Dataset preprocess，并由多进程 DataLoader
-worker 执行。
+materialized Parquet/DataLoader。Training 与 batch Prediction 共用 job-local resolver
+factory：每个 job 启动一个独立进程，通过有界、顺序的 length-prefixed protobuf frame
+按 512 行读取 source format 对应图片，任务结束关闭进程。默认 job 入口组合 upstream
+stager + job-owned source + legacy driver；部署可将 binary 切换为纯本地入口，并显式提供
+borrowed root/kind/format。两者都不监听端口、不调用 display image-parser RPC、也不在失败
+后 fallback 到线上服务。之后的图片解码、灰度转换、resize 和 channel stack 属于算法
+Dataset preprocess；训练由多进程 DataLoader worker 执行，预测由其有界 preprocess pool
+执行。
+
+image-parser 保留三个独立入口组合：display server 使用 upstream stager + shared cache，
+只提供前端/兼容展示 API；train/batch-predict job resolver 使用可替换 stager + job-owned
+source；online/instant prediction 使用纯本地 borrowed source、无 upstream/S3 client。
+三者共享 rooted filesystem、format driver 和 framed transport 等稳定 primitive，不共享
+下载、缓存生命周期、清理、认证或并发预算。display server 不暴露 job batch resolve RPC。
 
 SC v3 Prediction 不生成完整临时图片 Parquet，也不为进度预先 collect/count 全量数据。
 它从 Dataset 当前持久化数据以 512 行有界扫描；Collection 按 `source_dataset_id` 映射
-各成员的 source profile，再通过 image-parser `ResolvePatchImages` server stream 批量取
-`sample × role` 图片。预处理固定 4 个 spawn 进程，每个 task 最多 64 条、最多预取 8 个
+各成员的 source format，通过本 job 的 local resolver frame 批量取 `sample × role` 图片。
+预处理固定 4 个 spawn 进程，每个 task 最多 64 条、最多预取 8 个
 task；主进程聚合为 256 条模型 batch，prediction 每 5,000 条批量写回，结束时写入实际
 processed total。因此内存上界由各批次和队列上限决定，不随 Dataset 总样本数线性增长。
 图片缺失、损坏等稳定 item error 只生成该 sample 的 prediction error，其他 sample 继续；
-模型加载失败、worker 崩溃、source profile 整体不可用或 RPC 中断使整个任务失败。取消时
-必须关闭 RPC stream/channel、队列与子进程。Collection prediction 仍按源 Dataset 拆分写回。
+模型加载失败、worker 崩溃、source format/stager 整体不可用或本地 frame 中断使整个任务
+失败。取消时必须关闭 pipe、job resolver、队列与子进程。Collection prediction 仍按源
+Dataset 拆分写回。
 
 完整 capability matrix 和 SC sparse 路径详见 `docs/architecture/dataset-storage-modes.md`。Smoke 验证使用 `make smoke-tests`。
 

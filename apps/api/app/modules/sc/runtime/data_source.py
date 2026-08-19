@@ -20,7 +20,7 @@ from app.modules.runtime.domain.context import (
 )
 from app.modules.storage.port.local import DatasetStorageFactoryPort
 from app.modules.storage.domain.storage_agg import DatasetStorageAgg
-from app.modules.sc.domain.image_source import require_sc_patch_archive_profile
+from app.modules.sc.domain.image_source import require_sc_image_source_format
 from app.shared.api.schemas import Dataset
 
 
@@ -38,7 +38,7 @@ class ScRuntimeSource:
     collection_id: str | None
     collection_revision_id: str | None
     source_dataset_ids: tuple[str, ...]
-    image_source_profiles: dict[str, str]
+    image_source_formats: dict[str, str]
     resolved_dataset_revision_ids: tuple[str, ...] = ()
 
 
@@ -61,7 +61,7 @@ async def open_sc_runtime_source(
             org_id=getattr(runtime_ctx, "org_id", ""),
         )
         dataset = cast(Dataset, await storage.get_dataset_metadata())
-        image_source_profile = require_sc_patch_archive_profile(dataset)
+        image_source_format = require_sc_image_source_format(dataset)
         rows = cast(
             pl.LazyFrame,
             await storage.list_samples(
@@ -82,7 +82,7 @@ async def open_sc_runtime_source(
             collection_id=source.collection_id,
             collection_revision_id=source.collection_revision_id,
             source_dataset_ids=(source.dataset_id,),
-            image_source_profiles={source.dataset_id: image_source_profile},
+            image_source_formats={source.dataset_id: image_source_format},
         )
         return
 
@@ -143,8 +143,8 @@ async def open_sc_runtime_source(
         member_datasets = await asyncio.gather(
             *(storage.get_dataset_metadata() for storage in storages)
         )
-        image_source_profiles = {
-            dataset_id: require_sc_patch_archive_profile(cast(Dataset, dataset))
+        image_source_formats = {
+            dataset_id: require_sc_image_source_format(cast(Dataset, dataset))
             for dataset_id, dataset in zip(
                 source_dataset_ids,
                 member_datasets,
@@ -182,7 +182,7 @@ async def open_sc_runtime_source(
             collection_id=source.collection_id,
             collection_revision_id=revision.id,
             source_dataset_ids=source_dataset_ids,
-            image_source_profiles=image_source_profiles,
+            image_source_formats=image_source_formats,
             resolved_dataset_revision_ids=resolved_revision_ids,
         )
         return
@@ -196,9 +196,7 @@ async def open_sc_runtime_source(
         rows = pl.scan_parquet(data_path)
         if runtime_ctx.sample_ids is not None:
             rows = rows.filter(pl.col("sample_id").is_in(runtime_ctx.sample_ids))
-        image_source_profiles = _snapshot_image_source_profiles(
-            revision.source_snapshot
-        )
+        image_source_formats = _snapshot_image_source_formats(revision.source_snapshot)
         yield ScRuntimeSource(
             rows=rows,
             source_identity=source.identity,
@@ -209,14 +207,14 @@ async def open_sc_runtime_source(
             collection_id=source.collection_id,
             collection_revision_id=revision.id,
             source_dataset_ids=source_dataset_ids,
-            image_source_profiles=image_source_profiles,
+            image_source_formats=image_source_formats,
         )
 
 
-def _snapshot_image_source_profiles(
+def _snapshot_image_source_formats(
     source_snapshot: tuple[dict[str, object], ...],
 ) -> dict[str, str]:
-    profiles: dict[str, str] = {}
+    formats: dict[str, str] = {}
     for item in source_snapshot:
         dataset_id = item.get("source_dataset_id")
         image_source = item.get("image_source")
@@ -228,18 +226,18 @@ def _snapshot_image_source_profiles(
                 "source binding"
             )
         contract = image_source.get("contract")
-        profile = image_source.get("profile")
+        source_format = image_source.get("format")
         if (
-            contract != "sc.patch_archive.v1"
-            or not isinstance(profile, str)
-            or not profile.strip()
+            contract != "filesystem.image-source.v1"
+            or not isinstance(source_format, str)
+            or not source_format.strip()
         ):
             raise ValueError(
                 f"Collection member Dataset '{dataset_id}' has an incompatible "
                 "image source binding"
             )
-        profiles[dataset_id] = profile
-    return profiles
+        formats[dataset_id] = source_format
+    return formats
 
 
 async def _observed_member_rows(

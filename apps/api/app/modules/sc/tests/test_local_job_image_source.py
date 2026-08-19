@@ -5,8 +5,8 @@ import textwrap
 
 import pytest
 
-from app.modules.sc.adapter.local_training_image_source import (
-    LocalTrainingImageSourceFactory,
+from app.modules.sc.adapter.local_job_image_source import (
+    LocalJobImageSourceFactory,
 )
 
 
@@ -55,13 +55,13 @@ async def test_local_training_source_reuses_one_process_and_preserves_order(
         encoding="utf-8",
     )
     executable.chmod(0o755)
-    factory = LocalTrainingImageSourceFactory(binary_path=str(executable))
+    factory = LocalJobImageSourceFactory(binary_path=str(executable))
 
     async with factory.open() as source:
         first = [
             item
             async for item in source.resolve_patch_images(
-                source_profile="folder",
+                source_format="filesystem.role-paths.v1",
                 roles=["patch_template", "patch_defective"],
                 items=[
                     {
@@ -70,6 +70,9 @@ async def test_local_training_source_reuses_one_process_and_preserves_order(
                         "inspection_time": "20260816_100000",
                         "wafer_key": 42,
                         "defect_id": "1",
+                        "role_paths": {
+                            "patch_template": "sample-1/template.png"
+                        },
                     },
                     {
                         "request_id": "second",
@@ -84,7 +87,7 @@ async def test_local_training_source_reuses_one_process_and_preserves_order(
         second = [
             item
             async for item in source.resolve_patch_images(
-                source_profile="folder",
+                source_format="filesystem.role-paths.v1",
                 roles=["patch_template"],
                 items=[
                     {

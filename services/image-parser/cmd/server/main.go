@@ -21,9 +21,8 @@ func main() {
 	}
 
 	log.Printf(
-		"HTTP server starting on :%s (memory-cache=%dMB, local-cache-dir=%s, local-cache-ttl=%s, local-cache-max-bytes=%d)",
+		"HTTP server starting on :%s (local-cache-dir=%s, local-cache-ttl=%s, local-cache-max-bytes=%d)",
 		port,
-		app.cacheSizeMB,
 		app.cacheDir,
 		app.cacheTTL,
 		app.cacheMaxBytes,

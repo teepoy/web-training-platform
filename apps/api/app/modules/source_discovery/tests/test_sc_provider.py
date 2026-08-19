@@ -108,7 +108,7 @@ async def test_sc_discovery_uses_local_wall_clock_and_utc_half_open_range() -> N
 
 
 @pytest.mark.asyncio
-async def test_sc_discovery_import_binds_explicit_image_source_profile() -> None:
+async def test_sc_discovery_import_binds_explicit_image_source_format() -> None:
     importer = _CapturingImporter()
     provider = ScSourceRecordProvider(_Upstream(), importer)  # type: ignore[arg-type]
     now = datetime.now(UTC)
@@ -130,7 +130,7 @@ async def test_sc_discovery_import_binds_explicit_image_source_profile() -> None
         org_id="org",
         connector_id="connector",
         name="SC import",
-        settings={"image_source_profile": "mounted-archive"},
+        settings={"image_source_format": "filesystem.role-paths.v1"},
         max_records_per_run=100,
         max_rows_per_dataset=1_000,
         created_by="user",
@@ -156,4 +156,4 @@ async def test_sc_discovery_import_binds_explicit_image_source_profile() -> None
     )
 
     assert result.dataset_id == "dataset-1"
-    assert importer.kwargs["image_source_profile"] == "mounted-archive"
+    assert importer.kwargs["image_source_format"] == "filesystem.role-paths.v1"

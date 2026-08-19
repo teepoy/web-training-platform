@@ -20,9 +20,10 @@ from app.modules.sc.materialization.domain.sc_inspection import (
     DEFAULT_PATCH_IMAGE_TYPES,
     ScInspectionMaterialization,
 )
-from app.modules.sc.materialization.domain.training_image_source import (
+from app.modules.sc.domain.job_image_source import (
     ScPatchImageBatchResolver,
-    ScTrainingImageSourceFactory,
+    ScJobImageSourceFactory,
+    normalize_role_paths,
 )
 from app.modules.sc.domain.models import parse_inspection_time
 from app.modules.sc.schema import find_images_by_role
@@ -41,7 +42,7 @@ class ScInspectionMaterializer:
     def __init__(
         self,
         *,
-        image_source_factory: ScTrainingImageSourceFactory,
+        image_source_factory: ScJobImageSourceFactory,
         schema_registry: DataPlaneSchemaRegistry,
         batch_rows: int,
         max_error_records: int,
@@ -61,7 +62,7 @@ class ScInspectionMaterializer:
         self,
         *,
         rows_lazyframe: Any,
-        image_source_profiles: Mapping[str, str],
+        image_source_formats: Mapping[str, str],
         direct_dataset_id: str | None,
         dataset_id: str = "",
         job_id: str = "",
@@ -114,7 +115,7 @@ class ScInspectionMaterializer:
                         table = await self._materialize_batch(
                             rows,
                             image_source=image_source,
-                            image_source_profiles=image_source_profiles,
+                            image_source_formats=image_source_formats,
                             direct_dataset_id=direct_dataset_id,
                             requested_roles=requested_roles,
                             image_types=image_types,
@@ -198,7 +199,7 @@ class ScInspectionMaterializer:
         rows: list[dict[str, Any]],
         *,
         image_source: ScPatchImageBatchResolver,
-        image_source_profiles: Mapping[str, str],
+        image_source_formats: Mapping[str, str],
         direct_dataset_id: str | None,
         requested_roles: dict[str, str],
         image_types: list[str],
@@ -207,7 +208,7 @@ class ScInspectionMaterializer:
         schema: pa.Schema,
     ) -> pa.Table:
         image_bytes: dict[tuple[int, str], bytes] = {}
-        missing_by_profile: dict[str, list[dict[str, object]]] = {}
+        missing_by_format: dict[str, list[dict[str, object]]] = {}
         requested_by_id: dict[str, set[str]] = {}
         for row_index, row in enumerate(rows):
             inspection_time = str(row.get("inspection_time") or "")
@@ -222,11 +223,11 @@ class ScInspectionMaterializer:
                     f"SC sample '{sample_id}' has no source Dataset identity"
                 )
             try:
-                profile = image_source_profiles[source_dataset_id]
+                source_format = image_source_formats[source_dataset_id]
             except KeyError as exc:
                 raise ValueError(
                     f"SC source Dataset '{source_dataset_id}' has no image source "
-                    "profile"
+                    "format"
                 ) from exc
             images = row.get("images")
             if not isinstance(images, list):
@@ -242,39 +243,25 @@ class ScInspectionMaterializer:
                 image_bytes[(row_index, column)] = readable
             if not missing_roles:
                 continue
-            try:
-                int(defect_id)
-            except ValueError:
-                self._append_error(
-                    errors,
-                    {
-                        "defect_id": defect_id,
-                        "image_type": ",".join(requested_roles),
-                        "error": (
-                            "missing local bytes and defect_id is not "
-                            "upstream-resolvable"
-                        ),
-                    },
-                )
-                continue
             request_id = str(row_index)
             requested_by_id[request_id] = set(missing_roles)
-            missing_by_profile.setdefault(profile, []).append(
+            missing_by_format.setdefault(source_format, []).append(
                 {
                     "request_id": request_id,
                     "sample_id": sample_id,
                     "inspection_time": inspection_time,
                     "wafer_key": wafer_key,
                     "defect_id": defect_id,
+                    "role_paths": normalize_role_paths(row.get("role_paths")),
                 }
             )
 
         received: dict[str, set[str]] = {
             request_id: set() for request_id in requested_by_id
         }
-        for profile, requests in missing_by_profile.items():
+        for source_format, requests in missing_by_format.items():
             async for item in image_source.resolve_patch_images(
-                source_profile=profile,
+                source_format=source_format,
                 roles=image_types,
                 items=requests,
             ):
@@ -282,14 +269,14 @@ class ScInspectionMaterializer:
                 role = str(item.get("role") or "")
                 if request_id not in requested_by_id:
                     raise RuntimeError(
-                        f"Image parser returned unknown request_id {request_id!r}"
+                        f"Job image resolver returned unknown request_id {request_id!r}"
                     )
                 if role not in requested_by_id[request_id]:
-                    # Inline bytes may have satisfied this role before the RPC.
+                    # Inline bytes may have satisfied this role before local resolution.
                     continue
                 if role in received[request_id]:
                     raise RuntimeError(
-                        f"Image parser returned duplicate role {role!r} for "
+                        f"Job image resolver returned duplicate role {role!r} for "
                         f"request_id {request_id!r}"
                     )
                 received[request_id].add(role)
@@ -314,7 +301,7 @@ class ScInspectionMaterializer:
                 raw_image_data = item.get("image_data", b"")
                 if not isinstance(raw_image_data, (bytes, bytearray, memoryview)):
                     raise RuntimeError(
-                        "Image parser returned non-bytes image_data for "
+                        "Job image resolver returned non-bytes image_data for "
                         f"request_id {request_id!r} role {role!r}"
                     )
                 image_bytes[(int(request_id), image_type)] = bytes(raw_image_data)

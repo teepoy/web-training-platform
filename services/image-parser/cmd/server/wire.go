@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -14,8 +13,10 @@ import (
 
 	imageparserv1 "image-parser/gen/go/imageparser/v1"
 	"image-parser/internal/client"
+	"image-parser/internal/filesource"
 	"image-parser/internal/handler"
 	"image-parser/internal/metrics"
+	"image-parser/internal/sourceformat/legacyrangezip"
 
 	"github.com/gin-gonic/gin"
 	"google.golang.org/grpc"
@@ -26,7 +27,6 @@ import (
 
 type serverApp struct {
 	router        *gin.Engine
-	cacheSizeMB   int
 	cacheDir      string
 	cacheTTL      time.Duration
 	cacheMaxBytes int64
@@ -34,7 +34,6 @@ type serverApp struct {
 }
 
 func wire() *serverApp {
-	cacheSizeMB := flag.Int("cache-size-mb", 1024, "in-memory LRU cache size in MB")
 	cacheDir := flag.String("cache-dir", "/tmp/image-parser-cache", "local file cache directory")
 	cacheTTL := flag.Duration("cache-ttl", 10*time.Minute, "cache entry TTL since its last successful read")
 	cacheCleanupInterval := flag.Duration("cache-cleanup-interval", 5*time.Minute, "full cache scan interval")
@@ -42,7 +41,6 @@ func wire() *serverApp {
 	flag.Parse()
 
 	if err := applyEnvironment(
-		cacheSizeMB,
 		cacheDir,
 		cacheTTL,
 		cacheCleanupInterval,
@@ -56,20 +54,18 @@ func wire() *serverApp {
 		log.Fatalf("failed to init upstream client: %v", err)
 	}
 
-	profiles, defaultProfile, err := loadPatchSourceProfiles()
-	if err != nil {
-		_ = upstream.Close()
-		log.Fatalf("failed to load image source profiles: %v", err)
-	}
 	imageLoader, closeImageLoader, err := imageloader.Initialize(imageloader.Options{
 		Upstream:             upstream,
-		CacheSizeMB:          *cacheSizeMB,
-		CacheDir:             *cacheDir,
 		CacheTTL:             *cacheTTL,
 		CacheCleanupInterval: *cacheCleanupInterval,
 		CacheMaxBytes:        *cacheMaxBytes,
-		PatchSourceProfiles:  profiles,
-		DefaultPatchProfile:  defaultProfile,
+		PatchSource: imageloader.PatchSourceConfig{
+			Format:    legacyrangezip.FormatID,
+			Root:      filepath.Join(*cacheDir, "patch-source"),
+			Kind:      filesource.KindDirectory,
+			Ownership: filesource.OwnershipSharedCache,
+			Stager:    imageloader.PatchSourceStagerScUpstream,
+		},
 	})
 	if err != nil {
 		_ = upstream.Close()
@@ -105,7 +101,6 @@ func wire() *serverApp {
 
 	return &serverApp{
 		router:        r,
-		cacheSizeMB:   *cacheSizeMB,
 		cacheDir:      *cacheDir,
 		cacheTTL:      *cacheTTL,
 		cacheMaxBytes: *cacheMaxBytes,
@@ -117,25 +112,6 @@ func wire() *serverApp {
 			closeImageLoader()
 		},
 	}
-}
-
-func loadPatchSourceProfiles() (map[string]imageloader.PatchSourceProfileConfig, string, error) {
-	raw := strings.TrimSpace(os.Getenv("IMAGE_SOURCE_PROFILES_JSON"))
-	if raw == "" {
-		return nil, "", fmt.Errorf("IMAGE_SOURCE_PROFILES_JSON is required")
-	}
-	profiles := make(map[string]imageloader.PatchSourceProfileConfig)
-	if err := json.Unmarshal([]byte(raw), &profiles); err != nil {
-		return nil, "", fmt.Errorf("parse IMAGE_SOURCE_PROFILES_JSON: %w", err)
-	}
-	defaultProfile := strings.TrimSpace(os.Getenv("SC_COMPAT_IMAGE_SOURCE_PROFILE"))
-	if defaultProfile == "" {
-		return nil, "", fmt.Errorf("SC_COMPAT_IMAGE_SOURCE_PROFILE is required")
-	}
-	if _, ok := profiles[defaultProfile]; !ok {
-		return nil, "", fmt.Errorf("SC_COMPAT_IMAGE_SOURCE_PROFILE %q is not configured", defaultProfile)
-	}
-	return profiles, defaultProfile, nil
 }
 
 func listenGRPC() (net.Listener, string, func(), error) {
@@ -172,19 +148,11 @@ func listenGRPC() (net.Listener, string, func(), error) {
 }
 
 func applyEnvironment(
-	cacheSizeMB *int,
 	cacheDir *string,
 	cacheTTL *time.Duration,
 	cacheCleanupInterval *time.Duration,
 	cacheMaxBytes *int64,
 ) error {
-	if value := os.Getenv("CACHE_SIZE_MB"); value != "" {
-		parsed, err := strconv.Atoi(value)
-		if err != nil {
-			return fmt.Errorf("CACHE_SIZE_MB must be an integer: %w", err)
-		}
-		*cacheSizeMB = parsed
-	}
 	if value := os.Getenv("CACHE_DIR"); value != "" {
 		*cacheDir = value
 	}

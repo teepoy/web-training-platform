@@ -408,10 +408,13 @@ Global___StreamScInspectionImagesRequest: _TypeAlias = StreamScInspectionImagesR
 class ResolvePatchImagesRequest(_message.Message):
     DESCRIPTOR: _descriptor.Descriptor
 
-    SOURCE_PROFILE_FIELD_NUMBER: _builtins.int
+    SOURCE_FORMAT_FIELD_NUMBER: _builtins.int
     ROLES_FIELD_NUMBER: _builtins.int
     ITEMS_FIELD_NUMBER: _builtins.int
-    source_profile: _builtins.str
+    source_format: _builtins.str
+    """Format identifies the code-registered filesystem driver. It is not a
+    deployment profile and never carries a root path or credentials.
+    """
     @_builtins.property
     def roles(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]: ...
     @_builtins.property
@@ -419,13 +422,13 @@ class ResolvePatchImagesRequest(_message.Message):
     def __init__(
         self,
         *,
-        source_profile: _builtins.str = ...,
+        source_format: _builtins.str = ...,
         roles: _abc.Iterable[_builtins.str] | None = ...,
         items: _abc.Iterable[Global___ResolvePatchImageItem] | None = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["items", b"items", "roles", b"roles", "source_profile", b"source_profile"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["items", b"items", "roles", b"roles", "source_format", b"source_format"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
@@ -435,16 +438,43 @@ Global___ResolvePatchImagesRequest: _TypeAlias = ResolvePatchImagesRequest  # no
 class ResolvePatchImageItem(_message.Message):
     DESCRIPTOR: _descriptor.Descriptor
 
+    @_typing.final
+    class RolePathsEntry(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: _builtins.int
+        VALUE_FIELD_NUMBER: _builtins.int
+        key: _builtins.str
+        value: _builtins.str
+        def __init__(
+            self,
+            *,
+            key: _builtins.str = ...,
+            value: _builtins.str = ...,
+        ) -> None: ...
+        _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal["key", b"key", "value", b"value"]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+        def WhichOneof(self, oneof_group: _Never) -> None: ...
+
     REQUEST_ID_FIELD_NUMBER: _builtins.int
     SAMPLE_ID_FIELD_NUMBER: _builtins.int
     INSPECTION_TIME_FIELD_NUMBER: _builtins.int
     WAFER_KEY_FIELD_NUMBER: _builtins.int
     DEFECT_ID_FIELD_NUMBER: _builtins.int
+    ROLE_PATHS_FIELD_NUMBER: _builtins.int
     request_id: _builtins.str
     sample_id: _builtins.str
     inspection_time: _builtins.str
     wafer_key: _builtins.int
     defect_id: _builtins.str
+    @_builtins.property
+    def role_paths(self) -> _containers.ScalarMap[_builtins.str, _builtins.str]:
+        """Direct-file drivers consume explicit role-relative paths. Layout-based
+        compatibility drivers ignore this field and derive their own addresses.
+        """
+
     def __init__(
         self,
         *,
@@ -453,10 +483,11 @@ class ResolvePatchImageItem(_message.Message):
         inspection_time: _builtins.str = ...,
         wafer_key: _builtins.int = ...,
         defect_id: _builtins.str = ...,
+        role_paths: _abc.Mapping[_builtins.str, _builtins.str] | None = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["defect_id", b"defect_id", "inspection_time", b"inspection_time", "request_id", b"request_id", "sample_id", b"sample_id", "wafer_key", b"wafer_key"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["defect_id", b"defect_id", "inspection_time", b"inspection_time", "request_id", b"request_id", "role_paths", b"role_paths", "sample_id", b"sample_id", "wafer_key", b"wafer_key"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
@@ -507,9 +538,9 @@ Global___ResolvePatchImageResult: _TypeAlias = ResolvePatchImageResult  # noqa: 
 
 @_typing.final
 class ResolvePatchImagesBatchResponse(_message.Message):
-    """One ordered response frame used by the offline stdin/stdout batch parser.
-    It is deliberately not an RPC response: Training launches the parser locally
-    and never consumes the online ImageParser service.
+    """One ordered response frame used by stdin/stdout resolver processes. It is
+    deliberately not an RPC response: training, batch prediction, and pure-local
+    instant prediction never consume the display ImageParser service.
     """
 
     DESCRIPTOR: _descriptor.Descriptor

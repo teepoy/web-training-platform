@@ -68,12 +68,13 @@ make benchmark-sc-runtime-data-paths
 
 This benchmark clones the seeded SC inspection into a temporary Dataset, labels
 every imported row, and invokes the same Runtime callables used by the Prefect
-worker. Training uses the real Dataset reader, offline `image-parser-batch`
-process, and Parquet materializer. Prediction uses the real Dataset reader,
-online image-parser stream, and prediction writeback. Only the GPU Trainer and
-Predictor kernels are replaced: the fake Trainer reads every Parquet row and
-the fake Predictor consumes every resolved image pair. The temporary Dataset
-and fake model artifact are removed after the run.
+worker. Training uses the real Dataset reader, job-local `image-parser-batch`
+process, and Parquet materializer. Prediction uses the real Dataset reader, the
+same job-local resolver entrypoint, its bounded preprocessing stream, and
+prediction writeback. Neither path consumes the display image-parser service.
+Only the GPU Trainer and Predictor kernels are replaced: the fake Trainer reads
+every Parquet row and the fake Predictor consumes every resolved image pair.
+The temporary Dataset and fake model artifact are removed after the run.
 
 The JSON result reports setup time separately from training materialization and
 prediction Runtime throughput. The local target enforces the established 3,000

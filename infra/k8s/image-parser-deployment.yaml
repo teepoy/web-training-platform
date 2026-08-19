@@ -28,12 +28,6 @@ spec:
               value: "8090"
             - name: GRPC_PORT
               value: "9092"
-            - name: IMAGE_SOURCE_PROFILES_JSON
-              value: '{"sc_upstream":{"provider":"sc_upstream"}}'
-            - name: SC_COMPAT_IMAGE_SOURCE_PROFILE
-              value: sc_upstream
-            - name: CACHE_SIZE_MB
-              value: "32768"
             - name: CACHE_DIR
               value: /tmp/image-parser-cache
             - name: CACHE_TTL

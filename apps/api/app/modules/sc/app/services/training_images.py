@@ -74,6 +74,7 @@ def normalize_sc_training_row(row: dict[str, Any]) -> dict[str, Any]:
         "rough_bin",
         "class_number",
         "test_id",
+        "role_paths",
     ):
         if normalized.get(key) is None or normalized.get(key) == "":
             if key in metadata:

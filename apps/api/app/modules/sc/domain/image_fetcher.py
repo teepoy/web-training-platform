@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
 from typing import Protocol
 
 
@@ -23,14 +22,6 @@ class ScImageFetcher(Protocol):
         wafer_key: int,
         images: list[dict[str, object]],
     ) -> list[dict[str, object]]: ...
-
-    def resolve_patch_images(
-        self,
-        *,
-        source_profile: str,
-        roles: list[str],
-        items: list[dict[str, object]],
-    ) -> AsyncIterator[dict[str, object]]: ...
 
     async def warm_cache(
         self,

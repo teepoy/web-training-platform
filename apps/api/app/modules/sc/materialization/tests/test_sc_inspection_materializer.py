@@ -22,11 +22,11 @@ class _ImageSource:
     async def resolve_patch_images(
         self,
         *,
-        source_profile: str,
+        source_format: str,
         roles: list[str],
         items: list[dict[str, object]],
     ) -> AsyncIterator[dict[str, Any]]:
-        assert source_profile == "sc_upstream"
+        assert source_format == "sc.legacy-range-zip.v1"
         assert roles == ["patch_template", "patch_defective"]
         assert len(items) == 1
         item = items[0]
@@ -60,7 +60,7 @@ class _ProfileImageSource:
     async def resolve_patch_images(
         self,
         *,
-        source_profile: str,
+        source_format: str,
         roles: list[str],
         items: list[dict[str, object]],
     ) -> AsyncIterator[dict[str, Any]]:
@@ -69,7 +69,29 @@ class _ProfileImageSource:
                 yield {
                     "request_id": item["request_id"],
                     "role": role,
-                    "image_data": f"{source_profile}:{role}".encode(),
+                    "image_data": f"{source_format}:{role}".encode(),
+                }
+
+
+class _PathImageSource:
+    def __init__(self) -> None:
+        self.items: list[dict[str, object]] = []
+
+    async def resolve_patch_images(
+        self,
+        *,
+        source_format: str,
+        roles: list[str],
+        items: list[dict[str, object]],
+    ) -> AsyncIterator[dict[str, Any]]:
+        assert source_format == "filesystem.role-paths.v1"
+        self.items.extend(items)
+        for item in items:
+            for role in roles:
+                yield {
+                    "request_id": item["request_id"],
+                    "role": role,
+                    "image_data": f"{role}-bytes".encode(),
                 }
 
 
@@ -118,7 +140,7 @@ async def test_sc_materializer_cleans_partial_files_when_dataset_load_fails(
                     "rough_bin": [3],
                 }
             ).lazy(),
-            image_source_profiles={"dataset-1": "sc_upstream"},
+            image_source_formats={"dataset-1": "sc.legacy-range-zip.v1"},
             direct_dataset_id="dataset-1",
             dataset_id="dataset-1",
             job_id="job-1",
@@ -151,7 +173,7 @@ async def test_sc_materializer_returns_parquet_without_runtime_dataset(
                 "rough_bin": [3],
             }
         ).lazy(),
-        image_source_profiles={"dataset-1": "sc_upstream"},
+        image_source_formats={"dataset-1": "sc.legacy-range-zip.v1"},
         direct_dataset_id="dataset-1",
         dataset_id="dataset-1",
         job_id="job-1",
@@ -198,7 +220,7 @@ async def test_sc_inspection_materializer_returns_data_plane_manifest(
 
     result = await materializer.materialize(
         rows_lazyframe=lf,
-        image_source_profiles={"dataset-1": "sc_upstream"},
+        image_source_formats={"dataset-1": "sc.legacy-range-zip.v1"},
         direct_dataset_id="dataset-1",
         dataset_id="dataset-1",
         job_id="job-1",
@@ -247,7 +269,7 @@ async def test_sc_materializer_empty_output_uses_registered_schema(tmp_path) -> 
                 "wafer_key": pl.Int64,
             }
         ).lazy(),
-        image_source_profiles={"dataset-1": "sc_upstream"},
+        image_source_formats={"dataset-1": "sc.legacy-range-zip.v1"},
         direct_dataset_id="dataset-1",
         dataset_id="dataset-1",
         job_id="job-1",
@@ -275,7 +297,7 @@ async def test_sc_materializer_rejects_columns_outside_view_contract(tmp_path) -
     with pytest.raises(ValueError, match="patch_difference_bytes"):
         await materializer.materialize(
             rows_lazyframe=pl.DataFrame().lazy(),
-            image_source_profiles={"dataset-1": "sc_upstream"},
+            image_source_formats={"dataset-1": "sc.legacy-range-zip.v1"},
             direct_dataset_id="dataset-1",
             image_types=["patch_difference"],
             max_output_bytes=100_000_000,
@@ -324,7 +346,7 @@ async def test_sc_materializer_uses_inline_seed_images_before_upstream(
 
     result = await materializer.materialize(
         rows_lazyframe=lf,
-        image_source_profiles={"dataset-1": "sc_upstream"},
+        image_source_formats={"dataset-1": "sc.legacy-range-zip.v1"},
         direct_dataset_id="dataset-1",
         dataset_id="dataset-1",
         job_id="prediction-job-1",
@@ -368,7 +390,7 @@ async def test_sc_materializer_keeps_mixed_profile_collection_rows_distinct(
 
     result = await materializer.materialize(
         rows_lazyframe=rows,
-        image_source_profiles={"dataset-a": "upstream", "dataset-b": "folder"},
+        image_source_formats={"dataset-a": "format-a", "dataset-b": "format-b"},
         direct_dataset_id=None,
         dataset_id="collection-1",
         job_id="training-job-1",
@@ -378,12 +400,12 @@ async def test_sc_materializer_keeps_mixed_profile_collection_rows_distinct(
     try:
         table = pq.read_table(result.parquet_path)
         assert table["patch_template_bytes"].to_pylist() == [
-            b"upstream:patch_template",
-            b"folder:patch_template",
+            b"format-a:patch_template",
+            b"format-b:patch_template",
         ]
         assert table["patch_defective_bytes"].to_pylist() == [
-            b"upstream:patch_defective",
-            b"folder:patch_defective",
+            b"format-a:patch_defective",
+            b"format-b:patch_defective",
         ]
     finally:
         result.cleanup()
@@ -416,7 +438,7 @@ async def test_sc_training_materializer_uses_one_local_parser_session_per_run(
 
     result = await materializer.materialize(
         rows_lazyframe=rows,
-        image_source_profiles={"dataset-a": "upstream", "dataset-b": "folder"},
+        image_source_formats={"dataset-a": "format-a", "dataset-b": "format-b"},
         direct_dataset_id=None,
         dataset_id="collection-1",
         job_id="training-job-1",
@@ -431,5 +453,62 @@ async def test_sc_training_materializer_uses_one_local_parser_session_per_run(
         ]
         assert local_source.opened == 1
         assert local_source.closed == 1
+    finally:
+        result.cleanup()
+
+
+@pytest.mark.asyncio
+async def test_sc_training_materializer_passes_explicit_paths_without_legacy_identity(
+    tmp_path,
+) -> None:
+    path_source = _PathImageSource()
+    materializer = ScInspectionMaterializer(
+        image_source_factory=_LocalTrainingImageSource(path_source),
+        schema_registry=DataPlaneSchemaRegistry.default(),
+        batch_rows=2,
+        max_error_records=100,
+        temp_dir=str(tmp_path),
+    )
+    rows = pl.DataFrame(
+        {
+            "sample_id": ["sample-1"],
+            "role_paths": [
+                {
+                    "patch_template": "wafer-1/template.tiff",
+                    "patch_defective": "wafer-1/defective.tiff",
+                }
+            ],
+            "wafer_x": [10],
+            "wafer_y": [11],
+            "rough_bin": [3],
+        }
+    ).lazy()
+
+    result = await materializer.materialize(
+        rows_lazyframe=rows,
+        image_source_formats={"dataset-1": "filesystem.role-paths.v1"},
+        direct_dataset_id="dataset-1",
+        dataset_id="dataset-1",
+        job_id="training-job-1",
+        image_types=["patch_template", "patch_defective"],
+        max_output_bytes=100_000_000,
+    )
+    try:
+        table = pq.read_table(result.parquet_path)
+        assert table["patch_template_bytes"].to_pylist() == [b"patch_template-bytes"]
+        assert table["patch_defective_bytes"].to_pylist() == [b"patch_defective-bytes"]
+        assert path_source.items == [
+            {
+                "request_id": "0",
+                "sample_id": "sample-1",
+                "inspection_time": "",
+                "wafer_key": 0,
+                "defect_id": "",
+                "role_paths": {
+                    "patch_template": "wafer-1/template.tiff",
+                    "patch_defective": "wafer-1/defective.tiff",
+                },
+            }
+        ]
     finally:
         result.cleanup()

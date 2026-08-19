@@ -3,26 +3,34 @@ from __future__ import annotations
 from app.shared.api.schemas import Dataset
 
 
-SC_PATCH_ARCHIVE_SOURCE_CONTRACT = "sc.patch_archive.v1"
+FILESYSTEM_IMAGE_SOURCE_CONTRACT = "filesystem.image-source.v1"
+SC_LEGACY_RANGE_ZIP_FORMAT = "sc.legacy-range-zip.v1"
 
 
-def require_sc_patch_archive_profile(dataset: Dataset) -> str:
+def require_sc_image_source_format(dataset: Dataset) -> str:
     binding = dataset.image_source
     if binding is None:
         raise ValueError(
             f"Dataset '{dataset.id}' has no image source binding; bind contract "
-            f"'{SC_PATCH_ARCHIVE_SOURCE_CONTRACT}' and a deployment profile before "
+            f"'{FILESYSTEM_IMAGE_SOURCE_CONTRACT}' and an explicit source format before "
             "running SC training or prediction"
         )
-    if binding.contract != SC_PATCH_ARCHIVE_SOURCE_CONTRACT:
+    source_format = (binding.format or "").strip()
+    if not source_format:
+        raise ValueError(
+            f"Dataset '{dataset.id}' image source format is missing; historical "
+            "profile bindings are not inferred or backfilled"
+        )
+    if binding.contract != FILESYSTEM_IMAGE_SOURCE_CONTRACT:
         raise ValueError(
             f"Dataset '{dataset.id}' image source contract {binding.contract!r} is "
-            f"not compatible with {SC_PATCH_ARCHIVE_SOURCE_CONTRACT!r}"
+            f"not compatible with {FILESYSTEM_IMAGE_SOURCE_CONTRACT!r}"
         )
-    profile = binding.profile.strip()
-    if not profile:
-        raise ValueError(f"Dataset '{dataset.id}' image source profile is empty")
-    return profile
+    return source_format
 
 
-__all__ = ["SC_PATCH_ARCHIVE_SOURCE_CONTRACT", "require_sc_patch_archive_profile"]
+__all__ = [
+    "FILESYSTEM_IMAGE_SOURCE_CONTRACT",
+    "SC_LEGACY_RANGE_ZIP_FORMAT",
+    "require_sc_image_source_format",
+]

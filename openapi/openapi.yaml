@@ -8335,23 +8335,27 @@ components:
           type: string
           minLength: 1
           title: Contract
-        profile:
-          type: string
-          minLength: 1
-          title: Profile
+        format:
+          anyOf:
+            - type: string
+              minLength: 1
+            - type: "null"
+          title: Format
       type: object
       required:
         - contract
-        - profile
       title: ImageSourceBinding
-      description: "Deployment-owned image resolver contract selected by a Dataset.
+      description: "Filesystem image contract and code-registered format selected
+        by a Dataset.
 
 
-        The profile is an opaque registry key.  Filesystem roots, network
+        Filesystem roots, network credentials, staging policy, ownership, and cache
 
-        credentials, and other provider configuration never belong in Dataset
+        policy belong to the runtime entrypoint, never Dataset metadata. ``format``
 
-        metadata."
+        remains nullable so historical bindings are readable without backfilling;
+
+        operations that need images reject a missing format explicitly."
     ImportProfileVersionResponse:
       properties:
         id:

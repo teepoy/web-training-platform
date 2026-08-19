@@ -22,12 +22,12 @@ func (orderedBatchLoader) WarmInspection(context.Context, imageloader.Inspection
 	return 0, nil
 }
 
-func (orderedBatchLoader) ResolvePatchImageBytes(_ context.Context, profile string, keys []imageloader.ImageKey) ([]imageloader.ImageBytes, error) {
+func (orderedBatchLoader) ResolvePatchImageBytes(_ context.Context, format string, keys []imageloader.ImageKey) ([]imageloader.ImageBytes, error) {
 	results := make([]imageloader.ImageBytes, len(keys))
 	for index, key := range keys {
 		results[index] = imageloader.ImageBytes{
 			Key:         key,
-			Data:        []byte(profile + ":" + key.DefectID + ":" + key.ImageType),
+			Data:        []byte(format + ":" + key.DefectID + ":" + key.ImageType),
 			ContentType: "image/png",
 		}
 	}
@@ -36,8 +36,8 @@ func (orderedBatchLoader) ResolvePatchImageBytes(_ context.Context, profile stri
 
 func TestRunPreservesRequestAndRoleOrderAcrossOneBatchFrame(t *testing.T) {
 	request := &imageparserv1.ResolvePatchImagesRequest{
-		SourceProfile: "local-profile",
-		Roles:         []string{"patch_template", "patch_defective"},
+		SourceFormat: "local-format",
+		Roles:        []string{"patch_template", "patch_defective"},
 		Items: []*imageparserv1.ResolvePatchImageItem{
 			{RequestId: "first", SampleId: "sample-1", InspectionTime: "20260816_100000", WaferKey: 42, DefectId: "1"},
 			{RequestId: "second", SampleId: "sample-2", InspectionTime: "20260816_100000", WaferKey: 42, DefectId: "2"},
@@ -77,10 +77,10 @@ func TestRunPreservesRequestAndRoleOrderAcrossOneBatchFrame(t *testing.T) {
 		got = append(got, result.RequestId+":"+result.Role+":"+string(result.ImageData))
 	}
 	want := []string{
-		"first:patch_template:local-profile:1:patch_template",
-		"first:patch_defective:local-profile:1:patch_defective",
-		"second:patch_template:local-profile:2:patch_template",
-		"second:patch_defective:local-profile:2:patch_defective",
+		"first:patch_template:local-format:1:patch_template",
+		"first:patch_defective:local-format:1:patch_defective",
+		"second:patch_template:local-format:2:patch_template",
+		"second:patch_defective:local-format:2:patch_defective",
 	}
 	if len(got) != len(want) {
 		t.Fatalf("result count = %d, want %d: %#v", len(got), len(want), got)
@@ -104,9 +104,9 @@ func BenchmarkRunBatchFrame512(b *testing.B) {
 		}
 	}
 	request := &imageparserv1.ResolvePatchImagesRequest{
-		SourceProfile: "local-profile",
-		Roles:         []string{"patch_template", "patch_defective"},
-		Items:         items,
+		SourceFormat: "local-format",
+		Roles:        []string{"patch_template", "patch_defective"},
+		Items:        items,
 	}
 	payload, err := proto.Marshal(request)
 	if err != nil {

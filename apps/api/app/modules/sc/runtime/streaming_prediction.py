@@ -5,22 +5,26 @@ from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 
 import polars as pl
 
-from app.modules.sc.domain.image_fetcher import ScImageFetcher
+from app.modules.sc.domain.job_image_source import (
+    ScPatchImageBatchResolver,
+    normalize_role_paths,
+)
 
 
-_REQUIRED_COLUMNS = {
-    "sample_id",
+_REQUIRED_COLUMNS = {"sample_id"}
+_LOCATOR_COLUMNS = (
     "inspection_time",
     "wafer_key",
     "defect_id",
-}
+    "role_paths",
+)
 
 
 async def stream_sc_prediction_image_pairs(
     rows: pl.LazyFrame,
     *,
-    image_fetcher: ScImageFetcher,
-    image_source_profiles: Mapping[str, str],
+    image_resolver: ScPatchImageBatchResolver,
+    image_source_formats: Mapping[str, str],
     direct_dataset_id: str | None,
     input_batch_rows: int,
     roles: Sequence[str] = ("patch_defective", "patch_template"),
@@ -40,7 +44,8 @@ async def stream_sc_prediction_image_pairs(
     if direct_dataset_id is None and "source_dataset_id" not in schema_names:
         raise ValueError("Collection prediction source must expose source_dataset_id")
 
-    columns = ["sample_id", "inspection_time", "wafer_key", "defect_id"]
+    columns = ["sample_id"]
+    columns.extend(column for column in _LOCATOR_COLUMNS if column in schema_names)
     if "source_dataset_id" in schema_names:
         columns.append("source_dataset_id")
     batches = rows.select(columns).collect_batches(
@@ -57,8 +62,8 @@ async def stream_sc_prediction_image_pairs(
             resolved = await _resolve_batch(
                 batch,
                 batch_number=batch_number,
-                image_fetcher=image_fetcher,
-                image_source_profiles=image_source_profiles,
+                image_resolver=image_resolver,
+                image_source_formats=image_source_formats,
                 direct_dataset_id=direct_dataset_id,
                 roles=roles,
             )
@@ -75,13 +80,13 @@ async def _resolve_batch(
     batch: pl.DataFrame,
     *,
     batch_number: int,
-    image_fetcher: ScImageFetcher,
-    image_source_profiles: Mapping[str, str],
+    image_resolver: ScPatchImageBatchResolver,
+    image_source_formats: Mapping[str, str],
     direct_dataset_id: str | None,
     roles: Sequence[str],
 ) -> list[dict[str, object]]:
     rows = list(batch.iter_rows(named=True))
-    requests_by_profile: dict[str, list[dict[str, object]]] = {}
+    requests_by_format: dict[str, list[dict[str, object]]] = {}
     ordered: list[tuple[str, str]] = []
     for row_index, row in enumerate(rows):
         sample_id = str(row.get("sample_id") or "")
@@ -93,10 +98,10 @@ async def _resolve_batch(
                 f"SC prediction sample '{sample_id}' has no source Dataset identity"
             )
         try:
-            profile = image_source_profiles[dataset_id]
+            source_format = image_source_formats[dataset_id]
         except KeyError as exc:
             raise ValueError(
-                f"SC prediction source Dataset '{dataset_id}' has no image source profile"
+                f"SC prediction source Dataset '{dataset_id}' has no image source format"
             ) from exc
         request_id = f"{batch_number}:{row_index}"
         request = {
@@ -105,19 +110,20 @@ async def _resolve_batch(
             "inspection_time": str(row.get("inspection_time") or ""),
             "wafer_key": int(row.get("wafer_key") or 0),
             "defect_id": str(row.get("defect_id") or ""),
+            "role_paths": normalize_role_paths(row.get("role_paths")),
         }
-        requests_by_profile.setdefault(profile, []).append(request)
-        ordered.append((profile, request_id))
+        requests_by_format.setdefault(source_format, []).append(request)
+        ordered.append((source_format, request_id))
 
-    async def resolve_profile(
-        profile: str,
+    async def resolve_format(
+        source_format: str,
         requests: list[dict[str, object]],
     ) -> tuple[str, dict[str, dict[str, dict[str, object]]]]:
         by_request: dict[str, dict[str, dict[str, object]]] = {
             str(request["request_id"]): {} for request in requests
         }
-        async for result in image_fetcher.resolve_patch_images(
-            source_profile=profile,
+        async for result in image_resolver.resolve_patch_images(
+            source_format=source_format,
             roles=list(roles),
             items=requests,
         ):
@@ -125,23 +131,23 @@ async def _resolve_batch(
             role = str(result.get("role") or "")
             if request_id not in by_request:
                 raise RuntimeError(
-                    f"Image parser returned unknown request_id {request_id!r}"
+                    f"Job image resolver returned unknown request_id {request_id!r}"
                 )
             if role not in roles:
-                raise RuntimeError(f"Image parser returned unknown role {role!r}")
+                raise RuntimeError(f"Job image resolver returned unknown role {role!r}")
             if role in by_request[request_id]:
                 raise RuntimeError(
-                    f"Image parser returned duplicate role {role!r} for "
+                    f"Job image resolver returned duplicate role {role!r} for "
                     f"request_id {request_id!r}"
                 )
             by_request[request_id][role] = result
-        return profile, by_request
+        return source_format, by_request
 
-    profile_results = dict(
+    format_results = dict(
         await asyncio.gather(
             *(
-                resolve_profile(profile, requests)
-                for profile, requests in requests_by_profile.items()
+                resolve_format(source_format, requests)
+                for source_format, requests in requests_by_format.items()
             )
         )
     )
@@ -150,14 +156,14 @@ async def _resolve_batch(
     row_by_request = {
         f"{batch_number}:{row_index}": row for row_index, row in enumerate(rows)
     }
-    for profile, request_id in ordered:
-        role_results = profile_results[profile][request_id]
+    for source_format, request_id in ordered:
+        role_results = format_results[source_format][request_id]
         missing_roles = [role for role in roles if role not in role_results]
         row = row_by_request[request_id]
         sample_id = str(row["sample_id"])
         if missing_roles:
             raise RuntimeError(
-                f"Image parser ended before resolving sample '{sample_id}' roles: "
+                f"Job image resolver ended before resolving sample '{sample_id}' roles: "
                 + ", ".join(missing_roles)
             )
         errors = [
@@ -173,7 +179,7 @@ async def _resolve_batch(
                 raw_image = role_results[role].get("image_data")
                 if not isinstance(raw_image, (bytes, bytearray, memoryview)):
                     raise RuntimeError(
-                        f"Image parser returned invalid bytes for sample "
+                        f"Job image resolver returned invalid bytes for sample "
                         f"'{sample_id}' role {role!r}"
                     )
                 item[f"{role}_bytes"] = bytes(raw_image)

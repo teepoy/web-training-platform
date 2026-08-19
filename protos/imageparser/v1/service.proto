@@ -12,7 +12,6 @@ service ImageParser {
   rpc GetScImage(GetScImageRequest) returns (GetScImageResponse);
   rpc BatchGetScImage(BatchGetScImageRequest) returns (BatchGetScImageResponse);
   rpc StreamScInspectionImages(StreamScInspectionImagesRequest) returns (stream ScImageResult);
-  rpc ResolvePatchImages(ResolvePatchImagesRequest) returns (stream ResolvePatchImageResult);
   rpc WarmScCache(WarmScCacheRequest) returns (WarmScCacheResponse);
 }
 
@@ -108,7 +107,9 @@ message StreamScInspectionImagesRequest {
 }
 
 message ResolvePatchImagesRequest {
-  string source_profile = 1;
+  // Format identifies the code-registered filesystem driver. It is not a
+  // deployment profile and never carries a root path or credentials.
+  string source_format = 1;
   repeated string roles = 2;
   repeated ResolvePatchImageItem items = 3;
 }
@@ -119,6 +120,9 @@ message ResolvePatchImageItem {
   string inspection_time = 3;
   int32 wafer_key = 4;
   string defect_id = 5;
+  // Direct-file drivers consume explicit role-relative paths. Layout-based
+  // compatibility drivers ignore this field and derive their own addresses.
+  map<string, string> role_paths = 6;
 }
 
 message ResolvePatchImageResult {
@@ -133,9 +137,9 @@ message ResolvePatchImageResult {
   string error = 9;
 }
 
-// One ordered response frame used by the offline stdin/stdout batch parser.
-// It is deliberately not an RPC response: Training launches the parser locally
-// and never consumes the online ImageParser service.
+// One ordered response frame used by stdin/stdout resolver processes. It is
+// deliberately not an RPC response: training, batch prediction, and pure-local
+// instant prediction never consume the display ImageParser service.
 message ResolvePatchImagesBatchResponse {
   repeated ResolvePatchImageResult results = 1;
 }

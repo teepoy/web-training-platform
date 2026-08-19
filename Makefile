@@ -16,7 +16,8 @@ WEB_PORT    ?= 5173
 COMPOSE_DEV  := infra/compose/docker-compose.yaml -f infra/compose/docker-compose.dev.yaml
 DATA_DIR     := infra/compose/data
 IMAGE_PARSER_GRPC_ADDR_HOST ?= 127.0.0.1:9092
-IMAGE_PARSER_BATCH_BINARY_HOST ?= /tmp/web-training-platform-image-parser-batch
+JOB_IMAGE_RESOLVER_BINARY_HOST ?= /tmp/web-training-platform-image-parser-batch
+LOCAL_IMAGE_RESOLVER_BINARY_HOST ?= /tmp/web-training-platform-image-parser-local
 MINIO_ENDPOINT_HOST ?= localhost:9000
 SC_WAFER_MOCK_DEFECTS ?= 2500
 SC_WAFER_MOCK_INSPECTION_TIME ?= 2026-08-01T04:00:00
@@ -176,17 +177,27 @@ dev-web: ## Start frontend dev server (default: 5173)
 	cd $(WEB_DIR) && pnpm dev
 
 # GPU worker (host) — only ONE of this OR compose --profile gpu should run at a time
-.PHONY: image-parser-batch-host
-image-parser-batch-host: ## Build the offline training image parser for the host GPU worker
-	cd services/image-parser && go build -o $(IMAGE_PARSER_BATCH_BINARY_HOST) ./cmd/batch-resolve
+.PHONY: job-image-resolver-host
+job-image-resolver-host: ## Build the offline train/predict image resolver for the host GPU worker
+	cd services/image-parser && go build -o $(JOB_IMAGE_RESOLVER_BINARY_HOST) ./cmd/batch-resolve
+
+.PHONY: local-image-resolver-host
+local-image-resolver-host: ## Build the pure-local resolver (configure IMAGE_SOURCE_ROOT/FORMAT on the worker)
+	cd services/image-parser && go build -o $(LOCAL_IMAGE_RESOLVER_BINARY_HOST) ./cmd/local-resolve
 
 .PHONY: prefect-worker-gpu-host
-prefect-worker-gpu-host: image-parser-batch-host ## Start a host-side GPU Prefect worker (DO NOT run concurrently with compose --profile gpu)
+prefect-worker-gpu-host: job-image-resolver-host ## Start a host-side GPU Prefect worker (DO NOT run concurrently with compose --profile gpu)
 	cd apps/api && $(UV_RUN_INSTALLED) python -m prefect init --profile local --no-prompt && \
 	$(DEV_API_HOST_ENV) \
-	SC_TRAINING_IMAGE_PARSER_BINARY=$(IMAGE_PARSER_BATCH_BINARY_HOST) \
-	IMAGE_SOURCE_PROFILES_JSON='{"sc_upstream":{"provider":"sc_upstream"}}' \
-	SC_COMPAT_IMAGE_SOURCE_PROFILE=sc_upstream \
+	SC_JOB_IMAGE_RESOLVER_BINARY=$(JOB_IMAGE_RESOLVER_BINARY_HOST) \
+	PLATFORM_API_URL=http://localhost:8000 \
+	LITELLM_LOCAL_MODEL_COST_MAP="True" $(UV_RUN_INSTALLED) python -m prefect worker start --pool default-gpu
+
+.PHONY: prefect-worker-gpu-local-host
+prefect-worker-gpu-local-host: local-image-resolver-host ## Start host GPU worker with the pure-local resolver (requires IMAGE_SOURCE_ROOT/FORMAT)
+	cd apps/api && $(UV_RUN_INSTALLED) python -m prefect init --profile local --no-prompt && \
+	$(DEV_API_HOST_ENV) \
+	SC_JOB_IMAGE_RESOLVER_BINARY=$(LOCAL_IMAGE_RESOLVER_BINARY_HOST) \
 	PLATFORM_API_URL=http://localhost:8000 \
 	LITELLM_LOCAL_MODEL_COST_MAP="True" $(UV_RUN_INSTALLED) python -m prefect worker start --pool default-gpu
 
@@ -228,11 +239,9 @@ benchmark-sc-prediction: ## Require >3000 samples/s for bounded SC prediction pr
 	$(UV_RUN_INSTALLED) --package ml-library python libs/ml/benchmarks/sc_prediction_stream_throughput.py --minimum-samples-per-second 3000
 
 .PHONY: benchmark-sc-runtime-data-paths
-benchmark-sc-runtime-data-paths: image-parser-batch-host ## Benchmark real SC train/predict data paths with fake GPU kernels
+benchmark-sc-runtime-data-paths: job-image-resolver-host ## Benchmark real SC train/predict data paths with fake GPU kernels
 	cd $(API_DIR) && $(DEV_API_HOST_ENV) \
-		SC_TRAINING_IMAGE_PARSER_BINARY=$(IMAGE_PARSER_BATCH_BINARY_HOST) \
-		IMAGE_SOURCE_PROFILES_JSON='{"sc_upstream":{"provider":"sc_upstream"}}' \
-		SC_COMPAT_IMAGE_SOURCE_PROFILE=sc_upstream \
+		SC_JOB_IMAGE_RESOLVER_BINARY=$(JOB_IMAGE_RESOLVER_BINARY_HOST) \
 		SC_PATCH_S3_ENDPOINT=$(MINIO_ENDPOINT_HOST) \
 		SC_PATCH_S3_ACCESS_KEY=minioadmin \
 		SC_PATCH_S3_SECRET_KEY=minioadmin \

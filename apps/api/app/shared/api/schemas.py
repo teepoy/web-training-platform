@@ -68,15 +68,16 @@ class TaskSpec(BaseModel):
 
 
 class ImageSourceBinding(BaseModel):
-    """Deployment-owned image resolver contract selected by a Dataset.
+    """Filesystem image contract and code-registered format selected by a Dataset.
 
-    The profile is an opaque registry key.  Filesystem roots, network
-    credentials, and other provider configuration never belong in Dataset
-    metadata.
+    Filesystem roots, network credentials, staging policy, ownership, and cache
+    policy belong to the runtime entrypoint, never Dataset metadata. ``format``
+    remains nullable so historical bindings are readable without backfilling;
+    operations that need images reject a missing format explicitly.
     """
 
     contract: str = Field(min_length=1)
-    profile: str = Field(min_length=1)
+    format: str | None = Field(default=None, min_length=1)
 
 
 class Dataset(BaseModel):

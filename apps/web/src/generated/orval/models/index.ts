@@ -200,6 +200,7 @@ export * from './globalChatRequestSessionId';
 export * from './hTTPValidationError';
 export * from './healthHealthGet200';
 export * from './imageSourceBinding';
+export * from './imageSourceBindingFormat';
 export * from './importParquetApiV1PluginsImportParquetImportPostParams';
 export * from './importProfileVersionResponse';
 export * from './importProfileVersionResponseSettings';

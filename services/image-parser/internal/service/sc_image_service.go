@@ -4,9 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"strconv"
 	"strings"
-	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -22,7 +20,7 @@ type ScImageService struct {
 }
 
 type patchImageBatchResolver interface {
-	ResolvePatchImageBytes(ctx context.Context, profile string, keys []imageloader.ImageKey) ([]imageloader.ImageBytes, error)
+	ResolvePatchImageBytes(ctx context.Context, format string, keys []imageloader.ImageKey) ([]imageloader.ImageBytes, error)
 }
 
 func NewScImageService(images imageloader.ImageLoader) *ScImageService {
@@ -114,7 +112,9 @@ func (s *ScImageService) StreamScInspectionImages(req *imageparserv1.StreamScIns
 		imageTypes = []string{"Reference", "Defective", "Difference"}
 	}
 
-	warmPatchZips(s.images, req.InspectionTime, int(req.WaferKey), defectIDs)
+	if err := warmPatchZips(stream.Context(), s.images, req.InspectionTime, int(req.WaferKey), defectIDs); err != nil {
+		return err
+	}
 
 	keys := make([]imageloader.ImageKey, 0, len(defectIDs)*len(imageTypes))
 	for _, defectID := range defectIDs {
@@ -158,36 +158,23 @@ func (s *ScImageService) StreamScInspectionImages(req *imageparserv1.StreamScIns
 	return nil
 }
 
-func (s *ScImageService) ResolvePatchImages(req *imageparserv1.ResolvePatchImagesRequest, stream imageparserv1.ImageParser_ResolvePatchImagesServer) error {
-	response, err := ResolvePatchImagesBatch(stream.Context(), s.images, req)
-	if err != nil {
-		return err
-	}
-	for _, result := range response.Results {
-		if err := stream.Send(result); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// ResolvePatchImagesBatch resolves one bounded request while preserving the
-// request-item then role order. The gRPC stream and the offline batch process
-// deliberately share this implementation so training and prediction cannot
-// drift in image-role or correlation semantics.
+// ResolvePatchImagesBatch resolves one bounded local-process request while
+// preserving request-item then role order. Job-local and pure-local framed
+// entrypoints share this implementation so training and prediction cannot
+// drift in image-role or correlation semantics. It is not a network RPC.
 func ResolvePatchImagesBatch(ctx context.Context, images imageloader.ImageLoader, req *imageparserv1.ResolvePatchImagesRequest) (*imageparserv1.ResolvePatchImagesBatchResponse, error) {
 	resolver, ok := images.(patchImageBatchResolver)
 	if !ok {
-		return nil, status.Error(codes.Internal, "configured image loader does not support source profiles")
+		return nil, status.Error(codes.Internal, "configured image loader does not support source formats")
 	}
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	profile := strings.TrimSpace(req.SourceProfile)
-	if profile == "" {
-		return nil, status.Error(codes.InvalidArgument, "source_profile is required")
+	format := strings.TrimSpace(req.SourceFormat)
+	if format == "" {
+		return nil, status.Error(codes.InvalidArgument, "source_format is required")
 	}
-	if _, err := resolver.ResolvePatchImageBytes(ctx, profile, nil); err != nil {
+	if _, err := resolver.ResolvePatchImageBytes(ctx, format, nil); err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 	roles, err := validatePatchRoles(req.Roles)
@@ -216,10 +203,11 @@ func ResolvePatchImagesBatch(ctx context.Context, images imageloader.ImageLoader
 		for _, role := range roles {
 			keys = append(keys, imageloader.ImageKey{
 				Kind:          imageloader.ImageKindPatch,
-				SourceProfile: profile,
+				SourceFormat:  format,
 				InspectionKey: imageloader.InspectionKey{InspectionTime: item.InspectionTime, WaferKey: int(item.WaferKey)},
 				DefectID:      item.DefectId,
 				ImageType:     role,
+				RolePaths:     item.RolePaths,
 			})
 			correlations = append(correlations, correlation{item: item, role: role})
 		}
@@ -233,12 +221,12 @@ func ResolvePatchImagesBatch(ctx context.Context, images imageloader.ImageLoader
 		if end > len(keys) {
 			end = len(keys)
 		}
-		resolved, err := resolver.ResolvePatchImageBytes(ctx, profile, keys[start:end])
+		resolved, err := resolver.ResolvePatchImageBytes(ctx, format, keys[start:end])
 		if err != nil {
 			if ctx.Err() != nil {
 				return nil, ctx.Err()
 			}
-			return nil, status.Errorf(codes.Unavailable, "image source profile %q unavailable: %v", profile, err)
+			return nil, status.Errorf(codes.Unavailable, "image source format %q unavailable: %v", format, err)
 		}
 		if len(resolved) != end-start {
 			return nil, status.Error(codes.Internal, "image resolver returned an unexpected result count")
@@ -303,39 +291,19 @@ func validatePatchItem(item *imageparserv1.ResolvePatchImageItem) error {
 	if strings.TrimSpace(item.SampleId) == "" {
 		return fmt.Errorf("item %q sample_id is required", item.RequestId)
 	}
-	if item.WaferKey <= 0 {
-		return fmt.Errorf("item %q wafer_key must be greater than zero", item.RequestId)
-	}
-	defectID, err := strconv.Atoi(item.DefectId)
-	if err != nil || defectID <= 0 {
-		return fmt.Errorf("item %q defect_id must be a positive integer", item.RequestId)
-	}
-	if !validInspectionTime(item.InspectionTime) {
-		return fmt.Errorf("item %q inspection_time must be RFC3339 or YYYYMMDD_HHMMSS", item.RequestId)
-	}
 	return nil
 }
 
-func validInspectionTime(raw string) bool {
-	if _, err := time.Parse(time.RFC3339Nano, raw); err == nil {
-		return true
-	}
-	if _, err := time.Parse("2006-01-02T15:04:05", raw); err == nil {
-		return true
-	}
-	_, err := time.Parse("20060102_150405", raw)
-	return err == nil
-}
-
-func warmPatchZips(images imageloader.ImageLoader, inspectionTime string, waferKey int, defectIDs []int32) {
+func warmPatchZips(ctx context.Context, images imageloader.ImageLoader, inspectionTime string, waferKey int, defectIDs []int32) error {
 	if len(defectIDs) == 0 {
-		return
+		return nil
 	}
 	defectIDStrings := make([]string, 0, len(defectIDs))
 	for _, defectID := range defectIDs {
 		defectIDStrings = append(defectIDStrings, fmt.Sprintf("%d", defectID))
 	}
-	_, _ = images.WarmInspection(context.Background(), imageloader.InspectionKey{InspectionTime: inspectionTime, WaferKey: waferKey}, defectIDStrings, "stream")
+	_, err := images.WarmInspection(ctx, imageloader.InspectionKey{InspectionTime: inspectionTime, WaferKey: waferKey}, defectIDStrings, "stream")
+	return err
 }
 
 func (s *ScImageService) WarmScCache(ctx context.Context, req *imageparserv1.WarmScCacheRequest) (*imageparserv1.WarmScCacheResponse, error) {

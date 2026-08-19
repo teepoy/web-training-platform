@@ -3,11 +3,16 @@ package image_loader
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
 	scv1 "image-parser/gen/go/sc/v1"
-	"image-parser/internal/image_loader/cache"
+	"image-parser/internal/filesource"
+	"image-parser/internal/sourcecache"
+	"image-parser/internal/sourceformat"
+	"image-parser/internal/sourceformat/directfiles"
+	"image-parser/internal/sourceformat/legacyrangezip"
 )
 
 type ImageKind string
@@ -25,10 +30,11 @@ type InspectionKey struct {
 type ImageKey struct {
 	Kind ImageKind
 	InspectionKey
-	SourceProfile string
+	SourceFormat  string
 	DefectID      string
 	ImageType     string
 	ReviewImageID int
+	RolePaths     map[string]string
 }
 
 type ImageBytes struct {
@@ -45,18 +51,25 @@ type ImageLoader interface {
 
 type Options struct {
 	Upstream             UpstreamSource
-	CacheSizeMB          int
-	CacheDir             string
 	CacheTTL             time.Duration
 	CacheCleanupInterval time.Duration
 	CacheMaxBytes        int64
-	PatchSourceProfiles  map[string]PatchSourceProfileConfig
-	DefaultPatchProfile  string
+	PatchSource          PatchSourceConfig
 }
 
-type PatchSourceProfileConfig struct {
-	Provider string `json:"provider"`
-	Root     string `json:"root,omitempty"`
+type PatchSourceStager string
+
+const (
+	PatchSourceStagerNone       PatchSourceStager = "none"
+	PatchSourceStagerScUpstream PatchSourceStager = "sc_upstream"
+)
+
+type PatchSourceConfig struct {
+	Format    string
+	Root      string
+	Kind      filesource.Kind
+	Ownership filesource.Ownership
+	Stager    PatchSourceStager
 }
 
 type UpstreamSource interface {
@@ -73,79 +86,104 @@ type objectLoader interface {
 type s3ImageLoader struct{}
 
 func Initialize(opts Options) (ImageLoader, func(), error) {
-	if opts.CacheSizeMB <= 0 {
-		opts.CacheSizeMB = 1024
-	}
-	_ = getZips()
-	_ = getReview()
-
-	localFileCache, err := cache.NewLocalFileCache(cache.LocalFileCacheConfig{
-		Dir:             opts.CacheDir,
-		TTL:             opts.CacheTTL,
-		CleanupInterval: opts.CacheCleanupInterval,
-		MaxBytes:        opts.CacheMaxBytes,
-	})
-	if err != nil {
-		return nil, nil, err
-	}
-	zipCache, err := cache.New(
-		opts.CacheSizeMB,
-		opts.CacheTTL,
-		cache.WithLocalFileCache(localFileCache),
-	)
-	if err != nil {
-		_ = localFileCache.Close()
-		return nil, nil, err
-	}
-
 	loader := s3ImageLoader{}
-	profiles := make(map[string]PatchArchiveProvider, len(opts.PatchSourceProfiles))
-	for profile, config := range opts.PatchSourceProfiles {
-		switch config.Provider {
-		case PatchProviderScUpstream:
-			profiles[profile] = newUpstreamPatchArchiveProvider(opts.Upstream, loader)
-		case PatchProviderScZipFolder:
-			provider, err := NewFolderPatchArchiveProvider(config.Root)
-			if err != nil {
-				_ = zipCache.Close()
-				return nil, nil, fmt.Errorf("configure image source profile %q: %w", profile, err)
-			}
-			profiles[profile] = provider
-		default:
-			_ = zipCache.Close()
-			return nil, nil, fmt.Errorf("image source profile %q has unknown provider %q", profile, config.Provider)
+	patches, source, err := initializePatchSource(opts, loader)
+	if err != nil {
+		return nil, nil, err
+	}
+	var janitor *sourcecache.Janitor
+	if source.Ownership() == filesource.OwnershipSharedCache {
+		janitor, err = sourcecache.Start(
+			source,
+			opts.CacheTTL,
+			opts.CacheCleanupInterval,
+			opts.CacheMaxBytes,
+		)
+		if err != nil {
+			return nil, nil, err
 		}
 	}
-	registry, err := NewPatchArchiveProviderRegistry(profiles)
+	return newResolver(opts.Upstream, loader, patches), func() {
+		if janitor != nil {
+			janitor.Close()
+		}
+		if source.Ownership() == filesource.OwnershipJobOwned {
+			_ = source.Cleanup()
+		}
+	}, nil
+}
+
+type patchObjectLoader struct{ loader objectLoader }
+
+func (l patchObjectLoader) LoadPatchObject(ctx context.Context, bucket, key string) ([]byte, error) {
+	return l.loader.LoadPatchZip(ctx, bucket, key)
+}
+
+func initializePatchSource(opts Options, loader objectLoader) (*sourceformat.Resolver, *filesource.Source, error) {
+	config := opts.PatchSource
+	if strings.TrimSpace(config.Format) == "" {
+		return nil, nil, fmt.Errorf("patch source format is required")
+	}
+	if strings.TrimSpace(config.Root) == "" {
+		return nil, nil, fmt.Errorf("patch filesystem source root is required")
+	}
+	if config.Kind == "" {
+		config.Kind = filesource.KindDirectory
+	}
+	if config.Ownership == "" {
+		config.Ownership = filesource.OwnershipBorrowed
+	}
+	if config.Ownership != filesource.OwnershipBorrowed && config.Kind == filesource.KindDirectory {
+		if err := os.MkdirAll(config.Root, 0o750); err != nil {
+			return nil, nil, fmt.Errorf("create patch filesystem source root: %w", err)
+		}
+	}
+	source, err := filesource.Open(config.Root, config.Kind, config.Ownership)
 	if err != nil {
-		_ = zipCache.Close()
 		return nil, nil, err
 	}
-	if _, err := registry.Get(opts.DefaultPatchProfile); err != nil {
-		_ = zipCache.Close()
-		return nil, nil, fmt.Errorf("default patch source profile: %w", err)
+	var driver sourceformat.Driver
+	switch config.Format {
+	case directfiles.FormatID:
+		driver = directfiles.Driver{}
+	case legacyrangezip.FormatID:
+		driver = legacyrangezip.Driver{}
+	default:
+		return nil, nil, fmt.Errorf("unsupported patch source format %q", config.Format)
 	}
-	warmer := cache.NewWarmer(zipCache, func(bucket, key string) ([]byte, error) {
-		return loader.LoadPatchZip(context.Background(), bucket, key)
-	})
-
-	return newResolverWithProfiles(opts.Upstream, loader, registry, opts.DefaultPatchProfile, zipCache, warmer), func() {
-		_ = zipCache.Close()
-	}, nil
+	var stager sourceformat.Stager
+	switch config.Stager {
+	case "", PatchSourceStagerNone:
+	case PatchSourceStagerScUpstream:
+		if config.Format != legacyrangezip.FormatID {
+			return nil, nil, fmt.Errorf("SC upstream stager requires source format %q", legacyrangezip.FormatID)
+		}
+		if opts.Upstream == nil {
+			return nil, nil, fmt.Errorf("SC upstream stager requires an upstream client")
+		}
+		stager = legacyrangezip.NewUpstreamStager(opts.Upstream, patchObjectLoader{loader: loader})
+	default:
+		return nil, nil, fmt.Errorf("unsupported patch source stager %q", config.Stager)
+	}
+	resolver, err := sourceformat.NewResolver(source, driver, stager)
+	if err != nil {
+		return nil, nil, err
+	}
+	return resolver, source, nil
 }
 
 func (r s3ImageLoader) LoadPatchZip(ctx context.Context, bucket, key string) ([]byte, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	return downloadFullZip(getZips(), bucket, key)
+	return downloadObject(ctx, getZips(), bucket, key)
 }
 
 func (r s3ImageLoader) LoadReviewObject(ctx context.Context, bucket, key string) ([]byte, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	return downloadFullZip(getReview(), bucket, key)
+	return downloadObject(ctx, getReview(), bucket, key)
 }
 
 func NormalizeImageType(imageType string) string {

@@ -90,7 +90,7 @@ async def _benchmark(args: argparse.Namespace) -> dict[str, float | int]:
         started = time.perf_counter()
         result = await materializer.materialize(
             rows_lazyframe=lazyframe,
-            image_source_profiles={"benchmark": "inline-only"},
+            image_source_formats={"benchmark": "inline-only"},
             direct_dataset_id="benchmark",
             dataset_id="benchmark",
             job_id="benchmark",

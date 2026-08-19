@@ -198,7 +198,10 @@ def test_dev_showcase_seeds_manual_only_membership_rule() -> None:
         "/api/v1/dataset-collections/collection-dev/membership-rules",
     ]
     profile_payload = client.posts[1][1]
-    assert profile_payload["settings"]["image_source_profile"] == "sc_upstream"
+    assert (
+        profile_payload["settings"]["image_source_format"]
+        == "sc.legacy-range-zip.v1"
+    )
     rule_payload = client.posts[-1][1]
     assert rule_payload["condition"] == {
         "kind": "group",

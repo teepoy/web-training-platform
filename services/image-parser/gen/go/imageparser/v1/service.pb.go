@@ -938,8 +938,10 @@ func (x *StreamScInspectionImagesRequest) GetImageTypes() []string {
 }
 
 type ResolvePatchImagesRequest struct {
-	state         protoimpl.MessageState   `protogen:"open.v1"`
-	SourceProfile string                   `protobuf:"bytes,1,opt,name=source_profile,json=sourceProfile,proto3" json:"source_profile,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Format identifies the code-registered filesystem driver. It is not a
+	// deployment profile and never carries a root path or credentials.
+	SourceFormat  string                   `protobuf:"bytes,1,opt,name=source_format,json=sourceFormat,proto3" json:"source_format,omitempty"`
 	Roles         []string                 `protobuf:"bytes,2,rep,name=roles,proto3" json:"roles,omitempty"`
 	Items         []*ResolvePatchImageItem `protobuf:"bytes,3,rep,name=items,proto3" json:"items,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -976,9 +978,9 @@ func (*ResolvePatchImagesRequest) Descriptor() ([]byte, []int) {
 	return file_imageparser_v1_service_proto_rawDescGZIP(), []int{15}
 }
 
-func (x *ResolvePatchImagesRequest) GetSourceProfile() string {
+func (x *ResolvePatchImagesRequest) GetSourceFormat() string {
 	if x != nil {
-		return x.SourceProfile
+		return x.SourceFormat
 	}
 	return ""
 }
@@ -1004,8 +1006,11 @@ type ResolvePatchImageItem struct {
 	InspectionTime string                 `protobuf:"bytes,3,opt,name=inspection_time,json=inspectionTime,proto3" json:"inspection_time,omitempty"`
 	WaferKey       int32                  `protobuf:"varint,4,opt,name=wafer_key,json=waferKey,proto3" json:"wafer_key,omitempty"`
 	DefectId       string                 `protobuf:"bytes,5,opt,name=defect_id,json=defectId,proto3" json:"defect_id,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Direct-file drivers consume explicit role-relative paths. Layout-based
+	// compatibility drivers ignore this field and derive their own addresses.
+	RolePaths     map[string]string `protobuf:"bytes,6,rep,name=role_paths,json=rolePaths,proto3" json:"role_paths,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ResolvePatchImageItem) Reset() {
@@ -1071,6 +1076,13 @@ func (x *ResolvePatchImageItem) GetDefectId() string {
 		return x.DefectId
 	}
 	return ""
+}
+
+func (x *ResolvePatchImageItem) GetRolePaths() map[string]string {
+	if x != nil {
+		return x.RolePaths
+	}
+	return nil
 }
 
 type ResolvePatchImageResult struct {
@@ -1181,9 +1193,9 @@ func (x *ResolvePatchImageResult) GetError() string {
 	return ""
 }
 
-// One ordered response frame used by the offline stdin/stdout batch parser.
-// It is deliberately not an RPC response: Training launches the parser locally
-// and never consumes the online ImageParser service.
+// One ordered response frame used by stdin/stdout resolver processes. It is
+// deliberately not an RPC response: training, batch prediction, and pure-local
+// instant prediction never consume the display ImageParser service.
 type ResolvePatchImagesBatchResponse struct {
 	state         protoimpl.MessageState     `protogen:"open.v1"`
 	Results       []*ResolvePatchImageResult `protobuf:"bytes,1,rep,name=results,proto3" json:"results,omitempty"`
@@ -1417,18 +1429,23 @@ const file_imageparser_v1_service_proto_rawDesc = "" +
 	"\n" +
 	"defect_ids\x18\x03 \x03(\x05R\tdefectIds\x12\x1f\n" +
 	"\vimage_types\x18\x04 \x03(\tR\n" +
-	"imageTypes\"\x95\x01\n" +
-	"\x19ResolvePatchImagesRequest\x12%\n" +
-	"\x0esource_profile\x18\x01 \x01(\tR\rsourceProfile\x12\x14\n" +
+	"imageTypes\"\x93\x01\n" +
+	"\x19ResolvePatchImagesRequest\x12#\n" +
+	"\rsource_format\x18\x01 \x01(\tR\fsourceFormat\x12\x14\n" +
 	"\x05roles\x18\x02 \x03(\tR\x05roles\x12;\n" +
-	"\x05items\x18\x03 \x03(\v2%.imageparser.v1.ResolvePatchImageItemR\x05items\"\xb6\x01\n" +
+	"\x05items\x18\x03 \x03(\v2%.imageparser.v1.ResolvePatchImageItemR\x05items\"\xc9\x02\n" +
 	"\x15ResolvePatchImageItem\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x1b\n" +
 	"\tsample_id\x18\x02 \x01(\tR\bsampleId\x12'\n" +
 	"\x0finspection_time\x18\x03 \x01(\tR\x0einspectionTime\x12\x1b\n" +
 	"\twafer_key\x18\x04 \x01(\x05R\bwaferKey\x12\x1b\n" +
-	"\tdefect_id\x18\x05 \x01(\tR\bdefectId\"\xa4\x02\n" +
+	"\tdefect_id\x18\x05 \x01(\tR\bdefectId\x12S\n" +
+	"\n" +
+	"role_paths\x18\x06 \x03(\v24.imageparser.v1.ResolvePatchImageItem.RolePathsEntryR\trolePaths\x1a<\n" +
+	"\x0eRolePathsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xa4\x02\n" +
 	"\x17ResolvePatchImageResult\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x1b\n" +
@@ -1451,7 +1468,7 @@ const file_imageparser_v1_service_proto_rawDesc = "" +
 	"\x13WarmScCacheResponse\x12\x16\n" +
 	"\x06status\x18\x01 \x01(\tR\x06status\x12\x1f\n" +
 	"\vzips_warmed\x18\x02 \x01(\x05R\n" +
-	"zipsWarmed2\xa8\x06\n" +
+	"zipsWarmed2\xbc\x05\n" +
 	"\vImageParser\x12G\n" +
 	"\x06Health\x12\x1d.imageparser.v1.HealthRequest\x1a\x1e.imageparser.v1.HealthResponse\x12M\n" +
 	"\bGetImage\x12\x1f.imageparser.v1.GetImageRequest\x1a .imageparser.v1.GetImageResponse\x12G\n" +
@@ -1460,8 +1477,7 @@ const file_imageparser_v1_service_proto_rawDesc = "" +
 	"\n" +
 	"GetScImage\x12!.imageparser.v1.GetScImageRequest\x1a\".imageparser.v1.GetScImageResponse\x12b\n" +
 	"\x0fBatchGetScImage\x12&.imageparser.v1.BatchGetScImageRequest\x1a'.imageparser.v1.BatchGetScImageResponse\x12l\n" +
-	"\x18StreamScInspectionImages\x12/.imageparser.v1.StreamScInspectionImagesRequest\x1a\x1d.imageparser.v1.ScImageResult0\x01\x12j\n" +
-	"\x12ResolvePatchImages\x12).imageparser.v1.ResolvePatchImagesRequest\x1a'.imageparser.v1.ResolvePatchImageResult0\x01\x12V\n" +
+	"\x18StreamScInspectionImages\x12/.imageparser.v1.StreamScInspectionImagesRequest\x1a\x1d.imageparser.v1.ScImageResult0\x01\x12V\n" +
 	"\vWarmScCache\x12\".imageparser.v1.WarmScCacheRequest\x1a#.imageparser.v1.WarmScCacheResponseB8Z6ft-platform/protos/gen/go/imageparser/v1;imageparserv1b\x06proto3"
 
 var (
@@ -1476,7 +1492,7 @@ func file_imageparser_v1_service_proto_rawDescGZIP() []byte {
 	return file_imageparser_v1_service_proto_rawDescData
 }
 
-var file_imageparser_v1_service_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
+var file_imageparser_v1_service_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
 var file_imageparser_v1_service_proto_goTypes = []any{
 	(*HealthRequest)(nil),                   // 0: imageparser.v1.HealthRequest
 	(*HealthResponse)(nil),                  // 1: imageparser.v1.HealthResponse
@@ -1499,20 +1515,21 @@ var file_imageparser_v1_service_proto_goTypes = []any{
 	(*ResolvePatchImagesBatchResponse)(nil), // 18: imageparser.v1.ResolvePatchImagesBatchResponse
 	(*WarmScCacheRequest)(nil),              // 19: imageparser.v1.WarmScCacheRequest
 	(*WarmScCacheResponse)(nil),             // 20: imageparser.v1.WarmScCacheResponse
+	nil,                                     // 21: imageparser.v1.ResolvePatchImageItem.RolePathsEntry
 }
 var file_imageparser_v1_service_proto_depIdxs = []int32{
 	10, // 0: imageparser.v1.BatchGetScImageRequest.images:type_name -> imageparser.v1.ScImageRef
 	12, // 1: imageparser.v1.BatchGetScImageResponse.results:type_name -> imageparser.v1.ScImageResult
 	16, // 2: imageparser.v1.ResolvePatchImagesRequest.items:type_name -> imageparser.v1.ResolvePatchImageItem
-	17, // 3: imageparser.v1.ResolvePatchImagesBatchResponse.results:type_name -> imageparser.v1.ResolvePatchImageResult
-	0,  // 4: imageparser.v1.ImageParser.Health:input_type -> imageparser.v1.HealthRequest
-	2,  // 5: imageparser.v1.ImageParser.GetImage:input_type -> imageparser.v1.GetImageRequest
-	4,  // 6: imageparser.v1.ImageParser.Sprite:input_type -> imageparser.v1.SpriteRequest
-	6,  // 7: imageparser.v1.ImageParser.V2Sprite:input_type -> imageparser.v1.V2SpriteRequest
-	8,  // 8: imageparser.v1.ImageParser.GetScImage:input_type -> imageparser.v1.GetScImageRequest
-	11, // 9: imageparser.v1.ImageParser.BatchGetScImage:input_type -> imageparser.v1.BatchGetScImageRequest
-	14, // 10: imageparser.v1.ImageParser.StreamScInspectionImages:input_type -> imageparser.v1.StreamScInspectionImagesRequest
-	15, // 11: imageparser.v1.ImageParser.ResolvePatchImages:input_type -> imageparser.v1.ResolvePatchImagesRequest
+	21, // 3: imageparser.v1.ResolvePatchImageItem.role_paths:type_name -> imageparser.v1.ResolvePatchImageItem.RolePathsEntry
+	17, // 4: imageparser.v1.ResolvePatchImagesBatchResponse.results:type_name -> imageparser.v1.ResolvePatchImageResult
+	0,  // 5: imageparser.v1.ImageParser.Health:input_type -> imageparser.v1.HealthRequest
+	2,  // 6: imageparser.v1.ImageParser.GetImage:input_type -> imageparser.v1.GetImageRequest
+	4,  // 7: imageparser.v1.ImageParser.Sprite:input_type -> imageparser.v1.SpriteRequest
+	6,  // 8: imageparser.v1.ImageParser.V2Sprite:input_type -> imageparser.v1.V2SpriteRequest
+	8,  // 9: imageparser.v1.ImageParser.GetScImage:input_type -> imageparser.v1.GetScImageRequest
+	11, // 10: imageparser.v1.ImageParser.BatchGetScImage:input_type -> imageparser.v1.BatchGetScImageRequest
+	14, // 11: imageparser.v1.ImageParser.StreamScInspectionImages:input_type -> imageparser.v1.StreamScInspectionImagesRequest
 	19, // 12: imageparser.v1.ImageParser.WarmScCache:input_type -> imageparser.v1.WarmScCacheRequest
 	1,  // 13: imageparser.v1.ImageParser.Health:output_type -> imageparser.v1.HealthResponse
 	3,  // 14: imageparser.v1.ImageParser.GetImage:output_type -> imageparser.v1.GetImageResponse
@@ -1521,13 +1538,12 @@ var file_imageparser_v1_service_proto_depIdxs = []int32{
 	9,  // 17: imageparser.v1.ImageParser.GetScImage:output_type -> imageparser.v1.GetScImageResponse
 	13, // 18: imageparser.v1.ImageParser.BatchGetScImage:output_type -> imageparser.v1.BatchGetScImageResponse
 	12, // 19: imageparser.v1.ImageParser.StreamScInspectionImages:output_type -> imageparser.v1.ScImageResult
-	17, // 20: imageparser.v1.ImageParser.ResolvePatchImages:output_type -> imageparser.v1.ResolvePatchImageResult
-	20, // 21: imageparser.v1.ImageParser.WarmScCache:output_type -> imageparser.v1.WarmScCacheResponse
-	13, // [13:22] is the sub-list for method output_type
-	4,  // [4:13] is the sub-list for method input_type
-	4,  // [4:4] is the sub-list for extension type_name
-	4,  // [4:4] is the sub-list for extension extendee
-	0,  // [0:4] is the sub-list for field type_name
+	20, // 20: imageparser.v1.ImageParser.WarmScCache:output_type -> imageparser.v1.WarmScCacheResponse
+	13, // [13:21] is the sub-list for method output_type
+	5,  // [5:13] is the sub-list for method input_type
+	5,  // [5:5] is the sub-list for extension type_name
+	5,  // [5:5] is the sub-list for extension extendee
+	0,  // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_imageparser_v1_service_proto_init() }
@@ -1541,7 +1557,7 @@ func file_imageparser_v1_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_imageparser_v1_service_proto_rawDesc), len(file_imageparser_v1_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   21,
+			NumMessages:   22,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

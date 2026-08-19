@@ -629,7 +629,7 @@ def _ensure_source_membership_rule(
             "name": "Dev SC inspection import",
             "settings": {
                 "label_space": list(SC_LABELS),
-                "image_source_profile": "sc_upstream",
+                "image_source_format": "sc.legacy-range-zip.v1",
             },
             "max_records_per_run": 10,
             "max_rows_per_dataset": 2500,

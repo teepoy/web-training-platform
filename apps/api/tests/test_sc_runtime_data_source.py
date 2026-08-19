@@ -34,8 +34,8 @@ async def test_dataset_runtime_source_reuses_storage_metadata_without_direct_ses
         task_spec=TaskSpec(label_space=["scratch", "particle"]),
         view_types=["sc.patch_image.v1"],
         image_source=ImageSourceBinding(
-            contract="sc.patch_archive.v1",
-            profile="sc_upstream",
+            contract="filesystem.image-source.v1",
+            format="sc.legacy-range-zip.v1",
         ),
     )
     calls: list[tuple[str, object]] = []
@@ -101,7 +101,9 @@ async def test_dataset_runtime_source_reuses_storage_metadata_without_direct_ses
         assert source.dataset_type == "image_sc"
         assert source.view_types == ("sc.patch_image.v1",)
         assert source.label_space == ("scratch", "particle")
-        assert source.image_source_profiles == {"dataset-1": "sc_upstream"}
+        assert source.image_source_formats == {
+            "dataset-1": "sc.legacy-range-zip.v1"
+        }
         assert source.rows.collect().to_dicts() == [
             {
                 "sample_id": "sample-1",
@@ -170,8 +172,8 @@ async def test_observed_collection_runtime_resolves_current_member_data() -> Non
                 task_spec=TaskSpec(label_space=["scratch", "particle"]),
                 view_types=["sc.patch_image.v1"],
                 image_source=ImageSourceBinding(
-                    contract="sc.patch_archive.v1",
-                    profile="member-folder",
+                    contract="filesystem.image-source.v1",
+                    format="filesystem.role-paths.v1",
                 ),
             )
 
@@ -268,4 +270,6 @@ async def test_observed_collection_runtime_resolves_current_member_data() -> Non
             }
         ]
         assert source.resolved_dataset_revision_ids == ("dataset-revision-at-launch",)
-        assert source.image_source_profiles == {"dataset-1": "member-folder"}
+        assert source.image_source_formats == {
+            "dataset-1": "filesystem.role-paths.v1"
+        }

@@ -4,17 +4,18 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
+import type { ImageSourceBindingFormat } from './imageSourceBindingFormat';
 
 /**
- * Deployment-owned image resolver contract selected by a Dataset.
+ * Filesystem image contract and code-registered format selected by a Dataset.
 
-The profile is an opaque registry key.  Filesystem roots, network
-credentials, and other provider configuration never belong in Dataset
-metadata.
+Filesystem roots, network credentials, staging policy, ownership, and cache
+policy belong to the runtime entrypoint, never Dataset metadata. ``format``
+remains nullable so historical bindings are readable without backfilling;
+operations that need images reject a missing format explicitly.
  */
 export interface ImageSourceBinding {
   /** @minLength 1 */
   contract: string;
-  /** @minLength 1 */
-  profile: string;
+  format?: ImageSourceBindingFormat;
 }

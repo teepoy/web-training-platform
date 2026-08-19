@@ -1,94 +1,108 @@
-# Image parser
+# Image resolution service and local resolvers
 
-The image parser keeps its existing in-memory ZIP LRU and can attach a local
-file-cache helper as a second cache tier. Local cache files use a SHA-256 digest
-of the S3 bucket/key as their filename; the original object name is not written
-to disk.
+Image resolution is composed from three independent concerns:
 
-## Patch archive source profiles
+1. `filesource` exposes an already-local regular file or directory. A mounted
+   SMB share is a borrowed directory source. It enforces rooted access and
+   rejects absolute caller paths, traversal, and symlinks that escape the root.
+2. `sourceformat` selects one code-registered format driver. Drivers own layout
+   and container rules; the generic source layer does not assume ZIP, index
+   ranges, or any particular image file type.
+3. An optional entrypoint-owned stager makes source objects local before the
+   driver runs. Staging, retry, cache lifecycle, cleanup, credentials, and
+   concurrency budgets are not shared policy.
 
-The long-running gRPC server resolves prediction images through one provider
-registry. `IMAGE_SOURCE_PROFILES_JSON` is required and maps deployment-owned
-profile names to providers. `SC_COMPAT_IMAGE_SOURCE_PROFILE` is also required;
-it selects the configured profile used only by the older SC image RPCs.
+Dataset metadata stores `filesystem.image-source.v1` plus a format ID. It never
+stores an absolute root, SMB credentials, object-store credentials, staging
+mode, cache policy, or cleanup ownership. `IMAGE_SOURCE_PROFILES_JSON` and
+`SC_COMPAT_IMAGE_SOURCE_PROFILE` no longer exist.
 
-```json
-{
-  "sc_upstream": { "provider": "sc_upstream" },
-  "mounted_archive": {
-    "provider": "sc_patch_zip_folder",
-    "root": "/mnt/sc-patch-archives"
-  }
-}
-```
+## Entrypoints
 
-`sc_upstream` resolves archive references through the SC upstream service.
-`sc_patch_zip_folder` reads a local directory or an SMB share mounted into the
-container. Its v1 layout is
-`<root>/<YYYYMMDD_HHMMSS>/<wafer_key>/<start:06d>-<end:06d>.zip`, with 500
-defects per ZIP. The root and credentials stay in deployment configuration;
-RPC callers provide only a profile name and SC identity. Absolute caller paths,
-directory traversal, and symlinks escaping the configured root are rejected.
-Providers never fall back to another provider after a failure.
+### Display server
 
-`ResolvePatchImages` accepts one source profile, requested patch roles, and a
-bounded list of correlated samples. It streams one result per sample and role.
-Missing/corrupt archives or entries are stable item errors; an unknown profile,
-invalid request, or unavailable source is an RPC error.
+`cmd/server` runs HTTP/gRPC display APIs. Its SC compatibility path is composed
+in code from:
 
-## Offline training batch process
+- a shared-cache directory below `CACHE_DIR`;
+- the SC upstream stager;
+- the optional `sc.legacy-range-zip.v1` format driver.
 
-`cmd/batch-resolve` builds the `image-parser-batch` executable shipped inside
-the GPU Prefect worker. One process is started for one training materialization
-and reused for every ordered 512-row batch. It reads a 4-byte big-endian frame
-length followed by `ResolvePatchImagesRequest` protobuf bytes from stdin, then
-writes one length-prefixed `ResolvePatchImagesBatchResponse` to stdout. The
-process does not listen on HTTP/gRPC and never falls back to the online
-image-parser service.
+The display server does not expose the job batch `ResolvePatchImages` RPC.
+Training and prediction therefore cannot consume display capacity by mistake.
+The shared cache uses `CACHE_TTL`, `CACHE_CLEANUP_INTERVAL`, and
+`CACHE_MAX_BYTES`; reads refresh mtime, and cleanup evicts expired then
+least-recently-used files.
 
-The process reads the same `IMAGE_SOURCE_PROFILES_JSON` and
-`SC_COMPAT_IMAGE_SOURCE_PROFILE` registry as the server. Its cache is scoped to
-the training job and removed on exit; configure it with
-`SC_TRAINING_IMAGE_PARSER_CACHE_ROOT` and
-`SC_TRAINING_IMAGE_PARSER_CACHE_SIZE_MB`. A folder profile must be mounted
-read-only at the same absolute path in both the image-parser and GPU worker
-containers.
+### Train/batch-predict job resolver
 
-`GRPC_LISTEN` accepts `tcp://<address>` or `unix:///absolute/socket/path`. If it
-is absent, the compatibility `GRPC_PORT` setting is used. A Unix listener only
-removes a stale socket; it refuses to replace a regular file.
+`cmd/batch-resolve` builds `/usr/local/bin/image-parser-batch` in the GPU worker.
+One child is opened for one training materialization or batch prediction job and
+reused for all ordered bounded requests. It stages upstream objects into a
+job-owned directory, resolves them locally, then removes that directory on
+exit. It never opens HTTP/gRPC listeners or falls back to the display server.
 
-## Data source connections
+The framing protocol is a four-byte big-endian size followed by a
+`ResolvePatchImagesRequest`; the response is a length-prefixed
+`ResolvePatchImagesBatchResponse`. Frames are capped at 256 MiB. Configure the
+parent directory with `SC_JOB_IMAGE_RESOLVER_CACHE_ROOT`; the per-job directory
+is deleted when the resolver process exits.
 
-`SC_UPSTREAM_ADDR` selects the SC metadata service. Patch and review object
-stores use `SC_PATCH_S3_*` and `SC_REVIEW_S3_*` respectively (`ENDPOINT`,
-`REGION`, `ACCESS_KEY`, and `SECRET_KEY`). Missing source-specific values fall
-back to the corresponding `MINIO_*` setting. The repository mock addresses and
-credentials are used only when neither deployment setting is present. This
-same environment contract is inherited by the offline training batch process,
-which lets a host worker use `127.0.0.1` endpoints while Compose uses service
-DNS names.
+### Pure-local resolver
 
-## Local file cache
+`cmd/local-resolve` uses the same framed protocol without initializing an
+upstream or S3 client and without a stager. It requires:
 
-| Environment variable     | Meaning                                                            |
-| ------------------------ | ------------------------------------------------------------------ |
-| `CACHE_SIZE_MB`          | Existing in-memory LRU limit in MiB.                               |
-| `CACHE_DIR`              | Cache directory.                                                   |
-| `CACHE_TTL`              | Expiry duration since the program last successfully read the file. |
-| `CACHE_CLEANUP_INTERVAL` | Interval between full directory scans.                             |
-| `CACHE_MAX_BYTES`        | Optional byte limit. `0` disables capacity eviction.               |
+| Variable              | Meaning                                                            |
+| --------------------- | ------------------------------------------------------------------ |
+| `IMAGE_SOURCE_ROOT`   | Absolute local file/directory or mounted SMB root.                 |
+| `IMAGE_SOURCE_KIND`   | `directory` (default) or `file`.                                   |
+| `IMAGE_SOURCE_FORMAT` | Code-registered format ID, for example `filesystem.role-paths.v1`. |
 
-Durations use Go duration syntax such as `10m`, `2h`, or `30s`. Invalid values
-fail service startup.
+The source is borrowed and is never deleted. Use this entrypoint for
+local-source jobs and online/instant prediction hosts. The worker can switch to
+it with `SC_JOB_IMAGE_RESOLVER_BINARY=/usr/local/bin/image-parser-local` and the
+three variables above.
 
-Lookup order is in-memory LRU, local file helper, then S3. A local file hit is
-promoted back into the in-memory LRU. Every successful local read updates the
-file mtime. Startup and periodic cleanup
-scan the whole directory, remove files whose mtime is older than `CACHE_TTL`,
-then, when `CACHE_MAX_BYTES` is greater than zero, remove the least recently
-used files until the directory is within the configured limit.
+For host development, `make prefect-worker-gpu-host` selects the staged batch
+entrypoint and `make prefect-worker-gpu-local-host` selects the pure-local
+entrypoint. They build different output files, so one target cannot silently
+overwrite the resolver selected by the other.
 
-Writes use a temporary file followed by an atomic rename. Files not created by
-the cache are ignored. A stale interrupted temporary write is removed after one
-TTL window.
+## Format drivers
+
+`filesystem.role-paths.v1` reads the data row's explicit role-relative paths
+and invents no layout. It supports a single file or a directory source. A
+caller selecting this format must supply `role_paths` for every requested role;
+it does not need SC inspection, wafer, or defect identity. Current legacy SC
+rows instead select `sc.legacy-range-zip.v1`, which derives its locators from
+that compatibility identity.
+
+`sc.legacy-range-zip.v1` is a compatibility driver. Only this package knows the
+old `<YYYYMMDD_HHMMSS>/<wafer_key>/<start>-<end>.zip`, 500-defect range, and ZIP
+member naming rules. These rules are not part of the generic source contract.
+Archives are opened once per bounded batch and resolved concurrently across at
+most eight archives.
+
+New file/container formats must be implemented as another explicit driver and
+registered in code. Drivers never sniff extensions and never fall back to a
+different format after failure.
+
+## Source ownership
+
+- `borrowed`: local/SMB source; resolver cannot write or delete it.
+- `job_owned`: a job stager may write it and job shutdown deletes it.
+- `shared_cache`: a service stager may write it and the cache janitor owns
+  eviction; the resolver cannot delete the root.
+
+## External connections
+
+The display server and upstream-staging job resolver use `SC_UPSTREAM_ADDR` for
+metadata. Patch and review object stores use `SC_PATCH_S3_*` and
+`SC_REVIEW_S3_*` (`ENDPOINT`, `REGION`, `ACCESS_KEY`, `SECRET_KEY`), with the
+corresponding `MINIO_*` values as deployment defaults. The pure-local resolver
+does not initialize these clients.
+
+`GRPC_LISTEN` on the display server accepts `tcp://<address>` or
+`unix:///absolute/socket/path`. A Unix listener removes only a stale socket and
+refuses to replace a regular file.

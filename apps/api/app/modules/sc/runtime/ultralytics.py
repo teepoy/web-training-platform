@@ -33,7 +33,9 @@ from app.modules.sc.app.services.training_selection import (
     limit_sc_training_rows_per_class,
 )
 from app.modules.sc.capabilities import SC_PATCH_IMAGE_V1
-from app.modules.sc.domain.image_fetcher import ScImageFetcher
+from app.modules.sc.domain.job_image_source import (
+    ScJobImageSourceFactory,
+)
 from app.modules.sc.materialization.port.local import ScInspectionMaterializerPort
 from app.modules.sc.runtime.data_source import open_sc_runtime_source
 from app.modules.sc.runtime.materialized_input import parquet_paths_from_manifest
@@ -178,7 +180,7 @@ async def yolo_sc_train(ctx: TrainingRuntimeContext) -> RuntimeEventStream:
         materializer = app_context.injector.get(ScInspectionMaterializerPort)
         materialization = await materializer.materialize(
             rows_lazyframe=rows,
-            image_source_profiles=source.image_source_profiles,
+            image_source_formats=source.image_source_formats,
             direct_dataset_id=source.dataset_id,
             dataset_id=source.source_identity,
             job_id=ctx.job_id,
@@ -363,48 +365,49 @@ async def yolo_sc_predictor(ctx: PredictionRuntimeContext) -> RuntimeEventStream
                 model.uri,
                 str(checkpoint_path),
             )
-            image_fetcher = app_context.injector.get(ScImageFetcher)
-            image_pairs = stream_sc_prediction_image_pairs(
-                rows,
-                image_fetcher=image_fetcher,
-                image_source_profiles=source.image_source_profiles,
-                direct_dataset_id=source.dataset_id,
-                input_batch_rows=pipeline.prediction_input_batch_rows,
-            )
+            image_source_factory = app_context.injector.get(ScJobImageSourceFactory)
+            async with image_source_factory.open() as image_resolver:
+                image_pairs = stream_sc_prediction_image_pairs(
+                    rows,
+                    image_resolver=image_resolver,
+                    image_source_formats=source.image_source_formats,
+                    direct_dataset_id=source.dataset_id,
+                    input_batch_rows=pipeline.prediction_input_batch_rows,
+                )
 
-            async def prediction_results():
-                async for output in predict_yolo_stream(
-                    checkpoint_path,
-                    labels,
-                    image_pairs,
-                    workers=pipeline.prediction_preprocess_workers,
-                    preprocess_task_size=pipeline.prediction_preprocess_task_rows,
-                    prefetch_tasks=pipeline.prediction_preprocess_prefetch_tasks,
-                ):
-                    result = PredictionResult(
-                        sample_id=output.sample_id,
-                        predicted_label=output.label,
-                        confidence=output.confidence,
-                        all_scores=(dict(output.scores) if output.scores else None),
-                        model_id=model.id,
-                        target=ctx.target,
-                        model_version=model_version,
-                        job_id=ctx.job_id,
-                        error=output.error,
-                    )
-                    summary["failed" if result.error else "successful"] += 1
-                    summary["processed"] += 1
-                    yield result
-                    await flush_progress()
+                async def prediction_results():
+                    async for output in predict_yolo_stream(
+                        checkpoint_path,
+                        labels,
+                        image_pairs,
+                        workers=pipeline.prediction_preprocess_workers,
+                        preprocess_task_size=pipeline.prediction_preprocess_task_rows,
+                        prefetch_tasks=pipeline.prediction_preprocess_prefetch_tasks,
+                    ):
+                        result = PredictionResult(
+                            sample_id=output.sample_id,
+                            predicted_label=output.label,
+                            confidence=output.confidence,
+                            all_scores=(dict(output.scores) if output.scores else None),
+                            model_id=model.id,
+                            target=ctx.target,
+                            model_version=model_version,
+                            job_id=ctx.job_id,
+                            error=output.error,
+                        )
+                        summary["failed" if result.error else "successful"] += 1
+                        summary["processed"] += 1
+                        yield result
+                        await flush_progress()
 
-            await write_sc_predictions(
-                runtime_ctx=ctx,
-                source=source,
-                predictions=prediction_results(),
-                model_id=model.id,
-                model_version=model_version,
-                batch_size=pipeline.prediction_write_batch_rows,
-            )
+                await write_sc_predictions(
+                    runtime_ctx=ctx,
+                    source=source,
+                    predictions=prediction_results(),
+                    model_id=model.id,
+                    model_version=model_version,
+                    batch_size=pipeline.prediction_write_batch_rows,
+                )
         summary["total_samples"] = int(summary["processed"])
         source_dataset_ids = source.source_dataset_ids
 

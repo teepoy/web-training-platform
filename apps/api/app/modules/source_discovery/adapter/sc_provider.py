@@ -182,18 +182,15 @@ class ScSourceRecordProvider:
             label_space = cast(list[str], label_space_value)
         else:
             raise ValueError("SC Import profile label_space must be a list of strings")
-        image_source_profile = profile.settings.get("image_source_profile")
-        if (
-            not isinstance(image_source_profile, str)
-            or not image_source_profile.strip()
-        ):
+        image_source_format = profile.settings.get("image_source_format")
+        if not isinstance(image_source_format, str) or not image_source_format.strip():
             raise ValueError(
-                "SC Import profile image_source_profile must be a non-empty string"
+                "SC Import profile image_source_format must be a non-empty string"
             )
         result = await self._importer.submit_import(
             source_inspection_time=inspection_time,
             source_wafer_key=wafer_key,
-            image_source_profile=image_source_profile,
+            image_source_format=image_source_format,
             dataset_name=record.display_name,
             org_id=org_id,
             created_by=actor_id,

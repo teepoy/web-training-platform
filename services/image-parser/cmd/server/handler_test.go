@@ -13,18 +13,15 @@ import (
 
 func TestApplyEnvironmentParsesCacheConfiguration(t *testing.T) {
 	t.Setenv("CACHE_DIR", "/cache")
-	t.Setenv("CACHE_SIZE_MB", "128")
 	t.Setenv("CACHE_TTL", "2h")
 	t.Setenv("CACHE_CLEANUP_INTERVAL", "15m")
 	t.Setenv("CACHE_MAX_BYTES", "4096")
 	cacheDir := "/default"
-	cacheSizeMB := 1
 	cacheTTL := time.Minute
 	cleanupInterval := time.Minute
 	var maxBytes int64
 
 	err := applyEnvironment(
-		&cacheSizeMB,
 		&cacheDir,
 		&cacheTTL,
 		&cleanupInterval,
@@ -33,11 +30,10 @@ func TestApplyEnvironmentParsesCacheConfiguration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cacheSizeMB != 128 || cacheDir != "/cache" || cacheTTL != 2*time.Hour ||
+	if cacheDir != "/cache" || cacheTTL != 2*time.Hour ||
 		cleanupInterval != 15*time.Minute || maxBytes != 4096 {
 		t.Fatalf(
-			"unexpected config: memory_mb=%d dir=%s ttl=%s cleanup=%s max=%d",
-			cacheSizeMB,
+			"unexpected config: dir=%s ttl=%s cleanup=%s max=%d",
 			cacheDir,
 			cacheTTL,
 			cleanupInterval,
@@ -48,7 +44,6 @@ func TestApplyEnvironmentParsesCacheConfiguration(t *testing.T) {
 
 func TestApplyEnvironmentRejectsInvalidValues(t *testing.T) {
 	tests := map[string]string{
-		"CACHE_SIZE_MB":          "large",
 		"CACHE_TTL":              "soon",
 		"CACHE_CLEANUP_INTERVAL": "later",
 		"CACHE_MAX_BYTES":        "large",
@@ -57,12 +52,10 @@ func TestApplyEnvironmentRejectsInvalidValues(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Setenv(name, value)
 			cacheDir := "/cache"
-			cacheSizeMB := 1
 			cacheTTL := time.Minute
 			cleanupInterval := time.Minute
 			var maxBytes int64
 			if err := applyEnvironment(
-				&cacheSizeMB,
 				&cacheDir,
 				&cacheTTL,
 				&cleanupInterval,

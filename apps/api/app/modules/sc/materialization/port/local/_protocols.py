@@ -13,7 +13,7 @@ class ScInspectionMaterializerPort(Protocol):
         self,
         *,
         rows_lazyframe: Any,
-        image_source_profiles: Mapping[str, str],
+        image_source_formats: Mapping[str, str],
         direct_dataset_id: str | None,
         dataset_id: str = "",
         job_id: str = "",

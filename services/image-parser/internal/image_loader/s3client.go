@@ -1,7 +1,10 @@
 package image_loader
 
 import (
+	"bytes"
 	"context"
+	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -15,6 +18,23 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
+
+func downloadObject(ctx context.Context, client *s3.Client, bucket, key string) ([]byte, error) {
+	resp, err := client.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("get object: %w", err)
+	}
+	defer resp.Body.Close()
+
+	buffer := new(bytes.Buffer)
+	if _, err := io.Copy(buffer, resp.Body); err != nil {
+		return nil, fmt.Errorf("read object: %w", err)
+	}
+	return buffer.Bytes(), nil
+}
 
 var (
 	zipsClient   *s3.Client

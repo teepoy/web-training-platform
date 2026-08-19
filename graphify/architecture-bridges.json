@@ -128,10 +128,52 @@
     },
     {
       "id": "contract_image_parser",
-      "label": "Image Parser Service",
+      "label": "Image Source Resolution Primitives",
       "file_type": "concept",
       "source_file": "CORE_DESIGNS.md",
-      "source_location": "L237"
+      "source_location": "L244"
+    },
+    {
+      "id": "contract_image_source_binding",
+      "label": "Dataset Image Source Binding",
+      "file_type": "concept",
+      "source_file": "CORE_DESIGNS.md",
+      "source_location": "L235"
+    },
+    {
+      "id": "contract_image_source_format_driver",
+      "label": "Image Source Format Driver",
+      "file_type": "concept",
+      "source_file": "CORE_DESIGNS.md",
+      "source_location": "L244"
+    },
+    {
+      "id": "contract_image_source_stager",
+      "label": "Optional Image Source Stager",
+      "file_type": "concept",
+      "source_file": "CORE_DESIGNS.md",
+      "source_location": "L251"
+    },
+    {
+      "id": "contract_display_image_parser",
+      "label": "Display Image Parser Server",
+      "file_type": "concept",
+      "source_file": "CORE_DESIGNS.md",
+      "source_location": "L277"
+    },
+    {
+      "id": "contract_job_image_resolver",
+      "label": "Training and Batch Prediction Job Resolver",
+      "file_type": "concept",
+      "source_file": "CORE_DESIGNS.md",
+      "source_location": "L268"
+    },
+    {
+      "id": "contract_local_image_resolver",
+      "label": "Pure-local Instant Prediction Resolver",
+      "file_type": "concept",
+      "source_file": "CORE_DESIGNS.md",
+      "source_location": "L277"
     },
     {
       "id": "contract_collection_snapshot",
@@ -296,11 +338,121 @@
     {
       "source": "contract_image_parser",
       "target": "context_ml_lifecycle",
+      "relation": "supports",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "CORE_DESIGNS.md",
+      "source_location": "L268",
+      "weight": 1.0
+    },
+    {
+      "source": "context_data_resources",
+      "target": "contract_image_source_binding",
+      "relation": "owns",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "CORE_DESIGNS.md",
+      "source_location": "L235",
+      "weight": 1.0
+    },
+    {
+      "source": "contract_image_source_binding",
+      "target": "contract_image_source_format_driver",
+      "relation": "selects",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "CORE_DESIGNS.md",
+      "source_location": "L235",
+      "weight": 1.0
+    },
+    {
+      "source": "contract_image_source_format_driver",
+      "target": "contract_image_parser",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "CORE_DESIGNS.md",
+      "source_location": "L244",
+      "weight": 1.0
+    },
+    {
+      "source": "contract_image_source_stager",
+      "target": "contract_display_image_parser",
+      "relation": "optionally_stages_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "CORE_DESIGNS.md",
+      "source_location": "L251",
+      "weight": 1.0
+    },
+    {
+      "source": "contract_image_source_stager",
+      "target": "contract_job_image_resolver",
+      "relation": "optionally_stages_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "CORE_DESIGNS.md",
+      "source_location": "L268",
+      "weight": 1.0
+    },
+    {
+      "source": "contract_image_parser",
+      "target": "contract_display_image_parser",
+      "relation": "composes",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "CORE_DESIGNS.md",
+      "source_location": "L277",
+      "weight": 1.0
+    },
+    {
+      "source": "contract_image_parser",
+      "target": "contract_job_image_resolver",
+      "relation": "composes",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "CORE_DESIGNS.md",
+      "source_location": "L277",
+      "weight": 1.0
+    },
+    {
+      "source": "contract_image_parser",
+      "target": "contract_local_image_resolver",
+      "relation": "composes",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "CORE_DESIGNS.md",
+      "source_location": "L277",
+      "weight": 1.0
+    },
+    {
+      "source": "contract_display_image_parser",
+      "target": "context_sc_domain",
+      "relation": "serves_display_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "CORE_DESIGNS.md",
+      "source_location": "L277",
+      "weight": 1.0
+    },
+    {
+      "source": "contract_job_image_resolver",
+      "target": "context_ml_lifecycle",
       "relation": "feeds",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "CORE_DESIGNS.md",
-      "source_location": "L257",
+      "source_location": "L268",
+      "weight": 1.0
+    },
+    {
+      "source": "contract_local_image_resolver",
+      "target": "context_ml_lifecycle",
+      "relation": "feeds_instant_prediction",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "CORE_DESIGNS.md",
+      "source_location": "L277",
       "weight": 1.0
     },
     {

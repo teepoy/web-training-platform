@@ -9,16 +9,17 @@ from typing import cast
 
 from proto_stubs.imageparser.v1 import service_pb2 as pb
 
-from app.modules.sc.materialization.domain.training_image_source import (
+from app.modules.sc.domain.job_image_source import (
     ScPatchImageBatchResolver,
+    normalize_role_paths,
 )
 
 _MAX_FRAME_BYTES = 256 * 1024 * 1024
 _STDERR_TAIL_BYTES = 64 * 1024
 
 
-class LocalTrainingImageSourceFactory:
-    """Start one offline image-parser process for one materialization run."""
+class LocalJobImageSourceFactory:
+    """Start one offline resolver process for one training or prediction job."""
 
     def __init__(
         self,
@@ -28,7 +29,7 @@ class LocalTrainingImageSourceFactory:
         shutdown_timeout_seconds: float = 5.0,
     ) -> None:
         if not binary_path.strip():
-            raise ValueError("training image parser binary path is required")
+            raise ValueError("job image resolver binary path is required")
         if max_frame_bytes <= 0:
             raise ValueError("max_frame_bytes must be greater than zero")
         if shutdown_timeout_seconds <= 0:
@@ -46,7 +47,7 @@ class LocalTrainingImageSourceFactory:
             stderr=asyncio.subprocess.PIPE,
             env=os.environ.copy(),
         )
-        session = _LocalTrainingImageSourceSession(
+        session = _LocalJobImageSourceSession(
             process,
             max_frame_bytes=self._max_frame_bytes,
             shutdown_timeout_seconds=self._shutdown_timeout_seconds,
@@ -61,7 +62,7 @@ class LocalTrainingImageSourceFactory:
             await session.close(raise_on_process_error=not body_failed)
 
 
-class _LocalTrainingImageSourceSession:
+class _LocalJobImageSourceSession:
     def __init__(
         self,
         process: asyncio.subprocess.Process,
@@ -85,12 +86,12 @@ class _LocalTrainingImageSourceSession:
     async def resolve_patch_images(
         self,
         *,
-        source_profile: str,
+        source_format: str,
         roles: list[str],
         items: list[dict[str, object]],
     ) -> AsyncIterator[dict[str, object]]:
         request = pb.ResolvePatchImagesRequest(
-            source_profile=source_profile,
+            source_format=source_format,
             roles=roles,
             items=[
                 pb.ResolvePatchImageItem(
@@ -99,6 +100,7 @@ class _LocalTrainingImageSourceSession:
                     inspection_time=str(item.get("inspection_time", "")),
                     wafer_key=int(cast(object, item.get("wafer_key", 0)) or 0),  # type: ignore[arg-type]
                     defect_id=str(item.get("defect_id", "")),
+                    role_paths=normalize_role_paths(item.get("role_paths")),
                 )
                 for item in items
             ],
@@ -106,7 +108,7 @@ class _LocalTrainingImageSourceSession:
         payload = request.SerializeToString()
         if not payload or len(payload) > self._max_frame_bytes:
             raise RuntimeError(
-                f"training image parser request frame size {len(payload)} is invalid"
+                f"job image resolver request frame size {len(payload)} is invalid"
             )
 
         async with self._lock:
@@ -119,7 +121,7 @@ class _LocalTrainingImageSourceSession:
                 response_size = struct.unpack(">I", header)[0]
                 if response_size <= 0 or response_size > self._max_frame_bytes:
                     raise RuntimeError(
-                        "training image parser returned invalid frame size "
+                        "job image resolver returned invalid frame size "
                         f"{response_size}"
                     )
                 response_payload = await self._stdout.readexactly(response_size)
@@ -132,7 +134,7 @@ class _LocalTrainingImageSourceSession:
                 response.ParseFromString(response_payload)
             except Exception as exc:
                 raise RuntimeError(
-                    "training image parser returned an invalid protobuf response"
+                    "job image resolver returned an invalid protobuf response"
                 ) from exc
 
             expected = [
@@ -143,7 +145,7 @@ class _LocalTrainingImageSourceSession:
             actual = [(result.request_id, result.role) for result in response.results]
             if actual != expected:
                 raise RuntimeError(
-                    "training image parser response order/correlation mismatch: "
+                    "job image resolver response order/correlation mismatch: "
                     f"expected {expected!r}, got {actual!r}"
                 )
             for result in response.results:
@@ -187,7 +189,7 @@ class _LocalTrainingImageSourceSession:
 
     def _ensure_running(self) -> None:
         if self._closed:
-            raise RuntimeError("training image parser session is closed")
+            raise RuntimeError("job image resolver session is closed")
         if self._process.returncode is not None:
             raise RuntimeError(self._process_failure_message())
 
@@ -212,7 +214,7 @@ class _LocalTrainingImageSourceSession:
         stderr = self._stderr_tail.decode("utf-8", errors="replace").strip()
         detail = f": {stderr}" if stderr else ""
         return (
-            "training image parser process exited unexpectedly "
+            "job image resolver process exited unexpectedly "
             f"(code={self._process.returncode}){detail}"
         )
 
@@ -235,4 +237,4 @@ def _canonical_role(raw_role: str) -> str:
     return raw_role.strip()
 
 
-__all__ = ["LocalTrainingImageSourceFactory"]
+__all__ = ["LocalJobImageSourceFactory"]

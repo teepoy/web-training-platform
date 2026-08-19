@@ -41,8 +41,8 @@ async def test_update_dataset_meta_persists_json_update_across_sessions() -> Non
             storage_mode=DatasetStorageMode.FILE_SHARD_SPARSE,
             ls_project_id="SPARSE_NO_LS",
             image_source=ImageSourceBinding(
-                contract="sc.patch_archive.v1",
-                profile="mounted-archive",
+                contract="filesystem.image-source.v1",
+                format="filesystem.role-paths.v1",
             ),
         )
         await repo.create_dataset(dataset, org_id=org_id)
@@ -69,8 +69,8 @@ async def test_update_dataset_meta_persists_json_update_across_sessions() -> Non
         assert reloaded is not None
         assert reloaded.dataset_meta["geometry"] == geometry
         assert reloaded.image_source == ImageSourceBinding(
-            contract="sc.patch_archive.v1",
-            profile="mounted-archive",
+            contract="filesystem.image-source.v1",
+            format="filesystem.role-paths.v1",
         )
     finally:
         await engine.dispose()

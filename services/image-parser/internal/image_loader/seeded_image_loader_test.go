@@ -4,14 +4,16 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"fmt"
 	"image"
 	"image/color"
 	"image/png"
 	"testing"
-	"time"
 
 	scv1 "image-parser/gen/go/sc/v1"
-	"image-parser/internal/image_loader/cache"
+	"image-parser/internal/filesource"
+	"image-parser/internal/sourceformat"
+	"image-parser/internal/sourceformat/legacyrangezip"
 )
 
 type seededImageLoader struct {
@@ -55,19 +57,31 @@ func (seededLoaderUpstream) GetReviewImageFileSpec(context.Context, string, int3
 }
 
 func TestSeededImageLoaderIsSwappableAtResolverBoundary(t *testing.T) {
-	zipCache, err := cache.New(64, time.Minute)
+	localSource, err := filesource.Open(
+		t.TempDir(),
+		filesource.KindDirectory,
+		filesource.OwnershipJobOwned,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	resolver := newResolver(
-		seededLoaderUpstream{},
-		seededImageLoader{
-			patchZip: seedPatchZip(t, 456),
-			review:   seedPNG(t, color.Gray{Y: 180}),
-		},
-		zipCache,
-		nil,
+	upstream := seededLoaderUpstream{}
+	loader := seededImageLoader{
+		patchZip: seedPatchZip(t, 456),
+		review:   seedPNG(t, color.Gray{Y: 180}),
+	}
+	patches, err := sourceformat.NewResolver(
+		localSource,
+		legacyrangezip.Driver{},
+		legacyrangezip.NewUpstreamStager(
+			upstream,
+			patchObjectLoader{loader: loader},
+		),
 	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolver := newResolver(upstream, loader, patches)
 
 	results := resolver.GetImageBytes(context.Background(), []ImageKey{{
 		Kind:          ImageKindPatch,
@@ -103,9 +117,9 @@ func seedPatchZip(t *testing.T, defectID int) []byte {
 		name string
 		fill color.Gray
 	}{
-		{patchImagePrefixMust(defectID, "Reference") + ".png", color.Gray{Y: 96}},
-		{patchImagePrefixMust(defectID, "Defective") + ".png", color.Gray{Y: 128}},
-		{patchImagePrefixMust(defectID, "Difference") + ".png", color.Gray{Y: 160}},
+		{fmt.Sprintf("%06d_PatchReference.png", defectID), color.Gray{Y: 96}},
+		{fmt.Sprintf("%06d_PatchDefective.png", defectID), color.Gray{Y: 128}},
+		{fmt.Sprintf("%06d_PatchDifference.png", defectID), color.Gray{Y: 160}},
 	} {
 		w, err := zw.Create(entry.name)
 		if err != nil {
@@ -134,12 +148,4 @@ func seedPNG(t *testing.T, fill color.Gray) []byte {
 		t.Fatal(err)
 	}
 	return buf.Bytes()
-}
-
-func patchImagePrefixMust(defectID int, imageType string) string {
-	prefix, ok := patchImagePrefix(defectID, imageType)
-	if !ok {
-		panic("invalid test image type")
-	}
-	return prefix
 }

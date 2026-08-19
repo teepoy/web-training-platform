@@ -172,9 +172,13 @@ IMAGE_PARSER_IMAGE=registry.example.com/finetune-image-parser:<release>
 PLATFORM_DATA_DIR=/srv/finetune/platform/data
 SC_UPSTREAM_DATA_DIR=/srv/finetune/platform/sc-upstream
 IMAGE_PARSER_DATA_DIR=/srv/finetune/platform/image-parser
-IMAGE_SOURCE_PROFILES_JSON={"sc_upstream":{"provider":"sc_upstream"}}
-SC_UPSTREAM_IMAGE_SOURCE_PROFILE=sc_upstream
-SC_COMPAT_IMAGE_SOURCE_PROFILE=sc_upstream
+SC_UPSTREAM_IMAGE_SOURCE_FORMAT=sc.legacy-range-zip.v1
+SC_JOB_IMAGE_RESOLVER_BINARY=/usr/local/bin/image-parser-batch
+# Pure-local alternative:
+# SC_JOB_IMAGE_RESOLVER_BINARY=/usr/local/bin/image-parser-local
+# IMAGE_SOURCE_ROOT=/data
+# IMAGE_SOURCE_KIND=directory
+# IMAGE_SOURCE_FORMAT=filesystem.role-paths.v1
 PREFECT_SERVER_MEMORY=4g
 API_MEMORY=8g
 API_SHM_SIZE=1g
@@ -193,26 +197,26 @@ IMAGE_PARSER_SHM_SIZE=2g
 PLATFORM_PREPARE_MEMORY=2g
 ```
 
-`IMAGE_SOURCE_PROFILES_JSON` is the deployment-owned patch archive resolver
-registry. A mounted local/SMB archive may be added with
-`{"provider":"sc_patch_zip_folder","root":"/data/<mounted-directory>"}`; mount
-that directory read-only into the image-parser container. Dataset metadata stores
-only the chosen profile name, never the root path or credentials. The compatibility
-profile must name one entry in the registry, and providers never fall back to a
-different entry after a failure.
+Dataset metadata stores `filesystem.image-source.v1` and a code-registered
+format ID, never a root path, credentials, staging policy, or cleanup policy.
+`SC_UPSTREAM_IMAGE_SOURCE_FORMAT` is the binding used by direct SC import;
+versioned Source Discovery profiles carry their own explicit
+`image_source_format`. Browsers never choose roots or staging implementations.
 
-`SC_UPSTREAM_IMAGE_SOURCE_PROFILE` is the API-owned binding for datasets created
-from the direct SC preview/import flow. It must name the intended upstream entry in
-`IMAGE_SOURCE_PROFILES_JSON`; browsers never choose or submit this deployment-owned
-name. Versioned Source Discovery import profiles continue to carry their own explicit
-`image_source_profile` setting.
+The display image-parser composes an upstream stager, shared cache, and the
+legacy range-ZIP driver in code. It does not expose the train/predict batch RPC.
+Both SC training and batch prediction start the baked
+`/usr/local/bin/image-parser-batch` process once per job and send ordered,
+bounded protobuf frames over stdin/stdout. `SC_JOB_IMAGE_RESOLVER_CACHE_ROOT`
+selects the parent directory for the per-job staging directory; that directory
+is deleted when the resolver process exits.
 
-SC training does not call the shared image-parser HTTP/gRPC service. The GPU worker
-starts the baked `/usr/local/bin/image-parser-batch` process once per materialization
-and sends ordered, bounded protobuf batches over stdin/stdout. Configure its per-job
-cache with `SC_TRAINING_IMAGE_PARSER_CACHE_SIZE_MB` (default `256`). If a profile uses
-`sc_patch_zip_folder`, the same `${IMAGE_PARSER_DATA_DIR}` is mounted read-only at
-`/data` in the GPU worker, so the profile root must use that shared absolute path.
+For data already present as a local file/directory or mounted SMB share, switch
+the worker to `/usr/local/bin/image-parser-local` with
+`SC_JOB_IMAGE_RESOLVER_BINARY`, `IMAGE_SOURCE_ROOT`, `IMAGE_SOURCE_KIND`, and
+`IMAGE_SOURCE_FORMAT`. That entrypoint has no remote stager and never deletes
+the borrowed source. It also supports an online/instant prediction host without
+starting the display service.
 
 All service ceilings use `deploy.resources.limits.memory`, which is honored by
 current Docker Compose without requiring Swarm mode. Do not reintroduce the
