@@ -1,6 +1,12 @@
 # sampling-rules
 
-`sampling-rules` adds a composable rule pipeline in front of random sampling:
+`sampling-rules` owns two composable, deterministic sampling contracts:
+
+- the general-purpose `SamplingProgram` pipeline used by existing recipes; and
+- the SC Review `ReviewSamplingProgram`, whose public catalog declares the 17
+  product rules shown in the Reclassify UI.
+
+The general-purpose pipeline is:
 
 ```text
 extra filter
@@ -15,7 +21,7 @@ It owns sampling semantics and provides a production DuckDB compiler/executor fo
 table-first inputs. The original mapping-based executor remains available for
 explicitly bounded callers.
 
-The four rule forms are:
+Its rule forms are:
 
 - `ExtraFilterRule`: implements the optional recursive Extra filter and removes ineligible rows.
 - `ConditionalLimitRule`: caps only the rows matching a condition.
@@ -193,13 +199,25 @@ selected = execution.reader.read_all()
 ## SC Review Sampling integration
 
 The production SC Reclassify view exposes the same ordered rule forms through
-`ReviewSamplingModal.vue`. The web data source sends only a scoped candidate query
-and structured program. The SC data-provider maps that transport shape to
-`SamplingProgram`, and this package compiles conditional, group, and total stages
-into the production DuckDB query. Only sampled defect IDs are returned.
+`ReviewSamplingModal.vue`. Its dedicated `REVIEW_SAMPLING_RULE_CATALOG` contains
+one concrete dataclass for each of the 17 rules: eligibility filters, independent
+selectors, and post-selection caps. Eligibility is evaluated first, selector
+results are unioned by the configured identity, and caps are always applied in
+the canonical die -> cluster -> repeater -> wafer order. Therefore reordering UI
+cards does not silently change a result.
+
+The web data source sends only a scoped candidate query and structured program.
+The SC data-provider maps that transport shape to `ReviewSamplingProgram`, and
+this package compiles the complete program into one production DuckDB query.
+Only sampled defect IDs are returned; the service does not materialize candidate
+rows in Python.
+
+Final Class distribution uses exact largest-remainder quotas. Target percentages
+must total 100%. If a target group is smaller than its quota, all available rows
+are selected and the missing quota is not redistributed implicitly.
 
 The optional sampling Extra filter remains part of the candidate query, and the
 selected cohort stays frontend workbench state rather than a server-side column.
-Dynamic spatial fields now have a DuckDB overlay in the library; the remaining SC
-integration work is to expose the reference-layer and radius configuration in the
-transport/UI and compose that overlay before compiling the sampling program.
+Dynamic spatial fields remain available to the general-purpose pipeline. Review
+Sampling's cluster and repeater rules consume the explicit `cluster_id` and
+`repeater_id` columns supplied by the SC candidate relation.

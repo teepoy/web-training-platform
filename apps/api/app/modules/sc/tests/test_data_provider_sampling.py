@@ -13,27 +13,23 @@ def test_compiles_and_executes_structured_sc_sampling_in_the_library() -> None:
         {
             "seed": 42,
             "program": {
-                "conditional": {
-                    "enabled": True,
-                    "field": "rough_bin",
-                    "value": "4",
-                    "limit": 2,
-                },
-                "group": {
-                    "enabled": True,
-                    "field": "class_number",
-                    "unit": "ratio",
-                    "targets": [{"value": "1", "amount": 50}],
-                    "othersAmount": 25,
-                    "rounding": "nearest",
-                },
-                "total": {"enabled": True, "limit": 3},
+                "rules": [
+                    {"type": "exclude_class_codes", "classCodes": [99]},
+                    {"type": "cluster_count", "count": 3},
+                    {
+                        "type": "random_percentage",
+                        "percentage": 50,
+                        "rounding": "floor",
+                    },
+                    {"type": "per_die_limit", "limit": 2},
+                ]
             },
         }
     )
     compiled, parameters = compile_sc_sampling_query(
         validate_sc_sql(
-            "SELECT map_id, rough_bin, class_number FROM samples WHERE images > ?"
+            "SELECT map_id, inspection_time, wafer_key, index_x, index_y, "
+            "cluster_id, class_number FROM samples WHERE images > ?"
         ),
         [0],
         request,
@@ -46,6 +42,11 @@ def test_compiles_and_executes_structured_sc_sampling_in_the_library() -> None:
                 "map_id": [1, 2, 3, 4, 5, 6],
                 "rough_bin": [4, 4, 4, 5, 5, 5],
                 "class_number": [1, 1, 1, 2, 2, 2],
+                "inspection_time": ["2026-08-19T10:00:00+08:00"] * 6,
+                "wafer_key": [1] * 6,
+                "index_x": [0, 0, 1, 1, 2, 2],
+                "index_y": [0] * 6,
+                "cluster_id": [1, 1, 2, 0, 0, 0],
                 "images": [1, 1, 1, 1, 1, 1],
             }
         ),
@@ -54,8 +55,9 @@ def test_compiles_and_executes_structured_sc_sampling_in_the_library() -> None:
     result = connection.execute(compiled.sql, parameters).to_arrow_table()
 
     assert result.column_names == ["defect_id"]
-    assert result.num_rows <= 3
-    assert "__sampling_group_ranked" in compiled.sql
+    assert result.num_rows <= 5
+    assert "__review_selector_ranked" in compiled.sql
+    assert "__review_cap_ranked" in compiled.sql
 
 
 def test_maps_the_sc_missing_group_sentinel_to_sql_null() -> None:
@@ -63,27 +65,22 @@ def test_maps_the_sc_missing_group_sentinel_to_sql_null() -> None:
         {
             "seed": 42,
             "program": {
-                "conditional": {
-                    "enabled": False,
-                    "field": "annotation_label",
-                    "value": "",
-                    "limit": 5,
-                },
-                "group": {
-                    "enabled": True,
-                    "field": "annotation_label",
-                    "unit": "count",
-                    "targets": [{"value": "__unlabeled__", "amount": 1}],
-                    "othersAmount": 0,
-                    "rounding": "nearest",
-                },
-                "total": {"enabled": False, "limit": 200},
+                "rules": [
+                    {
+                        "type": "final_class_distribution",
+                        "count": 2,
+                        "targets": [
+                            {"value": "__unclassified__", "percentage": 50},
+                            {"value": "Scratch", "percentage": 50},
+                        ],
+                    }
+                ]
             },
         }
     )
 
     _compiled, parameters = compile_sc_sampling_query(
-        validate_sc_sql("SELECT map_id, annotation_label FROM samples"),
+        validate_sc_sql("SELECT map_id, final_class FROM samples"),
         [],
         request,
     )

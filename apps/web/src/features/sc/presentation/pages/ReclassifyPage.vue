@@ -446,7 +446,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
                   :loading="isPreparingSampling"
                   @click="openSamplingModal"
                 >
-                  Random Filter{{
+                  Annotation Sampling{{
                     page.galleryRandomSamplingDefectIds.value.size
                       ? ` (${page.galleryRandomSamplingDefectIds.value.size})`
                       : ""

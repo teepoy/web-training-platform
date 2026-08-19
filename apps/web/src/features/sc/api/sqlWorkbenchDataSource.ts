@@ -33,7 +33,13 @@ import type {
 } from "@/features/sc/domain/workbenchInteraction";
 import type { ScSampleTableFilter, ScSampleTableSort } from "@/features/sc/domain/sampleTable";
 import { buildScDataFilters } from "@/features/sc/application/workbenchDataFilter";
-import { scSamplingProgramError, type ScSamplingProgram } from "@/features/sc/domain/samplingRules";
+import {
+  cloneScSamplingProgram,
+  scSamplingProgramError,
+  scSamplingRequiredFields,
+  type ScSamplingProgram,
+  type ScSamplingRule,
+} from "@/features/sc/domain/samplingRules";
 import {
   isScMissingFilterValue,
   scMissingFilterOption,
@@ -61,6 +67,7 @@ const SAMPLE_COLUMNS = [
   "index_y",
   "adder",
   "cluster_id",
+  "repeater_id",
   "die_x",
   "die_y",
   "reticle_x",
@@ -269,7 +276,7 @@ interface CompiledSamplingSelection {
   parameters: ScDataParameter[];
   sampling: {
     seed: number;
-    program: Pick<ScSamplingProgram, "conditional" | "group" | "total">;
+    program: { rules: ScSamplingRule[] };
   };
 }
 
@@ -287,26 +294,17 @@ export function compileScSamplingSelection(
   }
 
   const compiledWhere = compileScWhere(filters, reticle, allowedColumns);
-  const selectedFields = [
-    "map_id",
-    ...(program.conditional.enabled ? [program.conditional.field] : []),
-    ...(program.group.enabled ? [program.group.field] : []),
-  ];
-  const baseColumns = [...new Set(selectedFields)]
+  const baseColumns = [...scSamplingRequiredFields(program)]
     .map((field) => quotedColumn(field, allowedColumns))
     .join(", ");
+  const transportProgram = cloneScSamplingProgram(program);
   return {
     sql: `SELECT ${baseColumns} FROM samples${compiledWhere.sql}`,
     parameters: compiledWhere.parameters,
     sampling: {
       seed,
       program: {
-        conditional: { ...program.conditional },
-        group: {
-          ...program.group,
-          targets: program.group.targets.map((target) => ({ ...target })),
-        },
-        total: { ...program.total },
+        rules: transportProgram.rules,
       },
     },
   };
@@ -386,6 +384,7 @@ function sampleRow(row: Record<string, unknown>): ScSampleTableDisplayRow {
     index_y: numeric(row.index_y),
     adder: numeric(row.adder),
     cluster_id: row.cluster_id == null ? null : numeric(row.cluster_id),
+    repeater_id: row.repeater_id == null ? null : numeric(row.repeater_id),
     die_x: numeric(row.die_x),
     die_y: numeric(row.die_y),
     reticle_x: numeric(row.reticle_x),
@@ -706,12 +705,7 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
       ...scFilterFields(query.filters ?? []),
       ...(constraint.kind === "legend" ? [constraint.field] : []),
       ...(constraint.kind === "sampling-program"
-        ? [
-            ...(constraint.program.conditional.enabled
-              ? [constraint.program.conditional.field]
-              : []),
-            ...(constraint.program.group.enabled ? [constraint.program.group.field] : []),
-          ]
+        ? [...scSamplingRequiredFields(constraint.program)]
         : []),
     ]);
     if (constraint.kind === "ids") {

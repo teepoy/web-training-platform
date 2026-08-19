@@ -37,7 +37,7 @@ const globalFilter = ref<ScGlobalFilter>({
   ],
 });
 const filterValueCatalog: Record<string, Array<string | number>> = {
-  class_number: ["Scratch", "Particle", "Residue", "Unknown"],
+  class_number: [0, 1, 2, 3],
   rough_bin: [1, 2, 3, 4],
   final_bin: ["A", "B", "C"],
   annotation_label: ["accepted", "rejected"],
@@ -65,29 +65,12 @@ function requestExtraFilterRange(payload: { field: string; itemId?: string }): v
 
 const program = ref<ScSamplingProgram>({
   extraFilterEnabled: true,
-  conditional: {
-    enabled: true,
-    field: "class_number",
-    value: "Unknown",
-    limit: 45,
-  },
-  group: {
-    enabled: true,
-    field: "class_number",
-    unit: "ratio",
-    targets: [
-      { value: "Scratch", amount: 40 },
-      { value: "Particle", amount: 30 },
-      { value: "Residue", amount: 20 },
-      { value: "Unknown", amount: 10 },
-    ],
-    othersAmount: 5,
-    rounding: "nearest",
-  },
-  total: {
-    enabled: true,
-    limit: 200,
-  },
+  rules: [
+    { type: "exclude_class_codes", classCodes: [0] },
+    { type: "cluster_percentage", percentage: 20, rounding: "floor" },
+    { type: "random_count", count: 200 },
+    { type: "per_die_limit", limit: 5 },
+  ],
 });
 
 const populations: ScSamplingGroupPopulation[] = [
@@ -97,7 +80,10 @@ const populations: ScSamplingGroupPopulation[] = [
   { value: "Unknown", count: 45 },
 ];
 
-async function loadGroups(): Promise<ScSamplingGroupPopulation[]> {
+async function loadGroups(field: string): Promise<ScSamplingGroupPopulation[]> {
+  if (field === "class_number") {
+    return [0, 1, 2, 3].map((value) => ({ value: String(value), count: 100 }));
+  }
   return populations.map((group) => ({ ...group }));
 }
 

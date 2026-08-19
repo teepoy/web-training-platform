@@ -34,32 +34,27 @@ def test_query_accepts_a_bounded_structured_sampling_program() -> None:
             "sampling": {
                 "seed": 42,
                 "program": {
-                    "conditional": {
-                        "enabled": False,
-                        "field": "class_number",
-                        "value": "",
-                        "limit": 50,
-                    },
-                    "group": {
-                        "enabled": True,
-                        "field": "class_number",
-                        "unit": "ratio",
-                        "targets": [{"value": "1", "amount": 2}],
-                        "othersAmount": 5,
-                        "rounding": "nearest",
-                    },
-                    "total": {"enabled": True, "limit": 200},
+                    "rules": [
+                        {"type": "include_class_codes", "classCodes": [1, 2]},
+                        {
+                            "type": "random_percentage",
+                            "percentage": 2,
+                            "rounding": "floor",
+                        },
+                        {"type": "per_wafer_limit", "limit": 200},
+                    ]
                 },
             },
         }
     )
 
     assert request.sampling is not None
-    assert request.sampling.program.group.others_amount == 5
+    assert len(request.sampling.program.rules) == 3
+    assert request.sampling.program.rules[0].type == "include_class_codes"
 
 
-def test_query_rejects_an_unbounded_sampling_program() -> None:
-    with pytest.raises(ValidationError, match="enabled group rule or total limit"):
+def test_query_rejects_non_floor_review_percentage_rounding() -> None:
+    with pytest.raises(ValidationError, match="rounding"):
         ScSqlQueryRequest.model_validate(
             {
                 "description": "sc-workbench.selection.sampling-program",
@@ -68,21 +63,33 @@ def test_query_rejects_an_unbounded_sampling_program() -> None:
                 "sampling": {
                     "seed": 42,
                     "program": {
-                        "conditional": {
-                            "enabled": False,
-                            "field": "class_number",
-                            "value": "",
-                            "limit": 50,
-                        },
-                        "group": {
-                            "enabled": False,
-                            "field": "class_number",
-                            "unit": "count",
-                            "targets": [],
-                            "othersAmount": 0,
-                            "rounding": "nearest",
-                        },
-                        "total": {"enabled": False, "limit": 200},
+                        "rules": [
+                            {
+                                "type": "random_percentage",
+                                "percentage": 2,
+                                "rounding": "nearest",
+                            }
+                        ]
+                    },
+                },
+            }
+        )
+
+
+def test_query_rejects_an_unbounded_sampling_program() -> None:
+    with pytest.raises(ValidationError, match="selector or cap"):
+        ScSqlQueryRequest.model_validate(
+            {
+                "description": "sc-workbench.selection.sampling-program",
+                "sql": "SELECT map_id FROM samples",
+                "parameters": [],
+                "sampling": {
+                    "seed": 42,
+                    "program": {
+                        "rules": [
+                            {"type": "require_image"},
+                            {"type": "exclude_class_codes", "classCodes": [0]},
+                        ]
                     },
                 },
             }
@@ -148,6 +155,7 @@ def test_dataset_materializer_preserves_dynamic_metadata_columns() -> None:
             "rough_bin": [5],
             "images": [7],
             "cluster": [8],
+            "repeater": [9],
             "future_metric": [12.5],
             "upstream_payload": ["kept"],
         }
@@ -167,6 +175,7 @@ def test_dataset_materializer_preserves_dynamic_metadata_columns() -> None:
     assert row["images"] == 0
     assert row["cluster"] == 8
     assert row["cluster_id"] == 8
+    assert row["repeater_id"] == 9
     assert row["future_metric"] == 12.5
     assert row["upstream_payload"] == "kept"
 

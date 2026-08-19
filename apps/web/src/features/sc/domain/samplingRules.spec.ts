@@ -1,37 +1,102 @@
 import { describe, expect, it } from "vitest";
-import { createDefaultScSamplingProgram, scSamplingProgramError } from "./samplingRules";
+import {
+  createDefaultScSamplingRule,
+  createDefaultScSamplingProgram,
+  SC_REVIEW_SAMPLING_RULE_CATALOG,
+  scSamplingProgramError,
+  scSamplingRequiredFields,
+} from "./samplingRules";
 
-describe("SC sampling rules", () => {
-  it("keeps the existing bounded random sampling behavior as the default", () => {
+describe("SC review sampling rules", () => {
+  it("declares the same seventeen product rules and keeps bounded random count as default", () => {
+    expect(SC_REVIEW_SAMPLING_RULE_CATALOG.map((item) => item.id)).toEqual([
+      "cluster_percentage",
+      "repeater_percentage",
+      "random_percentage",
+      "exclude_class_codes",
+      "per_die_limit",
+      "cluster_count",
+      "repeater_count",
+      "random_count",
+      "per_cluster_limit",
+      "per_repeater_limit",
+      "per_wafer_limit",
+      "require_image",
+      "size_range",
+      "include_class_codes",
+      "large_defect_percentage",
+      "large_defect_count",
+      "final_class_distribution",
+    ]);
+
     const program = createDefaultScSamplingProgram();
-
     expect(program.extraFilterEnabled).toBe(true);
-    expect(program.conditional.enabled).toBe(false);
-    expect(program.group.enabled).toBe(false);
-    expect(program.total).toEqual({ enabled: true, limit: 200 });
+    expect(program.rules).toEqual([{ type: "random_count", count: 200 }]);
     expect(scSamplingProgramError(program)).toBeNull();
   });
 
-  it("treats ratios as independent per-group sample percentages", () => {
+  it("uses floor rounding for every percentage rule", () => {
+    expect(createDefaultScSamplingRule("cluster_percentage")).toMatchObject({ rounding: "floor" });
+    expect(createDefaultScSamplingRule("repeater_percentage")).toMatchObject({ rounding: "floor" });
+    expect(createDefaultScSamplingRule("random_percentage")).toMatchObject({ rounding: "floor" });
+    expect(createDefaultScSamplingRule("large_defect_percentage")).toMatchObject({
+      rounding: "floor",
+    });
+  });
+
+  it("derives every source column required by a combined program", () => {
     const program = createDefaultScSamplingProgram();
-    program.group.enabled = true;
-    program.group.unit = "ratio";
-    program.group.targets = [
-      { value: "a", amount: 2 },
-      { value: "b", amount: 7.5 },
+    program.rules = [
+      { type: "cluster_percentage", percentage: 10, rounding: "floor" },
+      { type: "repeater_count", count: 20 },
+      { type: "per_die_limit", limit: 3 },
+      { type: "require_image" },
+      { type: "size_range", sizeField: "area", minimum: 2, maximum: 20 },
+      {
+        type: "final_class_distribution",
+        count: 10,
+        targets: [
+          { value: "Scratch", percentage: 60 },
+          { value: "__unclassified__", percentage: 40 },
+        ],
+      },
     ];
-    program.group.othersAmount = 3;
 
+    expect([...scSamplingRequiredFields(program)].sort()).toEqual(
+      [
+        "area",
+        "cluster_id",
+        "final_class",
+        "images",
+        "index_x",
+        "index_y",
+        "inspection_time",
+        "map_id",
+        "repeater_id",
+        "wafer_key",
+      ].sort(),
+    );
     expect(scSamplingProgramError(program)).toBeNull();
-
-    program.group.othersAmount = 101;
-    expect(scSamplingProgramError(program)).toContain("between 0 and 100%");
   });
 
-  it("does not allow an unbounded program", () => {
+  it("rejects duplicate rules and invalid final-class distributions", () => {
     const program = createDefaultScSamplingProgram();
-    program.total.enabled = false;
+    program.rules = [
+      { type: "random_count", count: 10 },
+      { type: "random_count", count: 20 },
+    ];
+    expect(scSamplingProgramError(program)).toContain("once");
 
-    expect(scSamplingProgramError(program)).toContain("bound the sampled cohort");
+    program.rules = [
+      {
+        type: "final_class_distribution",
+        count: 10,
+        targets: [
+          { value: "Scratch", percentage: 60 },
+          { value: "Particle", percentage: 30 },
+        ],
+      },
+    ];
+    expect(scSamplingProgramError(program)).toContain("100%");
   });
 });

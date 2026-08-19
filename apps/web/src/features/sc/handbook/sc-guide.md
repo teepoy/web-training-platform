@@ -112,18 +112,19 @@ The same wafer/die/reticle map triad as the preview page, integrated with annota
 
 ### Sampling
 
-Click **Random Filter** beside **Global Filter** to open the sampling modal:
+Click **Annotation Sampling** beside **Global Filter** to open the sampling modal:
 
 - Choose All, Map Selection, or Table Selection as the candidate scope.
 - Configure the enabled sampling rules and optional Extra filter.
+- Percentage rules always round down to a whole sample; rounding is not configurable.
 - In **After sampling**, draft-label assignment is enabled by default and uses the selected label.
   Disable it when the sampled cohort should not change annotation drafts. Existing drafts outside the
   sample are preserved.
 
-The active cohort is shown in the Random Filter button and narrows only the table and gallery. It
+The active cohort is shown in the Annotation Sampling button and narrows only the table and gallery. It
 composes with Review mode, transient map selection, and table filters; it does not alter the map,
 group distribution, Global Filter, or Train & Predict inputs. Clear or replace the cohort explicitly
-from the Random Filter control.
+from the Annotation Sampling control.
 
 ### Train & Predict
 

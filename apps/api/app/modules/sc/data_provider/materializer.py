@@ -48,6 +48,7 @@ _SAMPLE_COLUMN_DTYPES = {
     "index_y": pl.Int64,
     "adder": pl.Int64,
     "cluster_id": pl.Int64,
+    "repeater_id": pl.Int64,
     "size_x": pl.Int64,
     "size_y": pl.Int64,
     "size_d": pl.Int64,
@@ -71,7 +72,7 @@ _WORKBENCH_OWNED_SOURCE_COLUMNS = (
     "final_class",
 )
 # Bump whenever the physical workbench identity contract changes.
-_SAMPLES_BASE_FORMAT_VERSION = "v5-collection-row-key"
+_SAMPLES_BASE_FORMAT_VERSION = "v6-repeater-id"
 _REVIEW_IMAGES_FORMAT_VERSION = "v2-row-key"
 
 
@@ -950,6 +951,10 @@ def _normalize_dataset_base_lazyframe(
             expressions.append(
                 pl.col("cluster").cast(dtype, strict=False).alias(column)
             )
+        elif column == "repeater_id" and "repeater" in available:
+            expressions.append(
+                pl.col("repeater").cast(dtype, strict=False).alias(column)
+            )
         elif column == "images":
             expressions.append(pl.lit(0).cast(dtype).alias(column))
         elif column == "review_image_ids_json":
@@ -977,6 +982,10 @@ def _normalize_samples_frame(df: pl.DataFrame) -> pl.DataFrame:
         if column == "cluster_id" and "cluster" in df.columns:
             expressions.append(
                 pl.col("cluster").cast(dtype, strict=False).alias(column)
+            )
+        elif column == "repeater_id" and "repeater" in df.columns:
+            expressions.append(
+                pl.col("repeater").cast(dtype, strict=False).alias(column)
             )
         elif column == "images":
             expressions.append(pl.lit(0).cast(dtype).alias(column))

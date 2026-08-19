@@ -29,6 +29,7 @@ export interface ScSampleTableDisplayRow extends ScSampleTableRow {
   annotation_label?: string | null;
   prediction_label?: string | null;
   prediction_confidence?: number | null;
+  repeater_id?: number | null;
 }
 
 export interface ScSampleTableRowsQuery {

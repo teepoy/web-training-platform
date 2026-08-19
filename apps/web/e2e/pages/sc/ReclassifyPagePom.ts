@@ -39,7 +39,7 @@ export class ReclassifyPagePom extends BasePage {
     return this.page.getByTestId("reclassify-table-loadmore-spinner");
   }
 
-  get randomFilterButton(): Locator {
+  get annotationSamplingButton(): Locator {
     return this.page.getByTestId("sc-random-filter-trigger");
   }
 
@@ -52,7 +52,7 @@ export class ReclassifyPagePom extends BasePage {
   }
 
   async openReviewSampling(): Promise<void> {
-    await this.randomFilterButton.click();
+    await this.annotationSamplingButton.click();
     await this.reviewSamplingDialog.waitFor();
   }
 

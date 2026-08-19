@@ -275,7 +275,7 @@ test("Review Sampling manages rules and sends the backend sampling program from 
     sampling?: {
       seed: number;
       program: {
-        total: { enabled: boolean; limit: number };
+        rules: Array<{ type: string; count?: number }>;
       };
     };
   }> = [];
@@ -290,7 +290,7 @@ test("Review Sampling manages rules and sends the backend sampling program from 
   const filterActions = authedPage.getByTestId("sc-filter-actions");
   await expect(filterActions.getByTestId("sc-global-filter-trigger")).toBeVisible();
   await expect(filterActions).toBeVisible();
-  await expect(page.randomFilterButton).toHaveText("Random Filter");
+  await expect(page.annotationSamplingButton).toHaveText("Annotation Sampling");
   await expect(page.clearRandomFilterButton).toHaveCount(0);
   await expect
     .poll(() => dataRequests.filter((body) => body.description === "sc-workbench.map").length)
@@ -317,30 +317,31 @@ test("Review Sampling manages rules and sends the backend sampling program from 
   await expect(page.reviewSamplingDialog.getByTestId("sampling-draft-label")).toContainText(
     "60 · Code 60",
   );
-  await page.reviewSamplingDialog.getByText("Enabled rules", { exact: true }).click();
+  await page.reviewSamplingDialog.getByText("Sampling rules", { exact: true }).click();
   await expect(page.reviewSamplingDialog.getByRole("radio", { name: "All" })).toBeChecked();
+  const inlineRandomCount = page.reviewSamplingDialog
+    .getByTestId("sampling-rule-random_count")
+    .getByTestId("sampling-random-count")
+    .locator("input");
+  await expect(inlineRandomCount).toHaveValue("200");
+  await inlineRandomCount.fill("250");
+  await page.reviewSamplingDialog.getByRole("button", { name: "Add sampling rule" }).click();
+  await expect(authedPage.getByTestId("sampling-rule-catalog")).toBeVisible();
   await expect(
-    page.reviewSamplingDialog.getByTestId("sampling-total-limit").locator("input"),
-  ).toHaveValue("200");
-  await page.reviewSamplingDialog.getByRole("button", { name: "Manage sampling rules" }).click();
-  await expect(authedPage.getByRole("listbox", { name: "Disabled sampling rules" })).toBeVisible();
-  await expect(authedPage.getByRole("listbox", { name: "Enabled sampling rules" })).toBeVisible();
-
-  await authedPage
-    .getByTestId("manage-sampling-rules-modal")
-    .getByRole("button", { name: "Done" })
-    .click();
+    authedPage.getByTestId("sampling-rule-catalog").getByTestId(/^add-sampling-rule-/),
+  ).toHaveCount(17);
+  await authedPage.keyboard.press("Escape");
   await page.reviewSamplingDialog.getByText("Extra filter", { exact: true }).click();
   await expect(page.reviewSamplingDialog.getByText("Extra filter", { exact: true })).toHaveCount(2);
   await expect(page.reviewSamplingDialog.getByTestId("query-add-condition")).toBeVisible();
   await expect(page.reviewSamplingDialog.getByTestId("query-add-group")).toBeVisible();
-  await page.reviewSamplingDialog.getByText("Enabled rules", { exact: true }).click();
+  await page.reviewSamplingDialog.getByText("Sampling rules", { exact: true }).click();
   const mapRequestsBeforeSampling = dataRequests.filter(
     (body) => body.description === "sc-workbench.map",
   ).length;
   await page.reviewSamplingDialog.getByRole("button", { name: "Apply sampling" }).click();
 
-  await expect(page.randomFilterButton).toHaveText("Random Filter (200)");
+  await expect(page.annotationSamplingButton).toHaveText("Annotation Sampling (250)");
   await expect(page.clearRandomFilterButton).toHaveText("Clear");
   await expect
     .poll(
@@ -363,10 +364,10 @@ test("Review Sampling manages rules and sends the backend sampling program from 
   expect(samplingRequests[0]?.parameters).toEqual([]);
   expect(samplingRequests[0]?.sampling).toMatchObject({
     seed: 42,
-    program: { total: { enabled: true, limit: 200 } },
+    program: { rules: [{ type: "random_count", count: 250 }] },
   });
 
   await page.clearRandomFilterButton.click();
-  await expect(page.randomFilterButton).toHaveText("Random Filter");
+  await expect(page.annotationSamplingButton).toHaveText("Annotation Sampling");
   await expect(page.clearRandomFilterButton).toHaveCount(0);
 });

@@ -4,12 +4,9 @@ import {
   NAlert,
   NButton,
   NCard,
-  NInputNumber,
   NModal,
   NRadioButton,
   NRadioGroup,
-  NSelect,
-  NSpin,
   NTabPane,
   NTag,
   NTabs,
@@ -17,25 +14,33 @@ import {
   useMessage,
   useThemeVars,
 } from "naive-ui";
-import type { ScGlobalFilter } from "@/features/sc/domain/globalFilter";
 import type { ScSamplingCandidateScope } from "@/features/sc/application/inspectionFilterPolicy";
+import type { ScGlobalFilter } from "@/features/sc/domain/globalFilter";
 import {
   cloneScSamplingProgram,
-  SC_SAMPLING_GROUP_FIELDS,
+  createDefaultScSamplingRule,
+  SC_REVIEW_SAMPLING_RULE_CATALOG,
   scSamplingProgramError,
+  type ScSamplingClassCodesRule,
+  type ScSamplingCountRule,
+  type ScSamplingFinalClassDistributionRule,
   type ScSamplingGroupPopulation,
+  type ScSamplingLargeDefectCountRule,
+  type ScSamplingLargeDefectPercentageRule,
+  type ScSamplingLimitRule,
+  type ScSamplingPercentageRule,
   type ScSamplingProgram,
+  type ScSamplingRule,
   type ScSamplingRuleId,
+  type ScSamplingSizeRangeRule,
 } from "@/features/sc/domain/samplingRules";
 import { scMissingFilterOption } from "@/features/sc/domain/missingFilterValue";
+import {
+  scSamplingRuleEditor,
+  type ScSamplingRuleEditorDescriptor,
+} from "./sampling-rules/samplingRuleEditors";
+import type { ScSamplingRuleEditorContext } from "./sampling-rules/types";
 import ScGlobalFilterBar from "./ScGlobalFilterBar.vue";
-
-interface RuleCatalogItem {
-  id: ScSamplingRuleId;
-  order: string;
-  title: string;
-  description: string;
-}
 
 const props = withDefaults(
   defineProps<{
@@ -75,54 +80,21 @@ const emit = defineEmits<{
   (e: "confirm"): void;
 }>();
 
-const catalog: RuleCatalogItem[] = [
-  {
-    id: "extra",
-    order: "01",
-    title: "Extra filter",
-    description: "Optionally narrow the selected candidate scope before applying limits.",
-  },
-  {
-    id: "conditional",
-    order: "02",
-    title: "Conditional limit",
-    description: "Cap only one matching subset while leaving other candidates eligible.",
-  },
-  {
-    id: "quota",
-    order: "03",
-    title: "Group quota",
-    description: "Choose a count or sample ratio for each group and for all other values.",
-  },
-  {
-    id: "total",
-    order: "04",
-    title: "Total limit",
-    description: "Cap the final cohort without implicitly filling shortfalls.",
-  },
-];
-
 const message = useMessage();
 const themeVars = useThemeVars();
 const slots = useSlots();
 const draft = ref(cloneScSamplingProgram(props.program));
 const activeTab = ref<"rules" | "extra" | "after">("rules");
-const manageRulesVisible = ref(false);
-const ruleConfigVisible = ref(false);
-const editingRule = ref<ScSamplingRuleId | null>(null);
-const selectedDisabledRule = ref<ScSamplingRuleId | null>(null);
-const selectedEnabledRule = ref<ScSamplingRuleId | null>(null);
-const conditionalGroups = ref<ScSamplingGroupPopulation[]>([]);
-const groupPopulations = ref<ScSamplingGroupPopulation[]>([]);
-const conditionalGroupsLoading = ref(false);
-const groupPopulationsLoading = ref(false);
-let conditionalLoadVersion = 0;
-let groupLoadVersion = 0;
+const catalogVisible = ref(false);
+const configVisible = ref(false);
+const editingRuleId = ref<ScSamplingRuleId | null>(null);
+const classCodeOptions = ref<Array<{ label: string; value: number }>>([]);
+const finalClassOptions = ref<Array<{ label: string; value: string }>>([]);
+const groupLoading = ref(false);
+let loadVersion = 0;
 
-const modalThemeStyle = computed(() => ({
-  "--cv-bg": themeVars.value.bodyColor,
+const surfaceStyle = computed(() => ({
   "--cv-card-bg": themeVars.value.cardColor,
-  "--cv-text": themeVars.value.textColor1,
   "--cv-text-secondary": themeVars.value.textColor3,
   "--cv-border": themeVars.value.borderColor,
   "--cv-divider": themeVars.value.dividerColor,
@@ -130,20 +102,20 @@ const modalThemeStyle = computed(() => ({
   "--cv-primary": themeVars.value.primaryColor,
 }));
 const reviewModalStyle = computed(() => ({
-  ...modalThemeStyle.value,
-  width: "min(960px, calc(100vw - 32px))",
+  ...surfaceStyle.value,
+  width: "min(1040px, calc(100vw - 32px))",
   maxHeight: "calc(100vh - 32px)",
   overflow: "auto",
 }));
-const manageModalStyle = computed(() => ({
-  ...modalThemeStyle.value,
-  width: "min(820px, calc(100vw - 32px))",
+const catalogModalStyle = computed(() => ({
+  ...surfaceStyle.value,
+  width: "min(980px, calc(100vw - 32px))",
   maxHeight: "calc(100vh - 32px)",
   overflow: "auto",
 }));
-const ruleModalStyle = computed(() => ({
-  ...modalThemeStyle.value,
-  width: "min(760px, calc(100vw - 32px))",
+const configModalStyle = computed(() => ({
+  ...surfaceStyle.value,
+  width: "min(720px, calc(100vw - 32px))",
   maxHeight: "calc(100vh - 32px)",
   overflow: "auto",
 }));
@@ -154,160 +126,167 @@ const showModel = computed({
 });
 const scopeModel = computed({
   get: () => props.scope,
-  set: (value: ScSamplingCandidateScope) => emit("update:scope", value),
+  set: (scope: ScSamplingCandidateScope) => emit("update:scope", scope),
 });
-function ruleIsEnabled(id: ScSamplingRuleId): boolean {
-  if (id === "extra") return draft.value.extraFilterEnabled;
-  if (id === "conditional") return draft.value.conditional.enabled;
-  if (id === "total") return draft.value.total.enabled;
-  return draft.value.group.enabled;
-}
-
-const disabledRules = computed(() => catalog.filter((item) => !ruleIsEnabled(item.id)));
-const enabledRules = computed(() => catalog.filter((item) => ruleIsEnabled(item.id)));
-const configuredRules = computed(() => enabledRules.value.filter((item) => item.id !== "extra"));
-const hasAfterSamplingTab = computed(() => Boolean(slots["after-sampling"]));
-const configurationError = computed(() => scSamplingProgramError(draft.value));
-const editingRuleItem = computed(
-  () => catalog.find((item) => item.id === editingRule.value) ?? null,
+const enabledRules = computed(() =>
+  SC_REVIEW_SAMPLING_RULE_CATALOG.flatMap((item) => {
+    const rule = draft.value.rules.find((candidate) => candidate.type === item.id);
+    return rule ? [{ item, rule }] : [];
+  }),
 );
+const enabledIds = computed(() => new Set(draft.value.rules.map((rule) => rule.type)));
+const editingRule = computed(
+  () => draft.value.rules.find((rule) => rule.type === editingRuleId.value) ?? null,
+);
+const editingDescriptor = computed(
+  () => SC_REVIEW_SAMPLING_RULE_CATALOG.find((item) => item.id === editingRuleId.value) ?? null,
+);
+const editingEditor = computed<ScSamplingRuleEditorDescriptor | null>(() =>
+  editingRuleId.value ? scSamplingRuleEditor(editingRuleId.value) : null,
+);
+const editorContext = computed<ScSamplingRuleEditorContext>(() => ({
+  classCodeOptions: classCodeOptions.value,
+  finalClassOptions: finalClassOptions.value,
+  loading: groupLoading.value,
+}));
+const configurationError = computed(() => scSamplingProgramError(draft.value));
+const hasAfterSamplingTab = computed(() => Boolean(slots["after-sampling"]));
 
-const finalEstimate = computed(() => {
-  let eligible = props.availableCount;
-  if (draft.value.conditional.enabled) {
-    const population = conditionalGroups.value.find(
-      (group) => group.value === draft.value.conditional.value,
-    )?.count;
-    if (population !== undefined) {
-      eligible -= Math.max(population - draft.value.conditional.limit, 0);
-    }
-  }
-  if (draft.value.group.enabled && groupPopulations.value.length > 0) {
-    eligible = groupPopulations.value.reduce((sum, population) => {
-      const amount =
-        draft.value.group.targets.find((target) => target.value === population.value)?.amount ??
-        draft.value.group.othersAmount;
-      const planned =
-        draft.value.group.unit === "ratio"
-          ? roundedCount(population.count * (amount / 100), draft.value.group.rounding)
-          : amount;
-      return sum + Math.min(population.count, planned);
-    }, 0);
-  }
-  return draft.value.total.enabled ? Math.min(eligible, draft.value.total.limit) : eligible;
-});
-
-function roundedCount(value: number, rounding: "floor" | "ceil" | "nearest"): number {
-  if (rounding === "floor") return Math.floor(value);
-  if (rounding === "ceil") return Math.ceil(value);
-  return Math.floor(value + 0.5);
+function isPercentageRule(
+  rule: ScSamplingRule,
+): rule is ScSamplingPercentageRule<
+  "cluster_percentage" | "repeater_percentage" | "random_percentage"
+> {
+  return ["cluster_percentage", "repeater_percentage", "random_percentage"].includes(rule.type);
 }
 
-function displayGroupValue(field: string, value: string): string {
-  const missing = scMissingFilterOption(field);
-  return missing?.value === value ? missing.label : value;
+function isCountRule(
+  rule: ScSamplingRule,
+): rule is ScSamplingCountRule<"cluster_count" | "repeater_count" | "random_count"> {
+  return ["cluster_count", "repeater_count", "random_count"].includes(rule.type);
 }
 
-function defaultTargetAmount(population: ScSamplingGroupPopulation, count: number): number {
-  if (draft.value.group.unit === "ratio") return 10;
-  return Math.min(population.count, Math.max(Math.floor(draft.value.total.limit / count), 1));
-}
-
-function reconcileTargets(populations: ScSamplingGroupPopulation[], reset = false): void {
-  const existing = new Map(
-    (reset ? [] : draft.value.group.targets).map((target) => [target.value, target.amount]),
+function isLimitRule(
+  rule: ScSamplingRule,
+): rule is ScSamplingLimitRule<
+  "per_die_limit" | "per_cluster_limit" | "per_repeater_limit" | "per_wafer_limit"
+> {
+  return ["per_die_limit", "per_cluster_limit", "per_repeater_limit", "per_wafer_limit"].includes(
+    rule.type,
   );
-  draft.value.group.targets = populations.map((population) => ({
-    value: population.value,
-    amount: existing.get(population.value) ?? defaultTargetAmount(population, populations.length),
-  }));
-  if (reset) draft.value.group.othersAmount = draft.value.group.unit === "ratio" ? 10 : 0;
 }
 
-async function loadConditionalGroups(): Promise<void> {
-  if (!props.show) return;
-  const version = ++conditionalLoadVersion;
-  conditionalGroupsLoading.value = true;
+function isClassCodesRule(
+  rule: ScSamplingRule,
+): rule is ScSamplingClassCodesRule<"exclude_class_codes" | "include_class_codes"> {
+  return rule.type === "exclude_class_codes" || rule.type === "include_class_codes";
+}
+
+function isSizeRangeRule(rule: ScSamplingRule): rule is ScSamplingSizeRangeRule {
+  return rule.type === "size_range";
+}
+
+function isLargePercentageRule(rule: ScSamplingRule): rule is ScSamplingLargeDefectPercentageRule {
+  return rule.type === "large_defect_percentage";
+}
+
+function isLargeCountRule(rule: ScSamplingRule): rule is ScSamplingLargeDefectCountRule {
+  return rule.type === "large_defect_count";
+}
+
+function isFinalDistributionRule(
+  rule: ScSamplingRule,
+): rule is ScSamplingFinalClassDistributionRule {
+  return rule.type === "final_class_distribution";
+}
+
+function ruleSummary(rule: ScSamplingRule): string {
+  if (isPercentageRule(rule)) return `${rule.percentage}%`;
+  if (isCountRule(rule)) return `N = ${rule.count}`;
+  if (isLimitRule(rule)) return `Maximum ${rule.limit}`;
+  if (isClassCodesRule(rule)) {
+    return rule.classCodes.length ? rule.classCodes.join(", ") : "Class Codes required";
+  }
+  if (rule.type === "require_image") return "Images > 0";
+  if (isSizeRangeRule(rule)) return `${rule.sizeField}: ${rule.minimum}–${rule.maximum}`;
+  if (isLargePercentageRule(rule)) {
+    return `${rule.sizeField} ≥ ${rule.minimum} · ${rule.percentage}%`;
+  }
+  if (isLargeCountRule(rule)) return `${rule.sizeField} ≥ ${rule.minimum} · N = ${rule.count}`;
+  return `${rule.count} total · ${rule.targets.length} classes`;
+}
+
+function phaseLabel(phase: "eligibility" | "selector" | "cap"): string {
+  if (phase === "eligibility") return "Eligibility";
+  if (phase === "selector") return "Random selector";
+  return "Post-selection cap";
+}
+
+function addRule(id: ScSamplingRuleId): void {
+  if (!enabledIds.value.has(id)) draft.value.rules.push(createDefaultScSamplingRule(id));
+  catalogVisible.value = false;
+  openRule(id);
+}
+
+function removeRule(id: ScSamplingRuleId): void {
+  draft.value.rules = draft.value.rules.filter((rule) => rule.type !== id);
+  if (editingRuleId.value === id) configVisible.value = false;
+}
+
+function updateRule(updatedRule: ScSamplingRule): void {
+  const index = draft.value.rules.findIndex((rule) => rule.type === updatedRule.type);
+  if (index >= 0) draft.value.rules[index] = updatedRule;
+}
+
+async function loadRuleOptions(rule: ScSamplingRule): Promise<void> {
+  if (!isClassCodesRule(rule) && !isFinalDistributionRule(rule)) return;
+  const version = ++loadVersion;
+  groupLoading.value = true;
   try {
-    const groups = await props.loadGroups(draft.value.conditional.field);
-    if (version !== conditionalLoadVersion) return;
-    conditionalGroups.value = groups;
-    if (!groups.some((group) => group.value === draft.value.conditional.value)) {
-      draft.value.conditional.value = groups[0]?.value ?? "";
+    const field = isClassCodesRule(rule) ? "class_number" : "final_class";
+    const groups = await props.loadGroups(field);
+    if (version !== loadVersion) return;
+    if (isClassCodesRule(rule)) {
+      classCodeOptions.value = groups.flatMap((group) => {
+        const value = Number(group.value);
+        return Number.isInteger(value) ? [{ label: group.value, value }] : [];
+      });
+      return;
+    }
+    finalClassOptions.value = groups.map((group) => ({
+      label:
+        scMissingFilterOption("final_class")?.value === group.value ? "Unclassified" : group.value,
+      value: group.value,
+    }));
+    if (rule.targets.length === 0 && groups.length > 0) {
+      const base = Math.floor((100 / groups.length) * 100) / 100;
+      rule.targets = groups.map((group, index) => ({
+        value: group.value,
+        percentage: index === groups.length - 1 ? 100 - base * (groups.length - 1) : base,
+      }));
     }
   } catch (error) {
-    if (version === conditionalLoadVersion) {
-      message.error(error instanceof Error ? error.message : "Failed to load conditional groups");
-    }
+    message.error(error instanceof Error ? error.message : "Failed to load rule values");
   } finally {
-    if (version === conditionalLoadVersion) conditionalGroupsLoading.value = false;
+    if (version === loadVersion) groupLoading.value = false;
   }
 }
 
-async function loadGroupPopulations(reset = false): Promise<void> {
-  if (!props.show) return;
-  const version = ++groupLoadVersion;
-  groupPopulationsLoading.value = true;
-  try {
-    const groups = await props.loadGroups(draft.value.group.field);
-    if (version !== groupLoadVersion) return;
-    groupPopulations.value = groups;
-    reconcileTargets(groups, reset);
-  } catch (error) {
-    if (version === groupLoadVersion) {
-      message.error(error instanceof Error ? error.message : "Failed to load sampling groups");
-    }
-  } finally {
-    if (version === groupLoadVersion) groupPopulationsLoading.value = false;
-  }
-}
-
-function setRuleEnabled(id: ScSamplingRuleId, enabled: boolean): void {
-  if (id === "extra") {
-    draft.value.extraFilterEnabled = enabled;
-    emit("update:program", cloneScSamplingProgram(draft.value));
-    emit("scope-change");
-  } else if (id === "conditional") {
-    draft.value.conditional.enabled = enabled;
-  } else if (id === "total") {
-    draft.value.total.enabled = enabled;
-  } else if (enabled) {
-    draft.value.group.enabled = true;
-    void loadGroupPopulations(true);
-  } else if (draft.value.group.enabled && id === "quota") {
-    draft.value.group.enabled = false;
-  }
-  selectedDisabledRule.value = null;
-  selectedEnabledRule.value = enabled ? id : null;
-}
-
-function moveSelectedRule(enabled: boolean): void {
-  const id = enabled ? selectedDisabledRule.value : selectedEnabledRule.value;
-  if (id) setRuleEnabled(id, enabled);
-}
-
-function openRuleConfiguration(id: ScSamplingRuleId): void {
-  if (id === "extra") {
-    activeTab.value = "extra";
-    return;
-  }
-  editingRule.value = id;
-  ruleConfigVisible.value = true;
+function openRule(id: ScSamplingRuleId): void {
+  editingRuleId.value = id;
+  const rule = draft.value.rules.find((candidate) => candidate.type === id);
+  if (!rule || scSamplingRuleEditor(id).placement === "inline") return;
+  configVisible.value = true;
+  void loadRuleOptions(rule);
 }
 
 function handleScopeChange(): void {
   emit("scope-change");
-  void loadConditionalGroups();
-  void loadGroupPopulations();
 }
 
 function updateExtraFilter(filter: ScGlobalFilter): void {
   emit("update:extra-filter", filter);
   handleScopeChange();
-}
-
-function handleGroupModeChange(): void {
-  void loadGroupPopulations(true);
 }
 
 function handleConfirm(): void {
@@ -326,22 +305,11 @@ watch(
     if (!show) return;
     draft.value = cloneScSamplingProgram(props.program);
     activeTab.value = "rules";
-    void Promise.all([loadConditionalGroups(), loadGroupPopulations()]);
   },
   { immediate: true },
 );
 
 watch(draft, (program) => emit("update:program", cloneScSamplingProgram(program)), { deep: true });
-
-watch(
-  () => draft.value.conditional.field,
-  () => void loadConditionalGroups(),
-);
-
-watch(
-  () => draft.value.group.field,
-  () => void loadGroupPopulations(true),
-);
 </script>
 
 <template>
@@ -351,16 +319,15 @@ watch(
     title="Review Sampling"
     :bordered="false"
     :style="reviewModalStyle"
-    class="review-sampling-modal"
     data-testid="review-sampling-modal"
   >
     <NTabs v-model:value="activeTab" type="line" animated>
-      <NTabPane name="rules" tab="Enabled rules">
+      <NTabPane name="rules" tab="Sampling rules">
         <NCard size="small" :bordered="false" class="scope-card">
-          <div class="scope-heading">
+          <div class="section-heading">
             <div>
               <strong>Candidate scope</strong>
-              <small>Choose one source before enabled sampling rules.</small>
+              <small>Rules operate on one explicit workbench scope.</small>
             </div>
             <NText depth="3">{{ availableCount.toLocaleString() }} available</NText>
           </div>
@@ -380,92 +347,74 @@ watch(
           </NRadioGroup>
         </NCard>
 
-        <div class="rules-heading">
+        <div class="section-heading rules-heading">
           <div>
             <strong>Active pipeline</strong>
-            <small>Simple limits stay editable here; open complex rules for details.</small>
+            <small>Eligibility → independent random selectors → post-selection caps.</small>
           </div>
-          <NButton secondary type="primary" @click="manageRulesVisible = true">
-            Manage sampling rules
+          <NButton secondary type="primary" @click="catalogVisible = true">
+            Add sampling rule
           </NButton>
         </div>
 
-        <div class="enabled-rule-list">
-          <article v-for="item in configuredRules" :key="item.id" class="enabled-rule-item">
-            <button
-              v-if="item.id !== 'total'"
-              type="button"
-              class="rule-copy"
-              @click="openRuleConfiguration(item.id)"
-            >
-              <span>{{ item.order }}</span>
-              <div>
+        <div class="active-rules">
+          <article
+            v-for="{ item, rule } in enabledRules"
+            :key="item.id"
+            class="active-rule"
+            :data-testid="`sampling-rule-${item.id}`"
+          >
+            <span class="rule-order">{{ item.order }}</span>
+            <div class="rule-copy">
+              <div class="rule-title-line">
                 <strong>{{ item.title }}</strong>
-                <small>{{ item.description }}</small>
+                <NTag size="small" :bordered="false">{{ phaseLabel(item.phase) }}</NTag>
               </div>
-            </button>
-            <div v-else class="rule-copy rule-copy-static">
-              <span>{{ item.order }}</span>
-              <div>
-                <strong>{{ item.title }}</strong>
-                <small>{{ item.description }}</small>
-              </div>
+              <small>{{ item.description }}</small>
             </div>
-            <div class="inline-control">
-              <template v-if="item.id === 'conditional'">
-                <label>Matched max</label>
-                <NInputNumber
-                  v-model:value="draft.conditional.limit"
-                  :min="0"
-                  :precision="0"
-                  aria-label="Conditional limit"
-                />
-              </template>
-              <template v-else-if="item.id === 'total'">
-                <label>Final max</label>
-                <NInputNumber
-                  v-model:value="draft.total.limit"
-                  :min="1"
-                  :precision="0"
-                  aria-label="Total limit"
-                  data-testid="sampling-total-limit"
-                />
-              </template>
-              <template v-else>
-                <label>Configuration</label>
-                <NTag size="small" type="success">
-                  {{ draft.group.targets.length }} groups + Others ·
-                  {{ draft.group.unit === "ratio" ? "sample ratio" : "count" }}
-                </NTag>
-              </template>
+            <component
+              :is="scSamplingRuleEditor(rule.type).component"
+              v-if="scSamplingRuleEditor(rule.type).placement === 'inline'"
+              class="rule-inline-editor"
+              :rule="rule"
+              :context="editorContext"
+              compact
+              @update:rule="updateRule"
+            />
+            <NText v-else depth="3" class="rule-summary">{{ ruleSummary(rule) }}</NText>
+            <div class="rule-actions">
+              <NButton
+                v-if="scSamplingRuleEditor(rule.type).placement === 'modal'"
+                size="small"
+                @click="openRule(rule.type)"
+              >
+                Edit
+              </NButton>
+              <NButton size="small" quaternary type="error" @click="removeRule(rule.type)">
+                Remove
+              </NButton>
             </div>
-            <NButton
-              v-if="item.id !== 'total'"
-              size="small"
-              secondary
-              @click="openRuleConfiguration(item.id)"
-            >
-              Edit
-            </NButton>
           </article>
-          <div v-if="configuredRules.length === 0" class="empty-rules">
-            No limiting rule enabled. Use Manage sampling rules to add one.
+          <div v-if="enabledRules.length === 0" class="empty-state">
+            No rules enabled. Add a selector such as “All defects by count”.
           </div>
         </div>
       </NTabPane>
 
       <NTabPane name="extra" tab="Extra filter">
-        <NCard :bordered="false" class="global-filter-card">
-          <div class="global-filter-heading">
+        <NCard :bordered="false" class="extra-filter-card">
+          <div class="section-heading">
             <div>
               <strong>Extra filter</strong>
-              <small>
-                Apply an additional filter after choosing All, Map Selection, or Table Selection.
-              </small>
+              <small>Apply the workbench filter before the 17 sampling rules.</small>
             </div>
-            <NTag :type="draft.extraFilterEnabled ? 'success' : 'default'" round>
+            <NButton
+              size="small"
+              :type="draft.extraFilterEnabled ? 'primary' : 'default'"
+              @click="draft.extraFilterEnabled = !draft.extraFilterEnabled"
+            >
               {{ draft.extraFilterEnabled ? "Enabled" : "Disabled" }}
-            </NTag>
+            </NButton>
           </div>
           <ScGlobalFilterBar
             class="extra-filter-editor"
@@ -480,11 +429,6 @@ watch(
             @search-options="emit('search-extra-filter-options', $event)"
             @request-range="emit('request-extra-filter-range', $event)"
           />
-          <div v-if="!draft.extraFilterEnabled" class="global-filter-actions">
-            <NButton type="primary" secondary @click="setRuleEnabled('extra', true)">
-              Enable for sampling
-            </NButton>
-          </div>
         </NCard>
       </NTabPane>
 
@@ -500,11 +444,7 @@ watch(
     <template #footer>
       <div class="modal-footer">
         <NText depth="3">
-          {{
-            loading
-              ? "Resolving candidate scope…"
-              : `${finalEstimate.toLocaleString()} samples planned`
-          }}
+          {{ enabledRules.length }} rules · {{ availableCount.toLocaleString() }} candidates
         </NText>
         <div>
           <NButton @click="showModel = false">Cancel</NButton>
@@ -522,244 +462,92 @@ watch(
   </NModal>
 
   <NModal
-    v-model:show="manageRulesVisible"
+    v-model:show="catalogVisible"
     preset="card"
-    title="Manage sampling rules"
+    title="Add sampling rule"
     :bordered="false"
-    :style="manageModalStyle"
-    data-testid="manage-sampling-rules-modal"
+    :style="catalogModalStyle"
+    data-testid="sampling-rule-catalog"
   >
-    <NText depth="3">Move rules between lists to enable or disable pipeline stages.</NText>
-    <div class="dual-list">
-      <section class="rule-list-panel">
-        <header>
-          <strong>Disabled</strong><NTag size="small">{{ disabledRules.length }}</NTag>
-        </header>
-        <div class="rule-list" role="listbox" aria-label="Disabled sampling rules">
-          <button
-            v-for="item in disabledRules"
-            :key="item.id"
-            type="button"
-            role="option"
-            class="rule-list-item"
-            :class="{ selected: selectedDisabledRule === item.id }"
-            :aria-selected="selectedDisabledRule === item.id"
-            @click="selectedDisabledRule = item.id"
-            @dblclick="setRuleEnabled(item.id, true)"
-          >
-            <span>{{ item.order }}</span>
-            <div>
-              <strong>{{ item.title }}</strong
-              ><small>{{ item.description }}</small>
-            </div>
-          </button>
-          <div v-if="disabledRules.length === 0" class="empty-rules">All rules enabled.</div>
-        </div>
-      </section>
-      <div class="transfer-controls" aria-label="Sampling rule transfer controls">
-        <NButton
-          circle
-          type="primary"
-          aria-label="Enable selected rule"
-          :disabled="selectedDisabledRule === null"
-          @click="moveSelectedRule(true)"
-          >→</NButton
-        >
-        <NButton
-          circle
-          aria-label="Disable selected rule"
-          :disabled="selectedEnabledRule === null"
-          @click="moveSelectedRule(false)"
-          >←</NButton
-        >
-      </div>
-      <section class="rule-list-panel">
-        <header>
-          <strong>Enabled</strong><NTag size="small" type="success">{{ enabledRules.length }}</NTag>
-        </header>
-        <div class="rule-list" role="listbox" aria-label="Enabled sampling rules">
-          <button
-            v-for="item in enabledRules"
-            :key="item.id"
-            type="button"
-            role="option"
-            class="rule-list-item"
-            :class="{ selected: selectedEnabledRule === item.id }"
-            :aria-selected="selectedEnabledRule === item.id"
-            @click="selectedEnabledRule = item.id"
-            @dblclick="setRuleEnabled(item.id, false)"
-          >
-            <span>{{ item.order }}</span>
-            <div>
-              <strong>{{ item.title }}</strong
-              ><small>{{ item.description }}</small>
-            </div>
-          </button>
-          <div v-if="enabledRules.length === 0" class="empty-rules">No rules enabled.</div>
-        </div>
-      </section>
-    </div>
     <NAlert type="info" :show-icon="false">
-      Others applies the configured rule to every group value not listed explicitly.
+      Multiple selectors draw independently from the same eligible candidates and are combined
+      without duplicates.
     </NAlert>
-    <template #footer>
-      <div class="modal-footer">
-        <span />
-        <NButton type="primary" @click="manageRulesVisible = false">Done</NButton>
-      </div>
-    </template>
+    <div class="catalog-grid">
+      <article v-for="item in SC_REVIEW_SAMPLING_RULE_CATALOG" :key="item.id" class="catalog-item">
+        <div class="catalog-order">{{ item.order }}</div>
+        <div>
+          <div class="rule-title-line">
+            <strong>{{ item.title }}</strong>
+            <NTag size="small" :bordered="false">{{ phaseLabel(item.phase) }}</NTag>
+          </div>
+          <small>{{ item.description }}</small>
+        </div>
+        <NButton
+          size="small"
+          :disabled="enabledIds.has(item.id)"
+          :data-testid="`add-sampling-rule-${item.id}`"
+          @click="addRule(item.id)"
+        >
+          {{ enabledIds.has(item.id) ? "Enabled" : "Add" }}
+        </NButton>
+      </article>
+    </div>
   </NModal>
 
   <NModal
-    v-model:show="ruleConfigVisible"
+    v-model:show="configVisible"
     preset="card"
-    :title="editingRuleItem ? `Configure ${editingRuleItem.title}` : 'Configure rule'"
+    :title="editingDescriptor ? `Configure ${editingDescriptor.title}` : 'Configure rule'"
     :bordered="false"
-    :style="ruleModalStyle"
+    :style="configModalStyle"
+    data-testid="sampling-rule-config"
   >
-    <div v-if="editingRule === 'conditional'" class="rule-config-panel">
-      <NText depth="3">Rows outside this condition remain eligible.</NText>
-      <div class="condition-grid">
-        <NSelect
-          v-model:value="draft.conditional.field"
-          :options="SC_SAMPLING_GROUP_FIELDS"
-          aria-label="Conditional field"
-        />
-        <NSpin :show="conditionalGroupsLoading">
-          <NSelect
-            v-model:value="draft.conditional.value"
-            :options="
-              conditionalGroups.map((group) => ({
-                label: displayGroupValue(draft.conditional.field, group.value),
-                value: group.value,
-              }))
-            "
-            placeholder="Choose value"
-            aria-label="Conditional value"
-          />
-        </NSpin>
-        <NInputNumber
-          v-model:value="draft.conditional.limit"
-          :min="0"
-          :precision="0"
-          aria-label="Conditional maximum"
-        >
-          <template #suffix>max</template>
-        </NInputNumber>
-      </div>
-    </div>
-
-    <div v-else-if="editingRule === 'quota'" class="rule-config-panel">
-      <div class="group-config-toolbar">
-        <NSelect
-          v-model:value="draft.group.field"
-          :options="SC_SAMPLING_GROUP_FIELDS"
-          aria-label="Group field"
-        />
-        <NRadioGroup v-model:value="draft.group.unit" @update:value="handleGroupModeChange">
-          <NRadioButton value="count">Count</NRadioButton>
-          <NRadioButton value="ratio">Sample ratio</NRadioButton>
-        </NRadioGroup>
-        <NSelect
-          v-if="draft.group.unit === 'ratio'"
-          v-model:value="draft.group.rounding"
-          :options="[
-            { label: 'Nearest', value: 'nearest' },
-            { label: 'Floor', value: 'floor' },
-            { label: 'Ceil', value: 'ceil' },
-          ]"
-          aria-label="Sample ratio rounding"
-        />
-      </div>
-
-      <NAlert v-if="draft.group.unit === 'ratio'" type="info" :show-icon="false">
-        Sample ratio is applied to each group's own eligible population: 2% of 1,000 selects 20.
-      </NAlert>
-
-      <NSpin :show="groupPopulationsLoading">
-        <div class="group-table">
-          <div class="group-table-head">
-            <span>Group</span><span>Eligible</span><span>Rule value</span>
-          </div>
-          <div
-            v-for="(population, index) in groupPopulations"
-            :key="population.value"
-            class="group-table-row"
-          >
-            <strong>{{ displayGroupValue(draft.group.field, population.value) }}</strong>
-            <span>{{ population.count.toLocaleString() }}</span>
-            <NInputNumber
-              v-model:value="draft.group.targets[index]!.amount"
-              :min="0"
-              :max="draft.group.unit === 'ratio' ? 100 : undefined"
-              :precision="draft.group.unit === 'ratio' ? 2 : 0"
-              :aria-label="`${population.value} sampling target`"
-            >
-              <template v-if="draft.group.unit === 'ratio'" #suffix>%</template>
-            </NInputNumber>
-          </div>
-          <div class="group-table-row group-table-others">
-            <strong>Others</strong>
-            <span>All other values</span>
-            <NInputNumber
-              v-model:value="draft.group.othersAmount"
-              :min="0"
-              :max="draft.group.unit === 'ratio' ? 100 : undefined"
-              :precision="draft.group.unit === 'ratio' ? 2 : 0"
-              aria-label="Others sampling target"
-            >
-              <template v-if="draft.group.unit === 'ratio'" #suffix>%</template>
-            </NInputNumber>
-          </div>
-          <div v-if="groupPopulations.length === 0" class="empty-rules">
-            No groups in this candidate scope.
-          </div>
-        </div>
-      </NSpin>
-    </div>
-
+    <component
+      :is="editingEditor.component"
+      v-if="editingRule && editingEditor"
+      :rule="editingRule"
+      :context="editorContext"
+      @update:rule="updateRule"
+    />
     <template #footer>
       <div class="modal-footer">
         <NText v-if="configurationError" type="error">{{ configurationError }}</NText>
-        <NButton type="primary" @click="ruleConfigVisible = false">Done</NButton>
+        <NButton type="primary" @click="configVisible = false">Done</NButton>
       </div>
     </template>
   </NModal>
 </template>
 
 <style scoped>
-.scope-heading,
-.rules-heading,
-.global-filter-heading,
+.section-heading,
 .modal-footer,
-.rule-list-panel header {
+.rule-title-line,
+.rule-actions {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
+  gap: 12px;
 }
 
-.scope-heading small,
-.rules-heading small,
-.global-filter-heading small,
+.section-heading strong,
+.section-heading small,
+.rule-copy small {
+  display: block;
+}
+
+.section-heading small,
 .rule-copy small,
-.rule-list-item small {
+.catalog-item small {
+  margin-top: 3px;
   color: var(--cv-text-secondary, #737373);
-  font-size: 11px;
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .scope-card,
-.global-filter-card {
-  background: color-mix(in srgb, var(--cv-card-bg, #fff) 94%, var(--cv-primary, #4c80f0));
-}
-
-.scope-heading strong,
-.scope-heading small,
-.rules-heading strong,
-.rules-heading small,
-.global-filter-heading strong,
-.global-filter-heading small {
-  display: block;
+.extra-filter-card {
+  background: var(--cv-card-bg, #fff);
 }
 
 .scope-options {
@@ -773,104 +561,60 @@ watch(
   margin: 18px 0 10px;
 }
 
-.enabled-rule-list,
-.rule-list,
-.group-table,
-.global-condition-list {
+.active-rules,
+.catalog-grid {
   overflow: hidden;
   border: 1px solid var(--cv-border, #e2e2e2);
-  border-radius: 11px;
+  border-radius: 10px;
 }
 
-.enabled-rule-item {
+.active-rule {
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) minmax(150px, 190px) auto;
-  gap: 14px;
+  grid-template-columns: 36px minmax(260px, 1fr) minmax(130px, auto) auto;
+  gap: 12px;
   align-items: center;
-  min-height: 78px;
+  min-height: 76px;
   padding: 10px 12px;
   border-bottom: 1px solid var(--cv-divider, #ededed);
 }
 
-.enabled-rule-item:last-child {
+.active-rule:last-child,
+.catalog-item:last-child {
   border-bottom: 0;
 }
 
-.rule-copy,
-.rule-list-item {
-  display: grid;
-  grid-template-columns: 36px 1fr;
-  gap: 8px;
-  width: 100%;
-  padding: 0;
-  color: inherit;
-  text-align: left;
-  background: transparent;
-  border: 0;
-  cursor: pointer;
-}
-
-.rule-copy > span,
-.rule-list-item > span {
+.rule-order,
+.catalog-order {
   color: var(--cv-primary, #4c80f0);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
 }
 
-.rule-copy strong,
-.rule-copy small,
-.rule-list-item strong,
-.rule-list-item small {
-  display: block;
+.rule-title-line {
+  justify-content: flex-start;
 }
 
-.rule-copy small,
-.rule-list-item small {
-  margin-top: 3px;
-  line-height: 1.35;
+.rule-summary {
+  text-align: right;
 }
 
-.rule-copy-static {
-  cursor: default;
+.rule-inline-editor {
+  justify-self: end;
 }
 
-.inline-control label {
-  display: block;
-  margin-bottom: 5px;
-  font-weight: 600;
-}
-
-.empty-rules {
-  padding: 18px;
-  color: var(--cv-text-secondary, #777);
-  font-size: 12px;
+.empty-state {
+  padding: 20px;
+  color: var(--cv-text-secondary, #737373);
   text-align: center;
 }
 
-.global-filter-card {
-  min-height: 270px;
-}
-
-.global-filter-heading {
-  align-items: flex-start;
-  margin-bottom: 16px;
-}
-
-.global-filter-heading small {
-  max-width: 620px;
-  margin-top: 4px;
-  line-height: 1.5;
-}
-
-.global-filter-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 16px;
+.extra-filter-card {
+  min-height: 300px;
 }
 
 .extra-filter-editor {
   min-height: 220px;
+  margin-top: 16px;
 }
 
 .form-error {
@@ -882,96 +626,35 @@ watch(
   gap: 8px;
 }
 
-.dual-list {
+.catalog-grid {
+  margin-top: 14px;
+}
+
+.catalog-item {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-columns: 36px minmax(0, 1fr) auto;
   gap: 12px;
-  margin: 16px 0;
-}
-
-.rule-list-panel header {
-  padding: 9px 10px;
-  background: color-mix(in srgb, var(--cv-primary, #4c80f0) 6%, transparent);
-  border: 1px solid var(--cv-border, #e2e2e2);
-  border-bottom: 0;
-  border-radius: 10px 10px 0 0;
-}
-
-.rule-list-panel .rule-list {
-  min-height: 270px;
-  border-radius: 0 0 10px 10px;
-}
-
-.rule-list-item {
-  padding: 12px 10px;
+  align-items: center;
+  min-height: 70px;
+  padding: 10px 12px;
   border-bottom: 1px solid var(--cv-divider, #ededed);
 }
 
-.rule-list-item:hover,
-.rule-list-item.selected {
-  background: color-mix(in srgb, var(--cv-primary, #4c80f0) 10%, transparent);
+.catalog-item:hover,
+.active-rule:hover {
+  background: var(--cv-hover, #f5f5f5);
 }
 
-.transfer-controls {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 8px;
-}
-
-.condition-grid,
-.group-config-toolbar {
-  display: grid;
-  gap: 10px;
-  margin: 14px 0;
-}
-
-.condition-grid {
-  grid-template-columns: 1fr 1fr 150px;
-}
-
-.group-config-toolbar {
-  grid-template-columns: minmax(160px, 1fr) auto minmax(150px, auto);
-}
-
-.group-table {
-  margin: 14px 0 8px;
-}
-
-.group-table-head,
-.group-table-row {
-  display: grid;
-  grid-template-columns: minmax(120px, 1fr) 110px minmax(150px, 0.8fr);
-  gap: 12px;
-  align-items: center;
-  padding: 9px 12px;
-}
-
-.group-table-head {
-  color: var(--cv-text-secondary, #777);
-  font-size: 11px;
-  font-weight: 600;
-  background: color-mix(in srgb, var(--cv-primary, #4c80f0) 6%, transparent);
-}
-
-.group-table-row {
-  border-top: 1px solid var(--cv-divider, #ededed);
-}
-
-.rule-config-panel > :deep(.n-input-number) {
-  width: 100%;
-}
-
-@media (max-width: 700px) {
-  .enabled-rule-item,
-  .condition-grid,
-  .group-config-toolbar,
-  .dual-list {
+@media (max-width: 760px) {
+  .active-rule,
+  .catalog-item {
     grid-template-columns: 1fr;
   }
 
-  .transfer-controls {
-    flex-direction: row;
+  .rule-summary,
+  .rule-inline-editor {
+    justify-self: start;
+    text-align: left;
   }
 }
 </style>

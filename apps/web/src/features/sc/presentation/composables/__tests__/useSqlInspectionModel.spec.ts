@@ -316,7 +316,7 @@ describe("useSqlInspectionModel", () => {
     vi.mocked(source.resolveSelection).mockClear();
 
     const program = createDefaultScSamplingProgram();
-    program.total.limit = 25;
+    program.rules = [{ type: "random_count", count: 25 }];
     await model.querySamplingDefectIds(program, 1234, {
       scope: "map",
       extraFilterEnabled: true,

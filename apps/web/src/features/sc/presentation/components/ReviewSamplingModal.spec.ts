@@ -1,16 +1,21 @@
 import { h, nextTick } from "vue";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { NMessageProvider } from "naive-ui";
 import { mountWithProviders } from "@/testing";
 import { createDefaultScSamplingProgram } from "@/features/sc/domain/samplingRules";
 import ReviewSamplingModal from "./ReviewSamplingModal.vue";
+import ClusterCountRuleEditor from "./sampling-rules/ClusterCountRuleEditor.vue";
+
+const modalStub = {
+  name: "NModal",
+  props: ["show", "title"],
+  emits: ["update:show"],
+  template:
+    '<section v-if="show" :aria-label="title"><slot name="header" /><slot /><slot name="footer" /></section>',
+};
 
 describe("ReviewSamplingModal", () => {
-  it("uses the dual list only to enable rules and keeps their configuration in the main view", async () => {
-    const loadGroups = vi.fn(async () => [
-      { value: "1", count: 80 },
-      { value: "2", count: 20 },
-    ]);
+  it("shows all 17 business rules and adds one typed rule to the active pipeline", async () => {
     const { wrapper } = await mountWithProviders(NMessageProvider, {
       slots: {
         default: () =>
@@ -23,72 +28,55 @@ describe("ReviewSamplingModal", () => {
             extraFilter: { combinator: "and", items: [] },
             program: createDefaultScSamplingProgram(),
             scope: "all",
-            loadGroups,
+            loadGroups: async () => [],
           }),
       },
-      global: {
-        stubs: {
-          NModal: {
-            name: "NModal",
-            props: ["show", "title"],
-            emits: ["update:show"],
-            template:
-              '<section v-if="show" :aria-label="title"><slot name="header" /><slot /><slot name="footer" /></section>',
-          },
-        },
-      },
+      global: { stubs: { NModal: modalStub } },
     });
     const modal = wrapper.findComponent(ReviewSamplingModal);
 
-    await vi.waitFor(() => expect(loadGroups).toHaveBeenCalled());
-    await vi.waitFor(() => expect(document.body.textContent).toContain("Manage sampling rules"));
-    const allScope = document.body.querySelector('input[value="all"]') as HTMLInputElement | null;
-    expect(allScope?.checked).toBe(true);
-    const tabs = Array.from(document.body.querySelectorAll<HTMLElement>(".n-tabs-tab"));
-    tabs.find((tab) => tab.textContent?.includes("Extra filter"))?.click();
-    await nextTick();
-    expect(document.body.querySelector('[data-testid="query-add-condition"]')).not.toBeNull();
-    expect(document.body.querySelector('[data-testid="query-add-group"]')).not.toBeNull();
-    tabs.find((tab) => tab.textContent?.includes("Enabled rules"))?.click();
-    await nextTick();
-    const manageButton = Array.from(document.body.querySelectorAll("button")).find((button) =>
-      button.textContent?.includes("Manage sampling rules"),
+    const addButton = Array.from(document.body.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("Add sampling rule"),
     );
-    expect(manageButton).toBeDefined();
-    manageButton?.click();
+    addButton?.click();
     await nextTick();
 
-    expect(
-      document.body.querySelector('[role="listbox"][aria-label="Disabled sampling rules"]'),
-    ).not.toBeNull();
-    const conditionalRule = Array.from(document.body.querySelectorAll('[role="option"]')).find(
-      (option) => option.textContent?.includes("Conditional limit"),
-    ) as HTMLButtonElement | undefined;
-    conditionalRule?.click();
-    await nextTick();
-    const enableButton = document.body.querySelector(
-      'button[aria-label="Enable selected rule"]',
+    expect(document.body.querySelectorAll('[data-testid^="add-sampling-rule-"]')).toHaveLength(17);
+    const clusterCount = document.body.querySelector(
+      '[data-testid="add-sampling-rule-cluster_count"]',
     ) as HTMLButtonElement | null;
-    expect(enableButton?.disabled).toBe(false);
-    enableButton?.click();
+    expect(clusterCount?.disabled).toBe(false);
+    clusterCount?.click();
     await nextTick();
 
-    const updates = modal.emitted("update:program") ?? [];
-    const latest = updates.at(-1)?.[0] as ReturnType<typeof createDefaultScSamplingProgram>;
-    expect(latest.conditional.enabled).toBe(true);
-    expect(document.body.textContent).toContain("Matched max");
-    expect(document.body.textContent).not.toContain("Random seed");
-    expect(document.body.textContent).not.toContain("Assign draft label");
-
-    const totalRule = Array.from(document.body.querySelectorAll("article")).find((article) =>
-      article.textContent?.includes("Total limit"),
-    );
-    expect(totalRule?.querySelector("button.rule-copy")).toBeNull();
     expect(
-      Array.from(totalRule?.querySelectorAll("button") ?? []).some(
+      document.body.querySelector('[data-testid="sampling-rule-cluster_count"]'),
+    ).not.toBeNull();
+    const activeRule = document.body.querySelector(
+      '[data-testid="sampling-rule-cluster_count"]',
+    ) as HTMLElement;
+    expect(activeRule.querySelector('[data-testid="rule-editor-cluster_count"]')).not.toBeNull();
+    expect(
+      Array.from(activeRule.querySelectorAll("button")).some(
         (button) => button.textContent?.trim() === "Edit",
       ),
     ).toBe(false);
+    expect(document.body.textContent).toContain("Cluster defects by count");
+    expect(document.body.textContent).not.toContain("Random seed");
+    const updates = modal.emitted("update:program") ?? [];
+    const latest = updates.at(-1)?.[0] as ReturnType<typeof createDefaultScSamplingProgram>;
+    expect(latest.rules).toContainEqual({ type: "cluster_count", count: 50 });
+
+    modal.findComponent(ClusterCountRuleEditor).vm.$emit("update:rule", {
+      type: "cluster_count",
+      count: 75,
+    });
+    await nextTick();
+    const inlineUpdates = modal.emitted("update:program") ?? [];
+    const afterInlineEdit = inlineUpdates.at(-1)?.[0] as ReturnType<
+      typeof createDefaultScSamplingProgram
+    >;
+    expect(afterInlineEdit.rules).toContainEqual({ type: "cluster_count", count: 75 });
     wrapper.unmount();
   });
 
@@ -116,21 +104,11 @@ describe("ReviewSamplingModal", () => {
             },
           ),
       },
-      global: {
-        stubs: {
-          NModal: {
-            name: "NModal",
-            props: ["show", "title"],
-            emits: ["update:show"],
-            template:
-              '<section v-if="show" :aria-label="title"><slot name="header" /><slot /><slot name="footer" /></section>',
-          },
-        },
-      },
+      global: { stubs: { NModal: modalStub } },
     });
     const modal = wrapper.findComponent(ReviewSamplingModal);
 
-    await vi.waitFor(() => expect(document.body.textContent).toContain("After sampling"));
+    await nextTick();
     const afterSamplingTab = Array.from(
       document.body.querySelectorAll<HTMLElement>(".n-tabs-tab"),
     ).find((tab) => tab.textContent?.includes("After sampling"));

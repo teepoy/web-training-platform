@@ -126,6 +126,7 @@ function mockScColumns(total: number): Record<string, Array<number | string | nu
     index_y: defectIds.map((id) => id % 60),
     adder: defectIds.map(() => 0),
     cluster_id: defectIds.map((id) => String(id % 10)),
+    repeater_id: defectIds.map((id) => String(id % 7)),
     die_x: defectIds.map((id) => id % 37),
     die_y: defectIds.map((id) => id % 60),
     reticle_x: defectIds.map((id) => id % 20),
@@ -180,6 +181,7 @@ export async function mockScDataProvider(
       ["manual_bin", "Manual Bin", 120, "set", "default", "plain"],
       ["adder", "Adder", 120, "set", "default", "plain"],
       ["cluster_id", "Cluster ID", 120, "set", "default", "plain"],
+      ["repeater_id", "Repeater ID", 120, "set", "default", "plain"],
       ["kill_ratio", "Kill Ratio", 120, "range", "default", "fixed_3"],
       ["annotation_label", "Annotation", 140, "set", "reclassify", "plain"],
       ["prediction_label", "Prediction", 140, "set", "reclassify", "plain"],
@@ -217,15 +219,29 @@ export async function mockScDataProvider(
       parameters: unknown[];
       sampling?: {
         seed: number;
-        program: { total: { enabled: boolean; limit: number } };
+        program: {
+          rules: Array<{
+            type: string;
+            count?: number;
+          }>;
+        };
       };
     };
     const sql = request.sql;
     let columns: Record<string, Array<number | string | null>>;
     if (request.description === "sc-workbench.selection.sampling-program") {
-      const limit = request.sampling?.program.total.enabled
-        ? request.sampling.program.total.limit
-        : 200;
+      const randomCount = request.sampling?.program.rules.find(
+        (rule) => rule.type === "random_count",
+      );
+      if (randomCount?.count === undefined) {
+        await route.fulfill({
+          status: 422,
+          contentType: "application/json",
+          body: JSON.stringify({ detail: "Mock sampling requires random_count" }),
+        });
+        return;
+      }
+      const limit = randomCount.count;
       columns = { defect_id: (rows.defect_id ?? []).slice(0, limit) };
     } else if (sql.includes('AS "group_key"')) {
       columns = { group_key: [0, 1, 2], group_count: [334, 333, 333] };

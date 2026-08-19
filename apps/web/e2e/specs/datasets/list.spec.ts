@@ -44,11 +44,11 @@ test("dataset search and creator filters apply before pagination @mock", async (
   await listPage.goto("/library");
   await listPage.waitForLoaded();
 
-  await authedPage.getByPlaceholder("Search Library").fill("alpha");
+  await authedPage.getByPlaceholder("Search datasets").fill("alpha");
   await expect(authedPage.getByText("Alpha Flowers")).toBeVisible();
   await expect(authedPage.getByText("Beta Flowers")).toHaveCount(0);
 
-  await authedPage.getByPlaceholder("Search Library").clear();
+  await authedPage.getByPlaceholder("Search datasets").clear();
   await authedPage.locator(".library-creator").click();
   await authedPage.getByText("Bob", { exact: true }).last().click();
   await expect(authedPage.getByText("Beta Flowers")).toBeVisible();

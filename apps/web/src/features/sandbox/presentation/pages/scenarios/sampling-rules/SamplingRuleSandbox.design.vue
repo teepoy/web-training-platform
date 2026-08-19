@@ -8,10 +8,10 @@
       <button>Run preview</button>
     </header>
     <section class="pipeline">
-      Extra filter → Conditional limit → Group quota → Total limit → Random draw
+      Eligibility filters → Independent random selectors → Post-selection caps
     </section>
     <section class="workspace">
-      <aside class="catalog">Five rule types</aside>
+      <aside class="catalog">Seventeen product rules</aside>
       <article class="editor">Active rule configuration</article>
       <aside class="preview">Stage and distribution preview</aside>
     </section>

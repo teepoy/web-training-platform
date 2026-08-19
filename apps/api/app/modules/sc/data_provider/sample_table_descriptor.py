@@ -50,6 +50,7 @@ SC_SAMPLE_TABLE_DESCRIPTOR = ScSampleTableDescriptor(
         _column("manual_bin", "Manual Bin", filter="set"),
         _column("adder", "Adder", filter="set"),
         _column("cluster_id", "Cluster ID", filter="set"),
+        _column("repeater_id", "Repeater ID", filter="set"),
         _column("kill_ratio", "Kill Ratio", filter="range", format="fixed_3"),
         _column(
             "annotation_label",

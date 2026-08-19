@@ -28,6 +28,7 @@ const ARROW_FIELDS = [
   "index_y",
   "adder",
   "cluster_id",
+  "repeater_id",
   "die_x",
   "die_y",
   "reticle_x",

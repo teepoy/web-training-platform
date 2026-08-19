@@ -814,24 +814,10 @@ describe("SQL workbench data source", () => {
     const source = new SqlWorkbenchDataSource({ kind: "dataset", datasetId: "ds-1" });
     sources.push(source);
     const program = createDefaultScSamplingProgram();
-    program.conditional = {
-      enabled: true,
-      field: "rough_bin",
-      value: "4",
-      limit: 2,
-    };
-    program.group = {
-      enabled: true,
-      field: "class_number",
-      unit: "count",
-      targets: [
-        { value: "1", amount: 2 },
-        { value: "2", amount: 1 },
-      ],
-      othersAmount: 0,
-      rounding: "nearest",
-    };
-    program.total.limit = 3;
+    program.rules = [
+      { type: "cluster_count", count: 3 },
+      { type: "per_die_limit", limit: 2 },
+    ];
 
     await expect(
       source.resolveSelection({
@@ -842,40 +828,29 @@ describe("SQL workbench data source", () => {
 
     expect(requestBody?.description).toBe("sc-workbench.selection.sampling-program");
     expect(requestBody?.sql).toBe(
-      'SELECT "map_id", "rough_bin", "class_number" FROM samples WHERE "images" > ?',
+      'SELECT "map_id", "cluster_id", "index_x", "index_y", "inspection_time", "wafer_key" FROM samples WHERE "images" > ?',
     );
     expect(requestBody?.parameters).toEqual([0]);
     expect(requestBody?.sampling).toEqual({
       seed: 42,
       program: {
-        conditional: program.conditional,
-        group: program.group,
-        total: program.total,
+        rules: program.rules,
       },
     });
   });
 
-  it("keeps ratio and Others semantics in the structured backend program", () => {
+  it("keeps percentage semantics in the structured backend program", () => {
     const program = createDefaultScSamplingProgram();
-    program.group = {
-      enabled: true,
-      field: "class_number",
-      unit: "ratio",
-      targets: [{ value: "1", amount: 2 }],
-      othersAmount: 5,
-      rounding: "nearest",
-    };
+    program.rules = [{ type: "cluster_percentage", percentage: 2, rounding: "floor" }];
 
     const compiled = compileScSamplingSelection([], program, 42);
 
-    expect(compiled.sql).toBe('SELECT "map_id", "class_number" FROM samples');
+    expect(compiled.sql).toBe('SELECT "map_id", "cluster_id" FROM samples');
     expect(compiled.parameters).toEqual([]);
     expect(compiled.sampling).toEqual({
       seed: 42,
       program: {
-        conditional: program.conditional,
-        group: program.group,
-        total: program.total,
+        rules: program.rules,
       },
     });
   });
