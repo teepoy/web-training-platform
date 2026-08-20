@@ -10,9 +10,9 @@ Source connector configuration and infrastructure consoles require administrator
 
 ## Decision
 
-- Collection Detail groups work into `Overview`, `Data`, `Models`, `Snapshots`, and `Activity`.
+- Collection Detail groups work into `Overview`, `Data`, `Models`, `Snapshots`, and `Activity`, plus a direct `Classify ↗` workspace navigation item. Classify does not render an intermediate preview pane and is not another Automation mechanism page.
 - `Data` contains members, Membership rules, discovery status, and Backfill. `Models` contains the default Model, prediction coverage, reconciliation batches, Candidate Models, and cron-gated candidate training.
-- Classify is a prominent workspace action rather than another mechanism-oriented automation section.
+- Classify is a prominent direct workspace navigation item on the Collection, rather than an intermediate Samples surface or another mechanism-oriented automation section.
 - A global sidebar `Automations` page lists target-bound Automation records across resources and supports filtering, inspection, pause/resume, Retry, and history. It does not provide a targetless generic creation builder.
 - Discovery, Backfill, batch prediction, reconciliation, and training use one canonical run record. The same record appears with resource context in the target's `Activity` area and with cross-resource filters in the global `Automations` page.
 - `Admin > Connections` manages Source connectors and Label Studio configuration. `Admin > Infrastructure` shows Prefect UI and MinIO Console configuration status and protected links.

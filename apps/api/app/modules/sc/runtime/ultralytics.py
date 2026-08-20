@@ -4,7 +4,9 @@ import logging
 import tempfile
 import time
 import uuid
-from collections.abc import Sequence
+from collections.abc import AsyncIterator, Sequence
+from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
@@ -47,7 +49,7 @@ from app.modules.sc.runtime.streaming_prediction import (
     stream_sc_prediction_image_pairs,
 )
 from app.modules.training.domain.repository import TrainingRepository
-from app.shared.api.schemas import JobStatus, PredictionEvent, TrainingEvent
+from app.shared.api.schemas import JobStatus, Model, PredictionEvent, TrainingEvent
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +89,18 @@ def _model_metadata(
     }
 
 
-async def yolo_sc_train(ctx: TrainingRuntimeContext) -> RuntimeEventStream:
+@dataclass(frozen=True, slots=True)
+class ScYoloTrainingResult:
+    artifact: ArtifactOutput
+    metrics: MetricsReported
+    issues: tuple[RuntimeIssueReported, ...]
+
+
+async def execute_yolo_sc_training(
+    ctx: TrainingRuntimeContext,
+    *,
+    work_dir: Path,
+) -> ScYoloTrainingResult:
     import app.registrations  # noqa: F401
     import polars as pl
 
@@ -188,35 +201,34 @@ async def yolo_sc_train(ctx: TrainingRuntimeContext) -> RuntimeEventStream:
             max_output_bytes=pipeline.training_max_materialized_bytes,
         )
         try:
-            with tempfile.TemporaryDirectory(
-                prefix=f"sc-ultralytics-training-{ctx.job_id}-"
-            ) as temporary_directory:
-                parquet_paths = parquet_paths_from_manifest(materialization.manifest)
-                labels, valid_samples, skipped_samples = inspect_yolo_training_samples(
-                    parquet_paths,
-                    source.label_space,
+            work_dir.mkdir(parents=True, exist_ok=True)
+            parquet_paths = parquet_paths_from_manifest(materialization.manifest)
+            labels, valid_samples, skipped_samples = inspect_yolo_training_samples(
+                parquet_paths,
+                source.label_space,
+            )
+            if len(labels) < 2:
+                raise RuntimeExecutionError(
+                    "sc_training_insufficient_labels_after_image_filter",
+                    "SC Ultralytics training requires at least two labels after "
+                    "skipping unreadable images",
+                    details={
+                        "active_labels": list(labels),
+                        "skipped_samples": skipped_samples,
+                    },
                 )
-                if len(labels) < 2:
-                    raise RuntimeExecutionError(
-                        "sc_training_insufficient_labels_after_image_filter",
-                        "SC Ultralytics training requires at least two labels after "
-                        "skipping unreadable images",
-                        details={
-                            "active_labels": list(labels),
-                            "skipped_samples": skipped_samples,
-                        },
-                    )
-                output = await train_yolo(
-                    parquet_paths,
-                    labels,
-                    valid_samples=valid_samples,
-                    work_dir=Path(temporary_directory),
-                    shuffle_seed=pipeline.training_shuffle_seed,
-                    shuffle_buffer_rows=pipeline.training_shuffle_buffer_rows,
-                    on_epoch=report_epoch,
-                )
-                if materialization.errors or skipped_samples:
-                    yield RuntimeIssueReported(
+            output = await train_yolo(
+                parquet_paths,
+                labels,
+                valid_samples=valid_samples,
+                work_dir=work_dir,
+                shuffle_seed=pipeline.training_shuffle_seed,
+                shuffle_buffer_rows=pipeline.training_shuffle_buffer_rows,
+                on_epoch=report_epoch,
+            )
+            issues = (
+                (
+                    RuntimeIssueReported(
                         code="sc_training_images_skipped",
                         message=(
                             "SC Ultralytics training skipped unusable image samples"
@@ -225,8 +237,13 @@ async def yolo_sc_train(ctx: TrainingRuntimeContext) -> RuntimeEventStream:
                             "materialization_errors": len(materialization.errors),
                             "unreadable_samples": skipped_samples,
                         },
-                    )
-                yield ArtifactOutput(
+                    ),
+                )
+                if materialization.errors or skipped_samples
+                else ()
+            )
+            return ScYoloTrainingResult(
+                artifact=ArtifactOutput(
                     id=_model_artifact_id(ctx.job_id),
                     kind="model",
                     payload=LocalArtifactFile(
@@ -253,14 +270,61 @@ async def yolo_sc_train(ctx: TrainingRuntimeContext) -> RuntimeEventStream:
                     ),
                     name="checkpoint.pt",
                     format="pytorch",
-                )
-                yield MetricsReported(dict(output.metrics))
-                yield OperationCompleted({"job_id": ctx.job_id, "status": "completed"})
+                ),
+                metrics=MetricsReported(dict(output.metrics)),
+                issues=issues,
+            )
         finally:
             materialization.cleanup()
 
 
-async def yolo_sc_predictor(ctx: PredictionRuntimeContext) -> RuntimeEventStream:
+async def yolo_sc_train(ctx: TrainingRuntimeContext) -> RuntimeEventStream:
+    with tempfile.TemporaryDirectory(
+        prefix=f"sc-ultralytics-training-{ctx.job_id}-"
+    ) as temporary_directory:
+        result = await execute_yolo_sc_training(
+            ctx,
+            work_dir=Path(temporary_directory),
+        )
+        for issue in result.issues:
+            yield issue
+        yield result.artifact
+        yield result.metrics
+        yield OperationCompleted({"job_id": ctx.job_id, "status": "completed"})
+
+
+@asynccontextmanager
+async def _prediction_checkpoint(
+    *,
+    app_context: Any,
+    model: Model,
+    local_checkpoint: Path | None,
+    job_id: str,
+) -> AsyncIterator[Path]:
+    if local_checkpoint is not None:
+        if not local_checkpoint.is_file():
+            raise FileNotFoundError(
+                f"Local SC prediction checkpoint does not exist: {local_checkpoint}"
+            )
+        yield local_checkpoint
+        return
+    with tempfile.TemporaryDirectory(
+        prefix=f"sc-ultralytics-prediction-{job_id}-"
+    ) as temporary_directory:
+        checkpoint_path = Path(temporary_directory) / "model.pt"
+        await app_context.shared.artifact_storage.get_file(
+            model.uri,
+            str(checkpoint_path),
+        )
+        yield checkpoint_path
+
+
+async def _yolo_sc_predictor(
+    ctx: PredictionRuntimeContext,
+    *,
+    model_override: Model | None = None,
+    local_checkpoint: Path | None = None,
+) -> RuntimeEventStream:
     import app.registrations  # noqa: F401
 
     from ml_library import predict_yolo_stream
@@ -271,7 +335,7 @@ async def yolo_sc_predictor(ctx: PredictionRuntimeContext) -> RuntimeEventStream
     if app_context.injector is None:
         raise RuntimeError("AppContext injector was not initialized")
     pipeline = app_context.shared.config.sc.pipeline
-    model = await load_sc_prediction_model(ctx)
+    model = model_override or await load_sc_prediction_model(ctx)
     model_metadata = model.metadata if isinstance(model.metadata, dict) else {}
     predictor = runtime_catalog.validate_predictor_model_contract(
         ctx.predictor_id,
@@ -357,14 +421,12 @@ async def yolo_sc_predictor(ctx: PredictionRuntimeContext) -> RuntimeEventStream
             )
             last_flush = now
 
-        with tempfile.TemporaryDirectory(
-            prefix=f"sc-ultralytics-prediction-{ctx.job_id}-"
-        ) as temporary_directory:
-            checkpoint_path = Path(temporary_directory) / "model.pt"
-            await app_context.shared.artifact_storage.get_file(
-                model.uri,
-                str(checkpoint_path),
-            )
+        async with _prediction_checkpoint(
+            app_context=app_context,
+            model=model,
+            local_checkpoint=local_checkpoint,
+            job_id=ctx.job_id,
+        ) as checkpoint_path:
             image_source_factory = app_context.injector.get(ScJobImageSourceFactory)
             async with image_source_factory.open() as image_resolver:
                 image_pairs = stream_sc_prediction_image_pairs(
@@ -443,4 +505,29 @@ async def yolo_sc_predictor(ctx: PredictionRuntimeContext) -> RuntimeEventStream
     yield OperationCompleted(summary)
 
 
-__all__ = ["yolo_sc_predictor", "yolo_sc_train"]
+async def yolo_sc_predictor(ctx: PredictionRuntimeContext) -> RuntimeEventStream:
+    async for event in _yolo_sc_predictor(ctx):
+        yield event
+
+
+async def yolo_sc_predictor_from_local_checkpoint(
+    ctx: PredictionRuntimeContext,
+    *,
+    model: Model,
+    checkpoint_path: Path,
+) -> RuntimeEventStream:
+    async for event in _yolo_sc_predictor(
+        ctx,
+        model_override=model,
+        local_checkpoint=checkpoint_path,
+    ):
+        yield event
+
+
+__all__ = [
+    "ScYoloTrainingResult",
+    "execute_yolo_sc_training",
+    "yolo_sc_predictor",
+    "yolo_sc_predictor_from_local_checkpoint",
+    "yolo_sc_train",
+]

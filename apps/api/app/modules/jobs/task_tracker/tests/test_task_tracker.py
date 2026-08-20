@@ -12,7 +12,7 @@ from app.main import app
 from app.modules.jobs.schedules.port.local import ScheduleManagementPort
 from app.modules.jobs.task_tracker.app.services.task_tracker import TaskTrackerService
 from app.modules.jobs.task_tracker.port.http.deps import get_task_tracker_service
-from app.shared.api.schemas import JobStatus
+from app.shared.api.schemas import JobStatus, PredictionJob
 from tests.conftest import TRAINER_ID
 
 _SCHEDULE_RUN_READER = cast(ScheduleManagementPort, SimpleNamespace())
@@ -235,6 +235,43 @@ def test_task_tracker_displays_queued_platform_jobs_as_pending() -> None:
     assert service._display_status(SimpleNamespace(status=JobStatus.QUEUED), None) == "pending"
     assert service._display_status_from_prefect("PENDING") == "pending"
     assert service._display_status_from_prefect("SCHEDULED") == "pending"
+
+
+@pytest.mark.asyncio
+async def test_terminal_platform_job_detail_does_not_fall_back_to_queue_stage() -> None:
+    service = _make_service()
+    task = service._to_prediction_record(
+        PredictionJob(
+            id="prediction-cancelled",
+            dataset_id="dataset-1",
+            model_id="model-1",
+            status=JobStatus.CANCELLED,
+            created_by="user-1",
+            org_id="org-1",
+        )
+    )
+
+    detail = await service._derive(
+        task,
+        flow_run=None,
+        deployment=None,
+        task_runs=[],
+        work_queue=None,
+        work_pool=None,
+        logs=[],
+    )
+
+    assert detail.display_status == "cancelled"
+    assert detail.stage == "validation_output"
+    assert detail.active_node == "output"
+    assert [stage.status for stage in detail.stages] == [
+        "completed",
+        "completed",
+        "active",
+    ]
+    assert detail.stages[0].summary == "Scheduling completed"
+    assert detail.stages[0].nodes[0].detail == "queue cleared"
+    assert detail.stages[2].nodes[1].detail == "cancellation recorded"
 
 
 @pytest.mark.asyncio

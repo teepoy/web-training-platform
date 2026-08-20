@@ -12,7 +12,7 @@
 
 import type { Component } from "vue";
 
-export type ExporterSurface = "dataset" | "preview";
+export type ExporterSurface = "dataset" | "prediction" | "preview";
 
 export interface ExporterDescriptor {
   id: string;
@@ -38,26 +38,18 @@ export interface ExporterResult {
   message?: string;
 }
 
-export function defineExporter(
-  descriptor: ExporterDescriptor,
-): ExporterDescriptor {
+export function defineExporter(descriptor: ExporterDescriptor): ExporterDescriptor {
   if (!descriptor.id || descriptor.id.trim() === "") {
     throw new Error("[widget-sdk] defineExporter: id must not be empty");
   }
   if (!descriptor.label || descriptor.label.trim() === "") {
-    throw new Error(
-      `[widget-sdk] defineExporter(${descriptor.id}): label must not be empty`,
-    );
+    throw new Error(`[widget-sdk] defineExporter(${descriptor.id}): label must not be empty`);
   }
   if (!descriptor.component) {
-    throw new Error(
-      `[widget-sdk] defineExporter(${descriptor.id}): component must be provided`,
-    );
+    throw new Error(`[widget-sdk] defineExporter(${descriptor.id}): component must be provided`);
   }
   if (descriptor.surfaces.length === 0) {
-    throw new Error(
-      `[widget-sdk] defineExporter(${descriptor.id}): surfaces must not be empty`,
-    );
+    throw new Error(`[widget-sdk] defineExporter(${descriptor.id}): surfaces must not be empty`);
   }
   return descriptor;
 }

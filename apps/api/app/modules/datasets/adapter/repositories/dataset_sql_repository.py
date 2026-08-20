@@ -522,6 +522,49 @@ class DatasetSqlRepository:
             rows = (await session.execute(stmt)).all()
             return {str(dataset_id): str(name) for dataset_id, name in rows}
 
+    async def list_datasets_by_ids(
+        self, dataset_ids: list[str], org_id: str | None = None
+    ) -> list[Dataset]:
+        if not dataset_ids:
+            return []
+        unique_ids = list(dict.fromkeys(dataset_ids))
+        async with self.session_factory() as session:
+            stmt = (
+                select(DatasetORM, OrganizationORM.name, UserORM.name, UserORM.email)
+                .outerjoin(OrganizationORM, OrganizationORM.id == DatasetORM.org_id)
+                .outerjoin(UserORM, UserORM.id == DatasetORM.created_by)
+                .where(DatasetORM.id.in_(unique_ids))
+            )
+            if org_id is not None:
+                stmt = stmt.where(
+                    or_(DatasetORM.org_id == org_id, DatasetORM.is_public.is_(True))
+                )
+            rows = (await session.execute(stmt)).all()
+            by_id = {
+                row.id: Dataset(
+                    id=row.id,
+                    org_id=row.org_id,
+                    org_name=str(org_name or ""),
+                    creator_name=str(user_name or user_email or row.created_by),
+                    name=row.name,
+                    dataset_type=row.dataset_type,
+                    task_spec=cast(TaskSpec, row.dataset_meta),
+                    view_types=cast(list[str], row.view_types),
+                    created_by=row.created_by,
+                    is_public=row.is_public,
+                    created_at=row.created_at,
+                    embed_config=row.embed_config or {},
+                    ls_project_id=row.ls_project_id,
+                    storage_mode=cast(DatasetStorageMode, row.storage_mode),
+                    dataset_meta=row.dataset_meta,
+                    image_source=_image_source_binding(row.image_source_binding),
+                )
+                for row, org_name, user_name, user_email in rows
+            }
+            return [
+                by_id[dataset_id] for dataset_id in unique_ids if dataset_id in by_id
+            ]
+
     async def list_datasets_for_sc_inspections(
         self,
         inspection_times: Sequence[str],

@@ -1,6 +1,16 @@
+FROM golang:1.26-bookworm AS image-parser-batch-builder
+
+WORKDIR /src
+COPY services/image-parser/go.mod services/image-parser/go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
+COPY services/image-parser/ ./
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 go build -ldflags="-s -w" -o /image-parser-batch ./cmd/batch-resolve
+
 FROM python:3.12-slim AS base
 
 COPY --from=ghcr.io/astral-sh/uv:0.11.22 /uv /uvx /usr/local/bin/
+COPY --from=image-parser-batch-builder /image-parser-batch /usr/local/bin/image-parser-batch
 
 ARG UV_INDEX_URL=""
 ARG PIP_INDEX_URL=""
@@ -15,6 +25,7 @@ COPY apps/api/pyproject.toml apps/api/pyproject.toml
 COPY libs/protos/pyproject.toml libs/protos/pyproject.toml
 COPY libs/ml/pyproject.toml libs/ml/pyproject.toml
 COPY libs/sampling-rules/pyproject.toml libs/sampling-rules/pyproject.toml
+COPY libs/klarf/pyproject.toml libs/klarf/pyproject.toml
 COPY services/sc-upstream/pyproject.toml services/sc-upstream/pyproject.toml
 
 COPY libs/protos/ libs/protos/
@@ -26,6 +37,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 COPY apps/api/ apps/api/
 COPY libs/sampling-rules/ libs/sampling-rules/
+COPY libs/klarf/ libs/klarf/
 
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --package finetune-api --no-dev

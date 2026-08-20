@@ -277,7 +277,7 @@ function formatTime(ts: number): string {
 .acd-fab {
   position: fixed;
   bottom: 24px;
-  right: 24px;
+  left: 16px;
   z-index: 1000;
   width: 48px;
   height: 48px;
@@ -297,6 +297,14 @@ function formatTime(ts: number): string {
 .acd-fab:hover {
   transform: scale(1.08);
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+}
+
+@media (max-width: 640px) {
+  .acd-fab {
+    right: 16px;
+    bottom: 80px;
+    left: auto;
+  }
 }
 
 /* Drawer */

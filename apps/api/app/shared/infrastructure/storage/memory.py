@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator
 from pathlib import Path
 
 
@@ -40,6 +41,28 @@ class InMemoryArtifactStorage:
     async def get_file(self, uri: str, destination: str) -> None:
         data = await self.get_bytes(uri)
         await asyncio.to_thread(Path(destination).write_bytes, data)
+
+    async def get_size(self, uri: str) -> int:
+        return len(await self.get_bytes(uri))
+
+    async def iter_bytes(
+        self,
+        uri: str,
+        *,
+        offset: int = 0,
+        length: int | None = None,
+        chunk_size: int = 1024 * 1024,
+    ) -> AsyncIterator[bytes]:
+        if offset < 0:
+            raise ValueError("offset must be non-negative")
+        if length is not None and length < 0:
+            raise ValueError("length must be non-negative")
+        if chunk_size <= 0:
+            raise ValueError("chunk_size must be positive")
+        data = await self.get_bytes(uri)
+        end = len(data) if length is None else min(len(data), offset + length)
+        for position in range(offset, end, chunk_size):
+            yield data[position : min(position + chunk_size, end)]
 
     async def delete(self, uri: str) -> None:
         prefix = "memory://"

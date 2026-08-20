@@ -84,7 +84,10 @@ test("Global Filter persists with statistics from the dataset detail page @mock"
   await expect(filterStats).toContainText("40%");
   await expect(filterStats).toContainText("12 excluded");
 
-  await authedPage.getByRole("button", { name: "Open classify workspace", exact: true }).click();
+  await authedPage
+    .locator(".n-tabs-tab")
+    .filter({ hasText: /^Classify/ })
+    .click();
 
   await expect(authedPage).toHaveURL(`/datasets/${cachedDatasetId}/sc/classify`);
   await expect(authedPage.getByTestId("sc-global-filter-trigger")).toHaveText("Global Filter (1)");

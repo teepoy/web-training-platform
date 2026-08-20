@@ -14,7 +14,9 @@ from app.shared.api.schemas import (
 )
 from app.shared.db.registry import Base, OrganizationORM
 from app.shared.db.session import create_session_factory
-from app.modules.datasets.adapter.repositories.dataset_sql_repository import DatasetSqlRepository
+from app.modules.datasets.adapter.repositories.dataset_sql_repository import (
+    DatasetSqlRepository,
+)
 
 
 @pytest.mark.asyncio
@@ -128,6 +130,55 @@ async def test_sc_inspection_dataset_lookup_is_one_bulk_select() -> None:
             event.remove(engine.sync_engine, "before_cursor_execute", count_selects)
 
         assert len(datasets) == 8
+        assert select_count == 1
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_dataset_id_lookup_is_one_select_and_preserves_requested_order() -> None:
+    engine = create_async_engine("sqlite+aiosqlite://")
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    try:
+        session_factory = create_session_factory(engine)
+        repo = DatasetSqlRepository(session_factory)
+        org_id = str(uuid4())
+        org_slug = f"repo-test-{uuid4().hex[:8]}"
+        async with session_factory() as session:
+            session.add(OrganizationORM(id=org_id, name=org_slug, slug=org_slug))
+            await session.commit()
+
+        datasets = [
+            Dataset(
+                id=str(uuid4()),
+                name=f"selected-{index}",
+                dataset_type="image_sc",
+                task_spec=TaskSpec(task_type="sc", label_space=[]),
+                storage_mode=DatasetStorageMode.FILE_SHARD_SPARSE,
+                ls_project_id="SPARSE_NO_LS",
+            )
+            for index in range(3)
+        ]
+        for dataset in datasets:
+            await repo.create_dataset(dataset, org_id=org_id)
+
+        requested_ids = [datasets[2].id, datasets[0].id]
+        select_count = 0
+
+        def count_selects(_conn, _cursor, statement, *_args) -> None:
+            nonlocal select_count
+            if statement.lstrip().upper().startswith("SELECT"):
+                select_count += 1
+
+        event.listen(engine.sync_engine, "before_cursor_execute", count_selects)
+        try:
+            selected = await repo.list_datasets_by_ids(requested_ids, org_id=org_id)
+        finally:
+            event.remove(engine.sync_engine, "before_cursor_execute", count_selects)
+
+        assert [dataset.id for dataset in selected] == requested_ids
         assert select_count == 1
     finally:
         await engine.dispose()

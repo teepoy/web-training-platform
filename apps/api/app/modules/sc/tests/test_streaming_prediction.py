@@ -37,6 +37,7 @@ class _ImageResolver:
                     **item,
                     "role": role,
                     "image_data": f"{source_format}:{role}".encode(),
+                    "content_type": "image/png",
                     "error": (
                         "archive missing"
                         if item["sample_id"] == "dataset-b::sample-3"

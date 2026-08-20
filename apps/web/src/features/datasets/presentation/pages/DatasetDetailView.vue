@@ -1,14 +1,11 @@
 <script setup lang="ts">
-import { computed, h, ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useQueryClient } from "@tanstack/vue-query";
-import { useMessage, NButton } from "naive-ui";
-import { FlowModal, FlowTypeSelector, SampleDetailDrawer, type FlowCard } from "@/shared";
-import { buildExportDownloadUrl } from "@/shared/api/datasets";
+import { FlowModal, SampleDetailDrawer, type FlowCard } from "@/shared";
 import {
   getGetDatasetApiV1DatasetsDatasetIdGetQueryKey,
   getGetSparseSummaryApiV1DatasetsDatasetIdSparseSummaryGetQueryKey,
-  useGetCurrentDatasetRevisionApiV1DatasetsDatasetIdRevisionsCurrentGet,
   useGetDatasetApiV1DatasetsDatasetIdGet,
   useGetSparseSummaryApiV1DatasetsDatasetIdSparseSummaryGet,
 } from "@/generated/orval/endpoints/api";
@@ -18,18 +15,15 @@ import { orgScopedQueryKey } from "@/shared/api";
 import ManualImporter from "@/features/datasets/presentation/components/ManualImporter.vue";
 import ManualDatasetImporter from "@/features/datasets/presentation/components/ManualDatasetImporter.vue";
 import ParquetImporter from "@/features/datasets/presentation/components/ParquetImporter.vue";
-import PersistExportPlugin from "@/features/datasets/presentation/components/PersistExportPlugin.vue";
-import ParquetExportPlugin from "@/features/datasets/presentation/components/ParquetExportPlugin.vue";
-import PreviewExportPlugin from "@/features/datasets/presentation/components/PreviewExportPlugin.vue";
 import DatasetTrainTab from "@/features/datasets/presentation/components/DatasetTrainTab.vue";
 import DatasetPredictTab from "@/features/datasets/presentation/components/DatasetPredictTab.vue";
-import DatasetSparseSummary from "@/features/datasets/presentation/components/DatasetSparseSummary.vue";
+import DatasetPredictionExportTab from "@/features/datasets/presentation/components/DatasetPredictionExportTab.vue";
 import DatasetViewPage from "@/features/datasets/presentation/pages/DatasetViewPage.vue";
 import ScDatasetGlobalFilterControl from "@/features/sc/presentation/components/ScDatasetGlobalFilterControl.vue";
+import { supportsScPredictionExport } from "@/features/sc/domain/predictionExportCapability";
 
 const route = useRoute();
 const router = useRouter();
-const message = useMessage();
 const qc = useQueryClient();
 const orgStore = useOrgStore();
 
@@ -41,8 +35,6 @@ function tabFromHash(hash: string): string {
 const activeTab = ref(tabFromHash(route.hash));
 const selectedSampleId = ref<string | null>(null);
 const showImportFlow = ref(false);
-const exportStep = ref<"select" | "execute">("select");
-const selectedExporter = ref<FlowCard | null>(null);
 
 const datasetQuery = useGetDatasetApiV1DatasetsDatasetIdGet(id, {
   query: {
@@ -60,22 +52,17 @@ const datasetQuery = useGetDatasetApiV1DatasetsDatasetIdGet(id, {
 const dataset = computed(
   () => datasetQuery.data.value as Dataset & { ls_project_url?: string | null },
 );
-const currentRevisionQuery = useGetCurrentDatasetRevisionApiV1DatasetsDatasetIdRevisionsCurrentGet(
-  id,
-  {
-    query: {
-      enabled: computed(() => !!orgStore.currentOrgId && !!id.value),
-      retry: false,
-    },
-  },
-);
-const currentRevision = computed(() => currentRevisionQuery.data.value);
 
 const isSparse = computed(() => dataset.value?.storage_mode === "file_shard_sparse");
+const isScDataset = computed(
+  () => dataset.value?.dataset_type === "image_sc" && dataset.value?.task_spec?.task_type === "sc",
+);
+const supportsPredictionExport = computed(() => supportsScPredictionExport(dataset.value ?? null));
 const labelSpace = computed(() => dataset.value?.task_spec?.label_space ?? []);
 const hasSampleBrowser = computed(() =>
   (dataset.value?.view_types ?? []).includes("image_input_v1"),
 );
+const hasDetailSampleBrowser = computed(() => hasSampleBrowser.value && !isScDataset.value);
 const sparseSummaryQuery = useGetSparseSummaryApiV1DatasetsDatasetIdSparseSummaryGet(id, {
   query: {
     queryKey: computed(() =>
@@ -91,34 +78,51 @@ const sparseSummaryQuery = useGetSparseSummaryApiV1DatasetsDatasetIdSparseSummar
 const sparseSummary = computed(
   () => (sparseSummaryQuery.data.value as SparseSummaryResponse | undefined) ?? null,
 );
+const sampleCount = computed<number | null>(() => {
+  const sparseTotal = sparseSummary.value?.manifest.total_rows;
+  if (typeof sparseTotal === "number") return sparseTotal;
+  const metadataTotal = dataset.value?.dataset_meta?.total_samples;
+  return typeof metadataTotal === "number" ? metadataTotal : null;
+});
+const datasetKindLabel = computed(() => {
+  if (isScDataset.value) return "Patch inspection";
+  if (dataset.value?.dataset_type === "image_classification") return "Image classification";
+  const value = dataset.value?.dataset_type?.replace(/_/g, " ").trim();
+  return value ? value.replace(/^./, (character) => character.toUpperCase()) : "Dataset";
+});
+
+const availableTabs = computed(() => {
+  const value = dataset.value;
+  if (!value) return [];
+  return [
+    "overview",
+    ...(hasDetailSampleBrowser.value ? ["samples"] : []),
+    "train",
+    "predict",
+    ...(supportsPredictionExport.value ? ["export"] : []),
+    ...(value.storage_mode !== "file_shard_sparse" ? ["annotate"] : []),
+  ];
+});
 
 watch(
-  dataset,
-  (value) => {
+  [dataset, () => route.hash],
+  ([value, hash]) => {
     if (!value) return;
-    const availableTabs = [
-      "overview",
-      ...(hasSampleBrowser.value ? ["samples"] : []),
-      "train",
-      "predict",
-      ...(value.storage_mode !== "file_shard_sparse" ? ["annotate"] : []),
-    ];
-    if (!availableTabs.includes(activeTab.value)) {
-      activeTab.value = availableTabs[0] ?? "train";
+    const requestedTab = tabFromHash(hash);
+    if (isScDataset.value && (requestedTab === "classify" || requestedTab === "samples")) {
+      openScClassify();
+      return;
     }
+    const nextTab = availableTabs.value.includes(requestedTab) ? requestedTab : "overview";
+    if (activeTab.value !== nextTab) activeTab.value = nextTab;
+    const canonicalHash = `#${nextTab}`;
+    if (route.hash && route.hash !== canonicalHash) void router.replace({ hash: canonicalHash });
   },
   { immediate: true },
 );
 
-watch(
-  () => route.hash,
-  (hash) => {
-    const requestedTab = tabFromHash(hash);
-    if (requestedTab !== activeTab.value) activeTab.value = requestedTab;
-  },
-);
-
 watch(activeTab, (tab) => {
+  if (!availableTabs.value.includes(tab)) return;
   const hash = `#${tab}`;
   if (route.hash !== hash) void router.replace({ hash });
 });
@@ -148,33 +152,9 @@ const importerFlows: FlowCard[] = [
   },
 ];
 
-const exporterFlows: FlowCard[] = [
-  {
-    id: "export-persist",
-    label: "Persist Export",
-    description: "Persist dataset export artifact and return a URI.",
-    icon: "💾",
-    component: PersistExportPlugin,
-  },
-  {
-    id: "export-parquet",
-    label: "Export as Parquet",
-    description: "Export dataset samples and annotations as a HuggingFace-compatible Parquet file.",
-    icon: "📦",
-    component: ParquetExportPlugin,
-  },
-  {
-    id: "export-preview",
-    label: "Preview Export",
-    description: "Generate and inspect dataset export payload without persisting.",
-    icon: "👁️",
-    component: PreviewExportPlugin,
-  },
-];
-
 function handleImporterComplete() {
   showImportFlow.value = false;
-  activeTab.value = "samples";
+  activeTab.value = hasDetailSampleBrowser.value ? "samples" : "overview";
   qc.invalidateQueries({
     queryKey: orgScopedQueryKey(orgStore.currentOrgId, ["view-samples", id.value]),
   });
@@ -183,49 +163,14 @@ function handleImporterComplete() {
   });
 }
 
-function handleExportSelect(flow: FlowCard) {
-  selectedExporter.value = flow;
-  exportStep.value = "execute";
-}
-
-function handleExportBack() {
-  exportStep.value = "select";
-  selectedExporter.value = null;
-}
-
-function handleExportComplete(result: unknown) {
-  exportStep.value = "select";
-  selectedExporter.value = null;
-  const payload = result as { url?: string; message?: string } | undefined;
-  const url = payload?.url;
-  if (url) {
-    message.success(
-      () =>
-        h("span", {}, [
-          payload.message ?? "Export complete",
-          " — ",
-          h(
-            NButton,
-            {
-              tag: "a",
-              href: buildExportDownloadUrl(url),
-              download: true,
-              type: "primary",
-              size: "tiny",
-              style: "margin-left: 8px",
-            },
-            { default: () => "Download" },
-          ),
-        ]),
-      { duration: 10000 },
-    );
-  } else if (payload?.message) {
-    message.success(payload.message);
-  }
-}
-
 function openScClassify() {
-  router.push({ name: "sc-reclassify", params: { id: id.value } });
+  void router.push({ name: "sc-reclassify", params: { id: id.value } });
+}
+
+function handleTabBeforeLeave(name: string | number): boolean {
+  if (name !== "classify") return true;
+  openScClassify();
+  return false;
 }
 </script>
 
@@ -256,9 +201,8 @@ function openScClassify() {
           <div class="dataset-title-block">
             <div class="dataset-title-line">
               <h1>{{ dataset.name }}</h1>
-              <n-tag size="small" :bordered="false">{{ dataset.storage_mode }}</n-tag>
+              <n-tag size="small" :bordered="false">{{ datasetKindLabel }}</n-tag>
             </div>
-            <n-text depth="3" class="dataset-id">ID: {{ dataset.id }}</n-text>
           </div>
         </div>
         <n-space class="dataset-header-actions" :wrap="true">
@@ -269,39 +213,40 @@ function openScClassify() {
           >
             Add samples
           </n-button>
-          <n-button
-            v-if="dataset.task_spec?.task_type === 'sc'"
-            type="primary"
-            @click="openScClassify"
-          >
-            Open classify workspace
-          </n-button>
         </n-space>
       </header>
 
-      <ScDatasetGlobalFilterControl v-if="dataset.task_spec?.task_type === 'sc'" :dataset-id="id" />
+      <ScDatasetGlobalFilterControl v-if="isScDataset" :dataset-id="id" />
 
-      <n-tabs v-model:value="activeTab" type="line" animated class="dataset-tabs">
+      <n-tabs
+        v-model:value="activeTab"
+        type="line"
+        animated
+        class="dataset-tabs"
+        :on-before-leave="handleTabBeforeLeave"
+      >
         <n-tab-pane name="overview" tab="Overview">
-          <n-card size="small" title="Dataset contract" class="dataset-contract-card">
-            <div class="dataset-contract-grid">
-              <div class="contract-field">
-                <n-text depth="3">Dataset type</n-text>
-                <strong>{{ dataset.dataset_type }}</strong>
+          <n-card size="small" title="About this dataset" class="dataset-overview-card">
+            <div class="dataset-overview-grid">
+              <div class="overview-field">
+                <n-text depth="3">Purpose</n-text>
+                <strong>{{ datasetKindLabel }}</strong>
               </div>
-              <div class="contract-field">
-                <n-text depth="3">Storage mode</n-text>
-                <strong>{{ dataset.storage_mode }}</strong>
+              <div class="overview-field">
+                <n-text depth="3">Samples</n-text>
+                <strong>{{ sampleCount === null ? "—" : sampleCount.toLocaleString() }}</strong>
               </div>
-              <div class="contract-field">
-                <n-text depth="3">Task type</n-text>
-                <strong>{{ dataset.task_spec?.task_type ?? "—" }}</strong>
+              <div class="overview-field">
+                <n-text depth="3">Created by</n-text>
+                <strong>{{ dataset.creator_name || dataset.created_by || "System" }}</strong>
               </div>
-              <div class="contract-field">
-                <n-text depth="3">Creator</n-text>
-                <strong>{{ dataset.creator_name || dataset.created_by }}</strong>
+              <div class="overview-field">
+                <n-text depth="3">Created</n-text>
+                <strong>{{
+                  dataset.created_at ? new Date(dataset.created_at).toLocaleString() : "—"
+                }}</strong>
               </div>
-              <div class="contract-field contract-field-wide">
+              <div class="overview-field overview-field-wide">
                 <n-text depth="3">Labels</n-text>
                 <n-space v-if="labelSpace.length" size="small">
                   <n-tag v-for="label in labelSpace" :key="label" size="small">
@@ -310,53 +255,15 @@ function openScClassify() {
                 </n-space>
                 <n-text v-else depth="3">No labels configured</n-text>
               </div>
-              <div class="contract-field contract-field-wide">
-                <n-text depth="3">Available views</n-text>
-                <n-space v-if="(dataset.view_types ?? []).length" size="small">
-                  <n-tag v-for="viewType in dataset.view_types ?? []" :key="viewType" size="small">
-                    {{ viewType }}
-                  </n-tag>
-                </n-space>
-                <n-text v-else depth="3">No registered views</n-text>
-              </div>
             </div>
           </n-card>
-          <n-card size="small" title="Change record" class="dataset-revision-card">
-            <n-alert type="info" :show-icon="false" class="dataset-revision-explainer">
-              Dataset changes receive a simple sequence number for audit and update notices. This
-              record does not copy or freeze samples; jobs read current data when they start.
-            </n-alert>
-            <div v-if="currentRevision" class="dataset-revision-summary">
-              <div class="contract-field">
-                <n-text depth="3">Latest change</n-text>
-                <strong>#{{ currentRevision.revision_number }}</strong>
-              </div>
-              <div class="contract-field">
-                <n-text depth="3">Operation</n-text>
-                <strong>{{ currentRevision.operation.replace(/_/g, " ") }}</strong>
-              </div>
-              <div class="contract-field">
-                <n-text depth="3">Recorded</n-text>
-                <strong>{{ new Date(currentRevision.created_at).toLocaleString() }}</strong>
-              </div>
-              <div class="contract-field">
-                <n-text depth="3">Data copy</n-text>
-                <strong>None</strong>
-              </div>
-            </div>
-            <n-text v-else depth="3">
-              No change record yet. Existing historical data is not backfilled.
-            </n-text>
-          </n-card>
-          <DatasetSparseSummary
-            v-if="isSparse"
-            :dataset-id="id"
-            :sparse-summary="sparseSummary"
-            :is-loading="sparseSummaryQuery.isLoading.value"
-            @select-sample="selectedSampleId = $event"
-          />
         </n-tab-pane>
-        <n-tab-pane v-if="hasSampleBrowser" name="samples" tab="Samples">
+        <n-tab-pane v-if="isScDataset" name="classify">
+          <template #tab>
+            <span>Classify <span aria-hidden="true">&#8599;</span></span>
+          </template>
+        </n-tab-pane>
+        <n-tab-pane v-else-if="hasSampleBrowser" name="samples" tab="Samples">
           <DatasetViewPage
             :dataset-id="id"
             view-type="image_input_v1"
@@ -366,27 +273,11 @@ function openScClassify() {
         <n-tab-pane name="train" tab="Train">
           <DatasetTrainTab :dataset-id="id" :dataset="dataset" />
         </n-tab-pane>
-        <n-tab-pane name="predict" tab="Predict"><DatasetPredictTab :dataset-id="id" /></n-tab-pane>
-        <n-tab-pane v-if="false" name="export" tab="Export">
-          <n-empty
-            v-if="exporterFlows.length === 0"
-            description="No export plugins available."
-            style="margin-top: 24px"
-          />
-          <template v-else-if="exportStep === 'select'">
-            <FlowTypeSelector :flows="exporterFlows" @select="handleExportSelect" />
-          </template>
-          <template v-else-if="exportStep === 'execute' && selectedExporter">
-            <div style="margin-bottom: 12px">
-              <n-button text @click="handleExportBack">&larr; Back to export options</n-button>
-            </div>
-            <component
-              :is="selectedExporter?.component"
-              :dataset-id="id"
-              :on-complete="handleExportComplete"
-              :on-cancel="handleExportBack"
-            />
-          </template>
+        <n-tab-pane name="predict" tab="Predict">
+          <DatasetPredictTab :dataset-id="id" />
+        </n-tab-pane>
+        <n-tab-pane v-if="supportsPredictionExport" name="export" tab="Export">
+          <DatasetPredictionExportTab :dataset-id="id" />
         </n-tab-pane>
         <n-tab-pane v-if="!isSparse" name="annotate" tab="Annotate">
           <template v-if="dataset?.ls_project_url"
@@ -477,13 +368,6 @@ function openScClassify() {
   line-height: 1.25;
 }
 
-.dataset-id {
-  display: block;
-  margin-top: 4px;
-  overflow-wrap: anywhere;
-  font-size: 12px;
-}
-
 .dataset-header-actions {
   flex: 0 0 auto;
 }
@@ -492,43 +376,29 @@ function openScClassify() {
   margin-top: 16px;
 }
 
-.dataset-contract-card {
+.dataset-overview-card {
   margin-top: 4px;
 }
 
-.dataset-revision-card {
-  margin-top: 16px;
-}
-
-.dataset-revision-explainer {
-  margin-bottom: 16px;
-}
-
-.dataset-revision-summary {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 16px;
-}
-
-.dataset-contract-grid {
+.dataset-overview-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 20px 28px;
 }
 
-.contract-field {
+.overview-field {
   display: flex;
   min-width: 0;
   flex-direction: column;
   gap: 5px;
 }
 
-.contract-field strong {
+.overview-field strong {
   overflow-wrap: anywhere;
   font-weight: 600;
 }
 
-.contract-field-wide {
+.overview-field-wide {
   grid-column: 1 / -1;
 }
 
@@ -551,15 +421,11 @@ function openScClassify() {
     flex: 1 1 auto;
   }
 
-  .dataset-contract-grid {
+  .dataset-overview-grid {
     grid-template-columns: 1fr;
   }
 
-  .dataset-revision-summary {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .contract-field-wide {
+  .overview-field-wide {
     grid-column: auto;
   }
 

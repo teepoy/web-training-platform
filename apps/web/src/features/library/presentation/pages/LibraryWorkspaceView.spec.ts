@@ -26,6 +26,11 @@ const CollectionListStub = defineComponent({
     search: { type: String, default: "" },
     creatorId: { type: String, default: null },
   },
+  emits: ["open-create"],
+  setup(_, { emit, expose }) {
+    expose({ openCreate: () => emit("open-create") });
+    return {};
+  },
   template: '<section data-testid="collection-list-stub">Collection list</section>',
 });
 
@@ -119,5 +124,15 @@ describe("Library workspace", () => {
 
     expect(wrapper.findComponent(DatasetListStub).exists()).toBe(false);
     expect(wrapper.getComponent(CollectionListStub).props("creatorId")).toBeNull();
+    expect(wrapper.get('[data-testid="library-new-collection"]').text()).toBe("New collection");
+  });
+
+  it("opens collection creation from the shared filter toolbar", async () => {
+    const { wrapper } = await mountLibrary("/library?tab=collections&creator=all");
+    const collectionList = wrapper.getComponent(CollectionListStub);
+
+    await wrapper.get('[data-testid="library-new-collection"]').trigger("click");
+
+    expect(collectionList.emitted("open-create")).toHaveLength(1);
   });
 });

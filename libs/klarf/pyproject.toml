@@ -1,0 +1,18 @@
+[build-system]
+requires = ["uv_build"]
+build-backend = "uv_build"
+
+[project]
+name = "klarf"
+version = "0.1.0"
+description = "Strict KLARF 1.1/1.2 and 1.8 parser, writer, and builder"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.uv.build-backend]
+module-name = "klarf"
+module-root = "src"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

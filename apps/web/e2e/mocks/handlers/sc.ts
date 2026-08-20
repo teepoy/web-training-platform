@@ -84,6 +84,9 @@ export async function mockScDataset(
   const body = {
     id: datasetId,
     name: overrides?.name ?? "SC Wafer Dataset",
+    dataset_type: "image_sc",
+    storage_mode: "file_shard_sparse",
+    view_types: ["image_input_v1", "patch_image_v1", "review_image_v1"],
     label_space: overrides?.label_space ?? ["Scratch", "Particle", "Pattern Defect"],
     task_spec: overrides?.task_spec ?? { task_type: "sc" },
     dataset_meta: {

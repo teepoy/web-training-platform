@@ -1,3 +1,10 @@
 packages:
   - apps/web
   - packages/*
+
+allowBuilds:
+  "@bufbuild/buf": true
+  core-js: false
+  esbuild: false
+  msw: false
+  vue-demi: false

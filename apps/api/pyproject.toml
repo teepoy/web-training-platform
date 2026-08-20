@@ -29,6 +29,7 @@ dependencies = [
   "alembic==1.18.4",
   "minio==7.2.20",
   "kubernetes==35.0.0",
+  "klarf",
   "python-multipart==0.0.22",
   "python-jose[cryptography]==3.5.0",
   "pgvector==0.4.2",
@@ -56,6 +57,7 @@ sc-runtime = ["ml-library"]
 proto-stubs = { workspace = true }
 ml-library = { workspace = true }
 sampling-rules = { workspace = true }
+klarf = { workspace = true }
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "app"]
@@ -88,6 +90,7 @@ sc-runtime = ["ml-library"]
 [tool.pyright]
 extraPaths = [
   "../../scripts",
+  "../../libs/klarf/src",
   "../../libs/ml/src",
 ]
 exclude = [

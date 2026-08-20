@@ -28,6 +28,9 @@ from app.modules.prediction.port.http.router import (
 )
 from app.modules.sc.port.http.router import router as sc_router
 from app.modules.sc.port.http.router import sc_datasets_router
+from app.modules.sc.port.http.prediction_export_router import (
+    router as sc_prediction_export_router,
+)
 from app.modules.jobs.schedules.port.http.router import (
     router as schedules_router,
     runs_router,
@@ -65,6 +68,7 @@ MODULE_ROUTERS: list[APIRouter] = [
     training_router,
     sc_router,
     sc_datasets_router,
+    sc_prediction_export_router,
     source_connectors_router,
     source_discovery_collections_router,
     source_discovery_runs_router,

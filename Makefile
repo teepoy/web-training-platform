@@ -69,15 +69,25 @@ SC_RUNTIME_BENCHMARK_MIN_PREDICT_SPS     ?= 3000
 
 # Schema generation and Graphify
 # Pins repository-managed generators and controls Graphify build parallelism.
-GRAPHIFY_MAX_WORKERS         ?= 1
-PROTOC_GEN_GO_VERSION        ?= v1.36.11
-PROTOC_GEN_GO_GRPC_VERSION   ?= v1.6.0
-PROTO_TOOLS_DIR              ?= $(CURDIR)/.cache/protobuf-tools
-PROTO_GO_TOOLS_BIN           := $(PROTO_TOOLS_DIR)/bin
-PROTO_BUF_BIN                := $(CURDIR)/node_modules/.bin/buf
-PROTO_ES_BIN                 := $(CURDIR)/$(WEB_DIR)/node_modules/.bin/protoc-gen-es
-PROTO_MYPY_BIN               := $(CURDIR)/.venv/bin/protoc-gen-mypy
-PROTO_PYTHON_BIN             := $(CURDIR)/.venv/bin/python
+GRAPHIFY_MAX_WORKERS          ?= 1
+BUF_VERSION                   ?= 1.70.0
+PROTOC_GEN_GO_VERSION         ?= v1.36.11
+PROTOC_GEN_GO_GRPC_VERSION    ?= v1.6.0
+# Locked module sums are checked after building with the unavailable public checksum DB disabled.
+PROTOC_GEN_GO_MODULE_SUM      := h1:fV6ZwhNocDyBLK0dj+fg8ektcVegBBuEolpbTQyBNVE=
+PROTOC_GEN_GO_GRPC_MODULE_SUM := h1:6Al3kEFFP9VJhRz3DID6quisgPnTeZVr4lep9kkxdPA=
+PROTOC_GEN_GO_GRPC_PROTO_SUM  := h1:AYd7cD/uASjIL6Q9LiTjz8JLcrh/88q5UObnmY3aOOE=
+PROTO_TOOLS_HOST_OS           ?= $(shell uname -s | tr '[:upper:]' '[:lower:]')
+PROTO_TOOLS_HOST_ARCH         ?= $(shell uname -m | sed -e 's/^x86_64$$/amd64/' -e 's/^aarch64$$/arm64/')
+PROTO_TOOLS_TARGETS           ?= darwin/amd64 darwin/arm64 linux/amd64 linux/arm64
+PROTO_TOOLS_GO_PROXY_URL      ?= https://proxy.golang.org
+PROTO_TOOLS_DIR               ?= $(ARTIFACTS_DIR)/protobuf-tools
+PROTO_GO_TOOLS_BIN            := $(PROTO_TOOLS_DIR)/$(PROTO_TOOLS_HOST_OS)/$(PROTO_TOOLS_HOST_ARCH)/bin
+PROTO_BUF_BIN                 := $(PROTO_GO_TOOLS_BIN)/buf
+PROTO_ES_BIN                  := $(CURDIR)/$(WEB_DIR)/node_modules/.bin/protoc-gen-es
+PROTO_PRETTIER_BIN            := $(CURDIR)/$(WEB_DIR)/node_modules/.bin/prettier
+PROTO_MYPY_BIN                := $(CURDIR)/.venv/bin/protoc-gen-mypy
+PROTO_PYTHON_BIN              := $(CURDIR)/.venv/bin/python
 
 # Target modules
 include make/build.mk
@@ -125,9 +135,13 @@ help: ## Show this help message
 	@printf '    \033[36m%-43s\033[0m %s\n' "SC_RUNTIME_BENCHMARK_MIN_PREDICT_SPS" "Minimum accepted prediction throughput (default: 3000)"
 	@printf '\n  Schema generation and Graphify\n'
 	@printf '    \033[36m%-43s\033[0m %s\n' "GRAPHIFY_MAX_WORKERS" "Maximum parallel Graphify context builds (default: 1)"
+	@printf '    \033[36m%-43s\033[0m %s\n' "BUF_VERSION" "Pinned Buf CLI version packaged for offline protobuf generation"
 	@printf '    \033[36m%-43s\033[0m %s\n' "PROTOC_GEN_GO_VERSION" "Pinned protoc-gen-go version"
 	@printf '    \033[36m%-43s\033[0m %s\n' "PROTOC_GEN_GO_GRPC_VERSION" "Pinned protoc-gen-go-grpc version"
-	@printf '    \033[36m%-43s\033[0m %s\n' "PROTO_TOOLS_DIR" "Repository-local installation directory for protobuf tools"
+	@printf '    \033[36m%-43s\033[0m %s\n' "PROTO_TOOLS_HOST_OS / PROTO_TOOLS_HOST_ARCH" "Host platform route used to select offline protobuf executables"
+	@printf '    \033[36m%-43s\033[0m %s\n' "PROTO_TOOLS_TARGETS" "OS/architecture routes built by protobuf-tools-artifacts"
+	@printf '    \033[36m%-43s\033[0m %s\n' "PROTO_TOOLS_GO_PROXY_URL" "Go module proxy URL used only while building the connected-host bundle"
+	@printf '    \033[36m%-43s\033[0m %s\n' "PROTO_TOOLS_DIR" "Platform-routed protobuf executable artifacts directory"
 	@printf '\n  Production deployment defaults\n'
 	@printf '    \033[36m%-43s\033[0m %s\n' "PROD_NETWORK" "Shared production Docker network (default: finetune-prod)"
 	@printf '    \033[36m%-43s\033[0m %s\n' "PROD_STATEFUL_ENV" "Production stateful-services environment file"

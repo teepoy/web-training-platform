@@ -75,7 +75,7 @@ const emit = defineEmits<{
 }>();
 
 const DEFAULT_COLUMN_PCT = 35;
-const RECLASSIFY_ANNOTATION_PCT = 15;
+const RECLASSIFY_ANNOTATION_PCT = 20;
 const DEFAULT_MAP_PCT = 55;
 const DEFAULT_BAR_PCT = 60;
 const DEFAULT_RETICLE_DIE_SIZE = 100_000;

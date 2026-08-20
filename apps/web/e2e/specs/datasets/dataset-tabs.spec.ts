@@ -12,6 +12,7 @@ test("Dataset detail opens on an overview of its persisted contract @mock", asyn
   await apiMocks.datasets.mockGetDataset(datasetId, {
     task_spec: { task_type: "classification", label_space: ["rose", "tulip"] },
     view_types: ["image_input_v1"],
+    creator_name: "E2E User",
   });
 
   await page.gotoDetail(datasetId);
@@ -20,9 +21,12 @@ test("Dataset detail opens on an overview of its persisted contract @mock", asyn
   await expect(
     authedPage.locator(".n-tabs .n-tabs-tab").filter({ hasText: "Overview" }),
   ).toBeVisible();
-  await expect(authedPage.getByText("Dataset type", { exact: true })).toBeVisible();
-  await expect(authedPage.getByText("Storage mode", { exact: true })).toBeVisible();
+  await expect(authedPage.getByText("About this dataset", { exact: true }).first()).toBeVisible();
+  await expect(authedPage.getByText("E2E User", { exact: true })).toBeVisible();
   await expect(authedPage.getByText("rose", { exact: true })).toBeVisible();
+  await expect(authedPage.getByText("Storage mode", { exact: true })).toHaveCount(0);
+  await expect(authedPage.getByText("Available views", { exact: true })).toHaveCount(0);
+  await expect(authedPage.getByText("Change record", { exact: true })).toHaveCount(0);
 });
 
 test("Train tab does not block on sample-level readiness status @mock", async ({
@@ -127,11 +131,96 @@ test("Predict tab shows Start Prediction button and opens modal with model selec
   await expect(authedPage.getByRole("dialog")).toBeVisible();
 
   const dialog = authedPage.getByRole("dialog");
+  const dialogBox = await dialog.boundingBox();
+  expect(dialogBox).not.toBeNull();
+  expect((dialogBox?.y ?? 0) + (dialogBox?.height ?? 0)).toBeLessThanOrEqual(
+    authedPage.viewportSize()?.height ?? 720,
+  );
+  await expect(dialog.getByRole("button", { name: "Cancel" })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Start with selected model" })).toBeVisible();
   await expect(dialog.getByRole("columnheader", { name: "Model" })).toBeVisible();
   await expect(dialog.getByPlaceholder(/Search model name/)).toBeVisible();
   await expect(dialog.getByText("Demo Model", { exact: true })).toBeVisible();
   await dialog.getByText("Demo Model", { exact: true }).click();
   await expect(dialog.getByRole("button", { name: "Start with selected model" })).toBeEnabled();
+});
+
+test("SC Export tab offers Parquet, KLARF, and ZIP result exports @mock", async ({
+  authedPage,
+  apiMocks,
+}) => {
+  await apiMocks.datasets.mockGetDataset(datasetId, {
+    dataset_type: "image_sc",
+    storage_mode: "file_shard_sparse",
+    task_spec: { task_type: "sc", label_space: ["0", "60"] },
+  });
+  await apiMocks.datasets.mockDatasetStatus(datasetId);
+  await apiMocks.prediction.mockListPredictionJobs([]);
+  await apiMocks.prediction.mockListModels([]);
+
+  await authedPage.goto(`/datasets/${datasetId}#export`);
+  await expect(authedPage.getByTestId("dataset-prediction-export-tab")).toBeVisible();
+  await expect(authedPage).toHaveURL(new RegExp(`/datasets/${datasetId}#export$`));
+  await expect(authedPage.getByText("Prediction runs", { exact: true })).not.toBeVisible();
+  await expect(authedPage.getByRole("dialog")).not.toBeVisible();
+
+  const exportTab = authedPage.getByTestId("dataset-prediction-export-tab");
+
+  await expect(exportTab.getByText("Export current results", { exact: true })).toBeVisible();
+  await expect(
+    exportTab.getByText(
+      "Uses the annotation when it is classified; otherwise it uses the latest prediction.",
+    ),
+  ).toBeVisible();
+  await expect(exportTab.getByRole("radio", { name: /^Parquet\b/ })).toBeVisible();
+  const klarfOption = exportTab.getByRole("radio", { name: /^KLARF\b/ });
+  await expect(klarfOption).toBeVisible();
+  await expect(exportTab.getByRole("radio", { name: /^ZIP package\b/ })).toBeVisible();
+  await klarfOption.click();
+  await expect(exportTab.getByText("KLARF version", { exact: true })).toBeVisible();
+  await expect(exportTab.getByLabel("KLARF version 1.2")).toBeVisible();
+  await expect(exportTab.getByLabel("KLARF version 1.8")).toBeVisible();
+  await expect(exportTab.getByLabel("Include defect images")).toBeVisible();
+  await expect(exportTab.getByText("Annotation Sampling", { exact: true })).toBeVisible();
+  await expect(exportTab.getByText(/Defect images are optional/)).toBeVisible();
+  await expect(exportTab.getByText("Large exports may take several minutes")).toBeVisible();
+});
+
+test("SC-only export stays hidden for a generic sparse Dataset @mock", async ({
+  authedPage,
+  apiMocks,
+}) => {
+  await apiMocks.datasets.mockGetDataset(datasetId, {
+    dataset_type: "image_classification",
+    storage_mode: "file_shard_sparse",
+    task_spec: { task_type: "sc", label_space: ["0", "60"] },
+    view_types: ["image_input_v1"],
+  });
+
+  await authedPage.goto(`/datasets/${datasetId}#export`);
+
+  await expect(authedPage.locator(".n-tabs-tab").filter({ hasText: /^Export$/ })).toHaveCount(0);
+  await expect(authedPage.getByTestId("dataset-prediction-export-tab")).toHaveCount(0);
+  await expect(authedPage).toHaveURL(new RegExp(`/datasets/${datasetId}#overview$`));
+});
+
+test("SC Classify tab opens the workspace directly @mock", async ({ authedPage, apiMocks }) => {
+  await apiMocks.datasets.mockGetDataset(datasetId, {
+    name: "Inspection samples",
+    dataset_type: "image_sc",
+    storage_mode: "file_shard_sparse",
+    task_spec: { task_type: "sc", label_space: ["0", "60"] },
+    view_types: ["image_input_v1", "patch_image_v1", "review_image_v1"],
+  });
+
+  await authedPage.goto(`/datasets/${datasetId}#overview`);
+
+  await authedPage
+    .locator(".n-tabs-tab")
+    .filter({ hasText: /^Classify/ })
+    .click();
+  await expect(authedPage).toHaveURL(new RegExp(`/datasets/${datasetId}/sc/classify$`));
+  await expect(authedPage.getByTestId("classify-workspace-launcher")).toHaveCount(0);
 });
 
 test("Dataset detail restores the selected tab from the URL hash @mock", async ({

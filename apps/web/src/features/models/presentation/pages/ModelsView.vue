@@ -39,7 +39,6 @@
         :pagination="tablePagination"
         :row-key="(row: ModelResponse) => row.id"
         :checked-row-keys="checkedModelIds"
-        :sorter="sorter"
         :filters="tableFilters"
         :scroll-x="980"
         size="small"
@@ -392,6 +391,7 @@ function submitRename(): false {
 const columns = computed<DataTableColumns<ModelRow>>(() => [
   {
     type: "selection",
+    fixed: "left",
     disabled: (row) => row.created_by !== authStore.user?.id,
   },
   {
@@ -399,6 +399,7 @@ const columns = computed<DataTableColumns<ModelRow>>(() => [
     key: "name",
     width: 170,
     sorter: true,
+    sortOrder: sorter.value?.columnKey === "name" ? sorter.value.order : false,
     render: (row) =>
       h(NText, { style: "font-weight: 500" }, { default: () => modelDisplayName(row) }),
   },
@@ -407,6 +408,7 @@ const columns = computed<DataTableColumns<ModelRow>>(() => [
     key: "source",
     width: 210,
     sorter: true,
+    sortOrder: sorter.value?.columnKey === "source" ? sorter.value.order : false,
     filter: true,
     filterMultiple: false,
     filterOptions: [
@@ -434,14 +436,16 @@ const columns = computed<DataTableColumns<ModelRow>>(() => [
   {
     title: "Trainer",
     key: "trainer",
-    width: 150,
+    width: 120,
     sorter: true,
+    sortOrder: sorter.value?.columnKey === "trainer" ? sorter.value.order : false,
   },
   {
     title: "Creator",
     key: "creator",
     width: 130,
     sorter: true,
+    sortOrder: sorter.value?.columnKey === "creator" ? sorter.value.order : false,
     filter: true,
     filterMultiple: false,
     filterOptions: creatorOptions.value,
@@ -453,12 +457,14 @@ const columns = computed<DataTableColumns<ModelRow>>(() => [
     key: "created_at",
     width: 170,
     sorter: true,
+    sortOrder: sorter.value?.columnKey === "created_at" ? sorter.value.order : false,
     render: (row) => (row.created_at ? new Date(row.created_at).toLocaleString() : "-"),
   },
   {
     title: "Actions",
     key: "actions",
     width: 150,
+    fixed: "right",
     render: (row) => {
       const isCreator = row.created_by === authStore.user?.id;
       return h(

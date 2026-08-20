@@ -1,5 +1,6 @@
 from app.modules.dataset_collections.port.local.protocols import (
     CollectionDatasetUsagePort,
+    CollectionExportReaderPort,
     CollectionAutomationAdmissionPort,
     CollectionModelManagementPort,
     CollectionPredictionAutomationPort,
@@ -10,6 +11,7 @@ from app.modules.dataset_collections.port.local.protocols import (
 
 __all__ = [
     "CollectionDatasetUsagePort",
+    "CollectionExportReaderPort",
     "CollectionAutomationAdmissionPort",
     "CollectionModelManagementPort",
     "CollectionPredictionAutomationPort",

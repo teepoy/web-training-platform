@@ -1,11 +1,11 @@
 
 # ---- Build stage ----
-FROM node:20-alpine AS build
+FROM node:22-alpine AS build
 
 ARG NPM_CONFIG_REGISTRY=""
 ENV NPM_CONFIG_REGISTRY=${NPM_CONFIG_REGISTRY}
 
-RUN corepack enable && corepack prepare pnpm@10.5.0 --activate
+RUN corepack enable && corepack prepare pnpm@11.22.0 --activate
 
 WORKDIR /app
 
@@ -23,12 +23,12 @@ COPY packages/sc-map-element/ packages/sc-map-element/
 RUN pnpm --filter web build
 
 # ---- Dev stage ----
-FROM node:20-alpine AS dev
+FROM node:22-alpine AS dev
 
 ARG NPM_CONFIG_REGISTRY=""
 ENV NPM_CONFIG_REGISTRY=${NPM_CONFIG_REGISTRY}
 
-RUN corepack enable && corepack prepare pnpm@10.5.0 --activate
+RUN corepack enable && corepack prepare pnpm@11.22.0 --activate
 
 WORKDIR /app
 

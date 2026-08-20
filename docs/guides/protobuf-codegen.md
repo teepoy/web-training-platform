@@ -1,29 +1,68 @@
 # Protobuf code generation
 
-Run `make generate-protos` from the repository root. The generation pipeline must
-not use a system-installed `protoc` or globally installed plugins.
+Run `make generate-protos` from the repository root. Generation only consumes
+already installed, repository-managed tools: it does not install packages, run
+`go install`, tidy modules, or access the network. The pipeline must not use a
+system-installed `protoc` or globally installed plugins.
 
 The repository-managed toolchain is:
 
-| Output              | Compiler or plugin            | Version                 | Package manager source                                      |
-| ------------------- | ----------------------------- | ----------------------- | ----------------------------------------------------------- |
-| Buf plugin requests | `buf generate`                | 1.70.0                  | `@bufbuild/buf` from `pnpm-lock.yaml`                       |
-| Python messages     | `python -m grpc_tools.protoc` | 1.80.0 / libprotoc 31.1 | `grpcio-tools` from `uv.lock`                               |
-| Python type stubs   | `protoc-gen-mypy`             | 5.1.0                   | `mypy-protobuf` from `uv.lock`                              |
-| Python gRPC stubs   | `python -m grpc_tools.protoc` | 1.80.0 / libprotoc 31.1 | `grpcio-tools` from `uv.lock`                               |
-| TypeScript messages | `protoc-gen-es`               | 2.12.0                  | `@bufbuild/protoc-gen-es` from `pnpm-lock.yaml`             |
-| TypeScript runtime  | `@bufbuild/protobuf`          | 2.12.0                  | `pnpm-lock.yaml`                                            |
-| Go messages         | `protoc-gen-go`               | 1.36.11                 | fixed-version `go install` into `.cache/protobuf-tools/bin` |
-| Go gRPC stubs       | `protoc-gen-go-grpc`          | 1.6.0                   | fixed-version `go install` into `.cache/protobuf-tools/bin` |
+| Output              | Compiler or plugin            | Version                 | Package manager source                           |
+| ------------------- | ----------------------------- | ----------------------- | ------------------------------------------------ |
+| Buf plugin requests | `buf generate`                | 1.70.0                  | platform binary under `artifacts/protobuf-tools` |
+| Python messages     | `python -m grpc_tools.protoc` | 1.80.0 / libprotoc 31.1 | `grpcio-tools` from `uv.lock`                    |
+| Python type stubs   | `protoc-gen-mypy`             | 5.1.0                   | `mypy-protobuf` from `uv.lock`                   |
+| Python gRPC stubs   | `python -m grpc_tools.protoc` | 1.80.0 / libprotoc 31.1 | `grpcio-tools` from `uv.lock`                    |
+| TypeScript messages | `protoc-gen-es`               | 2.12.0                  | `@bufbuild/protoc-gen-es` from `pnpm-lock.yaml`  |
+| TypeScript runtime  | `@bufbuild/protobuf`          | 2.12.0                  | `pnpm-lock.yaml`                                 |
+| Go messages         | `protoc-gen-go`               | 1.36.11                 | platform binary under `artifacts/protobuf-tools` |
+| Go gRPC stubs       | `protoc-gen-go-grpc`          | 1.6.0                   | platform binary under `artifacts/protobuf-tools` |
 
-`generate-protos-deps` installs pnpm and uv dependencies with frozen lock files.
-The uv sync is inexact so it does not remove additional workspace dependency groups
-already installed by the developer. The target then installs the fixed Go plugins
-into the ignored repository cache. Buf plugin paths are explicit in
-`protos/buf.gen.yaml`; missing managed tools fail generation instead of falling back
-to a binary found on the developer machine's `PATH`. Generated TypeScript is passed
-through the pnpm-managed Prettier binary and normalized to one trailing newline so
-regeneration is byte-for-byte stable.
+`generate-protos-deps` is the explicit online bootstrap target. It installs pnpm
+and uv dependencies with frozen lock files and packages the current host's Buf and
+Go generators. The uv sync is inexact so it does not remove additional workspace
+dependency groups already installed by the developer. Missing managed tools fail
+generation before Buf runs. The Make target prepends only the selected artifact
+directory to `PATH`, so Buf resolves the checked Go plugins there instead of using
+a globally installed binary. Generated TypeScript is passed through the
+pnpm-managed Prettier binary and normalized to one trailing newline so regeneration
+is byte-for-byte stable.
+
+## Offline tool bundle
+
+Run the following on a connected build host:
+
+```console
+make protobuf-tools-artifacts
+```
+
+It creates this ignored, copyable layout:
+
+```text
+artifacts/protobuf-tools/
+├── darwin/{amd64,arm64}/bin/{buf,protoc-gen-go,protoc-gen-go-grpc}
+├── linux/{amd64,arm64}/bin/{buf,protoc-gen-go,protoc-gen-go-grpc}
+├── SHA256SUMS
+└── VERSIONS
+```
+
+`make generate-protos` selects the current host route from `uname`, normalizing
+`x86_64` to `amd64` and `aarch64` to `arm64`; Go itself is not required on the
+offline generation host. Override `PROTO_TOOLS_HOST_OS` or
+`PROTO_TOOLS_HOST_ARCH` only when the host identity cannot be detected correctly.
+`PROTO_TOOLS_TARGETS` can limit the connected-host build, for example:
+
+```console
+make protobuf-tools-artifacts PROTO_TOOLS_TARGETS="linux/amd64 linux/arm64"
+```
+
+Copy `artifacts/protobuf-tools` to the same repository-relative location in the
+offline environment. The binary bundle removes all Go module and Buf download
+requirements from generation. Full offline generation still requires the locked
+Python and Node dependencies to be present in `.venv` and `node_modules`; prepare
+those directories or their package-manager caches before disconnecting. Use
+`make generate-protos-check-deps` to check readiness without changing the
+environment.
 
 Buf does not use its built-in Python generator because that path delegates to a
 `protoc` executable on `PATH`. Python messages and gRPC stubs are generated by the

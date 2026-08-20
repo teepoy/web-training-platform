@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import asyncio
 import time
 
 import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.modules.datasets.port.http.deps import get_artifact_storage
+from app.shared.infrastructure.storage.memory import InMemoryArtifactStorage
 from tests.conftest import TRAINER_ID
 
 
@@ -64,3 +67,83 @@ def test_download_artifact_not_found() -> None:
         r = c.get("/api/v1/artifacts/nonexistent-artifact-id-99999/download")
         assert r.status_code == 404
         assert "not found" in r.json()["detail"]
+
+
+def test_export_download_streams_full_object_with_range_metadata() -> None:
+    storage = InMemoryArtifactStorage()
+    payload = b"0123456789" * 200_000
+    uri = asyncio.run(
+        storage.put_bytes("exports/dataset-1/large.zip", payload)
+    )
+    app.dependency_overrides[get_artifact_storage] = lambda: storage
+    try:
+        with TestClient(app) as c:
+            response = c.get("/api/v1/download", params={"uri": uri})
+    finally:
+        app.dependency_overrides.pop(get_artifact_storage, None)
+
+    assert response.status_code == 200
+    assert response.content == payload
+    assert response.headers["content-length"] == str(len(payload))
+    assert response.headers["accept-ranges"] == "bytes"
+    assert response.headers["x-accel-buffering"] == "no"
+    assert 'filename="large.zip"' in response.headers["content-disposition"]
+
+
+def test_export_download_honors_single_byte_range() -> None:
+    storage = InMemoryArtifactStorage()
+    uri = asyncio.run(
+        storage.put_bytes("exports/dataset-1/large.parquet", b"0123456789")
+    )
+    app.dependency_overrides[get_artifact_storage] = lambda: storage
+    try:
+        with TestClient(app) as c:
+            response = c.get(
+                "/api/v1/download",
+                params={"uri": uri},
+                headers={"Range": "bytes=3-6"},
+            )
+    finally:
+        app.dependency_overrides.pop(get_artifact_storage, None)
+
+    assert response.status_code == 206
+    assert response.content == b"3456"
+    assert response.headers["content-length"] == "4"
+    assert response.headers["content-range"] == "bytes 3-6/10"
+
+
+def test_export_download_rejects_unsatisfied_range() -> None:
+    storage = InMemoryArtifactStorage()
+    uri = asyncio.run(storage.put_bytes("exports/dataset-1/empty.zip", b""))
+    app.dependency_overrides[get_artifact_storage] = lambda: storage
+    try:
+        with TestClient(app) as c:
+            response = c.get(
+                "/api/v1/download",
+                params={"uri": uri},
+                headers={"Range": "bytes=0-1"},
+            )
+    finally:
+        app.dependency_overrides.pop(get_artifact_storage, None)
+
+    assert response.status_code == 416
+    assert response.headers["content-range"] == "bytes */0"
+
+
+def test_export_download_hides_another_organizations_scoped_object() -> None:
+    storage = InMemoryArtifactStorage()
+    uri = asyncio.run(
+        storage.put_bytes(
+            "exports/orgs/not-the-current-org/datasets/dataset-1/private.zip",
+            b"private",
+        )
+    )
+    app.dependency_overrides[get_artifact_storage] = lambda: storage
+    try:
+        with TestClient(app) as c:
+            response = c.get("/api/v1/download", params={"uri": uri})
+    finally:
+        app.dependency_overrides.pop(get_artifact_storage, None)
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "export artifact not found"

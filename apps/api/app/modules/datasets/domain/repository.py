@@ -43,6 +43,12 @@ class DatasetRepository(Protocol):
         org_id: str | None = None,
     ) -> dict[str, str]: ...
 
+    async def list_datasets_by_ids(
+        self,
+        dataset_ids: list[str],
+        org_id: str | None = None,
+    ) -> list[Dataset]: ...
+
     async def list_datasets_for_sc_inspections(
         self,
         inspection_times: Sequence[str],

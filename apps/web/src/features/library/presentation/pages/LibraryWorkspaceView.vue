@@ -45,9 +45,19 @@
           class="library-creator"
           @update:value="creatorScope = $event"
         />
+        <NButton
+          v-if="activeTab === 'collections'"
+          type="primary"
+          class="library-primary-action"
+          data-testid="library-new-collection"
+          @click="collectionListRef?.openCreate()"
+        >
+          New collection
+        </NButton>
       </div>
       <KeepAlive>
         <component
+          ref="collectionListRef"
           :is="activeListView"
           :key="activeTab"
           embedded
@@ -60,9 +70,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { useRoute, useRouter, type LocationQueryRaw } from "vue-router";
-import { NInput, NSelect } from "naive-ui";
+import { NButton, NInput, NSelect } from "naive-ui";
 import { useListDatasetCreatorsApiV1DatasetsCreatorsGet } from "@/generated/orval/endpoints/api";
 import { useAuthStore } from "@/features/auth/application/store";
 import { useOrgStore } from "@/features/auth/application/org";
@@ -76,6 +86,7 @@ const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
 const orgStore = useOrgStore();
+const collectionListRef = ref<{ openCreate: () => void } | null>(null);
 
 function firstQueryValue(value: unknown): string | undefined {
   if (Array.isArray(value)) return typeof value[0] === "string" ? value[0] : undefined;
@@ -197,6 +208,11 @@ h1 {
   width: min(240px, 100%);
 }
 
+.library-primary-action {
+  flex: none;
+  margin-left: auto;
+}
+
 .library-tabs {
   display: flex;
   gap: 4px;
@@ -245,6 +261,11 @@ h1 {
   .library-search,
   .library-creator {
     width: 100%;
+  }
+
+  .library-primary-action {
+    width: 100%;
+    margin-left: 0;
   }
 }
 </style>

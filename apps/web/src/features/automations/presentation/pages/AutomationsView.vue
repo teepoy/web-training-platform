@@ -13,9 +13,8 @@
       </div>
 
       <NAlert type="info" :show-icon="false">
-        Monitor data updates and predictions across your Collections. To change what runs or when it
-        runs, open that Collection. Recovery for data updates also starts there so changed Source
-        records are never mistaken for failed work. Automations cannot be created without a target.
+        Monitor Collection data updates and predictions here. Open a Collection to configure or
+        recover its work.
       </NAlert>
 
       <div class="automation-filters">
@@ -272,6 +271,7 @@ const columns: DataTableColumns<AutomationRunOverview> = [
     title: "Recovery",
     key: "actions",
     width: 130,
+    fixed: "right",
     render: (row) =>
       row.retry_supported
         ? h(

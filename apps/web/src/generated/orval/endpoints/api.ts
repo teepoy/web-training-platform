@@ -170,11 +170,13 @@ import type {
   ScBoxFilterResponse,
   ScBulkAnnotationRequest,
   ScBulkAnnotationResponse,
+  ScCollectionPredictionExportRequest,
   ScImportRequest,
   ScImportResponse,
   ScInspectionListResponse,
   ScInspectionReviewImagesResponse,
   ScInspectionSummaryItem,
+  ScPredictionExportRequest,
   ScSampleTableRowsRequest,
   ScSampleTableRowsResponse,
   ScheduleCapabilityResponse,
@@ -12153,6 +12155,148 @@ export const useScBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPo
       > => {
 
       const mutationOptions = getScBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkScPostMutationOptions(options);
+
+      return useMutation(mutationOptions);
+    }
+
+/**
+ * @summary Export Sc Predictions Stream
+ */
+export const getExportScPredictionsStreamApiV1ScDatasetsDatasetIdPredictionExportsStreamPostUrl = (datasetId: string,) => {
+
+
+  return `/api/v1/sc/datasets/${datasetId}/prediction-exports/stream`
+}
+
+export const exportScPredictionsStreamApiV1ScDatasetsDatasetIdPredictionExportsStreamPost = async (datasetId: string,
+    scPredictionExportRequest: ScPredictionExportRequest, options?: RequestInit): Promise<unknown> => {
+
+  return orvalFetcher<unknown>(getExportScPredictionsStreamApiV1ScDatasetsDatasetIdPredictionExportsStreamPostUrl(datasetId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      scPredictionExportRequest,)
+  }
+);}
+
+
+
+
+export const getExportScPredictionsStreamApiV1ScDatasetsDatasetIdPredictionExportsStreamPostMutationOptions = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof exportScPredictionsStreamApiV1ScDatasetsDatasetIdPredictionExportsStreamPost>>, TError,{datasetId: string;data: BodyType<ScPredictionExportRequest>}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+): UseMutationOptions<Awaited<ReturnType<typeof exportScPredictionsStreamApiV1ScDatasetsDatasetIdPredictionExportsStreamPost>>, TError,{datasetId: string;data: BodyType<ScPredictionExportRequest>}, TContext> => {
+
+const mutationKey = ['exportScPredictionsStreamApiV1ScDatasetsDatasetIdPredictionExportsStreamPost'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof exportScPredictionsStreamApiV1ScDatasetsDatasetIdPredictionExportsStreamPost>>, {datasetId: string;data: BodyType<ScPredictionExportRequest>}> = (props) => {
+          const {datasetId,data} = props ?? {};
+
+          return  exportScPredictionsStreamApiV1ScDatasetsDatasetIdPredictionExportsStreamPost(datasetId,data,requestOptions)
+        }
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ExportScPredictionsStreamApiV1ScDatasetsDatasetIdPredictionExportsStreamPostMutationResult = NonNullable<Awaited<ReturnType<typeof exportScPredictionsStreamApiV1ScDatasetsDatasetIdPredictionExportsStreamPost>>>
+    export type ExportScPredictionsStreamApiV1ScDatasetsDatasetIdPredictionExportsStreamPostMutationBody = BodyType<ScPredictionExportRequest>
+    export type ExportScPredictionsStreamApiV1ScDatasetsDatasetIdPredictionExportsStreamPostMutationError = ErrorType<HTTPValidationError>
+
+    /**
+ * @summary Export Sc Predictions Stream
+ */
+export const useExportScPredictionsStreamApiV1ScDatasetsDatasetIdPredictionExportsStreamPost = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof exportScPredictionsStreamApiV1ScDatasetsDatasetIdPredictionExportsStreamPost>>, TError,{datasetId: string;data: BodyType<ScPredictionExportRequest>}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+): UseMutationReturnType<
+        Awaited<ReturnType<typeof exportScPredictionsStreamApiV1ScDatasetsDatasetIdPredictionExportsStreamPost>>,
+        TError,
+        {datasetId: string;data: BodyType<ScPredictionExportRequest>},
+        TContext
+      > => {
+
+      const mutationOptions = getExportScPredictionsStreamApiV1ScDatasetsDatasetIdPredictionExportsStreamPostMutationOptions(options);
+
+      return useMutation(mutationOptions);
+    }
+
+/**
+ * @summary Export Sc Collection Predictions Stream
+ */
+export const getExportScCollectionPredictionsStreamApiV1ScDatasetCollectionsCollectionIdPredictionExportsStreamPostUrl = (collectionId: string,) => {
+
+
+  return `/api/v1/sc/dataset-collections/${collectionId}/prediction-exports/stream`
+}
+
+export const exportScCollectionPredictionsStreamApiV1ScDatasetCollectionsCollectionIdPredictionExportsStreamPost = async (collectionId: string,
+    scCollectionPredictionExportRequest: ScCollectionPredictionExportRequest, options?: RequestInit): Promise<unknown> => {
+
+  return orvalFetcher<unknown>(getExportScCollectionPredictionsStreamApiV1ScDatasetCollectionsCollectionIdPredictionExportsStreamPostUrl(collectionId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      scCollectionPredictionExportRequest,)
+  }
+);}
+
+
+
+
+export const getExportScCollectionPredictionsStreamApiV1ScDatasetCollectionsCollectionIdPredictionExportsStreamPostMutationOptions = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof exportScCollectionPredictionsStreamApiV1ScDatasetCollectionsCollectionIdPredictionExportsStreamPost>>, TError,{collectionId: string;data: BodyType<ScCollectionPredictionExportRequest>}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+): UseMutationOptions<Awaited<ReturnType<typeof exportScCollectionPredictionsStreamApiV1ScDatasetCollectionsCollectionIdPredictionExportsStreamPost>>, TError,{collectionId: string;data: BodyType<ScCollectionPredictionExportRequest>}, TContext> => {
+
+const mutationKey = ['exportScCollectionPredictionsStreamApiV1ScDatasetCollectionsCollectionIdPredictionExportsStreamPost'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof exportScCollectionPredictionsStreamApiV1ScDatasetCollectionsCollectionIdPredictionExportsStreamPost>>, {collectionId: string;data: BodyType<ScCollectionPredictionExportRequest>}> = (props) => {
+          const {collectionId,data} = props ?? {};
+
+          return  exportScCollectionPredictionsStreamApiV1ScDatasetCollectionsCollectionIdPredictionExportsStreamPost(collectionId,data,requestOptions)
+        }
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ExportScCollectionPredictionsStreamApiV1ScDatasetCollectionsCollectionIdPredictionExportsStreamPostMutationResult = NonNullable<Awaited<ReturnType<typeof exportScCollectionPredictionsStreamApiV1ScDatasetCollectionsCollectionIdPredictionExportsStreamPost>>>
+    export type ExportScCollectionPredictionsStreamApiV1ScDatasetCollectionsCollectionIdPredictionExportsStreamPostMutationBody = BodyType<ScCollectionPredictionExportRequest>
+    export type ExportScCollectionPredictionsStreamApiV1ScDatasetCollectionsCollectionIdPredictionExportsStreamPostMutationError = ErrorType<HTTPValidationError>
+
+    /**
+ * @summary Export Sc Collection Predictions Stream
+ */
+export const useExportScCollectionPredictionsStreamApiV1ScDatasetCollectionsCollectionIdPredictionExportsStreamPost = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof exportScCollectionPredictionsStreamApiV1ScDatasetCollectionsCollectionIdPredictionExportsStreamPost>>, TError,{collectionId: string;data: BodyType<ScCollectionPredictionExportRequest>}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+): UseMutationReturnType<
+        Awaited<ReturnType<typeof exportScCollectionPredictionsStreamApiV1ScDatasetCollectionsCollectionIdPredictionExportsStreamPost>>,
+        TError,
+        {collectionId: string;data: BodyType<ScCollectionPredictionExportRequest>},
+        TContext
+      > => {
+
+      const mutationOptions = getExportScCollectionPredictionsStreamApiV1ScDatasetCollectionsCollectionIdPredictionExportsStreamPostMutationOptions(options);
 
       return useMutation(mutationOptions);
     }

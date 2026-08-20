@@ -133,6 +133,8 @@ export function buildDatasetColumns<TDataset extends DatasetListItem>(
     {
       title: "Actions",
       key: "actions",
+      width: 180,
+      fixed: "right",
       render: (row: TDataset) =>
         h(DatasetRowActions, {
           row,

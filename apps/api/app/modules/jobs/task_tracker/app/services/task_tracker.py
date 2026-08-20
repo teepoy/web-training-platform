@@ -424,9 +424,12 @@ class TaskTrackerService:
     ) -> TaskTrackerDerived:
         prefect_state = self._nested_string(flow_run, "state", "type")
         display_status = self._display_status(task.platform_job, prefect_state)
-        stage = self._stage_for(prefect_state)
+        stage_state = prefect_state or self._prefect_state_for_display_status(
+            display_status
+        )
+        stage = self._stage_for_display_status(display_status)
         execution_kind = self._execution_kind(task, flow_run)
-        active_node = self._active_node(task, prefect_state)
+        active_node = self._active_node(stage)
         queue_priority = self._int_or_none(work_queue, "priority")
         pool_limit = self._int_or_none(work_pool, "concurrency_limit")
         pool_slots = self._int_or_none(work_pool, "status", "slot_count")
@@ -458,7 +461,7 @@ class TaskTrackerService:
             stages=self._stages(
                 task,
                 active_stage=stage,
-                prefect_state=prefect_state,
+                prefect_state=stage_state,
                 task_runs=task_runs,
             ),
             scorecard=scorecard,
@@ -677,12 +680,15 @@ class TaskTrackerService:
         }
         return mapping.get(prefect_state, "queued")
 
-    def _stage_for(self, prefect_state: str | None) -> str:
-        if prefect_state in _TERMINAL_STATES:
-            return "validation_output"
-        if prefect_state in _RUNNING_STATES:
-            return "execution_flow"
-        return "queue_allocation"
+    def _prefect_state_for_display_status(self, display_status: str) -> str:
+        return {
+            "pending": "PENDING",
+            "queued": "PENDING",
+            "running": "RUNNING",
+            "completed": "COMPLETED",
+            "failed": "FAILED",
+            "cancelled": "CANCELLED",
+        }.get(display_status, "PENDING")
 
     def _stage_for_display_status(self, display_status: str) -> str:
         if display_status in {"completed", "failed", "cancelled"}:
@@ -707,10 +713,10 @@ class TaskTrackerService:
             return "embedding-batch"
         return self._string_or_none(flow_run, "work_queue_name") or "predict-batch"
 
-    def _active_node(self, task: _TaskRecord, prefect_state: str | None) -> str | None:
-        if prefect_state in _QUEUE_STATES or prefect_state is None:
+    def _active_node(self, stage: str) -> str:
+        if stage == "queue_allocation":
             return "queue"
-        if prefect_state in _RUNNING_STATES:
+        if stage == "execution_flow":
             return "execute"
         return "output"
 
@@ -830,7 +836,11 @@ class TaskTrackerService:
         else:
             validate_detail = "terminal state"
             output_detail = "run summary"
-        if prefect_state not in _TERMINAL_STATES:
+        if prefect_state in {"FAILED", "CRASHED"}:
+            output_detail = "failure details available"
+        elif prefect_state == "CANCELLED":
+            output_detail = "cancellation recorded"
+        elif prefect_state not in _TERMINAL_STATES:
             output_detail = "awaiting completion"
         return [
             TaskTrackerNode(

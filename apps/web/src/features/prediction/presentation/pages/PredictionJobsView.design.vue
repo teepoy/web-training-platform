@@ -1,5 +1,12 @@
 <template>
   <section class="prediction-launcher-design">
+    <div class="prediction-actions">
+      <div>
+        <small>CURRENT RESULTS</small>
+        <strong>Prediction runs</strong>
+      </div>
+      <div><button class="primary">Start Prediction</button></div>
+    </div>
     <header>
       <div>
         <small>PREDICTION</small>
@@ -53,6 +60,23 @@
   background: #fff;
   border: 1px solid #dfe3e9;
   border-radius: 14px;
+}
+.prediction-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #edf0f3;
+}
+.prediction-actions > div:last-child {
+  display: flex;
+  gap: 8px;
+}
+.prediction-actions strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 18px;
 }
 header,
 .filters,

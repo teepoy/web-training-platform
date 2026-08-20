@@ -46,7 +46,10 @@
       preset="card"
       title="Choose a model for prediction"
       class="model-picker-modal"
-      :style="{ width: 'min(960px, calc(100vw - 32px))' }"
+      :style="{
+        width: 'min(960px, calc(100vw - 32px))',
+        maxHeight: 'calc(100vh - 32px)',
+      }"
     >
       <n-form
         ref="formRef"
@@ -99,6 +102,7 @@
                 :checked-row-keys="formModel.model_id ? [formModel.model_id] : []"
                 :row-props="modelRowProps"
                 :scroll-x="820"
+                :max-height="320"
                 remote
                 size="small"
                 @update:checked-row-keys="selectModel"
@@ -329,15 +333,40 @@ const modelPickerColumns = computed<DataTableColumns<ModelResponse>>(() => [
     minWidth: 180,
     render: (model) =>
       h("div", {}, [
-        h(NText, { strong: true }, { default: () => modelDisplayName(model) }),
-        h("div", { class: "model-picker-id" }, model.id),
+        h(
+          NText,
+          { strong: true, ellipsis: { tooltip: true }, style: { display: "block" } },
+          { default: () => modelDisplayName(model) },
+        ),
+        h(
+          "div",
+          {
+            title: model.id,
+            style: {
+              display: "block",
+              maxWidth: "190px",
+              marginTop: "2px",
+              overflow: "hidden",
+              color: "var(--n-text-color-3)",
+              fontSize: "11px",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            },
+          },
+          model.id,
+        ),
       ]),
   },
   {
     title: "Training source",
     key: "source",
     minWidth: 190,
-    render: (model) => modelSourceName(model),
+    render: (model) =>
+      h(
+        NText,
+        { ellipsis: { tooltip: true }, title: modelSourceName(model) },
+        { default: () => modelSourceName(model) },
+      ),
   },
   { title: "Trainer", key: "trainer_name", minWidth: 130 },
   {
@@ -381,13 +410,17 @@ function statusType(status: string): TagType {
   return "default";
 }
 
+function statusLabel(status: string): string {
+  return status.replace(/_/g, " ").replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
 const columns = computed<DataTableColumns<PredictionJob>>(() => {
   const baseColumns: DataTableColumns<PredictionJob> = [
     {
       title: "ID",
       key: "id",
       width: 120,
-      render: (row) => row.id.slice(0, 8) + "…",
+      render: (row) => h(NText, { title: row.id }, { default: () => `${row.id.slice(0, 8)}…` }),
     },
     {
       title: "Status",
@@ -397,20 +430,28 @@ const columns = computed<DataTableColumns<PredictionJob>>(() => {
         h(
           NTag,
           { type: statusType(row.status), size: "small", round: true },
-          { default: () => row.status },
+          { default: () => statusLabel(row.status) },
         ),
     },
     {
       title: "Dataset ID",
       key: "dataset_id",
       ellipsis: { tooltip: true },
-      render: (row) => (row.dataset_id ? row.dataset_id.slice(0, 8) + "…" : "Deleted dataset"),
+      render: (row) =>
+        row.dataset_id
+          ? h(
+              NText,
+              { title: row.dataset_id },
+              { default: () => `${row.dataset_id?.slice(0, 8)}…` },
+            )
+          : "Deleted dataset",
     },
     {
       title: "Model ID",
       key: "model_id",
       ellipsis: { tooltip: true },
-      render: (row) => row.model_id.slice(0, 8) + "…",
+      render: (row) =>
+        h(NText, { title: row.model_id }, { default: () => `${row.model_id.slice(0, 8)}…` }),
     },
     {
       title: "Created At",
@@ -422,6 +463,7 @@ const columns = computed<DataTableColumns<PredictionJob>>(() => {
       title: "Actions",
       key: "actions",
       width: 150,
+      fixed: "right",
       render: (row) =>
         h("span", { style: "display: inline-flex; gap: 8px" }, [
           h(
@@ -575,16 +617,6 @@ function predictionTaskSummary(row: PredictionJob): TaskTrackerSummary {
   display: grid;
   grid-template-columns: minmax(260px, 1fr) 190px 190px;
   gap: 8px;
-}
-
-.model-picker-id {
-  max-width: 190px;
-  margin-top: 2px;
-  overflow: hidden;
-  color: var(--n-text-color-3);
-  font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 @media (max-width: 640px) {

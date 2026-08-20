@@ -2,7 +2,8 @@
   <n-modal
     :show="show"
     preset="card"
-    style="width: min(960px, 96vw)"
+    style="width: min(960px, 96vw); max-height: 92vh"
+    content-style="overflow: auto"
     @update:show="emit('update:show', $event)"
   >
     <template #header>
@@ -130,6 +131,7 @@
                 <n-step
                   v-for="node in stage.nodes ?? []"
                   :key="node.key"
+                  :status="stepStatus(node.status)"
                   :title="node.label"
                   :description="node.detail"
                 />
@@ -138,7 +140,7 @@
           </n-collapse-item>
         </n-collapse>
 
-        <n-grid v-if="false" :cols="2" :x-gap="16">
+        <n-grid cols="1 720:2" :x-gap="16" :y-gap="16" responsive="self">
           <n-gi>
             <n-card title="Dynamic Console" size="small">
               <n-space vertical size="small">
@@ -313,6 +315,13 @@ function currentStep(nodes: Array<{ status: string }>): number {
   if (activeIndex >= 0) return activeIndex + 1;
   const completed = nodes.filter((node) => node.status === "completed").length;
   return Math.max(1, completed);
+}
+
+function stepStatus(status: string): "wait" | "process" | "finish" | "error" {
+  if (status === "completed") return "finish";
+  if (status === "failed") return "error";
+  if (status === "active") return "process";
+  return "wait";
 }
 
 function statusType(status?: string) {

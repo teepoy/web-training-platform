@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 import re
 from io import BytesIO
@@ -8,7 +9,6 @@ from typing import Any
 
 from minio.commonconfig import Filter
 from minio.lifecycleconfig import (
-    AbortIncompleteMultipartUpload,
     Expiration,
     LifecycleConfig,
     Rule,
@@ -17,7 +17,7 @@ from minio import Minio
 
 _S3_URI_RE = re.compile(r"^s3://([^/]+)/(.+)$")
 EXPORT_LIFECYCLE_RULE_ID = "finetune-export-expiration"
-EXPORT_MULTIPART_ABORT_RULE_ID = "finetune-export-multipart-abort"
+_LEGACY_EXPORT_MULTIPART_ABORT_RULE_ID = "finetune-export-multipart-abort"
 
 
 def _parse_s3_uri(uri: str) -> tuple[str, str]:
@@ -32,37 +32,24 @@ def _parse_s3_uri(uri: str) -> tuple[str, str]:
 class MinioExportLifecycle:
     prefix: str
     expiration_days: int
-    abort_incomplete_multipart_upload_days: int | None = None
 
     def __post_init__(self) -> None:
         if not self.prefix:
             raise ValueError("export lifecycle prefix must be non-empty")
         if self.expiration_days <= 0:
             raise ValueError("export lifecycle expiration_days must be positive")
-        if (
-            self.abort_incomplete_multipart_upload_days is not None
-            and self.abort_incomplete_multipart_upload_days <= 0
-        ):
-            raise ValueError(
-                "export lifecycle abort_incomplete_multipart_upload_days "
-                "must be positive"
-            )
 
     def to_rules(self) -> list[Rule]:
-        multipart_abort = (
-            AbortIncompleteMultipartUpload(
-                days_after_initiation=self.abort_incomplete_multipart_upload_days
-            )
-            if self.abort_incomplete_multipart_upload_days is not None
-            else None
-        )
+        # MinIO applies expiration days to complete objects and abandoned
+        # multipart uploads in unversioned buckets. It intentionally does not
+        # persist the S3 AbortIncompleteMultipartUpload field, so emitting that
+        # field would make strict read-after-write validation impossible.
         return [
             Rule(
                 status="Enabled",
                 rule_filter=Filter(prefix=self.prefix),
                 rule_id=EXPORT_LIFECYCLE_RULE_ID,
                 expiration=Expiration(days=self.expiration_days),
-                abort_incomplete_multipart_upload=multipart_abort,
             )
         ]
 
@@ -77,11 +64,6 @@ def build_minio_export_lifecycle(cfg: Any) -> MinioExportLifecycle | None:
     return MinioExportLifecycle(
         prefix=str(exports_cfg.prefix),
         expiration_days=int(exports_cfg.expiration_days),
-        abort_incomplete_multipart_upload_days=int(
-            exports_cfg.abort_incomplete_multipart_upload_days
-        )
-        if exports_cfg.get("abort_incomplete_multipart_upload_days") is not None
-        else None,
     )
 
 
@@ -207,6 +189,65 @@ class MinioArtifactStorage:
                 f"Object not found in MinIO bucket={bucket!r}: {uri!r}"
             ) from exc
 
+    async def get_size(self, uri: str) -> int:
+        if not uri.startswith("s3://"):
+            raise FileNotFoundError(f"Unsupported URI scheme: {uri!r}")
+        bucket, object_name = _parse_s3_uri(uri)
+        try:
+            stat = await asyncio.to_thread(
+                self.client.stat_object,
+                bucket,
+                object_name,
+            )
+        except Exception as exc:
+            raise FileNotFoundError(
+                f"Object not found in MinIO bucket={bucket!r}: {uri!r}"
+            ) from exc
+        size = getattr(stat, "size", None)
+        if not isinstance(size, int) or size < 0:
+            raise RuntimeError(f"MinIO returned an invalid object size for {uri!r}")
+        return size
+
+    async def iter_bytes(
+        self,
+        uri: str,
+        *,
+        offset: int = 0,
+        length: int | None = None,
+        chunk_size: int = 1024 * 1024,
+    ) -> AsyncIterator[bytes]:
+        if not uri.startswith("s3://"):
+            raise FileNotFoundError(f"Unsupported URI scheme: {uri!r}")
+        if offset < 0:
+            raise ValueError("offset must be non-negative")
+        if length is not None and length < 0:
+            raise ValueError("length must be non-negative")
+        if chunk_size <= 0:
+            raise ValueError("chunk_size must be positive")
+        bucket, object_name = _parse_s3_uri(uri)
+        response = await asyncio.to_thread(
+            self.client.get_object,
+            bucket,
+            object_name,
+            offset,
+            length or 0,
+        )
+        remaining = length
+        try:
+            while remaining is None or remaining > 0:
+                read_size = (
+                    chunk_size if remaining is None else min(chunk_size, remaining)
+                )
+                chunk = await asyncio.to_thread(response.read, read_size)
+                if not chunk:
+                    break
+                yield chunk
+                if remaining is not None:
+                    remaining -= len(chunk)
+        finally:
+            await asyncio.to_thread(response.close)
+            await asyncio.to_thread(response.release_conn)
+
     async def delete(self, uri: str) -> None:
         """Delete an object from MinIO storage identified by an ``s3://`` URI."""
         if not uri.startswith("s3://"):
@@ -322,7 +363,7 @@ def _existing_lifecycle_rules(client: Minio, bucket: str) -> list[Rule]:
 def _is_managed_rule(rule: Rule) -> bool:
     return str(rule.rule_id) in {
         EXPORT_LIFECYCLE_RULE_ID,
-        EXPORT_MULTIPART_ABORT_RULE_ID,
+        _LEGACY_EXPORT_MULTIPART_ABORT_RULE_ID,
     }
 
 

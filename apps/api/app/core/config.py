@@ -53,7 +53,6 @@ class MinioLifecycleExportsConfig(ConfigSection):
     enabled: bool = True
     prefix: str = "exports/"
     expiration_days: int = 1
-    abort_incomplete_multipart_upload_days: int | None = None
 
 
 class MinioLifecycleConfig(ConfigSection):

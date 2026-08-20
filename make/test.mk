@@ -38,6 +38,10 @@ benchmark-sc-runtime-data-paths: job-image-resolver-host ## Benchmark real SC tr
 			--source-dataset-name '$(SC_RUNTIME_BENCHMARK_SOURCE_DATASET_NAME)' \
 			--samples $(SC_RUNTIME_BENCHMARK_SAMPLES) $(if $(SC_RUNTIME_BENCHMARK_MIN_TRAIN_SPS),--minimum-training-samples-per-second $(SC_RUNTIME_BENCHMARK_MIN_TRAIN_SPS),) $(if $(SC_RUNTIME_BENCHMARK_MIN_PREDICT_SPS),--minimum-prediction-samples-per-second $(SC_RUNTIME_BENCHMARK_MIN_PREDICT_SPS),)
 
+.PHONY: benchmark-sc-prediction-export
+benchmark-sc-prediction-export: ## Benchmark 300k-row SC export generation plus MinIO upload (ARGS may override format/version)
+	cd $(API_DIR) && $(DEV_API_HOST_ENV) $(UV_RUN_INSTALLED) python scripts/benchmark_sc_prediction_export.py --samples 300000 $(ARGS)
+
 .PHONY: test-release-contract
 test-release-contract: ## Validate immutable release image environment generation
 	python3 -m unittest discover -s scripts/tests -p 'test_write_release_image_env.py'

@@ -23,6 +23,18 @@ class CollectionDatasetUsagePort(Protocol):
     async def has_dataset_references(self, dataset_id: str, org_id: str) -> bool: ...
 
 
+class CollectionExportReaderPort(Protocol):
+    """Read-only Collection boundary used by cross-module exporters."""
+
+    async def get_collection(
+        self, collection_id: str, org_id: str
+    ) -> DatasetCollection: ...
+
+    async def list_members(
+        self, collection_id: str, org_id: str
+    ) -> list[DatasetCollectionMember]: ...
+
+
 class DatasetCollectionRevisionReaderPort(Protocol):
     async def get_revision(
         self, collection_id: str, revision_id: str, org_id: str

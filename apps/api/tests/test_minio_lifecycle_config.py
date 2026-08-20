@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 from io import BytesIO
+from types import SimpleNamespace
 
 from minio.commonconfig import Filter
 from minio.lifecycleconfig import Expiration, LifecycleConfig, Rule
@@ -24,6 +26,7 @@ class _FakeMinioClient:
         self.existing = existing
         self.lifecycle: LifecycleConfig | None = None
         self.events: list[str] = []
+        self.object_payload = b"0123456789"
 
     def bucket_exists(self, bucket: str) -> bool:
         self.events.append(f"bucket_exists:{bucket}")
@@ -57,6 +60,30 @@ class _FakeMinioClient:
         assert length == len(b"payload")
         assert content_type == "application/json"
 
+    def stat_object(self, bucket_name: str, object_name: str) -> SimpleNamespace:
+        self.events.append(f"stat_object:{bucket_name}/{object_name}")
+        return SimpleNamespace(size=len(self.object_payload))
+
+    def get_object(
+        self,
+        bucket_name: str,
+        object_name: str,
+        offset: int = 0,
+        length: int = 0,
+    ) -> "_FakeObjectResponse":
+        self.events.append(f"get_object:{bucket_name}/{object_name}:{offset}:{length}")
+        end = None if length == 0 else offset + length
+        return _FakeObjectResponse(self.object_payload[offset:end])
+
+
+class _FakeObjectResponse(BytesIO):
+    def __init__(self, data: bytes) -> None:
+        super().__init__(data)
+        self.released = False
+
+    def release_conn(self) -> None:
+        self.released = True
+
 
 def _storage(fake: _FakeMinioClient) -> MinioArtifactStorage:
     storage = MinioArtifactStorage(
@@ -67,7 +94,6 @@ def _storage(fake: _FakeMinioClient) -> MinioArtifactStorage:
         export_lifecycle=MinioExportLifecycle(
             prefix="exports/",
             expiration_days=1,
-            abort_incomplete_multipart_upload_days=1,
         ),
     )
     storage.client = fake  # type: ignore[assignment]
@@ -87,8 +113,32 @@ def test_default_config_enables_export_lifecycle() -> None:
     assert lifecycle == MinioExportLifecycle(
         prefix="exports/",
         expiration_days=1,
-        abort_incomplete_multipart_upload_days=None,
     )
+
+
+def test_minio_artifact_download_streams_requested_range() -> None:
+    fake = _FakeMinioClient()
+    storage = _storage(fake)
+
+    async def read_range() -> tuple[int, list[bytes]]:
+        uri = "s3://finetune-artifacts/exports/dataset/large.zip"
+        size = await storage.get_size(uri)
+        chunks = [
+            chunk
+            async for chunk in storage.iter_bytes(
+                uri,
+                offset=2,
+                length=7,
+                chunk_size=3,
+            )
+        ]
+        return size, chunks
+
+    size, chunks = asyncio.run(read_range())
+
+    assert size == 10
+    assert chunks == [b"234", b"567", b"8"]
+    assert "get_object:finetune-artifacts/exports/dataset/large.zip:2:7" in fake.events
 
 
 def test_prepare_installs_export_lifecycle_when_bucket_has_no_policy() -> None:
@@ -108,11 +158,8 @@ def test_prepare_installs_export_lifecycle_when_bucket_has_no_policy() -> None:
         prefix="exports/"
     )
     assert rules["finetune-export-expiration"].expiration == Expiration(days=1)
-    multipart_abort = rules[
-        "finetune-export-expiration"
-    ].abort_incomplete_multipart_upload
-    assert multipart_abort is not None
-    assert multipart_abort.days_after_initiation == 1
+    assert rules["finetune-export-expiration"].abort_incomplete_multipart_upload is None
+    assert set(rules) == {"finetune-export-expiration"}
 
 
 def test_prepare_preserves_unmanaged_lifecycle_rules() -> None:

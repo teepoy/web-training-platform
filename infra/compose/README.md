@@ -245,6 +245,13 @@ All services at a glance:
 ## Notes
 
 - Dev mode uses `uvicorn --reload` with bind mounts; release modes use baked images without source mounts.
+- `prepare-platform` is required before production traffic. Its managed MinIO
+  `exports/` lifecycle expires completed export artifacts and aborts incomplete
+  multipart uploads according to `storage.minio.lifecycle.exports` (one day for
+  each by default), preventing large prediction packages from accumulating.
+- Both Dataset and Collection prediction-export SSE routes use the Web Nginx
+  long-running, unbuffered proxy policy; large downloads use the range-enabled
+  unbuffered download policy.
 - Release services run from the image's prebuilt `/app/.venv`. The dev API uses `uv run` to execute the bind-mounted workspace environment.
 - The `web` service serves assets baked into the image (prod) or via Vite dev server (dev).
 - Use `make up-dev` for the complete bind-mounted development stack.

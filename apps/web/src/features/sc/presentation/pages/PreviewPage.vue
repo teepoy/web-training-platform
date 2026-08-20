@@ -134,7 +134,7 @@ async function buildCollection(): Promise<void> {
     <div class="sc-preview" :style="containerStyle">
       <div class="sc-preview-body">
         <div class="sc-preview-tab-bar">
-          <div class="sc-preview-title">Summary</div>
+          <div class="sc-preview-title">Inspection summary</div>
           <div class="sc-preview-toolbar">
             <NButton size="small" quaternary @click="router.push('/sc/handbook')">
               Handbook

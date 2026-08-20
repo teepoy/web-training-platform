@@ -59,13 +59,15 @@ def compile_sc_sampling_query(
             identity_field="map_id",
             output_field="defect_id",
         ),
-        program=_sampling_program(selection.program),
+        program=sampling_program_from_request(selection.program),
         seed=selection.seed,
     )
     return validate_sc_sql(compiled.sql), list(compiled.parameters)
 
 
-def _sampling_program(request: ScSamplingProgramRequest) -> ReviewSamplingProgram:
+def sampling_program_from_request(
+    request: ScSamplingProgramRequest,
+) -> ReviewSamplingProgram:
     rules = []
     for rule in request.rules:
         if isinstance(rule, ScSamplingPercentageRule):

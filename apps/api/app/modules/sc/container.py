@@ -6,6 +6,7 @@ from typing import cast
 from injector import Module, inject, provider, singleton
 from app.modules.storage.domain.sparse import DatasetPayloadStore
 
+from app.modules.dataset_collections.port.local import CollectionExportReaderPort
 from app.modules.storage.port.local import (
     DataPlaneSchemaRegistryPort,
     DatasetStorageFactoryPort,
@@ -20,6 +21,9 @@ from app.modules.sc.adapter.local_job_image_source import (
 )
 from app.modules.sc.app.services.sc_plot_points_service import ScPlotPointsService
 from app.modules.sc.app.services.sc_import_service import ScImportService
+from app.modules.sc.app.services.prediction_export_service import (
+    ScPredictionExportService,
+)
 from app.modules.sc.domain.image_fetcher import ScImageFetcher
 from app.modules.sc.domain.upstream_reader import ScUpstreamReader
 from app.modules.sc.materialization.app.services.sc_inspection_materializer import (
@@ -29,7 +33,11 @@ from app.modules.sc.domain.job_image_source import (
     ScJobImageSourceFactory,
 )
 from app.modules.sc.materialization.port.local import ScInspectionMaterializerPort
-from app.modules.sc.port.local import ScImportPort, ScPlotPointsPort
+from app.modules.sc.port.local import (
+    ScImportPort,
+    ScPlotPointsPort,
+    ScPredictionExportPort,
+)
 from app.shared.context import SharedInfra
 
 
@@ -42,6 +50,7 @@ class ScContext:
     plot_points_service: ScPlotPointsService
     sc_inspection_materializer: ScInspectionMaterializer
     job_image_source_factory: ScJobImageSourceFactory
+    prediction_export_service: ScPredictionExportService
 
 
 def init_sc(
@@ -51,6 +60,7 @@ def init_sc(
     sparse_import_factory: SparseImportWriterFactoryPort,
     schema_registry: DataPlaneSchemaRegistry,
     revision_publisher: DatasetRevisionPublisherPort,
+    collection_reader: CollectionExportReaderPort,
     dataset_payload_store: DatasetPayloadStore | None = None,
     upstream_reader: ScUpstreamReader | None = None,
     image_fetcher: ScImageFetcher | None = None,
@@ -121,6 +131,14 @@ def init_sc(
         batch_rows=shared.config.sc.pipeline.materialization_batch_rows,
         max_error_records=(shared.config.sc.pipeline.materialization_max_error_records),
     )
+    prediction_export_service = ScPredictionExportService(
+        repository=repository,
+        collection_reader=collection_reader,
+        storage_factory=storage_factory,
+        artifact_storage=shared.artifact_storage,
+        image_source_factory=job_image_source_factory,
+        image_batch_rows=shared.config.sc.pipeline.prediction_input_batch_rows,
+    )
 
     return ScContext(
         image_fetcher=image_fetcher,
@@ -130,6 +148,7 @@ def init_sc(
         plot_points_service=plot_points_service,
         sc_inspection_materializer=sc_inspection_materializer,
         job_image_source_factory=job_image_source_factory,
+        prediction_export_service=prediction_export_service,
     )
 
 
@@ -146,6 +165,7 @@ class ScModule(Module):
         sparse_import_factory: SparseImportWriterFactoryPort,
         schema_registry: DataPlaneSchemaRegistryPort,
         revision_publisher: DatasetRevisionPublisherPort,
+        collection_reader: CollectionExportReaderPort,
     ) -> ScContext:
         return init_sc(
             shared,
@@ -155,6 +175,7 @@ class ScModule(Module):
             sparse_import_factory=sparse_import_factory,
             schema_registry=cast(DataPlaneSchemaRegistry, schema_registry),
             revision_publisher=revision_publisher,
+            collection_reader=collection_reader,
         )
 
     @provider
@@ -207,3 +228,17 @@ class ScModule(Module):
         self, context: ScContext
     ) -> ScJobImageSourceFactory:
         return context.job_image_source_factory
+
+    @provider
+    @singleton
+    def provide_sc_prediction_export_service(
+        self, context: ScContext
+    ) -> ScPredictionExportService:
+        return context.prediction_export_service
+
+    @provider
+    @singleton
+    def provide_sc_prediction_export_port(
+        self, service: ScPredictionExportService
+    ) -> ScPredictionExportPort:
+        return service

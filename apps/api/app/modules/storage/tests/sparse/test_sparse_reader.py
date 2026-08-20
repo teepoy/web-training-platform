@@ -10,6 +10,7 @@ Uses in-memory parquet bytes — no disk I/O or compose services needed.
 from __future__ import annotations
 
 import io
+from collections.abc import AsyncIterator
 from pathlib import Path
 
 import pyarrow as pa
@@ -91,6 +92,22 @@ class _InMemoryShardStore:
 
     async def get_file(self, uri: str, destination: str) -> None:
         Path(destination).write_bytes(await self.get_bytes(uri))
+
+    async def get_size(self, uri: str) -> int:
+        return len(await self.get_bytes(uri))
+
+    async def iter_bytes(
+        self,
+        uri: str,
+        *,
+        offset: int = 0,
+        length: int | None = None,
+        chunk_size: int = 1024 * 1024,
+    ) -> AsyncIterator[bytes]:
+        data = await self.get_bytes(uri)
+        end = len(data) if length is None else min(len(data), offset + length)
+        for position in range(offset, end, chunk_size):
+            yield data[position : min(position + chunk_size, end)]
 
     async def delete(self, uri: str) -> None:
         self._shards.pop(uri, None)

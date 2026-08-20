@@ -221,7 +221,7 @@ onBeforeUnmount(() => {
 }
 
 .sc-annotate {
-  padding: 12px 16px 16px;
+  padding: 12px 16px 88px;
   display: flex;
   flex-direction: column;
   gap: 4px;

@@ -1,14 +1,14 @@
 <template>
   <div data-testid="datasets-shim-sc">
     <n-data-table
-      :columns="columns"
+      :columns="controlledColumns"
       :data="datasets"
       :row-key="(row: DatasetListItem) => row.id"
       :checked-row-keys="checkedRowKeys"
       :bordered="false"
       size="small"
       :pagination="pagination"
-      :sorter="sorter"
+      :scroll-x="904"
       :row-props="rowProps"
       remote
       @update:checked-row-keys="handleCheckedRowKeysChange"
@@ -89,13 +89,14 @@ function formatCreateTime(value: string): string {
 const columns = computed<DataTableColumns<DatasetListItem>>(() => [
   {
     type: "selection",
+    fixed: "left",
     disabled: (row) => row.created_by !== props.currentUserId,
   },
   {
     title: "Name",
     key: "name",
     width: 220,
-    sorter: "default",
+    sorter: true,
     render(row) {
       return h(NText, { style: "font-weight: 500" }, { default: () => row.name });
     },
@@ -112,7 +113,7 @@ const columns = computed<DataTableColumns<DatasetListItem>>(() => [
     title: "Creator",
     key: "creator",
     width: 160,
-    sorter: "default",
+    sorter: true,
     render(row) {
       return h(NText, {}, { default: () => resolveCreator(row) });
     },
@@ -121,8 +122,7 @@ const columns = computed<DataTableColumns<DatasetListItem>>(() => [
     title: "Create Time",
     key: "created_at",
     width: 180,
-    sorter: (left, right) =>
-      new Date(left.created_at).getTime() - new Date(right.created_at).getTime(),
+    sorter: true,
     render(row) {
       return h(NText, {}, { default: () => formatCreateTime(row.created_at) });
     },
@@ -131,6 +131,7 @@ const columns = computed<DataTableColumns<DatasetListItem>>(() => [
     title: "Actions",
     key: "actions",
     width: 150,
+    fixed: "right",
     render(row) {
       return h(
         NSpace,
@@ -174,4 +175,14 @@ const columns = computed<DataTableColumns<DatasetListItem>>(() => [
     },
   },
 ]);
+
+const controlledColumns = computed<DataTableColumns<DatasetListItem>>(() =>
+  columns.value.map((column) => {
+    if (!("key" in column) || !("sorter" in column) || !column.sorter) return column;
+    return {
+      ...column,
+      sortOrder: props.sorter?.columnKey === column.key ? props.sorter.order : false,
+    };
+  }),
+);
 </script>

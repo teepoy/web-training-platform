@@ -4,6 +4,7 @@ import {
   NButton,
   NDataTable,
   NDatePicker,
+  NEmpty,
   NInput,
   NList,
   NListItem,
@@ -297,8 +298,16 @@ function rowProps(row: InspectionSummaryItem): Record<string, unknown> {
         <template #empty>
           <div class="sc-preview-empty">
             <NText v-if="summariesError" type="error">{{ summariesError }}</NText>
-            <NText v-else-if="summariesEmpty" depth="3">No inspections found</NText>
-            <NText v-else depth="3">Enter a time range to search</NText>
+            <NEmpty
+              v-else-if="summariesEmpty"
+              description="No inspections in this time range"
+              size="small"
+            >
+              <template #extra>
+                <NText depth="3">Try a wider date range or adjust the filters.</NText>
+              </template>
+            </NEmpty>
+            <NEmpty v-else description="Choose a time range, then search" size="small" />
             <NButton v-if="summariesError" size="small" @click="emit('search')"> Retry </NButton>
           </div>
         </template>
@@ -362,9 +371,11 @@ function rowProps(row: InspectionSummaryItem): Record<string, unknown> {
 }
 
 .sc-preview-empty {
-  display: inline-flex;
+  display: flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
+  min-height: 180px;
 }
 
 .sc-preview-last-opened {
@@ -373,6 +384,7 @@ function rowProps(row: InspectionSummaryItem): Record<string, unknown> {
 }
 
 :deep(.sc-summary-row--last-opened td) {
+  background: rgba(24, 160, 88, 0.14);
   background: color-mix(in srgb, var(--cv-primary, #18a058) 14%, transparent);
 }
 

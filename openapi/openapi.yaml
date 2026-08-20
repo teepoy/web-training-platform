@@ -5842,6 +5842,66 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HTTPValidationError"
+  /api/v1/sc/datasets/{dataset_id}/prediction-exports/stream:
+    post:
+      tags:
+        - sc-prediction-export
+      summary: Export Sc Predictions Stream
+      operationId: export_sc_predictions_stream_api_v1_sc_datasets__dataset_id__prediction_exports_stream_post
+      parameters:
+        - name: dataset_id
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Dataset Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScPredictionExportRequest"
+      responses:
+        "200":
+          description: Server-sent export progress and result events
+          content:
+            text/event-stream: {}
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /api/v1/sc/dataset-collections/{collection_id}/prediction-exports/stream:
+    post:
+      tags:
+        - sc-prediction-export
+      summary: Export Sc Collection Predictions Stream
+      operationId: export_sc_collection_predictions_stream_api_v1_sc_dataset_collections__collection_id__prediction_exports_stream_post
+      parameters:
+        - name: collection_id
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Collection Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScCollectionPredictionExportRequest"
+      responses:
+        "200":
+          description: Server-sent Collection export progress and result events
+          content:
+            text/event-stream: {}
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
   /api/v1/source-connectors/providers:
     get:
       tags:
@@ -10098,6 +10158,34 @@ components:
       required:
         - created
       title: ScBulkAnnotationResponse
+    ScCollectionPredictionExportRequest:
+      properties:
+        format:
+          $ref: "#/components/schemas/ScPredictionExportFormat"
+        klarf_version:
+          anyOf:
+            - $ref: "#/components/schemas/ScKlarfVersion"
+            - type: "null"
+        include_images:
+          type: boolean
+          title: Include Images
+          default: false
+        sampling:
+          anyOf:
+            - $ref: "#/components/schemas/ScSamplingSelectionRequest"
+            - type: "null"
+        member_ids:
+          items:
+            type: string
+          type: array
+          minItems: 1
+          title: Member Ids
+      additionalProperties: false
+      type: object
+      required:
+        - format
+        - member_ids
+      title: ScCollectionPredictionExportRequest
     ScImportRequest:
       properties:
         source_inspection_time:
@@ -10270,6 +10358,40 @@ components:
         - images
         - device
       title: ScInspectionSummaryItem
+    ScKlarfVersion:
+      type: string
+      enum:
+        - "1.2"
+        - "1.8"
+      title: ScKlarfVersion
+    ScPredictionExportFormat:
+      type: string
+      enum:
+        - klarf
+        - parquet
+        - zip
+      title: ScPredictionExportFormat
+    ScPredictionExportRequest:
+      properties:
+        format:
+          $ref: "#/components/schemas/ScPredictionExportFormat"
+        klarf_version:
+          anyOf:
+            - $ref: "#/components/schemas/ScKlarfVersion"
+            - type: "null"
+        include_images:
+          type: boolean
+          title: Include Images
+          default: false
+        sampling:
+          anyOf:
+            - $ref: "#/components/schemas/ScSamplingSelectionRequest"
+            - type: "null"
+      additionalProperties: false
+      type: object
+      required:
+        - format
+      title: ScPredictionExportRequest
     ScReviewImageItem:
       properties:
         image_name:
@@ -10549,6 +10671,274 @@ components:
         - field
         - direction
       title: ScSampleTableSort
+    ScSamplingClassCodesRule:
+      properties:
+        type:
+          type: string
+          enum:
+            - exclude_class_codes
+            - include_class_codes
+          title: Type
+        classCodes:
+          items:
+            type: integer
+          type: array
+          minItems: 1
+          title: Classcodes
+      additionalProperties: false
+      type: object
+      required:
+        - type
+        - classCodes
+      title: ScSamplingClassCodesRule
+    ScSamplingCountRule:
+      properties:
+        type:
+          type: string
+          enum:
+            - cluster_count
+            - repeater_count
+            - random_count
+          title: Type
+        count:
+          type: integer
+          minimum: 1.0
+          title: Count
+      additionalProperties: false
+      type: object
+      required:
+        - type
+        - count
+      title: ScSamplingCountRule
+    ScSamplingFinalClassDistributionRule:
+      properties:
+        type:
+          type: string
+          const: final_class_distribution
+          title: Type
+        count:
+          type: integer
+          minimum: 1.0
+          title: Count
+        targets:
+          items:
+            $ref: "#/components/schemas/ScSamplingFinalClassTarget"
+          type: array
+          minItems: 1
+          title: Targets
+      additionalProperties: false
+      type: object
+      required:
+        - type
+        - count
+        - targets
+      title: ScSamplingFinalClassDistributionRule
+    ScSamplingFinalClassTarget:
+      properties:
+        value:
+          anyOf:
+            - type: string
+            - type: "null"
+          title: Value
+        percentage:
+          type: number
+          maximum: 100.0
+          exclusiveMinimum: 0.0
+          title: Percentage
+      additionalProperties: false
+      type: object
+      required:
+        - value
+        - percentage
+      title: ScSamplingFinalClassTarget
+    ScSamplingLargeDefectRule:
+      properties:
+        type:
+          type: string
+          enum:
+            - large_defect_percentage
+            - large_defect_count
+          title: Type
+        sizeField:
+          type: string
+          enum:
+            - size_x
+            - size_y
+            - size_d
+            - area
+          title: Sizefield
+        minimum:
+          type: number
+          minimum: 0.0
+          title: Minimum
+        percentage:
+          anyOf:
+            - type: number
+              maximum: 100.0
+              exclusiveMinimum: 0.0
+            - type: "null"
+          title: Percentage
+        count:
+          anyOf:
+            - type: integer
+              minimum: 1.0
+            - type: "null"
+          title: Count
+        rounding:
+          anyOf:
+            - type: string
+              const: floor
+            - type: "null"
+          title: Rounding
+      additionalProperties: false
+      type: object
+      required:
+        - type
+        - sizeField
+        - minimum
+      title: ScSamplingLargeDefectRule
+    ScSamplingLimitRule:
+      properties:
+        type:
+          type: string
+          enum:
+            - per_die_limit
+            - per_cluster_limit
+            - per_repeater_limit
+            - per_wafer_limit
+          title: Type
+        limit:
+          type: integer
+          minimum: 1.0
+          title: Limit
+      additionalProperties: false
+      type: object
+      required:
+        - type
+        - limit
+      title: ScSamplingLimitRule
+    ScSamplingPercentageRule:
+      properties:
+        type:
+          type: string
+          enum:
+            - cluster_percentage
+            - repeater_percentage
+            - random_percentage
+          title: Type
+        percentage:
+          type: number
+          maximum: 100.0
+          exclusiveMinimum: 0.0
+          title: Percentage
+        rounding:
+          type: string
+          const: floor
+          title: Rounding
+      additionalProperties: false
+      type: object
+      required:
+        - type
+        - percentage
+        - rounding
+      title: ScSamplingPercentageRule
+    ScSamplingProgramRequest:
+      properties:
+        rules:
+          items:
+            oneOf:
+              - $ref: "#/components/schemas/ScSamplingPercentageRule"
+              - $ref: "#/components/schemas/ScSamplingClassCodesRule"
+              - $ref: "#/components/schemas/ScSamplingLimitRule"
+              - $ref: "#/components/schemas/ScSamplingCountRule"
+              - $ref: "#/components/schemas/ScSamplingRequireImageRule"
+              - $ref: "#/components/schemas/ScSamplingSizeRangeRule"
+              - $ref: "#/components/schemas/ScSamplingLargeDefectRule"
+              - $ref: "#/components/schemas/ScSamplingFinalClassDistributionRule"
+            discriminator:
+              propertyName: type
+              mapping:
+                cluster_count: "#/components/schemas/ScSamplingCountRule"
+                cluster_percentage: "#/components/schemas/ScSamplingPercentageRule"
+                exclude_class_codes: "#/components/schemas/ScSamplingClassCodesRule"
+                final_class_distribution: "#/components/schemas/ScSamplingFinalClassDistributionRule"
+                include_class_codes: "#/components/schemas/ScSamplingClassCodesRule"
+                large_defect_count: "#/components/schemas/ScSamplingLargeDefectRule"
+                large_defect_percentage: "#/components/schemas/ScSamplingLargeDefectRule"
+                per_cluster_limit: "#/components/schemas/ScSamplingLimitRule"
+                per_die_limit: "#/components/schemas/ScSamplingLimitRule"
+                per_repeater_limit: "#/components/schemas/ScSamplingLimitRule"
+                per_wafer_limit: "#/components/schemas/ScSamplingLimitRule"
+                random_count: "#/components/schemas/ScSamplingCountRule"
+                random_percentage: "#/components/schemas/ScSamplingPercentageRule"
+                repeater_count: "#/components/schemas/ScSamplingCountRule"
+                repeater_percentage: "#/components/schemas/ScSamplingPercentageRule"
+                require_image: "#/components/schemas/ScSamplingRequireImageRule"
+                size_range: "#/components/schemas/ScSamplingSizeRangeRule"
+          type: array
+          maxItems: 17
+          minItems: 1
+          title: Rules
+      additionalProperties: false
+      type: object
+      required:
+        - rules
+      title: ScSamplingProgramRequest
+    ScSamplingRequireImageRule:
+      properties:
+        type:
+          type: string
+          const: require_image
+          title: Type
+      additionalProperties: false
+      type: object
+      required:
+        - type
+      title: ScSamplingRequireImageRule
+    ScSamplingSelectionRequest:
+      properties:
+        program:
+          $ref: "#/components/schemas/ScSamplingProgramRequest"
+        seed:
+          type: integer
+          minimum: 0.0
+          title: Seed
+      additionalProperties: false
+      type: object
+      required:
+        - program
+        - seed
+      title: ScSamplingSelectionRequest
+    ScSamplingSizeRangeRule:
+      properties:
+        type:
+          type: string
+          const: size_range
+          title: Type
+        sizeField:
+          type: string
+          enum:
+            - size_x
+            - size_y
+            - size_d
+            - area
+          title: Sizefield
+        minimum:
+          type: number
+          minimum: 0.0
+          title: Minimum
+        maximum:
+          type: number
+          minimum: 0.0
+          title: Maximum
+      additionalProperties: false
+      type: object
+      required:
+        - type
+        - sizeField
+        - minimum
+        - maximum
+      title: ScSamplingSizeRangeRule
     ScheduleCapabilityResponse:
       properties:
         flow_name:

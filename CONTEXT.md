@@ -140,6 +140,12 @@ Collection 中每个成员 Dataset 相对于 default model 和当前 Dataset Rev
 
 普通用户完成平台业务工作的界面。Label Studio 在支持其标注能力的 Dataset 上作为上下文 work surface 出现，不作为独立的全局管理入口。
 
+### Classify workspace
+
+SC Dataset 或 SC Collection 中浏览、筛选、抽样和标注缺陷样本的全屏 Product work surface。资源详情中的 `Classify ↗` 是该 workspace 的直接导航入口，不渲染中间预览页；Dataset 直接打开自身样本，Collection 使用已保存 Snapshot 打开其成员样本。
+
+Avoid: 将 SC Samples 呈现为通用原始行表格，或把 Classify workspace 当作独立资源。
+
 ### Operator console
 
 用于检查执行基础设施或存储基础设施的管理界面。Prefect UI 和 MinIO Console 是 operator console，不进入一般用户导航。

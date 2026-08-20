@@ -7,7 +7,7 @@
     :checked-row-keys="checkedRowKeys"
     :bordered="false"
     :pagination="pagination"
-    :sorter="sorter"
+    :scroll-x="1080"
     remote
     style="cursor: pointer"
     @update:checked-row-keys="handleCheckedRowKeysChange"
@@ -39,13 +39,21 @@ const props = defineProps<{
 }>();
 
 const tableColumns = computed<DataTableColumns<TDataset>>(() => {
-  if (!props.onUpdateCheckedRowKeys) return props.columns;
+  const controlledColumns = props.columns.map((column) => {
+    if (!("key" in column) || !("sorter" in column) || !column.sorter) return column;
+    return {
+      ...column,
+      sortOrder: props.sorter?.columnKey === column.key ? props.sorter.order : false,
+    };
+  });
+  if (!props.onUpdateCheckedRowKeys) return controlledColumns;
   return [
     {
       type: "selection",
+      fixed: "left",
       disabled: (row: TDataset) => (props.rowCheckable ? !props.rowCheckable(row) : false),
     },
-    ...props.columns,
+    ...controlledColumns,
   ];
 });
 

@@ -100,6 +100,8 @@ This is a high-level endpoint index for the current API surface. It is not a sch
 
 - `GET /api/v1/exports/{dataset_id}`
 - `POST /api/v1/exports/{dataset_id}/persist`
+- `POST /api/v1/sc/datasets/{dataset_id}/prediction-exports/stream` — Export current SC prediction results as KLARF 1.2/1.8, Parquet, or ZIP, optionally with Annotation Sampling
+- `POST /api/v1/sc/dataset-collections/{collection_id}/prediction-exports/stream` — Export selected linked Dataset records; Parquet stays combined and the selected KLARF version is split into complete numbered files by inspection
 - `GET /api/v1/datasets/{dataset_id}/similarity/{sample_id}`
 
 ## Prediction review and annotation versioning

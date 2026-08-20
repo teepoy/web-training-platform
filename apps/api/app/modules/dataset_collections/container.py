@@ -18,6 +18,7 @@ from app.modules.dataset_collections.domain.repository import (
 from app.modules.dataset_collections.port.local import (
     CollectionDatasetUsagePort,
     CollectionAutomationAdmissionPort,
+    CollectionExportReaderPort,
     CollectionModelManagementPort,
     CollectionPredictionAutomationPort,
     CollectionSnapshotPublishingPort,
@@ -69,6 +70,13 @@ class DatasetCollectionsModule(Module):
     def provide_usage_port(
         self, service: DatasetCollectionService
     ) -> CollectionDatasetUsagePort:
+        return service
+
+    @provider
+    @singleton
+    def provide_export_reader(
+        self, service: DatasetCollectionService
+    ) -> CollectionExportReaderPort:
         return service
 
     @provider

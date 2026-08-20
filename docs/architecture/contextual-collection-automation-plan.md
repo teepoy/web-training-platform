@@ -56,7 +56,7 @@ This plan turns ADRs 0001–0014 into incremental, reviewable changes. It is an 
 ## Phase 5: Information architecture
 
 1. Add `/library`, separate Dataset/Collection tabs, shared URL search/creator scope, independent advanced filters/pagination, and old list-route redirects.
-2. Add contextual Collection sections: Overview, Data, Models, Snapshots, Activity, plus a prominent Classify action.
+2. Add contextual Collection sections: Overview, Data, Models, Snapshots, Activity, plus a direct `Classify ↗` workspace navigation item with no intermediate preview pane.
 3. Add Dataset current Revision/history and Collection member update review.
 4. Add a global Automations monitoring surface without a targetless creation builder.
 5. Add `Admin > Connections` and `Admin > Infrastructure`; do not synthesize localhost external URLs.

@@ -183,6 +183,13 @@ async def _resolve_batch(
                         f"'{sample_id}' role {role!r}"
                     )
                 item[f"{role}_bytes"] = bytes(raw_image)
+                content_type = role_results[role].get("content_type")
+                if not isinstance(content_type, str) or not content_type.strip():
+                    raise RuntimeError(
+                        f"Job image resolver returned no content type for sample "
+                        f"'{sample_id}' role {role!r}"
+                    )
+                item[f"{role}_content_type"] = content_type.strip().lower()
         output.append(item)
     return output
 

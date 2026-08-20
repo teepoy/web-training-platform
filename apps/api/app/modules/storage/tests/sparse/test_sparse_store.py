@@ -9,6 +9,7 @@ Uses an in-memory mock of ``ArtifactStorage`` — no compose services required.
 from __future__ import annotations
 
 import hashlib
+from collections.abc import AsyncIterator
 from pathlib import Path
 
 import pytest
@@ -63,6 +64,22 @@ class _InMemoryStore:
 
     async def get_file(self, uri: str, destination: str) -> None:
         Path(destination).write_bytes(await self.get_bytes(uri))
+
+    async def get_size(self, uri: str) -> int:
+        return len(await self.get_bytes(uri))
+
+    async def iter_bytes(
+        self,
+        uri: str,
+        *,
+        offset: int = 0,
+        length: int | None = None,
+        chunk_size: int = 1024 * 1024,
+    ) -> AsyncIterator[bytes]:
+        data = await self.get_bytes(uri)
+        end = len(data) if length is None else min(len(data), offset + length)
+        for position in range(offset, end, chunk_size):
+            yield data[position : min(position + chunk_size, end)]
 
     async def delete(self, uri: str) -> None:
         key = uri.removeprefix("memory://")

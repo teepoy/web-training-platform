@@ -3,7 +3,14 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from typing import Any, Protocol
 
+from sampling_rules import ReviewSamplingProgram
+
 from app.modules.sc.domain.entities.sc_import import ScImportStatus
+from app.modules.sc.domain.prediction_export import (
+    ScKlarfVersion,
+    ScPredictionExportFormat,
+    ScPredictionExportResult,
+)
 
 ScImportProgressCallback = Callable[[ScImportStatus], Awaitable[None]]
 
@@ -45,4 +52,33 @@ class ScPlotPointsPort(Protocol):
     async def filter_dataset_box(self, *args: Any, **kwargs: Any) -> Any: ...
 
 
-__all__ = ["ScImportPort", "ScPlotPointsPort"]
+class ScPredictionExportPort(Protocol):
+    async def export(
+        self,
+        *,
+        dataset_id: str,
+        org_id: str,
+        created_by: str,
+        export_format: ScPredictionExportFormat,
+        klarf_version: ScKlarfVersion,
+        sampling_program: ReviewSamplingProgram | None,
+        sampling_seed: int | None,
+        include_images: bool,
+    ) -> ScPredictionExportResult: ...
+
+    async def export_collection(
+        self,
+        *,
+        collection_id: str,
+        member_ids: tuple[str, ...],
+        org_id: str,
+        created_by: str,
+        export_format: ScPredictionExportFormat,
+        klarf_version: ScKlarfVersion,
+        sampling_program: ReviewSamplingProgram | None,
+        sampling_seed: int | None,
+        include_images: bool,
+    ) -> ScPredictionExportResult: ...
+
+
+__all__ = ["ScImportPort", "ScPlotPointsPort", "ScPredictionExportPort"]

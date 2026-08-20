@@ -66,6 +66,8 @@ import {
   refreshCollectionSnapshot,
 } from "@/features/dataset-collections/api/collectionSnapshotUpdates";
 import CollectionSnapshotUpdateAlert from "@/features/dataset-collections/presentation/components/CollectionSnapshotUpdateAlert.vue";
+import ScPredictionExportPlugin from "@/features/sc/presentation/components/ScPredictionExportPlugin.vue";
+import { supportsScPredictionExport } from "@/features/sc/domain/predictionExportCapability";
 import { useAuthStore } from "@/features/auth/application/store";
 import { useOrgStore } from "@/features/auth/application/org";
 import { orgScopedQueryKey, toUserMessage } from "@/shared/api";
@@ -84,6 +86,7 @@ const modelVisible = ref(false);
 const selectedDefaultModelId = ref<string | null>(null);
 const reconcileVisible = ref(false);
 const selectedCoverageMemberIds = ref<string[]>([]);
+const exportVisible = ref(false);
 const ruleVisible = ref(false);
 const ruleName = ref("");
 const ruleConnectorId = ref<string | null>(null);
@@ -202,6 +205,15 @@ const collection = computed(
       | (DatasetCollectionResponse & CollectionWithDefaultModel)
       | undefined,
 );
+const isScCollection = computed(() => {
+  const targetViewId = collection.value?.target_view_id;
+  const targetContract = collection.value?.target_view_contract;
+  return (
+    targetViewId === "patch_image_v1" ||
+    targetViewId === "sc:patch-image@v1" ||
+    targetContract?.startsWith("sc.patch-image") === true
+  );
+});
 const canModify = computed(
   () => !!collection.value && collection.value.created_by === authStore.user?.id,
 );
@@ -421,8 +433,33 @@ const modelMismatchCount = computed(
 const selectedCoverage = computed(() =>
   selectedCoverageMemberIds.value
     .map((memberId) => coverageByMemberId.value.get(memberId))
-    .filter((item): item is CollectionPredictionCoverage => !!item),
+    .filter(
+      (item): item is CollectionPredictionCoverage =>
+        !!item && item.status !== "current" && !item.active_prediction_job_id,
+    ),
 );
+const selectedMembers = computed(() => {
+  const selected = new Set(selectedCoverageMemberIds.value);
+  return members.value.filter((member) => selected.has(member.id));
+});
+const selectedMemberDatasetIds = computed(() =>
+  selectedMembers.value.map((member) => member.source_dataset_id),
+);
+const selectedExportDatasets = computed(() =>
+  selectedMemberDatasetIds.value
+    .map((datasetId) => datasetById.value.get(datasetId))
+    .filter((dataset): dataset is Dataset => !!dataset),
+);
+const exportDisabledReason = computed(() => {
+  if (selectedMembers.value.length === 0) return "Select at least one linked Dataset record";
+  if (
+    selectedExportDatasets.value.length !== selectedMembers.value.length ||
+    selectedExportDatasets.value.some((dataset) => !supportsScPredictionExport(dataset))
+  ) {
+    return "Current-result export requires SC Datasets using sparse storage";
+  }
+  return "";
+});
 
 function showModelPicker(): void {
   selectedDefaultModelId.value = collection.value?.default_model_id ?? null;
@@ -479,7 +516,12 @@ const retryBatchMutation = useMutation({
 });
 
 function coverageLabel(item: CollectionPredictionCoverage | undefined): string {
-  if (!item) return latestReadyRevision.value ? "Loading" : "No snapshot";
+  if (!item) {
+    if (!latestReadyRevision.value) return "No snapshot";
+    if (coverageQuery.isLoading.value) return "Loading";
+    if (coverageQuery.isError.value) return "Unavailable";
+    return "Not evaluated";
+  }
   if (item.active_prediction_status === "running") return "Prediction running";
   if (item.active_prediction_status === "queued") return "Prediction queued";
   if (item.status === "current") return "Current";
@@ -508,18 +550,19 @@ function openStack(): void {
   });
 }
 
+function handleTabBeforeLeave(name: string | number): boolean {
+  if (name !== "classify") return true;
+  if (!latestReadyRevision.value) return false;
+  openStack();
+  return false;
+}
+
+function closeExport(): void {
+  exportVisible.value = false;
+}
+
 const memberColumns: DataTableColumns<DatasetCollectionMemberResponse> = [
-  {
-    type: "selection",
-    disabled: (row) => {
-      const item = coverageByMemberId.value.get(row.id);
-      return (
-        !collection.value?.default_model_id ||
-        item?.status === "current" ||
-        !!item?.active_prediction_job_id
-      );
-    },
-  },
+  { type: "selection" },
   { title: "Order", key: "position", width: 80 },
   {
     title: "Dataset",
@@ -540,6 +583,7 @@ const memberColumns: DataTableColumns<DatasetCollectionMemberResponse> = [
     title: "Actions",
     key: "actions",
     width: 250,
+    fixed: "right",
     render: (row) =>
       h(NSpace, null, {
         default: () => [
@@ -602,6 +646,7 @@ const batchColumns: DataTableColumns<CollectionPredictionBatch> = [
     title: "Actions",
     key: "actions",
     width: 120,
+    fixed: "right",
     render: (row) => {
       const failed = row.items.some((item) => ["failed", "cancelled"].includes(item.status));
       return failed
@@ -895,13 +940,18 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
         This collection is read-only for you. Only its creator can change membership or create
         snapshots.
       </NAlert>
-      <NTabs v-model:value="activeTab" type="line" animated class="collection-tabs">
+      <NTabs
+        v-model:value="activeTab"
+        type="line"
+        animated
+        class="collection-tabs"
+        :on-before-leave="handleTabBeforeLeave"
+      >
         <NTabPane name="overview" tab="Overview">
           <NAlert type="info" :show-icon="false" class="snapshot-explainer">
             <strong>What is a snapshot?</strong>
-            It saves this collection's membership and rules, plus the Dataset change numbers
-            observed now. It does not copy or freeze member data. Review, training, and prediction
-            read each Dataset's current data when the run starts.
+            It records this Collection's members, rules, and current Dataset change numbers. Data is
+            read when a review, training, or prediction run starts; it is not copied or frozen.
           </NAlert>
           <NAlert v-if="!latestReadyRevision" type="info">
             This collection does not have a saved snapshot yet. Save one before using it for review,
@@ -955,7 +1005,17 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
             </div>
           </NCard>
         </NTabPane>
-        <NTabPane name="data" tab="Data">
+        <NTabPane v-if="isScCollection" name="classify" :disabled="!latestReadyRevision">
+          <template #tab>
+            <NTooltip :disabled="!!latestReadyRevision">
+              <template #trigger>
+                <span>Classify <span aria-hidden="true">&#8599;</span></span>
+              </template>
+              Save a snapshot before opening the Classify workspace.
+            </NTooltip>
+          </template>
+        </NTabPane>
+        <NTabPane name="data" tab="Data & rules">
           <NCard title="Dynamic membership" class="dynamic-membership-card">
             <template #header-extra>
               <NButton
@@ -981,13 +1041,7 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
               :scroll-x="700"
               size="small"
             />
-            <NEmpty v-else description="No dynamic membership rules yet">
-              <template #extra>
-                <NButton :disabled="!canManageAutomation" @click="ruleVisible = true">
-                  Set up dynamic membership
-                </NButton>
-              </template>
-            </NEmpty>
+            <NEmpty v-else description="No dynamic membership rules yet" />
           </NCard>
 
           <NCard title="Linked datasets">
@@ -1000,6 +1054,20 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
                 >
                   Predict selected ({{ selectedCoverage.length }})
                 </NButton>
+                <NTooltip :disabled="!exportDisabledReason">
+                  <template #trigger>
+                    <span>
+                      <NButton
+                        size="small"
+                        :disabled="!!exportDisabledReason"
+                        @click="exportVisible = true"
+                      >
+                        Export selected ({{ selectedMembers.length }})
+                      </NButton>
+                    </span>
+                  </template>
+                  {{ exportDisabledReason }}
+                </NTooltip>
                 <NButton
                   type="primary"
                   size="small"
@@ -1025,7 +1093,7 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
           <NCard title="Default prediction model">
             <template #header-extra>
               <NButton size="small" :disabled="!canModify" @click="showModelPicker">
-                {{ collection.default_model_id ? "Change model" : "Choose a model" }}
+                {{ collection.default_model_id ? "Change model" : "Select model" }}
               </NButton>
             </template>
             <div class="model-binding-summary">
@@ -1035,7 +1103,7 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
                   {{
                     collection.default_model_id
                       ? defaultModel?.name || collection.default_model_id
-                      : "Choose a default model"
+                      : "No default model selected"
                   }}
                 </strong>
               </div>
@@ -1085,6 +1153,27 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
         </NTabPane>
       </NTabs>
     </template>
+
+    <NModal
+      v-model:show="exportVisible"
+      preset="card"
+      title="Export selected Collection records"
+      :style="{ width: 'min(920px, calc(100vw - 32px))' }"
+    >
+      <NAlert type="info" :show-icon="false" class="collection-export-note">
+        {{ selectedMembers.length }} linked Dataset record{{
+          selectedMembers.length === 1 ? "" : "s"
+        }}
+        selected. Parquet stays combined; KLARF creates one complete numbered file per inspection.
+      </NAlert>
+      <ScPredictionExportPlugin
+        :collection-id="collectionId"
+        :member-ids="selectedCoverageMemberIds"
+        :member-dataset-ids="selectedMemberDatasetIds"
+        :on-complete="closeExport"
+        :on-cancel="closeExport"
+      />
+    </NModal>
 
     <NModal
       v-model:show="ruleVisible"

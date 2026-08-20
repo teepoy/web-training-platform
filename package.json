@@ -2,18 +2,7 @@
   "name": "online-finetune-platform",
   "private": true,
   "version": "0.1.0",
-  "packageManager": "pnpm@10.5.0",
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "@bufbuild/buf"
-    ],
-    "ignoredBuiltDependencies": [
-      "core-js",
-      "esbuild",
-      "msw",
-      "vue-demi"
-    ]
-  },
+  "packageManager": "pnpm@11.22.0",
   "scripts": {
     "dev:web": "pnpm --filter web dev",
     "build:web": "pnpm --filter web build",

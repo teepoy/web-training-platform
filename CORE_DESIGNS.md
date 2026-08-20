@@ -281,6 +281,13 @@ source；online/instant prediction 使用纯本地 borrowed source、无 upstrea
 三者共享 rooted filesystem、format driver 和 framed transport 等稳定 primitive，不共享
 下载、缓存生命周期、清理、认证或并发预算。display server 不暴露 job batch resolve RPC。
 
+SC prediction result export 可选携带缺陷图片。它先执行 Annotation Sampling，再通过同一个
+job-local resolver factory 按 512 行有界读取每个保留 sample 的 `patch_defective`，不得调用
+display image-parser 网络接口。包含图片的 KLARF/ZIP 导出必须返回 ZIP，KLARF 中每个非零
+图片引用必须精确对应包内文件；缺图、损坏、未知 content type 或 source format 整体不可用
+使整个导出失败，不得静默写成零图片。导出允许以临时文件换取有界内存，但图片 bytes 不得
+按 Dataset 总量聚合在进程内存中。
+
 SC v3 Prediction 不生成完整临时图片 Parquet，也不为进度预先 collect/count 全量数据。
 它从 Dataset 当前持久化数据以 512 行有界扫描；Collection 按 `source_dataset_id` 映射
 各成员的 source format，通过本 job 的 local resolver frame 批量取 `sample × role` 图片。
@@ -371,6 +378,13 @@ Label Studio 是人工标注界面和临时同步界面，不是平台 predictio
   terminal result。可恢复问题 yield issue，预期致命错误抛
   `RuntimeExecutionError`，未知异常直接冒泡。禁止恢复字符串 `output_contract`
   校验或通用 `Ok`/`Err` result chain。
+- SC 组合 Train & Predict 在同一个 GPU Prefect flow 中显式运行 module-owned
+  `sc-train` 与 `sc-predict` 两个 task。flow-owned workspace 持有本地 checkpoint；训练
+  task 返回轻量本地引用后，checkpoint 上传通过 `asyncio.create_task` 与预测 task
+  并行，预测直接读取同一文件，不得为组合操作从对象存储重新下载。flow 在清理
+  workspace 前必须收拢上传 task；Prefect terminal result 仍只包含持久化后的 artifact
+  metadata，不包含 checkpoint bytes 或本地路径。独立训练/独立预测继续使用标准
+  artifact event sink 和对象存储边界。
 - Missing-image 行为由具体 registered callable 实现，不是 registration 或 runtime
   context 字段。当前 SC trainer 固定跳过不可用图片，并在过滤后不足两个有效类别时
   明确失败；SC predictor 按样本记录失败并继续批处理。

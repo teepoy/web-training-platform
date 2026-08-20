@@ -59,6 +59,9 @@ const props = withDefaults(
     program: ScSamplingProgram;
     scope: ScSamplingCandidateScope;
     loadGroups: (field: string) => Promise<ScSamplingGroupPopulation[]>;
+    title?: string;
+    showCandidateScope?: boolean;
+    showExtraFilter?: boolean;
   }>(),
   {
     extraFilterDistinctValues: () => ({}),
@@ -66,6 +69,9 @@ const props = withDefaults(
     extraFilterNumericRangeLoading: () => ({}),
     extraFilterNumericRangeErrors: () => ({}),
     confirmDisabled: false,
+    title: "Annotation Sampling",
+    showCandidateScope: true,
+    showExtraFilter: true,
   },
 );
 
@@ -316,14 +322,14 @@ watch(draft, (program) => emit("update:program", cloneScSamplingProgram(program)
   <NModal
     v-model:show="showModel"
     preset="card"
-    title="Review Sampling"
+    :title="title"
     :bordered="false"
     :style="reviewModalStyle"
     data-testid="review-sampling-modal"
   >
     <NTabs v-model:value="activeTab" type="line" animated>
       <NTabPane name="rules" tab="Sampling rules">
-        <NCard size="small" :bordered="false" class="scope-card">
+        <NCard v-if="showCandidateScope" size="small" :bordered="false" class="scope-card">
           <div class="section-heading">
             <div>
               <strong>Candidate scope</strong>
@@ -401,7 +407,7 @@ watch(draft, (program) => emit("update:program", cloneScSamplingProgram(program)
         </div>
       </NTabPane>
 
-      <NTabPane name="extra" tab="Extra filter">
+      <NTabPane v-if="showExtraFilter" name="extra" tab="Extra filter">
         <NCard :bordered="false" class="extra-filter-card">
           <div class="section-heading">
             <div>

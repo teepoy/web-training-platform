@@ -10,8 +10,6 @@ plugins:
   - plugin: go
     out: ../services/image-parser/gen/go
     opt: paths=source_relative
-    path: ../.cache/protobuf-tools/bin/protoc-gen-go
   - plugin: go-grpc
     out: ../services/image-parser/gen/go
     opt: paths=source_relative
-    path: ../.cache/protobuf-tools/bin/protoc-gen-go-grpc

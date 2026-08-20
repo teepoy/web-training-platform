@@ -36,11 +36,13 @@ members = [
   "libs/protos",
   "libs/ml",
   "libs/sampling-rules",
+  "libs/klarf",
 ]
 
 [tool.uv.sources]
 finetune-api = { workspace = true }
 ml-library = { workspace = true }
+klarf = { workspace = true }
 
 [dependency-groups]
 dev = [

@@ -147,6 +147,105 @@ def _open_ls_read_repository(
 
 
 router = APIRouter(prefix="/api/v1", tags=["datasets"])
+_DOWNLOAD_CHUNK_BYTES = 1024 * 1024
+
+
+def _resolve_download_range(
+    range_header: str | None,
+    *,
+    object_size: int,
+) -> tuple[int, int, int]:
+    """Return (offset, length, status) for one RFC 7233 byte range."""
+    if range_header is None:
+        return 0, object_size, 200
+    if not range_header.startswith("bytes=") or "," in range_header:
+        raise HTTPException(
+            status_code=416,
+            detail="only one bytes range is supported",
+            headers={"Content-Range": f"bytes */{object_size}"},
+        )
+    start_text, separator, end_text = range_header.removeprefix("bytes=").partition("-")
+    if not separator or (not start_text and not end_text) or object_size == 0:
+        raise HTTPException(
+            status_code=416,
+            detail="requested byte range is not satisfiable",
+            headers={"Content-Range": f"bytes */{object_size}"},
+        )
+    try:
+        if start_text:
+            offset = int(start_text)
+            end = int(end_text) if end_text else object_size - 1
+            if offset < 0 or offset >= object_size or end < offset:
+                raise ValueError
+            end = min(end, object_size - 1)
+        else:
+            suffix_length = int(end_text)
+            if suffix_length <= 0:
+                raise ValueError
+            length = min(suffix_length, object_size)
+            offset = object_size - length
+            end = object_size - 1
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=416,
+            detail="requested byte range is not satisfiable",
+            headers={"Content-Range": f"bytes */{object_size}"},
+        ) from exc
+    return offset, end - offset + 1, 206
+
+
+def _export_artifact_org_id(uri: str) -> str | None:
+    object_path = uri.partition("://")[2]
+    marker = "exports/orgs/"
+    marker_index = object_path.find(marker)
+    if marker_index < 0:
+        return None
+    scoped_path = object_path[marker_index + len(marker) :]
+    return scoped_path.partition("/")[0]
+
+
+async def _stream_artifact_download(
+    *,
+    uri: str,
+    org_id: str,
+    range_header: str | None,
+    storage: ArtifactStorage,
+    not_found_detail: str,
+) -> StreamingResponse:
+    artifact_org_id = _export_artifact_org_id(uri)
+    if artifact_org_id is not None and artifact_org_id != org_id:
+        raise HTTPException(status_code=404, detail=not_found_detail)
+    try:
+        object_size = await storage.get_size(uri)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=not_found_detail) from exc
+    offset, length, status_code = _resolve_download_range(
+        range_header,
+        object_size=object_size,
+    )
+    filename = uri.rsplit("/", 1)[-1] if "/" in uri else uri
+    filename = filename.replace('"', "_").replace("\\", "_")
+    headers = {
+        "Accept-Ranges": "bytes",
+        "Content-Disposition": f'attachment; filename="{filename}"',
+        "Content-Length": str(length),
+        "X-Accel-Buffering": "no",
+    }
+    if status_code == 206:
+        headers["Content-Range"] = f"bytes {offset}-{offset + length - 1}/{object_size}"
+    return StreamingResponse(
+        storage.iter_bytes(
+            uri,
+            offset=offset,
+            length=length,
+            chunk_size=_DOWNLOAD_CHUNK_BYTES,
+        ),
+        status_code=status_code,
+        media_type="application/octet-stream",
+        headers=headers,
+    )
+
+
 _logger = logging.getLogger(__name__)
 _MAX_SAMPLE_UPLOAD_BYTES = 10 * 1024 * 1024
 _ANNOTATION_SYNC_PAGE_SIZE = 1000
@@ -1560,20 +1659,18 @@ async def export_dataset_persist_stream(
 
 @router.get("/download")
 async def download_export(
+    request: Request,
     uri: str = Query(...),
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
     storage: ArtifactStorage = Depends(get_artifact_storage),
-) -> Response:
-    try:
-        data = await storage.get_bytes(uri)
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="export artifact not found")
-    filename = uri.rsplit("/", 1)[-1] if "/" in uri else uri
-    return Response(
-        content=data,
-        media_type="application/octet-stream",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+) -> StreamingResponse:
+    return await _stream_artifact_download(
+        uri=uri,
+        org_id=org.id,
+        range_header=request.headers.get("range"),
+        storage=storage,
+        not_found_detail="export artifact not found",
     )
 
 
@@ -1614,16 +1711,19 @@ async def similarity_search(
 @router.get("/artifacts/{artifact_id}/download")
 async def download_artifact(
     artifact_id: str,
+    request: Request,
     repo: ArtifactLookupRepositoryDep,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
     storage: ArtifactStorage = Depends(get_artifact_storage),
-) -> Response:
+) -> StreamingResponse:
     artifact = await repo.get_artifact(artifact_id)
     if artifact is None:
         raise HTTPException(status_code=404, detail="artifact not found")
-    try:
-        data = await storage.get_bytes(artifact.uri)
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="artifact data not found")
-    return Response(content=data, media_type="application/octet-stream")
+    return await _stream_artifact_download(
+        uri=artifact.uri,
+        org_id=org.id,
+        range_header=request.headers.get("range"),
+        storage=storage,
+        not_found_detail="artifact data not found",
+    )

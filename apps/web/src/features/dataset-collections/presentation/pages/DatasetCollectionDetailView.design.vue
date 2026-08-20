@@ -13,9 +13,24 @@
     </header>
 
     <nav class="tabs" aria-label="Collection sections">
-      <button class="active">Overview</button><button>Data</button><button>Models</button
-      ><button>Snapshots</button><button>Activity</button>
+      <button class="active">Overview</button><button>Classify ↗</button
+      ><button>Data &amp; rules</button><button>Models</button><button>Snapshots</button
+      ><button>Activity</button>
     </nav>
+
+    <section class="member-export">
+      <div>
+        <strong>Linked datasets</strong>
+        <span>2 records selected</span>
+      </div>
+      <div class="actions">
+        <button>Predict selected (1)</button>
+        <button>Export selected (2)</button>
+      </div>
+      <small>
+        Parquet combines selected records. KLARF creates one complete .000/.001 file per inspection.
+      </small>
+    </section>
 
     <section class="snapshot-explainer">
       <strong>What is a snapshot?</strong>
@@ -83,6 +98,7 @@ button.primary {
 }
 
 .snapshot-explainer,
+.member-export,
 .models-panel,
 .warning,
 .summary,
@@ -119,6 +135,21 @@ button.primary {
   gap: 4px;
   border-color: #cad3fa;
   background: #f2f5ff;
+}
+
+.member-export {
+  display: grid;
+  gap: 12px;
+}
+
+.member-export > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.member-export span {
+  color: #6a7280;
 }
 
 .models-panel {

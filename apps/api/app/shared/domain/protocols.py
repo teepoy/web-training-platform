@@ -33,6 +33,21 @@ class ArtifactStorage(Protocol):
         """Stream an object into a local file."""
         ...
 
+    async def get_size(self, uri: str) -> int:
+        """Return an object's byte size without reading its payload."""
+        ...
+
+    def iter_bytes(
+        self,
+        uri: str,
+        *,
+        offset: int = 0,
+        length: int | None = None,
+        chunk_size: int = 1024 * 1024,
+    ) -> AsyncIterator[bytes]:
+        """Stream a bounded byte range without materializing the whole object."""
+        ...
+
     async def delete(self, uri: str) -> None:
         """Delete the object at the given URI."""
         ...

@@ -200,9 +200,10 @@ test("reruns only selected collection datasets with the pinned model @mock", asy
           {
             id: "dataset-1",
             name: "August line A",
-            dataset_type: "sc_patch",
+            dataset_type: "image_sc",
+            storage_mode: "file_shard_sparse",
             view_types: ["patch_image_v1"],
-            task_spec: { task_type: "classification", label_space: ["ok", "defect"] },
+            task_spec: { task_type: "sc", label_space: ["ok", "defect"] },
             org_id: "org-e2e-1",
             is_public: false,
             created_at: "2026-08-15T00:00:00Z",
@@ -210,9 +211,10 @@ test("reruns only selected collection datasets with the pinned model @mock", asy
           {
             id: "dataset-2",
             name: "August line B",
-            dataset_type: "sc_patch",
+            dataset_type: "image_sc",
+            storage_mode: "file_shard_sparse",
             view_types: ["patch_image_v1"],
-            task_spec: { task_type: "classification", label_space: ["ok", "defect"] },
+            task_spec: { task_type: "sc", label_space: ["ok", "defect"] },
             org_id: "org-e2e-1",
             is_public: false,
             created_at: "2026-08-15T00:00:00Z",
@@ -255,11 +257,20 @@ test("reruns only selected collection datasets with the pinned model @mock", asy
   await expect(authedPage.getByText("1 linked dataset uses a different model")).toBeVisible();
   await authedPage
     .locator(".n-tabs-tab")
-    .filter({ hasText: /^Data$/ })
+    .filter({ hasText: /^Data & rules$/ })
     .click();
   await expect(authedPage.getByText("Dynamic membership", { exact: true })).toBeVisible();
   const mismatchRow = authedPage.getByRole("row").filter({ hasText: "August line A" });
   await mismatchRow.getByRole("checkbox").check();
+  await authedPage.getByRole("button", { name: "Export selected (1)" }).click();
+  await expect(authedPage.getByText("Export selected Collection records")).toBeVisible();
+  await expect(
+    authedPage.getByText("Parquet stays combined; KLARF creates one complete numbered file"),
+  ).toBeVisible();
+  await authedPage
+    .getByTestId("sc-prediction-export")
+    .getByRole("button", { name: "Close" })
+    .click();
   await authedPage.getByRole("button", { name: "Predict selected (1)" }).click();
   await expect(authedPage.getByText("using Approved defect model and snapshot r1")).toBeVisible();
   await authedPage.getByRole("button", { name: "Start prediction" }).click();
@@ -271,6 +282,14 @@ test("reruns only selected collection datasets with the pinned model @mock", asy
       expected_default_model_id: "model-new",
       dataset_ids: ["dataset-1"],
     });
+
+  await authedPage
+    .locator(".n-tabs-tab")
+    .filter({ hasText: /^Classify/ })
+    .click();
+  await expect(authedPage).toHaveURL(
+    /\/dataset-collections\/collection-1\/classify\/dataset-1\?revisionId=snapshot-1$/,
+  );
 });
 
 test("shows and explicitly refreshes an outdated Collection Snapshot @mock", async ({

@@ -261,6 +261,8 @@ function openCreate(): void {
   createVisible.value = true;
 }
 
+defineExpose({ openCreate });
+
 function collectionRowProps(row: DatasetCollectionResponse): Record<string, unknown> {
   return {
     style: "cursor: pointer",
@@ -324,12 +326,19 @@ async function deleteSelectedCollections(): Promise<void> {
   }
 }
 
-const columns: DataTableColumns<DatasetCollectionResponse> = [
+const columns = computed<DataTableColumns<DatasetCollectionResponse>>(() => [
   {
     type: "selection",
+    fixed: "left",
     disabled: (row) => row.created_by !== authStore.user?.id,
   },
-  { title: "Name", key: "name", minWidth: 180, sorter: true },
+  {
+    title: "Name",
+    key: "name",
+    minWidth: 180,
+    sorter: true,
+    sortOrder: sorter.value?.columnKey === "name" ? sorter.value.order : false,
+  },
   { title: "Target view", key: "target_view_id", minWidth: 160 },
   {
     title: "Definition",
@@ -341,6 +350,7 @@ const columns: DataTableColumns<DatasetCollectionResponse> = [
     key: "creator",
     minWidth: 130,
     sorter: true,
+    sortOrder: sorter.value?.columnKey === "creator" ? sorter.value.order : false,
     render: (row) =>
       row.created_by === authStore.user?.id
         ? authStore.user?.name || authStore.user?.email || "You"
@@ -356,12 +366,14 @@ const columns: DataTableColumns<DatasetCollectionResponse> = [
     key: "updated_at",
     width: 180,
     sorter: true,
+    sortOrder: sorter.value?.columnKey === "updated_at" ? sorter.value.order : false,
     render: (row) => new Date(row.updated_at).toLocaleString(),
   },
   {
     title: "",
     key: "actions",
     width: 90,
+    fixed: "right",
     render: (row) =>
       h(
         NButton,
@@ -375,11 +387,11 @@ const columns: DataTableColumns<DatasetCollectionResponse> = [
         { default: () => "Open" },
       ),
   },
-];
+]);
 </script>
 
 <template>
-  <div class="collection-list-page">
+  <div class="collection-list-page" :class="{ 'collection-list-page--embedded': props.embedded }">
     <div v-if="!props.embedded" class="collection-list-header">
       <div>
         <h1>Dataset Collections</h1>
@@ -390,13 +402,10 @@ const columns: DataTableColumns<DatasetCollectionResponse> = [
       </NButton>
     </div>
 
-    <div v-else class="collection-list-embedded-actions">
-      <NButton type="primary" :disabled="!orgStore.currentOrgId" @click="openCreate">
-        New collection
-      </NButton>
-    </div>
-
-    <NCard>
+    <NCard
+      :bordered="!props.embedded"
+      :content-style="props.embedded ? { padding: '0' } : undefined"
+    >
       <div v-if="!props.embedded" class="collection-list-filters">
         <NSelect
           v-model:value="creatorFilter"
@@ -438,7 +447,6 @@ const columns: DataTableColumns<DatasetCollectionResponse> = [
         :row-key="(row: DatasetCollectionResponse) => row.id"
         :row-props="collectionRowProps"
         :checked-row-keys="checkedCollectionIds"
-        :sorter="sorter"
         :scroll-x="820"
         remote
         @update:checked-row-keys="checkedCollectionIds = $event"
@@ -530,9 +538,8 @@ const columns: DataTableColumns<DatasetCollectionResponse> = [
   gap: 16px;
 }
 
-.collection-list-embedded-actions {
-  display: flex;
-  justify-content: flex-end;
+.collection-list-page--embedded {
+  gap: 0;
 }
 
 h1 {

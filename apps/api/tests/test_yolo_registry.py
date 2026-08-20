@@ -30,7 +30,7 @@ def test_registered_yolo_model_contract() -> None:
 
 
 def test_yolo_prediction_stays_streaming_without_image_materialization() -> None:
-    source = inspect.getsource(ultralytics.yolo_sc_predictor)
+    source = inspect.getsource(ultralytics._yolo_sc_predictor)
 
     assert "predict_yolo_stream" in source
     assert "stream_sc_prediction_image_pairs" in source

@@ -7,7 +7,11 @@ from fastapi import Depends, Request
 from app.modules.sc.adapter.batch_reader import ScBatchReader
 from app.modules.sc.domain.image_fetcher import ScImageFetcher
 from app.modules.sc.domain.upstream_reader import ScUpstreamReader
-from app.modules.sc.port.local import ScImportPort, ScPlotPointsPort
+from app.modules.sc.port.local import (
+    ScImportPort,
+    ScPlotPointsPort,
+    ScPredictionExportPort,
+)
 from app.shared.domain.protocols import PrefectClient
 from app.shared.injection import resolve
 from app.modules.storage.domain.sparse import DatasetPayloadStore
@@ -33,6 +37,10 @@ def get_sc_plot_points_service(request: Request) -> ScPlotPointsPort:
     return resolve(request, ScPlotPointsPort)
 
 
+def get_sc_prediction_export_service(request: Request) -> ScPredictionExportPort:
+    return resolve(request, ScPredictionExportPort)
+
+
 def get_dataset_payload_store(request: Request) -> DatasetPayloadStore:
     return resolve(request, DatasetPayloadStore)
 
@@ -52,3 +60,6 @@ DatasetPayloadStoreDep = Annotated[
 ]
 ScBatchReaderDep = Annotated[ScBatchReader, Depends(get_sc_batch_reader)]
 ScImageFetcherDep = Annotated[ScImageFetcher, Depends(get_image_fetcher)]
+ScPredictionExportDep = Annotated[
+    ScPredictionExportPort, Depends(get_sc_prediction_export_service)
+]
