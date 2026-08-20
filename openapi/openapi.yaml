@@ -5776,40 +5776,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HTTPValidationError"
-  /api/v1/sc/datasets/{dataset_id}/samples/{sample_id}/images/{image_id}:
-    get:
-      tags:
-        - sc
-      summary: Serve Sc Sample Image
-      operationId: serve_sc_sample_image_api_v1_sc_datasets__dataset_id__samples__sample_id__images__image_id__get
-      parameters:
-        - name: dataset_id
-          in: path
-          required: true
-          schema:
-            type: string
-            title: Dataset Id
-        - name: sample_id
-          in: path
-          required: true
-          schema:
-            type: string
-            title: Sample Id
-        - name: image_id
-          in: path
-          required: true
-          schema:
-            type: string
-            title: Image Id
-      responses:
-        "200":
-          description: Successful Response
-        "422":
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HTTPValidationError"
   /api/v1/datasets/{dataset_id}/annotations/bulk-sc:
     post:
       tags:

@@ -38,40 +38,20 @@ class ImageParserStub(object):
                 request_serializer=imageparser_dot_v1_dot_service__pb2.HealthRequest.SerializeToString,
                 response_deserializer=imageparser_dot_v1_dot_service__pb2.HealthResponse.FromString,
                 _registered_method=True)
-        self.GetImage = channel.unary_unary(
-                '/imageparser.v1.ImageParser/GetImage',
-                request_serializer=imageparser_dot_v1_dot_service__pb2.GetImageRequest.SerializeToString,
-                response_deserializer=imageparser_dot_v1_dot_service__pb2.GetImageResponse.FromString,
+        self.StreamPredictionImages = channel.stream_stream(
+                '/imageparser.v1.ImageParser/StreamPredictionImages',
+                request_serializer=imageparser_dot_v1_dot_service__pb2.StreamImagesRequest.SerializeToString,
+                response_deserializer=imageparser_dot_v1_dot_service__pb2.StreamImagesResponse.FromString,
                 _registered_method=True)
-        self.Sprite = channel.unary_unary(
-                '/imageparser.v1.ImageParser/Sprite',
-                request_serializer=imageparser_dot_v1_dot_service__pb2.SpriteRequest.SerializeToString,
-                response_deserializer=imageparser_dot_v1_dot_service__pb2.SpriteResponse.FromString,
+        self.StreamTrainingImages = channel.stream_stream(
+                '/imageparser.v1.ImageParser/StreamTrainingImages',
+                request_serializer=imageparser_dot_v1_dot_service__pb2.StreamImagesRequest.SerializeToString,
+                response_deserializer=imageparser_dot_v1_dot_service__pb2.StreamImagesResponse.FromString,
                 _registered_method=True)
-        self.V2Sprite = channel.unary_unary(
-                '/imageparser.v1.ImageParser/V2Sprite',
-                request_serializer=imageparser_dot_v1_dot_service__pb2.V2SpriteRequest.SerializeToString,
-                response_deserializer=imageparser_dot_v1_dot_service__pb2.V2SpriteResponse.FromString,
-                _registered_method=True)
-        self.GetScImage = channel.unary_unary(
-                '/imageparser.v1.ImageParser/GetScImage',
-                request_serializer=imageparser_dot_v1_dot_service__pb2.GetScImageRequest.SerializeToString,
-                response_deserializer=imageparser_dot_v1_dot_service__pb2.GetScImageResponse.FromString,
-                _registered_method=True)
-        self.BatchGetScImage = channel.unary_unary(
-                '/imageparser.v1.ImageParser/BatchGetScImage',
-                request_serializer=imageparser_dot_v1_dot_service__pb2.BatchGetScImageRequest.SerializeToString,
-                response_deserializer=imageparser_dot_v1_dot_service__pb2.BatchGetScImageResponse.FromString,
-                _registered_method=True)
-        self.StreamScInspectionImages = channel.unary_stream(
-                '/imageparser.v1.ImageParser/StreamScInspectionImages',
-                request_serializer=imageparser_dot_v1_dot_service__pb2.StreamScInspectionImagesRequest.SerializeToString,
-                response_deserializer=imageparser_dot_v1_dot_service__pb2.ScImageResult.FromString,
-                _registered_method=True)
-        self.WarmScCache = channel.unary_unary(
-                '/imageparser.v1.ImageParser/WarmScCache',
-                request_serializer=imageparser_dot_v1_dot_service__pb2.WarmScCacheRequest.SerializeToString,
-                response_deserializer=imageparser_dot_v1_dot_service__pb2.WarmScCacheResponse.FromString,
+        self.StreamExportImages = channel.stream_stream(
+                '/imageparser.v1.ImageParser/StreamExportImages',
+                request_serializer=imageparser_dot_v1_dot_service__pb2.StreamImagesRequest.SerializeToString,
+                response_deserializer=imageparser_dot_v1_dot_service__pb2.StreamImagesResponse.FromString,
                 _registered_method=True)
 
 
@@ -84,43 +64,19 @@ class ImageParserServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def GetImage(self, request, context):
+    def StreamPredictionImages(self, request_iterator, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def Sprite(self, request, context):
+    def StreamTrainingImages(self, request_iterator, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def V2Sprite(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def GetScImage(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def BatchGetScImage(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def StreamScInspectionImages(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def WarmScCache(self, request, context):
+    def StreamExportImages(self, request_iterator, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -134,40 +90,20 @@ def add_ImageParserServicer_to_server(servicer, server):
                     request_deserializer=imageparser_dot_v1_dot_service__pb2.HealthRequest.FromString,
                     response_serializer=imageparser_dot_v1_dot_service__pb2.HealthResponse.SerializeToString,
             ),
-            'GetImage': grpc.unary_unary_rpc_method_handler(
-                    servicer.GetImage,
-                    request_deserializer=imageparser_dot_v1_dot_service__pb2.GetImageRequest.FromString,
-                    response_serializer=imageparser_dot_v1_dot_service__pb2.GetImageResponse.SerializeToString,
+            'StreamPredictionImages': grpc.stream_stream_rpc_method_handler(
+                    servicer.StreamPredictionImages,
+                    request_deserializer=imageparser_dot_v1_dot_service__pb2.StreamImagesRequest.FromString,
+                    response_serializer=imageparser_dot_v1_dot_service__pb2.StreamImagesResponse.SerializeToString,
             ),
-            'Sprite': grpc.unary_unary_rpc_method_handler(
-                    servicer.Sprite,
-                    request_deserializer=imageparser_dot_v1_dot_service__pb2.SpriteRequest.FromString,
-                    response_serializer=imageparser_dot_v1_dot_service__pb2.SpriteResponse.SerializeToString,
+            'StreamTrainingImages': grpc.stream_stream_rpc_method_handler(
+                    servicer.StreamTrainingImages,
+                    request_deserializer=imageparser_dot_v1_dot_service__pb2.StreamImagesRequest.FromString,
+                    response_serializer=imageparser_dot_v1_dot_service__pb2.StreamImagesResponse.SerializeToString,
             ),
-            'V2Sprite': grpc.unary_unary_rpc_method_handler(
-                    servicer.V2Sprite,
-                    request_deserializer=imageparser_dot_v1_dot_service__pb2.V2SpriteRequest.FromString,
-                    response_serializer=imageparser_dot_v1_dot_service__pb2.V2SpriteResponse.SerializeToString,
-            ),
-            'GetScImage': grpc.unary_unary_rpc_method_handler(
-                    servicer.GetScImage,
-                    request_deserializer=imageparser_dot_v1_dot_service__pb2.GetScImageRequest.FromString,
-                    response_serializer=imageparser_dot_v1_dot_service__pb2.GetScImageResponse.SerializeToString,
-            ),
-            'BatchGetScImage': grpc.unary_unary_rpc_method_handler(
-                    servicer.BatchGetScImage,
-                    request_deserializer=imageparser_dot_v1_dot_service__pb2.BatchGetScImageRequest.FromString,
-                    response_serializer=imageparser_dot_v1_dot_service__pb2.BatchGetScImageResponse.SerializeToString,
-            ),
-            'StreamScInspectionImages': grpc.unary_stream_rpc_method_handler(
-                    servicer.StreamScInspectionImages,
-                    request_deserializer=imageparser_dot_v1_dot_service__pb2.StreamScInspectionImagesRequest.FromString,
-                    response_serializer=imageparser_dot_v1_dot_service__pb2.ScImageResult.SerializeToString,
-            ),
-            'WarmScCache': grpc.unary_unary_rpc_method_handler(
-                    servicer.WarmScCache,
-                    request_deserializer=imageparser_dot_v1_dot_service__pb2.WarmScCacheRequest.FromString,
-                    response_serializer=imageparser_dot_v1_dot_service__pb2.WarmScCacheResponse.SerializeToString,
+            'StreamExportImages': grpc.stream_stream_rpc_method_handler(
+                    servicer.StreamExportImages,
+                    request_deserializer=imageparser_dot_v1_dot_service__pb2.StreamImagesRequest.FromString,
+                    response_serializer=imageparser_dot_v1_dot_service__pb2.StreamImagesResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -208,7 +144,7 @@ class ImageParser(object):
             _registered_method=True)
 
     @staticmethod
-    def GetImage(request,
+    def StreamPredictionImages(request_iterator,
             target,
             options=(),
             channel_credentials=None,
@@ -218,12 +154,12 @@ class ImageParser(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
+        return grpc.experimental.stream_stream(
+            request_iterator,
             target,
-            '/imageparser.v1.ImageParser/GetImage',
-            imageparser_dot_v1_dot_service__pb2.GetImageRequest.SerializeToString,
-            imageparser_dot_v1_dot_service__pb2.GetImageResponse.FromString,
+            '/imageparser.v1.ImageParser/StreamPredictionImages',
+            imageparser_dot_v1_dot_service__pb2.StreamImagesRequest.SerializeToString,
+            imageparser_dot_v1_dot_service__pb2.StreamImagesResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -235,7 +171,7 @@ class ImageParser(object):
             _registered_method=True)
 
     @staticmethod
-    def Sprite(request,
+    def StreamTrainingImages(request_iterator,
             target,
             options=(),
             channel_credentials=None,
@@ -245,12 +181,12 @@ class ImageParser(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
+        return grpc.experimental.stream_stream(
+            request_iterator,
             target,
-            '/imageparser.v1.ImageParser/Sprite',
-            imageparser_dot_v1_dot_service__pb2.SpriteRequest.SerializeToString,
-            imageparser_dot_v1_dot_service__pb2.SpriteResponse.FromString,
+            '/imageparser.v1.ImageParser/StreamTrainingImages',
+            imageparser_dot_v1_dot_service__pb2.StreamImagesRequest.SerializeToString,
+            imageparser_dot_v1_dot_service__pb2.StreamImagesResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -262,7 +198,7 @@ class ImageParser(object):
             _registered_method=True)
 
     @staticmethod
-    def V2Sprite(request,
+    def StreamExportImages(request_iterator,
             target,
             options=(),
             channel_credentials=None,
@@ -272,120 +208,12 @@ class ImageParser(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
+        return grpc.experimental.stream_stream(
+            request_iterator,
             target,
-            '/imageparser.v1.ImageParser/V2Sprite',
-            imageparser_dot_v1_dot_service__pb2.V2SpriteRequest.SerializeToString,
-            imageparser_dot_v1_dot_service__pb2.V2SpriteResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def GetScImage(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/imageparser.v1.ImageParser/GetScImage',
-            imageparser_dot_v1_dot_service__pb2.GetScImageRequest.SerializeToString,
-            imageparser_dot_v1_dot_service__pb2.GetScImageResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def BatchGetScImage(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/imageparser.v1.ImageParser/BatchGetScImage',
-            imageparser_dot_v1_dot_service__pb2.BatchGetScImageRequest.SerializeToString,
-            imageparser_dot_v1_dot_service__pb2.BatchGetScImageResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def StreamScInspectionImages(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_stream(
-            request,
-            target,
-            '/imageparser.v1.ImageParser/StreamScInspectionImages',
-            imageparser_dot_v1_dot_service__pb2.StreamScInspectionImagesRequest.SerializeToString,
-            imageparser_dot_v1_dot_service__pb2.ScImageResult.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def WarmScCache(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/imageparser.v1.ImageParser/WarmScCache',
-            imageparser_dot_v1_dot_service__pb2.WarmScCacheRequest.SerializeToString,
-            imageparser_dot_v1_dot_service__pb2.WarmScCacheResponse.FromString,
+            '/imageparser.v1.ImageParser/StreamExportImages',
+            imageparser_dot_v1_dot_service__pb2.StreamImagesRequest.SerializeToString,
+            imageparser_dot_v1_dot_service__pb2.StreamImagesResponse.FromString,
             options,
             channel_credentials,
             insecure,

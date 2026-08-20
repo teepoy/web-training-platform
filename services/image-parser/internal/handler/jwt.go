@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -9,34 +10,41 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-var jwtSecret = []byte(getSecret())
-
-func getSecret() string {
-	if s := os.Getenv("JWT_SECRET"); s != "" {
-		return s
+func JWTAuthFromEnvironment() (gin.HandlerFunc, error) {
+	secret := strings.TrimSpace(os.Getenv("JWT_SECRET_KEY"))
+	if secret == "" {
+		return nil, fmt.Errorf("JWT_SECRET_KEY is required")
 	}
-	return "default-secret"
+	return JWTAuth([]byte(secret)), nil
 }
 
-func JWTAuth() gin.HandlerFunc {
+func JWTAuth(secret []byte) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing Authorization header"})
+		queryToken := strings.TrimSpace(c.Query("token"))
+		tokenValue := queryToken
+		if authHeader != "" {
+			parts := strings.SplitN(authHeader, " ", 2)
+			if len(parts) != 2 || !strings.EqualFold(parts[0], "bearer") || strings.TrimSpace(parts[1]) == "" {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid Authorization format"})
+				return
+			}
+			tokenValue = strings.TrimSpace(parts[1])
+			if queryToken != "" && queryToken != tokenValue {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "conflicting authentication tokens"})
+				return
+			}
+		}
+		if tokenValue == "" {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing authentication token"})
 			return
 		}
 
-		parts := strings.SplitN(authHeader, " ", 2)
-		if len(parts) != 2 || strings.ToLower(parts[0]) != "bearer" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid Authorization format"})
-			return
-		}
-
-		token, err := jwt.Parse(parts[1], func(t *jwt.Token) (interface{}, error) {
-			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+		token, err := jwt.Parse(tokenValue, func(t *jwt.Token) (interface{}, error) {
+			if t.Method.Alg() != jwt.SigningMethodHS256.Alg() {
 				return nil, jwt.ErrSignatureInvalid
 			}
-			return jwtSecret, nil
+			return secret, nil
 		})
 		if err != nil || !token.Valid {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})

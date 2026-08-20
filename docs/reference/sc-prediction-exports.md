@@ -85,9 +85,9 @@ count does not justify emitting a file reference when that file is absent from
 the export.
 
 When enabled, Annotation Sampling runs first. The exporter then resolves exactly
-one `patch_defective` image for every retained row through the job-local image
-resolver in bounded 512-row batches. It does not call the display image-parser
-network API. KLARF 1.2 writes `IMAGECOUNT 1`, one `IMAGELIST` pair, and the
+one `patch_defective` image for every retained row through the semantic Export
+image-parser stream in bounded 512-row batches. The Export lane has its own
+cache namespace and concurrency budget. KLARF 1.2 writes `IMAGECOUNT 1`, one `IMAGELIST` pair, and the
 matching `TiffFileName`; KLARF 1.8 writes one `Images` entry. Every referenced
 relative name must exist under `images/` in the returned ZIP. Missing/corrupt
 images and unknown content types fail the whole export without uploading a

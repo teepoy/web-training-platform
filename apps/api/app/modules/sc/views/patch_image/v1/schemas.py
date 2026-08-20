@@ -8,11 +8,11 @@ from app.core.registry import view
 
 
 class ScImageRef(BaseModel):
-    """Reference to one SC image exposed through a dataset-owned proxy.
+    """Reference to one SC image exposed by the image-parser service.
 
-    Existing source schema v2 rows may resolve embedded bytes or persisted
-    locators. Source schema v3 rows derive patch references from scalar sample
-    identity when this view is requested; no image structs are stored per row.
+    Source schema v2 rows retain image identities, while v3 rows derive patch
+    references from scalar sample identity. The Python API never serves the
+    corresponding image bytes.
     """
 
     role: str

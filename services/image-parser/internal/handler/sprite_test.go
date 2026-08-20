@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"image"
 	"image/color"
+	"image/jpeg"
 	"image/png"
 	"testing"
 )
@@ -81,6 +82,33 @@ func TestCreateSpriteFromResized_Multi(t *testing.T) {
 	}
 	if bounds.Dy() != 48 {
 		t.Errorf("height = %d, want %d", bounds.Dy(), 48)
+	}
+}
+
+func TestResizeSquarePNGUsesBilinearInterpolationAndDecodesJPEG(t *testing.T) {
+	source := image.NewNRGBA(image.Rect(0, 0, 2, 2))
+	source.SetNRGBA(0, 0, color.NRGBA{R: 255, A: 255})
+	source.SetNRGBA(1, 0, color.NRGBA{G: 255, A: 255})
+	source.SetNRGBA(0, 1, color.NRGBA{B: 255, A: 255})
+	source.SetNRGBA(1, 1, color.NRGBA{R: 255, G: 255, B: 255, A: 255})
+	var input bytes.Buffer
+	if err := jpeg.Encode(&input, source, &jpeg.Options{Quality: 100}); err != nil {
+		t.Fatal(err)
+	}
+
+	resized, err := resizeSquarePNG(input.Bytes(), 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, _, err := image.Decode(bytes.NewReader(resized))
+	if err != nil {
+		t.Fatal(err)
+	}
+	center := color.NRGBAModel.Convert(decoded.At(1, 1)).(color.NRGBA)
+	for name, channel := range map[string]uint8{"red": center.R, "green": center.G, "blue": center.B} {
+		if channel < 95 || channel > 170 {
+			t.Fatalf("bilinear center %s channel = %d, want a blended value", name, channel)
+		}
 	}
 }
 

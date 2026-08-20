@@ -215,6 +215,7 @@ def test_sparse_dataset_export_v2_returns_compact_image_refs() -> None:
                 "filename": "0000001_1.png",
                 "bytes": b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR",
                 "source_uri": "s3://review-images/20260526/1/0000001_1.png",
+                "review_image_id": 1,
             },
             {
                 "image_id": "img-tmpl-1",
@@ -309,15 +310,16 @@ def test_sparse_dataset_export_v2_returns_compact_image_refs() -> None:
         assert sample["sample_id"] == "defect-001"
         assert sample["defect_id"] == "defect-001"
 
-        # primary URI fields should be API access URLs, not upstream S3
+        # primary URI fields should be image-parser URLs, not upstream S3
         assert sample["image_uri"] == (
-            f"/api/v1/datasets/{ds_id}/samples/defect-001/images/img-review-1"
+            "/api/v1/sc/images/2026-05-26T08%3A00%3A00/1/defect-001/review"
+            "?review_image_id=1"
         )
         assert sample["defective_uri"] == (
-            f"/api/v1/datasets/{ds_id}/samples/defect-001/images/img-defect-1"
+            "/api/v1/sc/images/2026-05-26T08%3A00%3A00/1/defect-001/defective"
         )
         assert sample["reference_uri"] == (
-            f"/api/v1/datasets/{ds_id}/samples/defect-001/images/img-tmpl-1"
+            "/api/v1/sc/images/2026-05-26T08%3A00%3A00/1/defect-001/template"
         )
 
         # v2 export has no metadata
@@ -342,9 +344,7 @@ def test_sparse_dataset_export_v2_returns_compact_image_refs() -> None:
             assert "filename" in img_ref, f"Missing filename: {img_ref}"
             assert "image_type" in img_ref, f"Missing image_type: {img_ref}"
             assert "access_url" in img_ref, f"Missing access_url: {img_ref}"
-            assert img_ref["access_url"].startswith(
-                f"/api/v1/datasets/{ds_id}/samples/"
-            ), (
+            assert img_ref["access_url"].startswith("/api/v1/sc/images/"), (
                 f"Unexpected access_url: {img_ref['access_url']}"
             )
 
@@ -352,7 +352,8 @@ def test_sparse_dataset_export_v2_returns_compact_image_refs() -> None:
         review_ref = next(r for r in images if r["role"] == "review")
         assert review_ref["image_id"] == "img-review-1"
         assert review_ref["access_url"] == (
-            f"/api/v1/datasets/{ds_id}/samples/defect-001/images/img-review-1"
+            "/api/v1/sc/images/2026-05-26T08%3A00%3A00/1/defect-001/review"
+            "?review_image_id=1"
         )
 
         tmpl_ref = next(r for r in images if r["role"] == "patch_template")
@@ -382,10 +383,10 @@ def test_sparse_dataset_export_v3_derives_patch_refs_from_scalar_row() -> None:
 
     assert sample["image_uri"] is None
     assert sample["reference_uri"] == (
-        "/api/v1/sc/datasets/dataset-v3/samples/42/images/42_template"
+        "/api/v1/sc/images/2026-05-26T08%3A00%3A00%2B00%3A00/1/42/template"
     )
     assert sample["defective_uri"] == (
-        "/api/v1/sc/datasets/dataset-v3/samples/42/images/42_defective"
+        "/api/v1/sc/images/2026-05-26T08%3A00%3A00%2B00%3A00/1/42/defective"
     )
     assert [image["role"] for image in sample["images"]] == [
         "patch_template",

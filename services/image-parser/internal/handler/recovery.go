@@ -7,16 +7,16 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-const maxConcurrentBimgOps = 8
+const maxConcurrentResizeOps = 8
 
-var bimgSem = make(chan struct{}, maxConcurrentBimgOps)
+var resizeSem = make(chan struct{}, maxConcurrentResizeOps)
 
-func acquireBimg() {
-	bimgSem <- struct{}{}
+func acquireResize() {
+	resizeSem <- struct{}{}
 }
 
-func releaseBimg() {
-	<-bimgSem
+func releaseResize() {
+	<-resizeSem
 }
 
 func StableRecovery() gin.HandlerFunc {

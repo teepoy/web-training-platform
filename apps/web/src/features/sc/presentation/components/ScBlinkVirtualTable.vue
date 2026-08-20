@@ -22,7 +22,7 @@ import {
   MINI_HEADER_HEIGHT,
 } from "@/features/sc/presentation/composables/useBlinkVirtualScroll";
 import { useBlinkRubberBand } from "@/features/sc/presentation/composables/useBlinkRubberBand";
-import { scSampleImageUrl } from "@/features/sc/domain/models";
+import { scReviewUrl } from "@/features/sc/domain/models";
 import { usePagedDataGallery } from "@/features/sc/presentation/composables/usePagedDataGallery";
 import { cssBackgroundImageUrl } from "@/features/sc/presentation/components/scSpriteStyle";
 import type {
@@ -600,10 +600,9 @@ const previewImageSrc = ref<string | null>(null);
 const hiddenImageRef = ref<InstanceType<typeof NImage> | null>(null);
 
 function handleReviewPreview(sample: BlinkSample, imageId: number) {
-  const datasetId = sample.sourceDatasetId ?? props.datasetId;
-  const sampleId = sample.sourceSampleId ?? sample.sampleId;
-  if (!datasetId || !sampleId) return;
-  previewImageSrc.value = scSampleImageUrl(datasetId, sampleId, imageId);
+  const inspectionTime = sample.inspectionTime ?? props.inspectionTime;
+  const waferKey = sample.waferKey ?? props.waferKey;
+  previewImageSrc.value = scReviewUrl(inspectionTime, waferKey, sample.defectId, imageId);
   void nextTick(() => {
     const el = hiddenImageRef.value?.$el;
     if (el instanceof HTMLElement) {

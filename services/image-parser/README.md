@@ -1,108 +1,101 @@
-# Image resolution service and local resolvers
+# Image resolution service
 
-Image resolution is composed from three independent concerns:
+`image-parser` is the only runtime that downloads, caches, and parses SC image
+source artifacts. Browser Display, Prediction, Training, and image-bearing
+Export use one deployment and one equipment-entry model; API and Prefect worker
+images do not embed a second parser binary.
 
-1. `filesource` exposes an already-local regular file or directory. A mounted
-   SMB share is a borrowed directory source. It enforces rooted access and
-   rejects absolute caller paths, traversal, and symlinks that escape the root.
-2. `sourceformat` selects one code-registered format driver. Drivers own layout
-   and container rules; the generic source layer does not assume ZIP, index
-   ranges, or any particular image file type.
-3. An optional entrypoint-owned stager makes source objects local before the
-   driver runs. Staging, retry, cache lifecycle, cleanup, credentials, and
-   concurrency budgets are not shared policy.
+## Public surfaces
 
-Dataset metadata stores `filesystem.image-source.v1` plus a format ID. It never
-stores an absolute root, SMB credentials, object-store credentials, staging
-mode, cache policy, or cleanup ownership. `IMAGE_SOURCE_PROFILES_JSON` and
-`SC_COMPAT_IMAGE_SOURCE_PROFILE` no longer exist.
+- Authenticated HTTP `/sc/images/...` and `/sc/sprites/...` serve browser
+  display. The web gateway forwards `/api/v1/sc/images/...` and
+  `/api/v1/sc/sprites/...` directly here. A browser may provide the API access
+  token through the `token` query parameter; normal clients use a Bearer header.
+- gRPC `StreamPredictionImages`, `StreamTrainingImages`, and
+  `StreamExportImages` are separate bidirectional streams with independent
+  traffic metrics and resource lanes. They share request/result messages but
+  cannot be substituted for one another by the caller.
+- HTTP `/health`, `/metrics`, and gRPC `Health` are operational surfaces. There
+  is no generic format-selection RPC, subprocess frame protocol, or cache-warm
+  compatibility endpoint.
 
-## Entrypoints
+One stream can open several explicit `(inspection_time, wafer_key)` contexts.
+Opening resolves the Inspection and its `eqp_id` once, returns the exact
+equipment ID, and advertises the batch, response-byte, and active-context
+limits. One monotonically increasing sequence identifies one sample and all
+requested roles. The service may work concurrently but sends results in
+sequence order. Clients reopen contexts and resend from the first unacknowledged
+sequence after a transport failure.
 
-### Display server
+The service returns raw compressed image bytes and content type. Decode,
+resize, channel stacking, tensor construction, model batching, and inference
+remain algorithm responsibilities.
 
-`cmd/server` runs HTTP/gRPC display APIs. Its SC compatibility path is composed
-in code from:
+## Equipment entries
 
-- a shared-cache directory below `CACHE_DIR`;
-- the SC upstream stager;
-- the optional `sc.legacy-range-zip.v1` format driver.
+An exact code-owned registry maps explicit `eqp_id` values to an
+`Equipment.Factory`. Unknown, empty, and duplicate equipment IDs fail; requests
+cannot select a parser, source root, downloader, file format, or staging policy.
 
-The display server does not expose the job batch `ResolvePatchImages` RPC.
-Training and prediction therefore cannot consume display capacity by mistake.
-The shared cache uses `CACHE_TTL`, `CACHE_CLEANUP_INTERVAL`, and
-`CACHE_MAX_BYTES`; reads refresh mtime, and cleanup evicts expired then
-least-recently-used files.
+The current `sc.legacy-range-zip.v1` entry owns these fixed rules:
 
-### Train/batch-predict job resolver
+- patch archives contain at most 500 consecutive defects;
+- members use six-digit defect IDs plus `PatchReference`, `PatchDefective`, or
+  `PatchDifference`;
+- up to eight selected archives may be opened concurrently;
+- missing members are item errors, while inspection/catalog/archive failures
+  close only that context with a typed context error.
 
-`cmd/batch-resolve` builds `/usr/local/bin/image-parser-batch` in the GPU worker.
-One child is opened for one training materialization or batch prediction job and
-reused for all ordered bounded requests. It stages upstream objects into a
-job-owned directory, resolves them locally, then removes that directory on
-exit. It never opens HTTP/gRPC listeners or falls back to the display server.
+Another equipment layout belongs in another registered entry. Do not restore a
+generic source-format switch or infer behavior from extensions.
 
-The framing protocol is a four-byte big-endian size followed by a
-`ResolvePatchImagesRequest`; the response is a length-prefixed
-`ResolvePatchImagesBatchResponse`. Frames are capped at 256 MiB. Configure the
-parent directory with `SC_JOB_IMAGE_RESOLVER_CACHE_ROOT`; the per-job directory
-is deleted when the resolver process exits.
+## Artifact cache
 
-### Pure-local resolver
+Every equipment entry separates two interfaces:
 
-`cmd/local-resolve` uses the same framed protocol without initializing an
-upstream or S3 client and without a stager. It requires:
+1. the downloader describes a source as
+   `ArtifactRef(entry_id, source_identity, revision, kind)` and streams it into
+   the supplied staging destination;
+2. the parser reads the locally published file or directory and returns image
+   bytes.
 
-| Variable              | Meaning                                                            |
-| --------------------- | ------------------------------------------------------------------ |
-| `IMAGE_SOURCE_ROOT`   | Absolute local file/directory or mounted SMB root.                 |
-| `IMAGE_SOURCE_KIND`   | `directory` (default) or `file`.                                   |
-| `IMAGE_SOURCE_FORMAT` | Code-registered format ID, for example `filesystem.role-paths.v1`. |
+The service owns one Artifact Cache Manager contract. Display, Prediction,
+Training, and Export use separate subdirectories and independent TTL, capacity,
+concurrency, and metrics. A miss acquires process singleflight and a persistent
+filesystem advisory lock before downloading, rechecks the final target, writes
+to a sibling temporary location, rejects symlinks, fsyncs, and atomically
+renames. Janitor eviction takes the same lock non-blockingly. Coordination and
+staging files are never counted or deleted as cache objects.
 
-The source is borrowed and is never deleted. Use this entrypoint for
-local-source jobs and online/instant prediction hosts. The worker can switch to
-it with `SC_JOB_IMAGE_RESOLVER_BINARY=/usr/local/bin/image-parser-local` and the
-three variables above.
+Source revision precedence is S3 VersionId, then ETag, then reliable source
+LastModified plus size. Local cache mtime is only LRU/TTL metadata. Directory
+entries require a provider generation or manifest revision.
 
-For host development, `make prefect-worker-gpu-host` selects the staged batch
-entrypoint and `make prefect-worker-gpu-local-host` selects the pure-local
-entrypoint. They build different output files, so one target cannot silently
-overwrite the resolver selected by the other.
+Base cache variables are `CACHE_DIR`, `CACHE_TTL`,
+`CACHE_CLEANUP_INTERVAL`, and `CACHE_MAX_BYTES`. Each semantic namespace can
+override `DISPLAY_CACHE_*`, `PREDICTION_CACHE_*`, `TRAINING_CACHE_*`, or
+`EXPORT_CACHE_*` (`TTL`, `CLEANUP_INTERVAL`, and `MAX_BYTES`).
 
-## Format drivers
+## Required connections
 
-`filesystem.role-paths.v1` reads the data row's explicit role-relative paths
-and invents no layout. It supports a single file or a directory source. A
-caller selecting this format must supply `role_paths` for every requested role;
-it does not need SC inspection, wafer, or defect identity. Current legacy SC
-rows instead select `sc.legacy-range-zip.v1`, which derives its locators from
-that compatibility identity.
+The service fails startup when a required connection is absent:
 
-`sc.legacy-range-zip.v1` is a compatibility driver. Only this package knows the
-old `<YYYYMMDD_HHMMSS>/<wafer_key>/<start>-<end>.zip`, 500-defect range, and ZIP
-member naming rules. These rules are not part of the generic source contract.
-Archives are opened once per bounded batch and resolved concurrently across at
-most eight archives.
+| Variable                                                      | Purpose                                                         |
+| ------------------------------------------------------------- | --------------------------------------------------------------- |
+| `SC_UPSTREAM_ADDR`                                            | Inspection, equipment, archive catalog, and review locator gRPC |
+| `SC_PATCH_S3_ENDPOINT`, `REGION`, `ACCESS_KEY`, `SECRET_KEY`  | Patch archive source                                            |
+| `SC_REVIEW_S3_ENDPOINT`, `REGION`, `ACCESS_KEY`, `SECRET_KEY` | Review image source                                             |
+| `JWT_SECRET_KEY`                                              | Shared HS256 key for browser HTTP image authentication          |
 
-New file/container formats must be implemented as another explicit driver and
-registered in code. Drivers never sniff extensions and never fall back to a
-different format after failure.
+The S3 fields may explicitly use the corresponding `MINIO_*` environment
+values. There are no mock credentials or localhost defaults. `GRPC_LISTEN`
+accepts `tcp://<address>` or `unix:///absolute/socket/path`; a Unix listener
+removes only a stale socket and refuses to replace a regular file.
 
-## Source ownership
+## Verification
 
-- `borrowed`: local/SMB source; resolver cannot write or delete it.
-- `job_owned`: a job stager may write it and job shutdown deletes it.
-- `shared_cache`: a service stager may write it and the cache janitor owns
-  eviction; the resolver cannot delete the root.
-
-## External connections
-
-The display server and upstream-staging job resolver use `SC_UPSTREAM_ADDR` for
-metadata. Patch and review object stores use `SC_PATCH_S3_*` and
-`SC_REVIEW_S3_*` (`ENDPOINT`, `REGION`, `ACCESS_KEY`, `SECRET_KEY`), with the
-corresponding `MINIO_*` values as deployment defaults. The pure-local resolver
-does not initialize these clients.
-
-`GRPC_LISTEN` on the display server accepts `tcp://<address>` or
-`unix:///absolute/socket/path`. A Unix listener removes only a stale socket and
-refuses to replace a regular file.
+`make benchmark-image-stream-receipt` creates a deterministic 300,000-sample,
+two-image range-ZIP fixture, warms the Artifact Cache, then measures production
+ZIP parsing through the public Prediction stream to the generated Python
+client. The gate is 3,000 samples/second. Fixture generation, cold download,
+and decode/fake-predictor throughput are reported separately.

@@ -146,6 +146,46 @@ SC Dataset 或 SC Collection 中浏览、筛选、抽样和标注缺陷样本的
 
 Avoid: 将 SC Samples 呈现为通用原始行表格，或把 Classify workspace 当作独立资源。
 
+### Image resolution service
+
+把一组顺序的领域图片引用解析为原始图片 bytes、content type 与稳定错误的共享 data-plane 服务。Display、Prediction 与 Training 使用语义分离的入口、资源预算和缓存 namespace，但共用同一套设备入口、下载与解析契约。
+
+Avoid: 把图片 decode、resize、channel stack、tensor 转换或模型推理称为 image resolution。
+
+### Prediction image stream
+
+一次 Prediction run 与 Image resolution service 之间的有界双向 gRPC 流。客户端持续提交顺序 request batches，服务端在有界并发解析后按 sequence 返回 result batches，并通过 stream flow control 向上游施加 backpressure。
+
+### Training image stream
+
+与 Prediction image stream 共享图片解析 primitive，但以独立 gRPC 入口表达 Training 语义、指标、并发预算和缓存生命周期。第一阶段只要求职责分离，不要求复制 Prediction 专用优化。
+
+### Export image stream
+
+含图片的 Prediction Export 与 Image resolution service 之间的独立有界 gRPC 流。它可以只请求导出格式需要的 role，共享 streaming engine 但不伪装成 Prediction，也不占用 Display 预算。
+
+### Image stream context
+
+一条 Prediction 或 Training image stream 内显式打开的 Inspection 解析上下文。客户端使用 stream-local context ID 引用 `(inspection_time, wafer_key)`；服务端在打开时解析一次 `eqp_id`，关闭或断流时释放该上下文持有的资源。
+
+### Equipment image entry
+
+一个精确 `eqp_id` 在代码注册表中对应的图片来源入口。多个明确列出的 `eqp_id` 可指向同一 EntryFactory；未知设备、重复注册或空 ID 直接失败。Entry 提供 Image artifact downloader 与 Image artifact parser，不根据运行时配置、扩展名或 sniffing 改变解析逻辑。
+
+### Image artifact downloader
+
+设备入口中把 upstream source 解析为带稳定 identity 与 version/etag 的 ArtifactRef，并能将对应文件或目录流式写入指定的本地 staging 位置。Downloader 不决定 TTL、LRU、Janitor 或共享缓存生命周期。
+
+### Image artifact parser
+
+设备入口中从已在本地可见的 artifact 按设备规则解析所需图片，返回原始 bytes、content type 和 item error 的组件。Parser 不下载 source、不管理缓存，也不执行模型预处理。
+
+### Image artifact cache
+
+Image resolution service 中在下载前使用 ArtifactRef 查找或发布本地文件/目录的统一机制。Display、Prediction 与 Training 共享 Cache Manager 契约，但使用独立目录、容量、TTL、并发预算与指标。同一 cache key 只允许一个 downloader 在锁内流式写入临时位置并原子发布；其他请求等待后复用结果。
+
+ArtifactRef 的 revision 必须来自 source：对象存储优先使用 VersionId 或 ETag，可证明可靠时可使用 source `mtime + size`；目录需要 provider 给出 generation、manifest revision 或可靠的整体更新时间。下载后本地文件的 mtime 只用于 TTL/LRU，不能证明 source freshness。
+
 ### Operator console
 
 用于检查执行基础设施或存储基础设施的管理界面。Prefect UI 和 MinIO Console 是 operator console，不进入一般用户导航。

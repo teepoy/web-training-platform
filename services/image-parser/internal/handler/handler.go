@@ -4,37 +4,31 @@ import (
 	"context"
 	"fmt"
 
-	imageloader "image-parser/internal/image_loader"
+	"image-parser/internal/display"
 )
 
 type scRoutes struct {
-	images imageloader.ImageLoader
+	images display.Reader
 }
 
 type SCImageRequest struct {
-	Inspection    imageloader.InspectionKey
+	Inspection    display.InspectionKey
 	DefectID      string
 	ImageType     string
 	ReviewImageID int
 }
 
 type SCSpriteRequest struct {
-	Inspection imageloader.InspectionKey
+	Inspection display.InspectionKey
 	DefectID   string
 	CellSize   int
 	Images     []SCSpriteImage
 }
 
 type SCSpriteImage struct {
-	Kind          imageloader.ImageKind
+	Kind          display.ImageKind
 	ImageType     string
 	ReviewImageID int
-}
-
-type SCWarmRequest struct {
-	Inspection   imageloader.InspectionKey
-	DefectIDs    []string
-	RecordPrefix string
 }
 
 type ImageResponse struct {
@@ -42,30 +36,26 @@ type ImageResponse struct {
 	ContentType string
 }
 
-type WarmResponse struct {
-	Zips int
-}
-
-func NewSCRoutes(images imageloader.ImageLoader) *scRoutes {
+func NewSCRoutes(images display.Reader) *scRoutes {
 	return &scRoutes{images: images}
 }
 
 func (s *scRoutes) GetSCImage(ctx context.Context, req SCImageRequest) (ImageResponse, error) {
 	imageType := normalizeImageType(req.ImageType)
-	key := imageloader.ImageKey{
-		Kind:          imageloader.ImageKindPatch,
+	key := display.ImageKey{
+		Kind:          display.ImageKindPatch,
 		InspectionKey: req.Inspection,
 		DefectID:      req.DefectID,
 		ImageType:     imageType,
 	}
 	contentType := "image/png"
 	if imageType == "review" {
-		key.Kind = imageloader.ImageKindReview
+		key.Kind = display.ImageKindReview
 		key.ReviewImageID = req.ReviewImageID
 		contentType = "image/jpeg"
 	}
 
-	result := firstImageResult(s.images.GetImageBytes(ctx, []imageloader.ImageKey{key}))
+	result := firstImageResult(s.images.GetImageBytes(ctx, []display.ImageKey{key}))
 	if result.Err != nil {
 		return ImageResponse{}, result.Err
 	}
@@ -76,13 +66,13 @@ func (s *scRoutes) GetSCSprite(ctx context.Context, req SCSpriteRequest) (ImageR
 	pngs := make([][]byte, 0, len(req.Images))
 	for _, image := range req.Images {
 		switch image.Kind {
-		case imageloader.ImageKindPatch:
+		case display.ImageKindPatch:
 			resized, err := patchSpriteCell(ctx, s.images, req.Inspection, req.DefectID, image.ImageType, req.CellSize)
 			if err != nil {
 				return ImageResponse{}, err
 			}
 			pngs = append(pngs, resized)
-		case imageloader.ImageKindReview:
+		case display.ImageKindReview:
 			resized, err := reviewSpriteCell(ctx, s.images, req.Inspection, req.DefectID, image.ReviewImageID, req.CellSize)
 			if err != nil {
 				return ImageResponse{}, err
@@ -104,21 +94,9 @@ func (s *scRoutes) GetSCSprite(ctx context.Context, req SCSpriteRequest) (ImageR
 	return ImageResponse{Data: result, ContentType: "image/png"}, nil
 }
 
-func (s *scRoutes) WarmSC(ctx context.Context, req SCWarmRequest) (WarmResponse, error) {
-	prefix := req.RecordPrefix
-	if prefix == "" {
-		prefix = "warm"
-	}
-	warmed, err := s.images.WarmInspection(ctx, req.Inspection, req.DefectIDs, prefix)
-	if err != nil {
-		return WarmResponse{}, err
-	}
-	return WarmResponse{Zips: warmed}, nil
-}
-
-func patchSpriteCell(ctx context.Context, images imageloader.ImageLoader, inspection imageloader.InspectionKey, defectID string, imageType string, cellSize int) ([]byte, error) {
-	result := firstImageResult(images.GetImageBytes(ctx, []imageloader.ImageKey{{
-		Kind:          imageloader.ImageKindPatch,
+func patchSpriteCell(ctx context.Context, images display.Reader, inspection display.InspectionKey, defectID string, imageType string, cellSize int) ([]byte, error) {
+	result := firstImageResult(images.GetImageBytes(ctx, []display.ImageKey{{
+		Kind:          display.ImageKindPatch,
 		InspectionKey: inspection,
 		DefectID:      defectID,
 		ImageType:     imageType,
@@ -126,18 +104,18 @@ func patchSpriteCell(ctx context.Context, images imageloader.ImageLoader, inspec
 	if result.Err != nil {
 		return blankSquarePNG(cellSize)
 	}
-	acquireBimg()
+	acquireResize()
 	resized, err := resizeSquarePNG(result.Data, cellSize)
-	releaseBimg()
+	releaseResize()
 	if err != nil {
 		return blankSquarePNG(cellSize)
 	}
 	return resized, nil
 }
 
-func reviewSpriteCell(ctx context.Context, images imageloader.ImageLoader, inspection imageloader.InspectionKey, defectID string, reviewImageID int, cellSize int) ([]byte, error) {
-	result := firstImageResult(images.GetImageBytes(ctx, []imageloader.ImageKey{{
-		Kind:          imageloader.ImageKindReview,
+func reviewSpriteCell(ctx context.Context, images display.Reader, inspection display.InspectionKey, defectID string, reviewImageID int, cellSize int) ([]byte, error) {
+	result := firstImageResult(images.GetImageBytes(ctx, []display.ImageKey{{
+		Kind:          display.ImageKindReview,
 		InspectionKey: inspection,
 		DefectID:      defectID,
 		ReviewImageID: reviewImageID,
@@ -145,18 +123,18 @@ func reviewSpriteCell(ctx context.Context, images imageloader.ImageLoader, inspe
 	if result.Err != nil {
 		return blankSquarePNG(cellSize)
 	}
-	acquireBimg()
+	acquireResize()
 	resized, err := resizeSquarePNG(result.Data, cellSize)
-	releaseBimg()
+	releaseResize()
 	if err != nil {
 		return blankSquarePNG(cellSize)
 	}
 	return resized, nil
 }
 
-func firstImageResult(results []imageloader.ImageBytes) imageloader.ImageBytes {
+func firstImageResult(results []display.ImageBytes) display.ImageBytes {
 	if len(results) == 0 {
-		return imageloader.ImageBytes{Err: fmt.Errorf("no image result")}
+		return display.ImageBytes{Err: fmt.Errorf("no image result")}
 	}
 	return results[0]
 }

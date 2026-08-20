@@ -206,7 +206,7 @@ Resolved means browser-ready and authenticated. The component does not know abou
 
 - Generic dataset samples use `resolveImageUri()` / `resolveImageUris()` in `apps/web/src/shared/utils/image-adapters.ts`.
 - SC patch/review images use `scPatchUrl()`, `scReviewUrl()`, or `buildScBlinkImageUrls()` in `apps/web/src/features/sc/domain/models.ts`.
-- Imported sparse dataset image refs should point at `/api/v1/datasets/{dataset_id}/samples/{sample_id}/images/{image_id}` and include auth query parameters. Do not fall back from dataset-owned image refs to upstream inspection-time URLs inside shared browser components.
+- Imported SC sparse dataset image refs use scalar Inspection identity and point at the web-gateway `/api/v1/sc/images/...` alias. Shared browser adapters append auth query parameters before rendering; FastAPI does not proxy these bytes.
 
 **Key types** (from `libs/web-ui/src/types/blink-table.ts`): `BlinkRow` (`id`, `imageA`, `imageB`, `metadata`, `cells`), `BlinkColumnDef` (`key`, `title`, optional `width`), `BlinkTableProps` (`rows`, `columns`, optional `blinkIntervalMs` / `initialBlinkEnabled`).
 

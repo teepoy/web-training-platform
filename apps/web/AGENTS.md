@@ -84,7 +84,7 @@ Browser-native image consumers (`<img>`, Naive image previews, virtualized blink
 | SC review images                         | `scReviewUrl()` from `src/features/sc/domain/models.ts`                                     | Raw `reviewImageUrl()` as an `<img src>`        |
 | SC blink table bundles                   | `buildScBlinkImageUrls()` and pass the result into `ScBlinkTable` via `imageUrlsByDefectId` | Fallback URL construction inside `ScBlinkTable` |
 
-`patchImageUrl()` and `reviewImageUrl()` intentionally return raw backend paths for tests and composition. They do **not** append `token` or `org_id`; using them directly in the DOM will fail when auth is enabled. Imported SC dataset views should prefer dataset-owned image refs from `/api/v1/samples/{sample_id}/images/{image_id}?dataset_id=...` over upstream inspection-time image paths.
+`patchImageUrl()` and `reviewImageUrl()` intentionally return raw image-parser gateway paths for tests and composition. They do **not** append `token` or `org_id`; using them directly in the DOM will fail when auth is enabled. Imported SC Dataset views use the same scalar Inspection identity paths, and `resolveImageUri()` adds the required browser auth before rendering.
 
 ## API AND ORVAL TRANSPORT
 

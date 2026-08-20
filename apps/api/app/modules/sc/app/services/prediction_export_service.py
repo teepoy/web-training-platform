@@ -38,8 +38,7 @@ from app.modules.sc.domain.prediction_export import (
     ScPredictionExportFormat,
     ScPredictionExportResult,
 )
-from app.modules.sc.domain.image_source import require_sc_image_source_format
-from app.modules.sc.domain.job_image_source import ScJobImageSourceFactory
+from app.modules.sc.domain.image_stream import ScExportImageStreamFactory
 from app.modules.sc.runtime.streaming_prediction import (
     stream_sc_prediction_image_pairs,
 )
@@ -114,7 +113,7 @@ class ScPredictionExportService:
         collection_reader: CollectionExportReaderPort,
         storage_factory: DatasetStorageFactoryPort,
         artifact_storage: ArtifactStorage,
-        image_source_factory: ScJobImageSourceFactory,
+        image_stream_factory: ScExportImageStreamFactory,
         image_batch_rows: int,
     ) -> None:
         if image_batch_rows <= 0:
@@ -123,7 +122,7 @@ class ScPredictionExportService:
         self._collection_reader = collection_reader
         self._storage_factory = storage_factory
         self._artifact_storage = artifact_storage
-        self._image_source_factory = image_source_factory
+        self._image_stream_factory = image_stream_factory
         self._image_batch_rows = image_batch_rows
 
     async def export(
@@ -148,11 +147,6 @@ class ScPredictionExportService:
             )
 
         lazy_frame = await self._load_datasets((dataset,), org_id=org_id)
-        image_source_formats = (
-            {dataset.id: require_sc_image_source_format(dataset)}
-            if include_images
-            else {}
-        )
         return await self._persist_export(
             org_id=org_id,
             scope_id=dataset.id,
@@ -167,7 +161,6 @@ class ScPredictionExportService:
             sampling_program=sampling_program,
             sampling_seed=sampling_seed,
             include_images=include_images,
-            image_source_formats=image_source_formats,
         )
 
     async def export_collection(
@@ -226,14 +219,6 @@ class ScPredictionExportService:
         for dataset in ordered_datasets:
             self._validate_dataset(dataset)
         lazy_frame = await self._load_datasets(ordered_datasets, org_id=org_id)
-        image_source_formats = (
-            {
-                dataset.id: require_sc_image_source_format(dataset)
-                for dataset in ordered_datasets
-            }
-            if include_images
-            else {}
-        )
         return await self._persist_export(
             org_id=org_id,
             scope_id=collection.id,
@@ -248,7 +233,6 @@ class ScPredictionExportService:
             sampling_program=sampling_program,
             sampling_seed=sampling_seed,
             include_images=include_images,
-            image_source_formats=image_source_formats,
         )
 
     async def _load_datasets(
@@ -294,7 +278,6 @@ class ScPredictionExportService:
         sampling_program: ReviewSamplingProgram | None,
         sampling_seed: int | None,
         include_images: bool,
-        image_source_formats: dict[str, str],
     ) -> ScPredictionExportResult:
         if include_images and export_format is ScPredictionExportFormat.PARQUET:
             raise ScPredictionExportError(
@@ -341,7 +324,6 @@ class ScPredictionExportService:
                     export_images = await self._resolve_export_images(
                         directory=directory,
                         frame=klarf_frame,
-                        image_source_formats=image_source_formats,
                     )
                 if export_format in (
                     ScPredictionExportFormat.PARQUET,
@@ -455,17 +437,14 @@ class ScPredictionExportService:
         *,
         directory: Path,
         frame: pl.DataFrame,
-        image_source_formats: dict[str, str],
     ) -> list[_ExportImage]:
         images_directory = directory / "images"
         images_directory.mkdir()
         resolved_images: list[_ExportImage] = []
-        async with self._image_source_factory.open() as image_resolver:
+        async with self._image_stream_factory.open() as image_stream:
             resolved_stream = stream_sc_prediction_image_pairs(
                 frame.lazy(),
-                image_resolver=image_resolver,
-                image_source_formats=image_source_formats,
-                direct_dataset_id=None,
+                image_stream=image_stream,
                 input_batch_rows=self._image_batch_rows,
                 roles=(_EXPORT_IMAGE_ROLE,),
             )

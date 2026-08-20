@@ -19,14 +19,10 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	ImageParser_Health_FullMethodName                   = "/imageparser.v1.ImageParser/Health"
-	ImageParser_GetImage_FullMethodName                 = "/imageparser.v1.ImageParser/GetImage"
-	ImageParser_Sprite_FullMethodName                   = "/imageparser.v1.ImageParser/Sprite"
-	ImageParser_V2Sprite_FullMethodName                 = "/imageparser.v1.ImageParser/V2Sprite"
-	ImageParser_GetScImage_FullMethodName               = "/imageparser.v1.ImageParser/GetScImage"
-	ImageParser_BatchGetScImage_FullMethodName          = "/imageparser.v1.ImageParser/BatchGetScImage"
-	ImageParser_StreamScInspectionImages_FullMethodName = "/imageparser.v1.ImageParser/StreamScInspectionImages"
-	ImageParser_WarmScCache_FullMethodName              = "/imageparser.v1.ImageParser/WarmScCache"
+	ImageParser_Health_FullMethodName                 = "/imageparser.v1.ImageParser/Health"
+	ImageParser_StreamPredictionImages_FullMethodName = "/imageparser.v1.ImageParser/StreamPredictionImages"
+	ImageParser_StreamTrainingImages_FullMethodName   = "/imageparser.v1.ImageParser/StreamTrainingImages"
+	ImageParser_StreamExportImages_FullMethodName     = "/imageparser.v1.ImageParser/StreamExportImages"
 )
 
 // ImageParserClient is the client API for ImageParser service.
@@ -34,13 +30,9 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ImageParserClient interface {
 	Health(ctx context.Context, in *HealthRequest, opts ...grpc.CallOption) (*HealthResponse, error)
-	GetImage(ctx context.Context, in *GetImageRequest, opts ...grpc.CallOption) (*GetImageResponse, error)
-	Sprite(ctx context.Context, in *SpriteRequest, opts ...grpc.CallOption) (*SpriteResponse, error)
-	V2Sprite(ctx context.Context, in *V2SpriteRequest, opts ...grpc.CallOption) (*V2SpriteResponse, error)
-	GetScImage(ctx context.Context, in *GetScImageRequest, opts ...grpc.CallOption) (*GetScImageResponse, error)
-	BatchGetScImage(ctx context.Context, in *BatchGetScImageRequest, opts ...grpc.CallOption) (*BatchGetScImageResponse, error)
-	StreamScInspectionImages(ctx context.Context, in *StreamScInspectionImagesRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ScImageResult], error)
-	WarmScCache(ctx context.Context, in *WarmScCacheRequest, opts ...grpc.CallOption) (*WarmScCacheResponse, error)
+	StreamPredictionImages(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[StreamImagesRequest, StreamImagesResponse], error)
+	StreamTrainingImages(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[StreamImagesRequest, StreamImagesResponse], error)
+	StreamExportImages(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[StreamImagesRequest, StreamImagesResponse], error)
 }
 
 type imageParserClient struct {
@@ -61,97 +53,53 @@ func (c *imageParserClient) Health(ctx context.Context, in *HealthRequest, opts 
 	return out, nil
 }
 
-func (c *imageParserClient) GetImage(ctx context.Context, in *GetImageRequest, opts ...grpc.CallOption) (*GetImageResponse, error) {
+func (c *imageParserClient) StreamPredictionImages(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[StreamImagesRequest, StreamImagesResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(GetImageResponse)
-	err := c.cc.Invoke(ctx, ImageParser_GetImage_FullMethodName, in, out, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &ImageParser_ServiceDesc.Streams[0], ImageParser_StreamPredictionImages_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
-}
-
-func (c *imageParserClient) Sprite(ctx context.Context, in *SpriteRequest, opts ...grpc.CallOption) (*SpriteResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(SpriteResponse)
-	err := c.cc.Invoke(ctx, ImageParser_Sprite_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *imageParserClient) V2Sprite(ctx context.Context, in *V2SpriteRequest, opts ...grpc.CallOption) (*V2SpriteResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(V2SpriteResponse)
-	err := c.cc.Invoke(ctx, ImageParser_V2Sprite_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *imageParserClient) GetScImage(ctx context.Context, in *GetScImageRequest, opts ...grpc.CallOption) (*GetScImageResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(GetScImageResponse)
-	err := c.cc.Invoke(ctx, ImageParser_GetScImage_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *imageParserClient) BatchGetScImage(ctx context.Context, in *BatchGetScImageRequest, opts ...grpc.CallOption) (*BatchGetScImageResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(BatchGetScImageResponse)
-	err := c.cc.Invoke(ctx, ImageParser_BatchGetScImage_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *imageParserClient) StreamScInspectionImages(ctx context.Context, in *StreamScInspectionImagesRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ScImageResult], error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &ImageParser_ServiceDesc.Streams[0], ImageParser_StreamScInspectionImages_FullMethodName, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	x := &grpc.GenericClientStream[StreamScInspectionImagesRequest, ScImageResult]{ClientStream: stream}
-	if err := x.ClientStream.SendMsg(in); err != nil {
-		return nil, err
-	}
-	if err := x.ClientStream.CloseSend(); err != nil {
-		return nil, err
-	}
+	x := &grpc.GenericClientStream[StreamImagesRequest, StreamImagesResponse]{ClientStream: stream}
 	return x, nil
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type ImageParser_StreamScInspectionImagesClient = grpc.ServerStreamingClient[ScImageResult]
+type ImageParser_StreamPredictionImagesClient = grpc.BidiStreamingClient[StreamImagesRequest, StreamImagesResponse]
 
-func (c *imageParserClient) WarmScCache(ctx context.Context, in *WarmScCacheRequest, opts ...grpc.CallOption) (*WarmScCacheResponse, error) {
+func (c *imageParserClient) StreamTrainingImages(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[StreamImagesRequest, StreamImagesResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(WarmScCacheResponse)
-	err := c.cc.Invoke(ctx, ImageParser_WarmScCache_FullMethodName, in, out, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &ImageParser_ServiceDesc.Streams[1], ImageParser_StreamTrainingImages_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	x := &grpc.GenericClientStream[StreamImagesRequest, StreamImagesResponse]{ClientStream: stream}
+	return x, nil
 }
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type ImageParser_StreamTrainingImagesClient = grpc.BidiStreamingClient[StreamImagesRequest, StreamImagesResponse]
+
+func (c *imageParserClient) StreamExportImages(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[StreamImagesRequest, StreamImagesResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &ImageParser_ServiceDesc.Streams[2], ImageParser_StreamExportImages_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[StreamImagesRequest, StreamImagesResponse]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type ImageParser_StreamExportImagesClient = grpc.BidiStreamingClient[StreamImagesRequest, StreamImagesResponse]
 
 // ImageParserServer is the server API for ImageParser service.
 // All implementations must embed UnimplementedImageParserServer
 // for forward compatibility.
 type ImageParserServer interface {
 	Health(context.Context, *HealthRequest) (*HealthResponse, error)
-	GetImage(context.Context, *GetImageRequest) (*GetImageResponse, error)
-	Sprite(context.Context, *SpriteRequest) (*SpriteResponse, error)
-	V2Sprite(context.Context, *V2SpriteRequest) (*V2SpriteResponse, error)
-	GetScImage(context.Context, *GetScImageRequest) (*GetScImageResponse, error)
-	BatchGetScImage(context.Context, *BatchGetScImageRequest) (*BatchGetScImageResponse, error)
-	StreamScInspectionImages(*StreamScInspectionImagesRequest, grpc.ServerStreamingServer[ScImageResult]) error
-	WarmScCache(context.Context, *WarmScCacheRequest) (*WarmScCacheResponse, error)
+	StreamPredictionImages(grpc.BidiStreamingServer[StreamImagesRequest, StreamImagesResponse]) error
+	StreamTrainingImages(grpc.BidiStreamingServer[StreamImagesRequest, StreamImagesResponse]) error
+	StreamExportImages(grpc.BidiStreamingServer[StreamImagesRequest, StreamImagesResponse]) error
 	mustEmbedUnimplementedImageParserServer()
 }
 
@@ -165,26 +113,14 @@ type UnimplementedImageParserServer struct{}
 func (UnimplementedImageParserServer) Health(context.Context, *HealthRequest) (*HealthResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Health not implemented")
 }
-func (UnimplementedImageParserServer) GetImage(context.Context, *GetImageRequest) (*GetImageResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetImage not implemented")
+func (UnimplementedImageParserServer) StreamPredictionImages(grpc.BidiStreamingServer[StreamImagesRequest, StreamImagesResponse]) error {
+	return status.Error(codes.Unimplemented, "method StreamPredictionImages not implemented")
 }
-func (UnimplementedImageParserServer) Sprite(context.Context, *SpriteRequest) (*SpriteResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method Sprite not implemented")
+func (UnimplementedImageParserServer) StreamTrainingImages(grpc.BidiStreamingServer[StreamImagesRequest, StreamImagesResponse]) error {
+	return status.Error(codes.Unimplemented, "method StreamTrainingImages not implemented")
 }
-func (UnimplementedImageParserServer) V2Sprite(context.Context, *V2SpriteRequest) (*V2SpriteResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method V2Sprite not implemented")
-}
-func (UnimplementedImageParserServer) GetScImage(context.Context, *GetScImageRequest) (*GetScImageResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetScImage not implemented")
-}
-func (UnimplementedImageParserServer) BatchGetScImage(context.Context, *BatchGetScImageRequest) (*BatchGetScImageResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method BatchGetScImage not implemented")
-}
-func (UnimplementedImageParserServer) StreamScInspectionImages(*StreamScInspectionImagesRequest, grpc.ServerStreamingServer[ScImageResult]) error {
-	return status.Error(codes.Unimplemented, "method StreamScInspectionImages not implemented")
-}
-func (UnimplementedImageParserServer) WarmScCache(context.Context, *WarmScCacheRequest) (*WarmScCacheResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method WarmScCache not implemented")
+func (UnimplementedImageParserServer) StreamExportImages(grpc.BidiStreamingServer[StreamImagesRequest, StreamImagesResponse]) error {
+	return status.Error(codes.Unimplemented, "method StreamExportImages not implemented")
 }
 func (UnimplementedImageParserServer) mustEmbedUnimplementedImageParserServer() {}
 func (UnimplementedImageParserServer) testEmbeddedByValue()                     {}
@@ -225,124 +161,26 @@ func _ImageParser_Health_Handler(srv interface{}, ctx context.Context, dec func(
 	return interceptor(ctx, in, info, handler)
 }
 
-func _ImageParser_GetImage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetImageRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ImageParserServer).GetImage(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ImageParser_GetImage_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ImageParserServer).GetImage(ctx, req.(*GetImageRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _ImageParser_Sprite_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SpriteRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ImageParserServer).Sprite(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ImageParser_Sprite_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ImageParserServer).Sprite(ctx, req.(*SpriteRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _ImageParser_V2Sprite_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(V2SpriteRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ImageParserServer).V2Sprite(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ImageParser_V2Sprite_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ImageParserServer).V2Sprite(ctx, req.(*V2SpriteRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _ImageParser_GetScImage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetScImageRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ImageParserServer).GetScImage(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ImageParser_GetScImage_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ImageParserServer).GetScImage(ctx, req.(*GetScImageRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _ImageParser_BatchGetScImage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(BatchGetScImageRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ImageParserServer).BatchGetScImage(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ImageParser_BatchGetScImage_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ImageParserServer).BatchGetScImage(ctx, req.(*BatchGetScImageRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _ImageParser_StreamScInspectionImages_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(StreamScInspectionImagesRequest)
-	if err := stream.RecvMsg(m); err != nil {
-		return err
-	}
-	return srv.(ImageParserServer).StreamScInspectionImages(m, &grpc.GenericServerStream[StreamScInspectionImagesRequest, ScImageResult]{ServerStream: stream})
+func _ImageParser_StreamPredictionImages_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(ImageParserServer).StreamPredictionImages(&grpc.GenericServerStream[StreamImagesRequest, StreamImagesResponse]{ServerStream: stream})
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type ImageParser_StreamScInspectionImagesServer = grpc.ServerStreamingServer[ScImageResult]
+type ImageParser_StreamPredictionImagesServer = grpc.BidiStreamingServer[StreamImagesRequest, StreamImagesResponse]
 
-func _ImageParser_WarmScCache_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(WarmScCacheRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ImageParserServer).WarmScCache(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ImageParser_WarmScCache_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ImageParserServer).WarmScCache(ctx, req.(*WarmScCacheRequest))
-	}
-	return interceptor(ctx, in, info, handler)
+func _ImageParser_StreamTrainingImages_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(ImageParserServer).StreamTrainingImages(&grpc.GenericServerStream[StreamImagesRequest, StreamImagesResponse]{ServerStream: stream})
 }
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type ImageParser_StreamTrainingImagesServer = grpc.BidiStreamingServer[StreamImagesRequest, StreamImagesResponse]
+
+func _ImageParser_StreamExportImages_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(ImageParserServer).StreamExportImages(&grpc.GenericServerStream[StreamImagesRequest, StreamImagesResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type ImageParser_StreamExportImagesServer = grpc.BidiStreamingServer[StreamImagesRequest, StreamImagesResponse]
 
 // ImageParser_ServiceDesc is the grpc.ServiceDesc for ImageParser service.
 // It's only intended for direct use with grpc.RegisterService,
@@ -355,36 +193,25 @@ var ImageParser_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "Health",
 			Handler:    _ImageParser_Health_Handler,
 		},
-		{
-			MethodName: "GetImage",
-			Handler:    _ImageParser_GetImage_Handler,
-		},
-		{
-			MethodName: "Sprite",
-			Handler:    _ImageParser_Sprite_Handler,
-		},
-		{
-			MethodName: "V2Sprite",
-			Handler:    _ImageParser_V2Sprite_Handler,
-		},
-		{
-			MethodName: "GetScImage",
-			Handler:    _ImageParser_GetScImage_Handler,
-		},
-		{
-			MethodName: "BatchGetScImage",
-			Handler:    _ImageParser_BatchGetScImage_Handler,
-		},
-		{
-			MethodName: "WarmScCache",
-			Handler:    _ImageParser_WarmScCache_Handler,
-		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
-			StreamName:    "StreamScInspectionImages",
-			Handler:       _ImageParser_StreamScInspectionImages_Handler,
+			StreamName:    "StreamPredictionImages",
+			Handler:       _ImageParser_StreamPredictionImages_Handler,
 			ServerStreams: true,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "StreamTrainingImages",
+			Handler:       _ImageParser_StreamTrainingImages_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "StreamExportImages",
+			Handler:       _ImageParser_StreamExportImages_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
 		},
 	},
 	Metadata: "imageparser/v1/service.proto",

@@ -18,6 +18,7 @@ from app.modules.datasets.domain.sample_row import (
 from app.modules.datasets.domain.view_projection import ViewProjectionContext
 from app.modules.sc.views.patch_image.v1.schemas import ScImageRef, ScPatchImageV1Row
 from app.modules.sc.views.review_image.v1.schemas import ScReviewImageV1Row
+from app.modules.sc.domain.image_url import build_sc_image_url
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -217,6 +218,12 @@ def dict_to_sample_row(data: dict) -> SampleRow:
                     content_type=str(img.get("content_type", "")),
                     filename=str(img.get("filename", "")),
                     bytes_=img.get("bytes"),
+                    image_type=str(img.get("image_type", "")),
+                    review_image_id=(
+                        int(img["review_image_id"])
+                        if img.get("review_image_id") is not None
+                        else None
+                    ),
                     access_url=(
                         f"/api/v1/datasets/{dataset_id}/samples/"
                         f"{sample_id}/images/{img_id}"
@@ -291,6 +298,7 @@ def _embedded_bytes_to_sc_image_refs(
     row: SampleRow,
     *,
     dataset_id: str = "",
+    use_sc_service: bool = False,
 ) -> list[ScImageRef]:
     """Build ``ScImageRef`` list from ``row.images`` (v2) and/or ``row.embedded_bytes`` (v1)."""
     from urllib.parse import quote
@@ -302,10 +310,20 @@ def _embedded_bytes_to_sc_image_refs(
     if row.images:
         for img in row.images:
             iid_q = quote(img.image_id, safe="")
-            url = (
-                img.access_url
-                or f"/api/v1/datasets/{ds_q}/samples/{sid_q}/images/{iid_q}"
-            )
+            if use_sc_service:
+                metadata = row.metadata if isinstance(row.metadata, dict) else {}
+                url = build_sc_image_url(
+                    inspection_time=metadata.get("inspection_time"),
+                    wafer_key=metadata.get("wafer_key"),
+                    defect_id=metadata.get("defect_id") or row.sample_id,
+                    image_type=img.image_type or img.role,
+                    review_image_id=img.review_image_id,
+                )
+            else:
+                url = (
+                    img.access_url
+                    or f"/api/v1/datasets/{ds_q}/samples/{sid_q}/images/{iid_q}"
+                )
             refs.append(
                 ScImageRef(
                     role=img.role or img.image_id,
@@ -343,8 +361,6 @@ def _scalar_sc_patch_image_refs(
     dataset_id: str,
 ) -> list[ScImageRef]:
     """Build v3 patch references only when the legacy view is requested."""
-    from urllib.parse import quote
-
     metadata = row.metadata if isinstance(row.metadata, dict) else {}
     if not (
         metadata.get("inspection_time")
@@ -353,8 +369,7 @@ def _scalar_sc_patch_image_refs(
     ):
         return []
 
-    dataset_q = quote(dataset_id or row.dataset_id, safe="")
-    sample_q = quote(row.sample_id, safe="")
+    del dataset_id
     refs: list[ScImageRef] = []
     for image_type, role in (
         ("template", "patch_template"),
@@ -368,9 +383,11 @@ def _scalar_sc_patch_image_refs(
                 image_id=image_id,
                 image_type=image_type,
                 content_type="image/png",
-                url=(
-                    f"/api/v1/sc/datasets/{dataset_q}/samples/{sample_q}/images/"
-                    f"{quote(image_id, safe='')}"
+                url=build_sc_image_url(
+                    inspection_time=metadata["inspection_time"],
+                    wafer_key=metadata["wafer_key"],
+                    defect_id=metadata["defect_id"],
+                    image_type=image_type,
                 ),
             )
         )
@@ -417,7 +434,11 @@ def sample_row_to_sc_patch_image_v1(
     if confidence is not None:
         confidence = float(confidence)
     sc_fields = _sample_row_meta_to_sc_fields(row)
-    images = _embedded_bytes_to_sc_image_refs(row, dataset_id=context.dataset_id)
+    images = _embedded_bytes_to_sc_image_refs(
+        row,
+        dataset_id=context.dataset_id,
+        use_sc_service=context.dataset_type == "image_sc",
+    )
     if not images and context.dataset_type == "image_sc":
         images = _scalar_sc_patch_image_refs(
             row,

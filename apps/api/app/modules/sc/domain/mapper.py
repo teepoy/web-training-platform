@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
-from urllib.parse import quote
 from uuid import uuid4
 
 from app.core.mapper_registry import mapper
@@ -13,6 +12,7 @@ from app.modules.sc.domain.models import (
     ShardImageRef,
     parse_inspection_time,
 )
+from app.modules.sc.domain.image_url import build_sc_image_url
 from app.modules.sc.models import PatchSample as DecoratedPatchSample
 from app.modules.sc.views.patch_image.v1.schemas import ScImageRef, ScPatchImageV1Row
 from app.modules.sc.views.review_image.v1.schemas import ScReviewImageV1Row
@@ -164,13 +164,19 @@ def patch_sample_to_patch_image_v1(
 ) -> ScPatchImageV1Row:
     images: list[ScImageRef] = []
     if dataset_id:
-        ds_q = quote(dataset_id, safe="")
-        sid_q = quote(obj.sample_id, safe="")
         for ref in obj.shard_images:
-            iid_q = quote(ref.image_id, safe="")
-            url = (
-                getattr(ref, "access_url", None)
-                or f"/api/v1/datasets/{ds_q}/samples/{sid_q}/images/{iid_q}"
+            url = build_sc_image_url(
+                inspection_time=obj.inspection_time.isoformat()
+                if obj.inspection_time
+                else None,
+                wafer_key=obj.wafer_key,
+                defect_id=obj.defect_id,
+                image_type=ref.image_type or ref.role,
+                review_image_id=(
+                    int(ref.image_id)
+                    if (ref.image_type or ref.role).lower() == "review"
+                    else None
+                ),
             )
             images.append(
                 ScImageRef(

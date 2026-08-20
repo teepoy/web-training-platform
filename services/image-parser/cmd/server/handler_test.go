@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"image-parser/internal/display"
 	"image-parser/internal/handler"
-	imageloader "image-parser/internal/image_loader"
 )
 
 func TestApplyEnvironmentParsesCacheConfiguration(t *testing.T) {
@@ -78,11 +78,11 @@ func TestSpriteImagesFromQueryPreservesOrder(t *testing.T) {
 		t.Fatalf("spriteImagesFromQuery returned error: %v", err)
 	}
 	want := []handler.SCSpriteImage{
-		{Kind: imageloader.ImageKindPatch, ImageType: "Defective"},
-		{Kind: imageloader.ImageKindReview, ReviewImageID: 1},
-		{Kind: imageloader.ImageKindPatch, ImageType: "Reference"},
-		{Kind: imageloader.ImageKindReview, ReviewImageID: 2},
-		{Kind: imageloader.ImageKindPatch, ImageType: "Difference"},
+		{Kind: display.ImageKindPatch, ImageType: "Defective"},
+		{Kind: display.ImageKindReview, ReviewImageID: 1},
+		{Kind: display.ImageKindPatch, ImageType: "Reference"},
+		{Kind: display.ImageKindReview, ReviewImageID: 2},
+		{Kind: display.ImageKindPatch, ImageType: "Difference"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("spriteImagesFromQuery = %#v, want %#v", got, want)

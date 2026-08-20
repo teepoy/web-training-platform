@@ -101,9 +101,6 @@ async def test_dataset_runtime_source_reuses_storage_metadata_without_direct_ses
         assert source.dataset_type == "image_sc"
         assert source.view_types == ("sc.patch_image.v1",)
         assert source.label_space == ("scratch", "particle")
-        assert source.image_source_formats == {
-            "dataset-1": "sc.legacy-range-zip.v1"
-        }
         assert source.rows.collect().to_dicts() == [
             {
                 "sample_id": "sample-1",
@@ -270,6 +267,3 @@ async def test_observed_collection_runtime_resolves_current_member_data() -> Non
             }
         ]
         assert source.resolved_dataset_revision_ids == ("dataset-revision-at-launch",)
-        assert source.image_source_formats == {
-            "dataset-1": "filesystem.role-paths.v1"
-        }

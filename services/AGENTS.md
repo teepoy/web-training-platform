@@ -16,7 +16,7 @@ If this file conflicts with root `AGENTS.md` or `CORE_DESIGNS.md`, treat `CORE_D
 - Keep these services out-of-process. Do not move FastAPI entrypoints, API route handlers, or API module business services here.
 - API code should depend on these services through explicit adapter/protocol boundaries such as SC upstream readers and image fetchers.
 - Do not make platform sample identity depend on upstream SC identities. Preserve upstream IDs as provenance only.
-- Keep image access aligned with `CORE_DESIGNS.md`: imported dataset images should prefer dataset-owned sample image endpoints; SC upstream image routes remain compatibility/preview paths.
+- Keep image access aligned with `CORE_DESIGNS.md`: the image-parser service owns all SC image bytes for browser display, prediction, training, and image-bearing exports. API metadata routes may describe image locations but must not proxy or parse SC image bytes.
 - Shared wire contracts belong in proto/OpenAPI definitions already used by the repo, not duplicated ad hoc inside a service.
 - Service configuration should come from environment/config passed by compose or k8s; do not hardcode deployment URLs.
 

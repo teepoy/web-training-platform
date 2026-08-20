@@ -16,21 +16,23 @@ from app.modules.storage.domain.data_plane import DataPlaneSchemaRegistry
 from app.modules.datasets.domain.repository import DatasetRepository
 from app.modules.datasets.port.local import DatasetRevisionPublisherPort
 from app.modules.sc.adapter.batch_reader import ScBatchReader
-from app.modules.sc.adapter.local_job_image_source import (
-    LocalJobImageSourceFactory,
+from app.modules.sc.adapter.grpc_job_image_stream import (
+    GrpcJobImageStreamFactory,
+    ScImageStreamUseCase,
 )
 from app.modules.sc.app.services.sc_plot_points_service import ScPlotPointsService
 from app.modules.sc.app.services.sc_import_service import ScImportService
 from app.modules.sc.app.services.prediction_export_service import (
     ScPredictionExportService,
 )
-from app.modules.sc.domain.image_fetcher import ScImageFetcher
 from app.modules.sc.domain.upstream_reader import ScUpstreamReader
 from app.modules.sc.materialization.app.services.sc_inspection_materializer import (
     ScInspectionMaterializer,
 )
-from app.modules.sc.domain.job_image_source import (
-    ScJobImageSourceFactory,
+from app.modules.sc.domain.image_stream import (
+    ScExportImageStreamFactory,
+    ScPredictionImageStreamFactory,
+    ScTrainingImageStreamFactory,
 )
 from app.modules.sc.materialization.port.local import ScInspectionMaterializerPort
 from app.modules.sc.port.local import (
@@ -43,13 +45,14 @@ from app.shared.context import SharedInfra
 
 @dataclass
 class ScContext:
-    image_fetcher: ScImageFetcher
     sc_import_service: ScImportService
     upstream_reader: ScUpstreamReader
     batch_reader: ScBatchReader
     plot_points_service: ScPlotPointsService
     sc_inspection_materializer: ScInspectionMaterializer
-    job_image_source_factory: ScJobImageSourceFactory
+    prediction_image_stream_factory: ScPredictionImageStreamFactory
+    training_image_stream_factory: ScTrainingImageStreamFactory
+    export_image_stream_factory: ScExportImageStreamFactory
     prediction_export_service: ScPredictionExportService
 
 
@@ -63,8 +66,9 @@ def init_sc(
     collection_reader: CollectionExportReaderPort,
     dataset_payload_store: DatasetPayloadStore | None = None,
     upstream_reader: ScUpstreamReader | None = None,
-    image_fetcher: ScImageFetcher | None = None,
-    job_image_source_factory: ScJobImageSourceFactory | None = None,
+    prediction_image_stream_factory: ScPredictionImageStreamFactory | None = None,
+    training_image_stream_factory: ScTrainingImageStreamFactory | None = None,
+    export_image_stream_factory: ScExportImageStreamFactory | None = None,
 ) -> ScContext:
     repository = dataset_repository
     batch_reader = ScBatchReader(async_engine=shared.db_engine)
@@ -96,18 +100,23 @@ def init_sc(
         )
         upstream_reader = GrpcScUpstream(grpc_addr=grpc_addr, flight_addr=flight_addr)
 
-    if image_fetcher is None:
-        import os
+    import os
 
-        from app.modules.sc.adapter.grpc_image_fetcher import GrpcImageFetcher
-
-        image_fetcher = GrpcImageFetcher(
-            addr=os.environ.get("IMAGE_PARSER_GRPC_ADDR", "image-parser:9092")
+    image_parser_addr = os.environ.get("IMAGE_PARSER_GRPC_ADDR", "image-parser:9092")
+    if prediction_image_stream_factory is None:
+        prediction_image_stream_factory = GrpcJobImageStreamFactory(
+            addr=image_parser_addr,
+            use_case=ScImageStreamUseCase.PREDICTION,
         )
-
-    if job_image_source_factory is None:
-        job_image_source_factory = LocalJobImageSourceFactory(
-            binary_path=shared.config.sc.job_image_resolver_binary
+    if training_image_stream_factory is None:
+        training_image_stream_factory = GrpcJobImageStreamFactory(
+            addr=image_parser_addr,
+            use_case=ScImageStreamUseCase.TRAINING,
+        )
+    if export_image_stream_factory is None:
+        export_image_stream_factory = GrpcJobImageStreamFactory(
+            addr=image_parser_addr,
+            use_case=ScImageStreamUseCase.EXPORT,
         )
 
     svc = ScImportService(
@@ -115,7 +124,6 @@ def init_sc(
         payload_store=dataset_payload_store,
         revision_publisher=revision_publisher,
         upstream_reader=upstream_reader,
-        upstream_image_source_format=(shared.config.sc.upstream_image_source_format),
         sparse_import_factory=sparse_import_factory,
         import_batch_rows=shared.config.sc.pipeline.import_batch_rows,
         index_row_group_rows=shared.config.sc.pipeline.index_row_group_rows,
@@ -126,7 +134,7 @@ def init_sc(
         storage_factory=storage_factory,
     )
     sc_inspection_materializer = ScInspectionMaterializer(
-        image_source_factory=job_image_source_factory,
+        image_stream_factory=training_image_stream_factory,
         schema_registry=schema_registry,
         batch_rows=shared.config.sc.pipeline.materialization_batch_rows,
         max_error_records=(shared.config.sc.pipeline.materialization_max_error_records),
@@ -136,18 +144,19 @@ def init_sc(
         collection_reader=collection_reader,
         storage_factory=storage_factory,
         artifact_storage=shared.artifact_storage,
-        image_source_factory=job_image_source_factory,
+        image_stream_factory=export_image_stream_factory,
         image_batch_rows=shared.config.sc.pipeline.prediction_input_batch_rows,
     )
 
     return ScContext(
-        image_fetcher=image_fetcher,
         sc_import_service=svc,
         upstream_reader=upstream_reader,
         batch_reader=batch_reader,
         plot_points_service=plot_points_service,
         sc_inspection_materializer=sc_inspection_materializer,
-        job_image_source_factory=job_image_source_factory,
+        prediction_image_stream_factory=prediction_image_stream_factory,
+        training_image_stream_factory=training_image_stream_factory,
+        export_image_stream_factory=export_image_stream_factory,
         prediction_export_service=prediction_export_service,
     )
 
@@ -207,11 +216,6 @@ class ScModule(Module):
 
     @provider
     @singleton
-    def provide_sc_image_fetcher(self, context: ScContext) -> ScImageFetcher:
-        return context.image_fetcher
-
-    @provider
-    @singleton
     def provide_sc_upstream_reader(self, context: ScContext) -> ScUpstreamReader:
         return context.upstream_reader
 
@@ -224,10 +228,24 @@ class ScModule(Module):
 
     @provider
     @singleton
-    def provide_sc_job_image_source_factory(
+    def provide_sc_prediction_image_stream_factory(
         self, context: ScContext
-    ) -> ScJobImageSourceFactory:
-        return context.job_image_source_factory
+    ) -> ScPredictionImageStreamFactory:
+        return context.prediction_image_stream_factory
+
+    @provider
+    @singleton
+    def provide_sc_training_image_stream_factory(
+        self, context: ScContext
+    ) -> ScTrainingImageStreamFactory:
+        return context.training_image_stream_factory
+
+    @provider
+    @singleton
+    def provide_sc_export_image_stream_factory(
+        self, context: ScContext
+    ) -> ScExportImageStreamFactory:
+        return context.export_image_stream_factory
 
     @provider
     @singleton

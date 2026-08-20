@@ -274,14 +274,13 @@ def _make_service(
         payload_store=payload_store or _MockPayloadStore(),
         revision_publisher=revision_publisher or _MockRevisionPublisher(),
         upstream_reader=upstream_reader or _MockUpstream(row_count=1000),
-        upstream_image_source_format="sc.legacy-range-zip.v1",
         import_batch_rows=25_000,
         index_row_group_rows=65_536,
     )
 
 
 @pytest.mark.asyncio
-async def test_direct_upstream_import_binds_configured_image_source_format() -> None:
+async def test_direct_upstream_import_does_not_embed_parser_selection() -> None:
     repository = _MockRepository()
     service = _make_service(
         upstream_reader=_MockUpstream(row_count=1),
@@ -297,10 +296,7 @@ async def test_direct_upstream_import_binds_configured_image_source_format() -> 
 
     assert status.status == "completed"
     assert repository.created_dataset is not None
-    assert repository.created_dataset.image_source is not None
-    assert (
-        repository.created_dataset.image_source.format == "sc.legacy-range-zip.v1"
-    )
+    assert repository.created_dataset.image_source is None
 
 
 @pytest.mark.asyncio
@@ -316,7 +312,6 @@ async def test_completed_sc_import_publishes_initial_dataset_revision() -> None:
     status = await service.submit_import(
         source_inspection_time="2024-01-15T08:30:00",
         source_wafer_key=7,
-        image_source_format="sc.legacy-range-zip.v1",
         dataset_name="Revision publication",
         org_id="test-org",
         created_by="test-user",
@@ -324,14 +319,7 @@ async def test_completed_sc_import_publishes_initial_dataset_revision() -> None:
 
     assert status.status == "completed"
     assert repository.created_dataset is not None
-    assert repository.created_dataset.image_source is not None
-    assert (
-        repository.created_dataset.image_source.contract
-        == "filesystem.image-source.v1"
-    )
-    assert (
-        repository.created_dataset.image_source.format == "sc.legacy-range-zip.v1"
-    )
+    assert repository.created_dataset.image_source is None
     assert len(publisher.publications) == 1
     publication = publisher.publications[0]
     assert publication["dataset_id"] == status.dataset_id
@@ -353,7 +341,6 @@ async def test_hybrid_data_exhausted_before_threshold_completes() -> None:
     status = await service.submit_import(
         source_inspection_time="2024-01-15T08:30:00",
         source_wafer_key=1,
-        image_source_format="sc.legacy-range-zip.v1",
         dataset_name="Hybrid exhausted",
         org_id="test-org",
         max_rows=None,
@@ -371,7 +358,6 @@ async def test_boundary_exact_30k_stays_direct_only() -> None:
     status = await service.submit_import(
         source_inspection_time="2024-01-15T08:30:00",
         source_wafer_key=1,
-        image_source_format="sc.legacy-range-zip.v1",
         dataset_name="Direct boundary",
         org_id="test-org",
         max_rows=30_000,
@@ -411,7 +397,6 @@ async def test_direct_import_persists_geometry_metadata() -> None:
     await service.submit_import(
         source_inspection_time="2024-01-15T08:30:00",
         source_wafer_key=1,
-        image_source_format="sc.legacy-range-zip.v1",
         dataset_name="Geometry Test Dataset",
         org_id="test-org",
         max_rows=100,
@@ -447,7 +432,6 @@ async def test_hybrid_shuffle_exhausted_early() -> None:
     status = await service.submit_import(
         source_inspection_time="2024-01-15T08:30:00",
         source_wafer_key=1,
-        image_source_format="sc.legacy-range-zip.v1",
         dataset_name="Hybrid shuffle exhausted",
         org_id="test-org",
         max_rows=50_000,
@@ -469,7 +453,6 @@ async def test_direct_import_uses_shuffled_ids() -> None:
     status = await service.submit_import(
         source_inspection_time="2024-01-15T08:30:00",
         source_wafer_key=1,
-        image_source_format="sc.legacy-range-zip.v1",
         dataset_name="Shuffle direct",
         org_id="test-org",
         max_rows=50,
@@ -514,7 +497,6 @@ async def test_direct_import_shuffle_reproducible() -> None:
     await service_a.submit_import(
         source_inspection_time="2024-01-15T08:30:00",
         source_wafer_key=1,
-        image_source_format="sc.legacy-range-zip.v1",
         dataset_name="Reproducible A",
         org_id="test-org",
         max_rows=50,
@@ -526,7 +508,6 @@ async def test_direct_import_shuffle_reproducible() -> None:
     await service_b.submit_import(
         source_inspection_time="2024-01-15T08:30:00",
         source_wafer_key=1,
-        image_source_format="sc.legacy-range-zip.v1",
         dataset_name="Reproducible B",
         org_id="test-org",
         max_rows=50,

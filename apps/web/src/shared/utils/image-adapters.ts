@@ -39,10 +39,7 @@ const adapters: AdapterEntry[] = [];
  * @param name   Unique name for the adapter (replaces if already registered).
  * @param adapter  Function that returns a renderable `src` string, or `null` to pass.
  */
-export function registerImageAdapter(
-  name: string,
-  adapter: ImageAdapter,
-): void {
+export function registerImageAdapter(name: string, adapter: ImageAdapter): void {
   const idx = adapters.findIndex((e) => e.name === name);
   if (idx !== -1) {
     adapters[idx] = { name, adapter };
@@ -104,6 +101,14 @@ const dataUriAdapter: ImageAdapter = (uri) => {
   return null;
 };
 
+/** Add browser auth to direct image-parser URLs emitted by SC Dataset views. */
+const scImageServiceAdapter: ImageAdapter = (uri) => {
+  if (uri.startsWith("/api/v1/sc/images/") || uri.startsWith("/api/v1/sc/sprites/")) {
+    return withAuthQueryParams(uri);
+  }
+  return null;
+};
+
 /** Pass through `http://` and `https://` URLs. */
 const httpAdapter: ImageAdapter = (uri) => {
   if (uri.startsWith("http://") || uri.startsWith("https://")) return uri;
@@ -112,6 +117,7 @@ const httpAdapter: ImageAdapter = (uri) => {
 
 // Register built-ins on module load
 registerImageAdapter("data-uri", dataUriAdapter);
+registerImageAdapter("sc-image-service", scImageServiceAdapter);
 registerImageAdapter("http", httpAdapter);
 
 // ---------------------------------------------------------------------------
@@ -121,9 +127,7 @@ registerImageAdapter("http", httpAdapter);
 /** Proxy `s3://` and `memory://` URIs through the backend image resolver with auth. */
 const proxyAdapter: ImageAdapter = (uri) => {
   if (uri.startsWith("s3://") || uri.startsWith("memory://")) {
-    return withAuthQueryParams(
-      `/api/v1/images/resolve?uri=${encodeURIComponent(uri)}`,
-    );
+    return withAuthQueryParams(`/api/v1/images/resolve?uri=${encodeURIComponent(uri)}`);
   }
   return null;
 };

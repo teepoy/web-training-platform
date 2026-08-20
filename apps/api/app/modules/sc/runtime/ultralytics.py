@@ -35,9 +35,7 @@ from app.modules.sc.app.services.training_selection import (
     limit_sc_training_rows_per_class,
 )
 from app.modules.sc.capabilities import SC_PATCH_IMAGE_V1
-from app.modules.sc.domain.job_image_source import (
-    ScJobImageSourceFactory,
-)
+from app.modules.sc.domain.image_stream import ScPredictionImageStreamFactory
 from app.modules.sc.materialization.port.local import ScInspectionMaterializerPort
 from app.modules.sc.runtime.data_source import open_sc_runtime_source
 from app.modules.sc.runtime.materialized_input import parquet_paths_from_manifest
@@ -193,8 +191,6 @@ async def execute_yolo_sc_training(
         materializer = app_context.injector.get(ScInspectionMaterializerPort)
         materialization = await materializer.materialize(
             rows_lazyframe=rows,
-            image_source_formats=source.image_source_formats,
-            direct_dataset_id=source.dataset_id,
             dataset_id=source.source_identity,
             job_id=ctx.job_id,
             image_types=["patch_template", "patch_defective"],
@@ -427,13 +423,13 @@ async def _yolo_sc_predictor(
             local_checkpoint=local_checkpoint,
             job_id=ctx.job_id,
         ) as checkpoint_path:
-            image_source_factory = app_context.injector.get(ScJobImageSourceFactory)
-            async with image_source_factory.open() as image_resolver:
+            image_stream_factory = app_context.injector.get(
+                ScPredictionImageStreamFactory
+            )
+            async with image_stream_factory.open() as image_stream:
                 image_pairs = stream_sc_prediction_image_pairs(
                     rows,
-                    image_resolver=image_resolver,
-                    image_source_formats=source.image_source_formats,
-                    direct_dataset_id=source.dataset_id,
+                    image_stream=image_stream,
                     input_batch_rows=pipeline.prediction_input_batch_rows,
                 )
 

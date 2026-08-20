@@ -135,8 +135,6 @@ startup_checks:
   dependency_timeout_seconds: 5
 
 sc:
-  upstream_image_source_format: sc.legacy-range-zip.v1
-  job_image_resolver_binary: /usr/local/bin/image-parser-batch
   pipeline:
     import_batch_rows: 25000
     index_row_group_rows: 65536

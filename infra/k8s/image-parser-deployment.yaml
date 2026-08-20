@@ -36,6 +36,19 @@ spec:
               value: 5m
             - name: CACHE_MAX_BYTES
               value: "34359738368"
+            - name: DISPLAY_CACHE_MAX_BYTES
+              value: "4294967296"
+            - name: PREDICTION_CACHE_MAX_BYTES
+              value: "25769803776"
+            - name: TRAINING_CACHE_MAX_BYTES
+              value: "4294967296"
+            - name: EXPORT_CACHE_MAX_BYTES
+              value: "4294967296"
+          envFrom:
+            - configMapRef:
+                name: finetune-config
+            - secretRef:
+                name: finetune-secrets
           resources:
             requests:
               memory: "1Gi"

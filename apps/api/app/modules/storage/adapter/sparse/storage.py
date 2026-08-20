@@ -418,9 +418,14 @@ class SparseDatasetStorage:
         for img in images_list:
             image_id = str(img.get("image_id", ""))
             if self._dataset_type == "image_sc":
-                access_url = (
-                    f"/api/v1/sc/datasets/{self._dataset_id}/samples/"
-                    f"{sample_id}/images/{image_id}"
+                from app.modules.sc.domain.image_url import build_sc_image_url
+
+                access_url = build_sc_image_url(
+                    inspection_time=row.get("inspection_time"),
+                    wafer_key=row.get("wafer_key"),
+                    defect_id=row.get("defect_id") or sample_id,
+                    image_type=img.get("image_type") or img.get("role"),
+                    review_image_id=img.get("review_image_id"),
                 )
             else:
                 access_url = (

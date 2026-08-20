@@ -32,7 +32,6 @@ class ScImportPort(Protocol):
         self,
         source_inspection_time: str,
         source_wafer_key: int,
-        image_source_format: str,
         dataset_name: str,
         org_id: str,
         created_by: str = "system",

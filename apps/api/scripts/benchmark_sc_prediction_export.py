@@ -20,7 +20,7 @@ from app.modules.sc.domain.prediction_export import (
     ScKlarfVersion,
     ScPredictionExportFormat,
 )
-from app.modules.sc.domain.job_image_source import ScJobImageSourceFactory
+from app.modules.sc.domain.image_stream import ScExportImageStreamFactory
 from app.modules.storage.port.local import DatasetStorageFactoryPort
 from app.shared.api.schemas import Dataset, DatasetStorageMode, TaskSpec
 from app.shared.infrastructure.storage.minio import MinioArtifactStorage
@@ -162,8 +162,8 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
             _StorageFactory(_DatasetStorage(_benchmark_rows(args.samples))),
         ),
         artifact_storage=artifact_storage,
-        image_source_factory=cast(
-            ScJobImageSourceFactory,
+        image_stream_factory=cast(
+            ScExportImageStreamFactory,
             _UnusedImageSourceFactory(),
         ),
         image_batch_rows=512,

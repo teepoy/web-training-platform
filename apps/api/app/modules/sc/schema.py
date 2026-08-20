@@ -88,12 +88,12 @@ content_type : string (not nullable)
 filename : string (not nullable)
     Original filename (e.g. ``"0000001_1.jpg"``, ``"template.png"``).
 bytes : binary (nullable)
-    Raw image bytes.  ``None`` when not yet fetched; resolved lazily via
-    :class:`~app.modules.sc.domain.image_fetcher.ScImageFetcher`.
+    Raw image bytes.  ``None`` when not embedded; the image-parser HTTP surface
+    resolves the image from scalar inspection identity.
 review_image_id : int32 (nullable)
     The ``review_image_id`` value for review images; ``None`` for
-    patch/template/difference images.  Used as part of the
-    ``GetScImageRequest`` to refetch images lazily.
+    patch/template/difference images. Used by the image-parser display and
+    Export stream contracts to resolve the exact review image.
 source_uri : string (nullable)
     Optional upstream / provenance URI (e.g.
     ``"s3://review-images/20250101_120000/1/0000001_1.jpg"``).

@@ -1,9 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import {
-  resolveImageUri,
-  resolveImageUris,
-  FALLBACK_PLACEHOLDER,
-} from "../image-adapters";
+import { resolveImageUri, resolveImageUris, FALLBACK_PLACEHOLDER } from "../image-adapters";
 
 const TOKEN = "test-jwt";
 
@@ -29,6 +25,13 @@ describe("resolveImageUri", () => {
   it("passes through https:// URLs", () => {
     const uri = "https://cdn.example.com/img.png";
     expect(resolveImageUri(uri)).toBe(uri);
+  });
+
+  it("adds browser auth to direct SC image-parser URLs", () => {
+    const result = resolveImageUri("/api/v1/sc/images/t/1/d/defective");
+
+    expect(result).toContain("/api/v1/sc/images/t/1/d/defective?");
+    expect(result).toContain(`token=${encodeURIComponent(TOKEN)}`);
   });
 
   it("resolves s3:// URIs through proxy with auth token", () => {
@@ -62,10 +65,7 @@ describe("resolveImageUri", () => {
 
 describe("resolveImageUris", () => {
   it("resolves multiple URIs", () => {
-    const results = resolveImageUris([
-      "data:image/png;base64,AAA",
-      "s3://bucket/key.png",
-    ]);
+    const results = resolveImageUris(["data:image/png;base64,AAA", "s3://bucket/key.png"]);
     expect(results).toHaveLength(2);
     expect(results[0]).toBe("data:image/png;base64,AAA");
     expect(results[1]).toContain("/api/v1/images/resolve?uri=");

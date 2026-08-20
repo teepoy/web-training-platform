@@ -6,13 +6,9 @@ option go_package = "ft-platform/protos/gen/go/imageparser/v1;imageparserv1";
 
 service ImageParser {
   rpc Health(HealthRequest) returns (HealthResponse);
-  rpc GetImage(GetImageRequest) returns (GetImageResponse);
-  rpc Sprite(SpriteRequest) returns (SpriteResponse);
-  rpc V2Sprite(V2SpriteRequest) returns (V2SpriteResponse);
-  rpc GetScImage(GetScImageRequest) returns (GetScImageResponse);
-  rpc BatchGetScImage(BatchGetScImageRequest) returns (BatchGetScImageResponse);
-  rpc StreamScInspectionImages(StreamScInspectionImagesRequest) returns (stream ScImageResult);
-  rpc WarmScCache(WarmScCacheRequest) returns (WarmScCacheResponse);
+  rpc StreamPredictionImages(stream StreamImagesRequest) returns (stream StreamImagesResponse);
+  rpc StreamTrainingImages(stream StreamImagesRequest) returns (stream StreamImagesResponse);
+  rpc StreamExportImages(stream StreamImagesRequest) returns (stream StreamImagesResponse);
 }
 
 message HealthRequest {}
@@ -21,136 +17,84 @@ message HealthResponse {
   string status = 1;
 }
 
-message GetImageRequest {
-  string bucket = 1;
-  string key = 2;
-  string prefix = 3;
-  bool cache = 4;
+message StreamImagesRequest {
+  oneof payload {
+    OpenImageContext open_context = 1;
+    ImageSampleBatchRequest sample_batch = 2;
+    CloseImageContext close_context = 3;
+  }
 }
 
-message GetImageResponse {
-  bytes image_data = 1;
-  string filename = 2;
-  int32 width = 3;
-  int32 height = 4;
+message OpenImageContext {
+  string context_id = 1;
+  string inspection_time = 2;
+  int32 wafer_key = 3;
+  repeated string roles = 4;
 }
 
-message SpriteRequest {
-  string bucket = 1;
-  string key = 2;
-  repeated string prefixes = 3;
-  int32 size = 4;
-  bool cache = 5;
-}
-
-message SpriteResponse {
-  bytes image_data = 1;
-  int32 width = 2;
-  int32 height = 3;
-}
-
-message V2SpriteRequest {
-  string bucket = 1;
-  string record = 2;
-  repeated string items = 3;
-  int32 size = 4;
-}
-
-message V2SpriteResponse {
-  bytes image_data = 1;
-  int32 width = 2;
-  int32 height = 3;
-}
-
-message GetScImageRequest {
-  string inspection_time = 1;
-  int32 wafer_key = 2;
+message ImageSampleRequest {
+  uint64 sequence = 1;
+  string sample_id = 2;
   string defect_id = 3;
-  string image_type = 4;
-  int32 review_image_id = 5;
 }
 
-message GetScImageResponse {
-  bytes image_data = 1;
-  string content_type = 2;
+message ImageSampleBatchRequest {
+  string context_id = 1;
+  repeated ImageSampleRequest samples = 2;
 }
 
-message ScImageRef {
-  string defect_id = 1;
-  string image_type = 2;
-  int32 review_image_id = 3;
+message CloseImageContext {
+  string context_id = 1;
 }
 
-message BatchGetScImageRequest {
-  string inspection_time = 1;
-  int32 wafer_key = 2;
-  repeated ScImageRef images = 3;
+message StreamImagesResponse {
+  oneof payload {
+    ImageContextOpened context_opened = 1;
+    ImageSampleBatchResponse sample_batch = 2;
+    ImageContextError context_error = 3;
+    ImageContextClosed context_closed = 4;
+  }
 }
 
-message ScImageResult {
-  string defect_id = 1;
-  string image_type = 2;
-  bytes image_data = 3;
-  string content_type = 4;
+message ImageStreamLimits {
+  uint32 max_batch_items = 1;
+  uint64 max_response_bytes = 2;
+  uint32 max_active_contexts = 3;
+}
+
+message ImageContextOpened {
+  string context_id = 1;
+  string eqp_id = 2;
+  ImageStreamLimits limits = 3;
+}
+
+message ImageRoleResult {
+  string role = 1;
+  bytes image_data = 2;
+  string content_type = 3;
+  string error = 4;
+}
+
+message ImageSampleResult {
+  uint64 sequence = 1;
+  string sample_id = 2;
+  string defect_id = 3;
+  repeated ImageRoleResult images = 4;
   string error = 5;
 }
 
-message BatchGetScImageResponse {
-  repeated ScImageResult results = 1;
+message ImageSampleBatchResponse {
+  string context_id = 1;
+  repeated ImageSampleResult samples = 2;
+  uint64 ack_sequence = 3;
 }
 
-message StreamScInspectionImagesRequest {
-  string inspection_time = 1;
-  int32 wafer_key = 2;
-  repeated int32 defect_ids = 3;
-  repeated string image_types = 4;
+message ImageContextError {
+  string context_id = 1;
+  string code = 2;
+  string error = 3;
 }
 
-message ResolvePatchImagesRequest {
-  // Format identifies the code-registered filesystem driver. It is not a
-  // deployment profile and never carries a root path or credentials.
-  string source_format = 1;
-  repeated string roles = 2;
-  repeated ResolvePatchImageItem items = 3;
-}
-
-message ResolvePatchImageItem {
-  string request_id = 1;
-  string sample_id = 2;
-  string inspection_time = 3;
-  int32 wafer_key = 4;
-  string defect_id = 5;
-  // Direct-file drivers consume explicit role-relative paths. Layout-based
-  // compatibility drivers ignore this field and derive their own addresses.
-  map<string, string> role_paths = 6;
-}
-
-message ResolvePatchImageResult {
-  string request_id = 1;
-  string sample_id = 2;
-  string inspection_time = 3;
-  int32 wafer_key = 4;
-  string defect_id = 5;
-  string role = 6;
-  bytes image_data = 7;
-  string content_type = 8;
-  string error = 9;
-}
-
-// One ordered response frame used by stdin/stdout resolver processes. It is
-// deliberately not an RPC response: training, batch prediction, and pure-local
-// instant prediction never consume the display ImageParser service.
-message ResolvePatchImagesBatchResponse {
-  repeated ResolvePatchImageResult results = 1;
-}
-
-message WarmScCacheRequest {
-  string inspection_time = 1;
-  int32 wafer_key = 2;
-  repeated int32 defect_ids = 3;
-}
-
-message WarmScCacheResponse {
-  string status = 1;
-  int32 zips_warmed = 2;
+message ImageContextClosed {
+  string context_id = 1;
 }

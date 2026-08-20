@@ -33,7 +33,6 @@ x-platform-environment: &platform-environment
   SC_REVIEW_S3_BUCKET: sc-review-images
   SC_UPSTREAM_ADDR: sc-upstream:9091
   SC_UPSTREAM_FLIGHT_ADDR: grpc://sc-upstream:9093
-  SC_UPSTREAM_IMAGE_SOURCE_FORMAT: sc.legacy-range-zip.v1
   IMAGE_PARSER_GRPC_ADDR: image-parser:9092
   LLM_BASE_URL: ${LLM_BASE_URL:-}
   LLM_API_KEY: ${LLM_API_KEY:-}
@@ -236,26 +235,36 @@ services:
     depends_on:
       sc-upstream:
         condition: service_healthy
+      minio:
+        condition: service_healthy
     volumes:
       - ../../services/image-parser:/app/services/image-parser
     environment:
       PORT: "8090"
       GRPC_PORT: "9092"
+      JWT_SECRET_KEY: replace-me-in-production
+      SC_UPSTREAM_ADDR: sc-upstream:9091
+      SC_PATCH_S3_ENDPOINT: http://minio:9000
+      SC_PATCH_S3_REGION: us-east-1
+      SC_PATCH_S3_ACCESS_KEY: minioadmin
+      SC_PATCH_S3_SECRET_KEY: minioadmin
+      SC_REVIEW_S3_ENDPOINT: http://minio:9000
+      SC_REVIEW_S3_REGION: us-east-1
+      SC_REVIEW_S3_ACCESS_KEY: minioadmin
+      SC_REVIEW_S3_SECRET_KEY: minioadmin
       CACHE_DIR: /tmp/image-parser-cache
       CACHE_TTL: ${IMAGE_PARSER_CACHE_TTL:-10m}
       CACHE_CLEANUP_INTERVAL: ${IMAGE_PARSER_CACHE_CLEANUP_INTERVAL:-5m}
       CACHE_MAX_BYTES: ${IMAGE_PARSER_CACHE_MAX_BYTES:-1073741824}
+      DISPLAY_CACHE_MAX_BYTES: ${IMAGE_PARSER_DISPLAY_CACHE_MAX_BYTES:-268435456}
+      PREDICTION_CACHE_MAX_BYTES: ${IMAGE_PARSER_PREDICTION_CACHE_MAX_BYTES:-536870912}
+      TRAINING_CACHE_MAX_BYTES: ${IMAGE_PARSER_TRAINING_CACHE_MAX_BYTES:-268435456}
+      EXPORT_CACHE_MAX_BYTES: ${IMAGE_PARSER_EXPORT_CACHE_MAX_BYTES:-268435456}
     ports:
       - "8090:8090"
       - "9092:9092"
     healthcheck:
-      test:
-        [
-          "CMD",
-          "bash",
-          "-c",
-          "exec 3<>/dev/tcp/127.0.0.1/8090 && printf 'GET /health HTTP/1.1\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && head -n 1 <&3 | grep -q '200'",
-        ]
+      test: ["CMD", "wget", "-q", "-T", "5", "-O", "/dev/null", "http://127.0.0.1:8090/health"]
       interval: 30s
       timeout: 20s
       retries: 12
@@ -372,11 +381,6 @@ services:
     environment:
       <<: *platform-environment
       PYTHONPATH: /app/libs/protos/src
-      SC_JOB_IMAGE_RESOLVER_BINARY: ${SC_JOB_IMAGE_RESOLVER_BINARY:-/usr/local/bin/image-parser-batch}
-      SC_JOB_IMAGE_RESOLVER_CACHE_ROOT: /tmp/sc-job-image-resolver
-      IMAGE_SOURCE_ROOT: ${IMAGE_SOURCE_ROOT:-}
-      IMAGE_SOURCE_KIND: ${IMAGE_SOURCE_KIND:-}
-      IMAGE_SOURCE_FORMAT: ${IMAGE_SOURCE_FORMAT:-}
     depends_on:
       prefect-server:
         condition: service_healthy

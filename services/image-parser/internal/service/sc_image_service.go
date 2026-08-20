@@ -3,348 +3,331 @@ package service
 import (
 	"context"
 	"fmt"
-	"sort"
+	"io"
 	"strings"
+	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	imageparserv1 "image-parser/gen/go/imageparser/v1"
-	imageloader "image-parser/internal/image_loader"
+	"image-parser/internal/imagestream"
+	"image-parser/internal/metrics"
 )
 
-const streamLookupBatchSize = 2048
+const (
+	defaultContextIdleTimeout = 10 * time.Minute
+	contextIdleSweepMaximum   = time.Minute
+)
 
 type ScImageService struct {
 	imageparserv1.UnimplementedImageParserServer
-	images imageloader.ImageLoader
+	streams            imagestream.Engine
+	contextIdleTimeout time.Duration
+	now                func() time.Time
 }
 
-type patchImageBatchResolver interface {
-	ResolvePatchImageBytes(ctx context.Context, format string, keys []imageloader.ImageKey) ([]imageloader.ImageBytes, error)
-}
-
-func NewScImageService(images imageloader.ImageLoader) *ScImageService {
-	return &ScImageService{images: images}
-}
-
-func (s *ScImageService) GetScImage(ctx context.Context, req *imageparserv1.GetScImageRequest) (*imageparserv1.GetScImageResponse, error) {
-	imageType := imageloader.NormalizeImageType(req.ImageType)
-	contentType := "image/png"
-
-	if imageType == "review" {
-		reviewImageID := int(req.ReviewImageId)
-		if reviewImageID <= 0 {
-			return nil, errMissingParam("review_image_id")
-		}
-		result := firstImageResult(s.images.GetImageBytes(ctx, []imageloader.ImageKey{{
-			Kind:          imageloader.ImageKindReview,
-			InspectionKey: imageloader.InspectionKey{InspectionTime: req.InspectionTime, WaferKey: int(req.WaferKey)},
-			DefectID:      req.DefectId,
-			ReviewImageID: reviewImageID,
-		}}))
-		if result.Err != nil {
-			return nil, result.Err
-		}
-		contentType = "image/jpeg"
-		return &imageparserv1.GetScImageResponse{ImageData: result.Data, ContentType: contentType}, nil
+func NewScImageService(streams imagestream.Engine) *ScImageService {
+	if streams == nil {
+		panic("image stream engine is required")
 	}
-
-	result := firstImageResult(s.images.GetImageBytes(ctx, []imageloader.ImageKey{{
-		Kind:          imageloader.ImageKindPatch,
-		InspectionKey: imageloader.InspectionKey{InspectionTime: req.InspectionTime, WaferKey: int(req.WaferKey)},
-		DefectID:      req.DefectId,
-		ImageType:     imageType,
-	}}))
-	if result.Err != nil {
-		return nil, result.Err
-	}
-	return &imageparserv1.GetScImageResponse{ImageData: result.Data, ContentType: contentType}, nil
+	return &ScImageService{streams: streams, contextIdleTimeout: defaultContextIdleTimeout, now: time.Now}
 }
 
-func (s *ScImageService) BatchGetScImage(ctx context.Context, req *imageparserv1.BatchGetScImageRequest) (*imageparserv1.BatchGetScImageResponse, error) {
-	keys := make([]imageloader.ImageKey, 0, len(req.Images))
+type imageBidiStream interface {
+	Context() context.Context
+	Recv() (*imageparserv1.StreamImagesRequest, error)
+	Send(*imageparserv1.StreamImagesResponse) error
+}
 
-	for _, img := range req.Images {
-		imageType := imageloader.NormalizeImageType(img.ImageType)
-		if imageType == "review" {
-			keys = append(keys, imageloader.ImageKey{
-				Kind:          imageloader.ImageKindReview,
-				InspectionKey: imageloader.InspectionKey{InspectionTime: req.InspectionTime, WaferKey: int(req.WaferKey)},
-				DefectID:      img.DefectId,
-				ImageType:     img.ImageType,
-				ReviewImageID: int(img.ReviewImageId),
-			})
+func (s *ScImageService) StreamPredictionImages(stream imageparserv1.ImageParser_StreamPredictionImagesServer) error {
+	return s.streamImages(imagestream.UseCasePrediction, stream)
+}
+
+func (s *ScImageService) StreamTrainingImages(stream imageparserv1.ImageParser_StreamTrainingImagesServer) error {
+	return s.streamImages(imagestream.UseCaseTraining, stream)
+}
+
+func (s *ScImageService) StreamExportImages(stream imageparserv1.ImageParser_StreamExportImagesServer) error {
+	return s.streamImages(imagestream.UseCaseExport, stream)
+}
+
+func (s *ScImageService) streamImages(useCase imagestream.UseCase, stream imageBidiStream) error {
+	limits := s.streams.Limits(useCase)
+	if limits.MaxBatchItems == 0 || limits.MaxResponseBytes == 0 || limits.MaxActiveContexts == 0 {
+		return status.Error(codes.Internal, "image stream limits are invalid")
+	}
+	contexts := make(map[string]*activeImageContext)
+	defer func() {
+		for _, opened := range contexts {
+			_ = opened.Context.Close()
+		}
+	}()
+	sweepEvery := s.contextIdleTimeout / 4
+	if sweepEvery <= 0 || sweepEvery > contextIdleSweepMaximum {
+		sweepEvery = contextIdleSweepMaximum
+	}
+	idleTicker := time.NewTicker(sweepEvery)
+	defer idleTicker.Stop()
+	type receivedRequest struct {
+		request *imageparserv1.StreamImagesRequest
+		err     error
+	}
+	received := make(chan receivedRequest, 1)
+	go func() {
+		for {
+			request, err := stream.Recv()
+			select {
+			case received <- receivedRequest{request: request, err: err}:
+			case <-stream.Context().Done():
+				return
+			}
+			if err != nil {
+				return
+			}
+		}
+	}()
+	var lastSequence uint64
+	var hasSequence bool
+	for {
+		var request *imageparserv1.StreamImagesRequest
+		select {
+		case <-stream.Context().Done():
+			return stream.Context().Err()
+		case now := <-idleTicker.C:
+			for contextID, opened := range contexts {
+				if now.Sub(opened.lastUsed) < s.contextIdleTimeout {
+					continue
+				}
+				_ = opened.Context.Close()
+				delete(contexts, contextID)
+				if err := sendContextError(stream, contextID, "context_idle_timeout", "image context exceeded its idle timeout"); err != nil {
+					return err
+				}
+			}
+			continue
+		case item := <-received:
+			request = item.request
+			err := item.err
+			if err == io.EOF {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+		}
+		switch payload := request.Payload.(type) {
+		case *imageparserv1.StreamImagesRequest_OpenContext:
+			if err := s.openImageContext(stream, useCase, limits, contexts, payload.OpenContext); err != nil {
+				return err
+			}
+		case *imageparserv1.StreamImagesRequest_SampleBatch:
+			batch := payload.SampleBatch
+			if batch == nil || strings.TrimSpace(batch.ContextId) == "" || len(batch.Samples) == 0 {
+				return status.Error(codes.InvalidArgument, "sample_batch context_id and samples are required")
+			}
+			if len(batch.Samples) > int(limits.MaxBatchItems) {
+				return status.Errorf(codes.ResourceExhausted, "sample batch has %d items; maximum is %d", len(batch.Samples), limits.MaxBatchItems)
+			}
+			opened, ok := contexts[batch.ContextId]
+			if !ok {
+				if err := sendContextError(stream, batch.ContextId, "context_not_open", "image context is not open"); err != nil {
+					return err
+				}
+				continue
+			}
+			samples := make([]imagestream.SampleRequest, len(batch.Samples))
+			for index, sample := range batch.Samples {
+				if sample == nil || strings.TrimSpace(sample.SampleId) == "" || strings.TrimSpace(sample.DefectId) == "" {
+					return status.Error(codes.InvalidArgument, "sample_id and defect_id are required")
+				}
+				if hasSequence && sample.Sequence <= lastSequence {
+					return status.Errorf(codes.InvalidArgument, "sample sequence %d is not greater than %d", sample.Sequence, lastSequence)
+				}
+				hasSequence = true
+				lastSequence = sample.Sequence
+				samples[index] = imagestream.SampleRequest{Sequence: sample.Sequence, SampleID: sample.SampleId, DefectID: sample.DefectId}
+			}
+			opened.lastUsed = s.now()
+			resolved, resolveErr := opened.Context.Resolve(stream.Context(), samples)
+			if resolveErr != nil {
+				_ = opened.Context.Close()
+				delete(contexts, batch.ContextId)
+				if err := sendContextError(stream, batch.ContextId, imagestream.ErrorCode(resolveErr), resolveErr.Error()); err != nil {
+					return err
+				}
+				continue
+			}
+			ordered, err := orderSampleResults(samples, resolved)
+			if err != nil {
+				return status.Error(codes.Internal, err.Error())
+			}
+			if err := sendSampleBatches(stream, batch.ContextId, ordered, limits.MaxResponseBytes); err != nil {
+				return err
+			}
+			sampleCount, errorCount, imageBytes := imageResultMetrics(ordered)
+			metrics.ObserveImageSamples(useCase, sampleCount, errorCount, imageBytes)
+		case *imageparserv1.StreamImagesRequest_CloseContext:
+			contextID := ""
+			if payload.CloseContext != nil {
+				contextID = strings.TrimSpace(payload.CloseContext.ContextId)
+			}
+			opened, ok := contexts[contextID]
+			if !ok {
+				if err := sendContextError(stream, contextID, "context_not_open", "image context is not open"); err != nil {
+					return err
+				}
+				continue
+			}
+			if err := opened.Context.Close(); err != nil {
+				return status.Errorf(codes.Internal, "close image context: %v", err)
+			}
+			delete(contexts, contextID)
+			if err := stream.Send(&imageparserv1.StreamImagesResponse{Payload: &imageparserv1.StreamImagesResponse_ContextClosed{
+				ContextClosed: &imageparserv1.ImageContextClosed{ContextId: contextID},
+			}}); err != nil {
+				return err
+			}
+		default:
+			return status.Error(codes.InvalidArgument, "image stream request payload is required")
+		}
+	}
+}
+
+type activeImageContext struct {
+	imagestream.Context
+	lastUsed time.Time
+}
+
+func imageResultMetrics(samples []*imageparserv1.ImageSampleResult) (int64, int64, int64) {
+	var errors int64
+	var bytes int64
+	for _, sample := range samples {
+		if sample.Error != "" {
+			errors++
+		}
+		for _, image := range sample.Images {
+			bytes += int64(len(image.ImageData))
+			if image.Error != "" {
+				errors++
+			}
+		}
+	}
+	return int64(len(samples)), errors, bytes
+}
+
+func sendSampleBatches(stream imageBidiStream, contextID string, ordered []*imageparserv1.ImageSampleResult, maxBytes uint64) error {
+	current := make([]*imageparserv1.ImageSampleResult, 0, len(ordered))
+	send := func(samples []*imageparserv1.ImageSampleResult) error {
+		response := &imageparserv1.StreamImagesResponse{Payload: &imageparserv1.StreamImagesResponse_SampleBatch{
+			SampleBatch: &imageparserv1.ImageSampleBatchResponse{
+				ContextId: contextID, Samples: samples, AckSequence: samples[len(samples)-1].Sequence,
+			},
+		}}
+		if uint64(proto.Size(response)) > maxBytes {
+			return status.Errorf(codes.ResourceExhausted, "image sample sequence %d exceeds maximum response bytes %d", samples[0].Sequence, maxBytes)
+		}
+		return stream.Send(response)
+	}
+	for _, sample := range ordered {
+		candidate := append(current, sample)
+		response := &imageparserv1.StreamImagesResponse{Payload: &imageparserv1.StreamImagesResponse_SampleBatch{
+			SampleBatch: &imageparserv1.ImageSampleBatchResponse{ContextId: contextID, Samples: candidate, AckSequence: sample.Sequence},
+		}}
+		if len(current) > 0 && uint64(proto.Size(response)) > maxBytes {
+			if err := send(current); err != nil {
+				return err
+			}
+			current = []*imageparserv1.ImageSampleResult{sample}
 			continue
 		}
-		keys = append(keys, imageloader.ImageKey{
-			Kind:          imageloader.ImageKindPatch,
-			InspectionKey: imageloader.InspectionKey{InspectionTime: req.InspectionTime, WaferKey: int(req.WaferKey)},
-			DefectID:      img.DefectId,
-			ImageType:     imageType,
-		})
+		current = candidate
 	}
-
-	loaded := s.images.GetImageBytes(ctx, keys)
-	results := make([]*imageparserv1.ScImageResult, len(loaded))
-	for i, item := range loaded {
-		result := &imageparserv1.ScImageResult{
-			DefectId:    item.Key.DefectID,
-			ImageType:   item.Key.ImageType,
-			ContentType: item.ContentType,
-		}
-		if item.Err != nil {
-			result.Error = item.Err.Error()
-		} else {
-			result.ImageData = item.Data
-		}
-		results[i] = result
-	}
-
-	return &imageparserv1.BatchGetScImageResponse{Results: results}, nil
-}
-
-func (s *ScImageService) StreamScInspectionImages(req *imageparserv1.StreamScInspectionImagesRequest, stream imageparserv1.ImageParser_StreamScInspectionImagesServer) error {
-	defectIDs := append([]int32(nil), req.DefectIds...)
-	sort.Slice(defectIDs, func(i, j int) bool { return defectIDs[i] < defectIDs[j] })
-
-	imageTypes := append([]string(nil), req.ImageTypes...)
-	if len(imageTypes) == 0 {
-		imageTypes = []string{"Reference", "Defective", "Difference"}
-	}
-
-	if err := warmPatchZips(stream.Context(), s.images, req.InspectionTime, int(req.WaferKey), defectIDs); err != nil {
-		return err
-	}
-
-	keys := make([]imageloader.ImageKey, 0, len(defectIDs)*len(imageTypes))
-	for _, defectID := range defectIDs {
-		defectIDStr := fmt.Sprintf("%d", defectID)
-		for _, requestedType := range imageTypes {
-			imageType := imageloader.NormalizeImageType(requestedType)
-			keys = append(keys, imageloader.ImageKey{
-				Kind:          imageloader.ImageKindPatch,
-				InspectionKey: imageloader.InspectionKey{InspectionTime: req.InspectionTime, WaferKey: int(req.WaferKey)},
-				DefectID:      defectIDStr,
-				ImageType:     imageType,
-			})
-		}
-	}
-
-	for start := 0; start < len(keys); start += streamLookupBatchSize {
-		end := start + streamLookupBatchSize
-		if end > len(keys) {
-			end = len(keys)
-		}
-		results := s.images.GetImageBytes(stream.Context(), keys[start:end])
-		for _, resolved := range results {
-			result := &imageparserv1.ScImageResult{
-				DefectId:    resolved.Key.DefectID,
-				ImageType:   resolved.Key.ImageType,
-				ContentType: resolved.ContentType,
-			}
-			if resolved.Err != nil {
-				result.Error = resolved.Err.Error()
-			} else {
-				result.ImageData = resolved.Data
-			}
-			if err := stream.Context().Err(); err != nil {
-				return err
-			}
-			if err := stream.Send(result); err != nil {
-				return err
-			}
-		}
+	if len(current) > 0 {
+		return send(current)
 	}
 	return nil
 }
 
-// ResolvePatchImagesBatch resolves one bounded local-process request while
-// preserving request-item then role order. Job-local and pure-local framed
-// entrypoints share this implementation so training and prediction cannot
-// drift in image-role or correlation semantics. It is not a network RPC.
-func ResolvePatchImagesBatch(ctx context.Context, images imageloader.ImageLoader, req *imageparserv1.ResolvePatchImagesRequest) (*imageparserv1.ResolvePatchImagesBatchResponse, error) {
-	resolver, ok := images.(patchImageBatchResolver)
-	if !ok {
-		return nil, status.Error(codes.Internal, "configured image loader does not support source formats")
+func (s *ScImageService) openImageContext(stream imageBidiStream, useCase imagestream.UseCase, limits imagestream.Limits, contexts map[string]*activeImageContext, request *imageparserv1.OpenImageContext) error {
+	if request == nil || strings.TrimSpace(request.ContextId) == "" || strings.TrimSpace(request.InspectionTime) == "" || request.WaferKey <= 0 || len(request.Roles) == 0 {
+		return status.Error(codes.InvalidArgument, "open_context context_id, inspection_time, wafer_key, and roles are required")
 	}
-	if req == nil {
-		return nil, status.Error(codes.InvalidArgument, "request is required")
+	if _, exists := contexts[request.ContextId]; exists {
+		return status.Errorf(codes.AlreadyExists, "image context %q is already open", request.ContextId)
 	}
-	format := strings.TrimSpace(req.SourceFormat)
-	if format == "" {
-		return nil, status.Error(codes.InvalidArgument, "source_format is required")
+	if len(contexts) >= int(limits.MaxActiveContexts) {
+		return status.Errorf(codes.ResourceExhausted, "maximum active image contexts is %d", limits.MaxActiveContexts)
 	}
-	if _, err := resolver.ResolvePatchImageBytes(ctx, format, nil); err != nil {
-		return nil, status.Error(codes.InvalidArgument, err.Error())
-	}
-	roles, err := validatePatchRoles(req.Roles)
-	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, err.Error())
-	}
-	if len(req.Items) == 0 {
-		return nil, status.Error(codes.InvalidArgument, "items is required")
-	}
-
-	type correlation struct {
-		item *imageparserv1.ResolvePatchImageItem
-		role string
-	}
-	keys := make([]imageloader.ImageKey, 0, len(req.Items)*len(roles))
-	correlations := make([]correlation, 0, len(req.Items)*len(roles))
-	requestIDs := make(map[string]struct{}, len(req.Items))
-	for _, item := range req.Items {
-		if err := validatePatchItem(item); err != nil {
-			return nil, status.Error(codes.InvalidArgument, err.Error())
-		}
-		if _, exists := requestIDs[item.RequestId]; exists {
-			return nil, status.Errorf(codes.InvalidArgument, "duplicate request_id %q", item.RequestId)
-		}
-		requestIDs[item.RequestId] = struct{}{}
-		for _, role := range roles {
-			keys = append(keys, imageloader.ImageKey{
-				Kind:          imageloader.ImageKindPatch,
-				SourceFormat:  format,
-				InspectionKey: imageloader.InspectionKey{InspectionTime: item.InspectionTime, WaferKey: int(item.WaferKey)},
-				DefectID:      item.DefectId,
-				ImageType:     role,
-				RolePaths:     item.RolePaths,
-			})
-			correlations = append(correlations, correlation{item: item, role: role})
-		}
-	}
-
-	response := &imageparserv1.ResolvePatchImagesBatchResponse{
-		Results: make([]*imageparserv1.ResolvePatchImageResult, 0, len(keys)),
-	}
-	for start := 0; start < len(keys); start += streamLookupBatchSize {
-		end := start + streamLookupBatchSize
-		if end > len(keys) {
-			end = len(keys)
-		}
-		resolved, err := resolver.ResolvePatchImageBytes(ctx, format, keys[start:end])
-		if err != nil {
-			if ctx.Err() != nil {
-				return nil, ctx.Err()
-			}
-			return nil, status.Errorf(codes.Unavailable, "image source format %q unavailable: %v", format, err)
-		}
-		if len(resolved) != end-start {
-			return nil, status.Error(codes.Internal, "image resolver returned an unexpected result count")
-		}
-		for index, image := range resolved {
-			correlation := correlations[start+index]
-			result := &imageparserv1.ResolvePatchImageResult{
-				RequestId:      correlation.item.RequestId,
-				SampleId:       correlation.item.SampleId,
-				InspectionTime: correlation.item.InspectionTime,
-				WaferKey:       correlation.item.WaferKey,
-				DefectId:       correlation.item.DefectId,
-				Role:           correlation.role,
-				ContentType:    image.ContentType,
-			}
-			if image.Err != nil {
-				result.Error = image.Err.Error()
-			} else {
-				result.ImageData = image.Data
-			}
-			response.Results = append(response.Results, result)
-		}
-	}
-	return response, nil
-}
-
-func validatePatchRoles(rawRoles []string) ([]string, error) {
-	if len(rawRoles) == 0 {
-		return nil, fmt.Errorf("roles is required")
-	}
-	roles := make([]string, 0, len(rawRoles))
-	seen := make(map[string]struct{}, len(rawRoles))
-	for _, rawRole := range rawRoles {
-		normalized := imageloader.NormalizeImageType(rawRole)
-		var role string
-		switch normalized {
-		case "Reference":
-			role = "patch_template"
-		case "Defective":
-			role = "patch_defective"
-		case "Difference":
-			role = "patch_difference"
-		default:
-			return nil, fmt.Errorf("unsupported patch image role %q", rawRole)
+	roles := make([]string, len(request.Roles))
+	seen := make(map[string]struct{}, len(request.Roles))
+	for index, raw := range request.Roles {
+		role := strings.TrimSpace(raw)
+		if role == "" {
+			return status.Error(codes.InvalidArgument, "image context roles cannot contain an empty role")
 		}
 		if _, exists := seen[role]; exists {
-			return nil, fmt.Errorf("duplicate patch image role %q", role)
+			return status.Errorf(codes.InvalidArgument, "duplicate image context role %q", role)
 		}
 		seen[role] = struct{}{}
-		roles = append(roles, role)
+		roles[index] = role
 	}
-	return roles, nil
-}
-
-func validatePatchItem(item *imageparserv1.ResolvePatchImageItem) error {
-	if item == nil {
-		return fmt.Errorf("items cannot contain null entries")
-	}
-	if strings.TrimSpace(item.RequestId) == "" {
-		return fmt.Errorf("item request_id is required")
-	}
-	if strings.TrimSpace(item.SampleId) == "" {
-		return fmt.Errorf("item %q sample_id is required", item.RequestId)
-	}
-	return nil
-}
-
-func warmPatchZips(ctx context.Context, images imageloader.ImageLoader, inspectionTime string, waferKey int, defectIDs []int32) error {
-	if len(defectIDs) == 0 {
-		return nil
-	}
-	defectIDStrings := make([]string, 0, len(defectIDs))
-	for _, defectID := range defectIDs {
-		defectIDStrings = append(defectIDStrings, fmt.Sprintf("%d", defectID))
-	}
-	_, err := images.WarmInspection(ctx, imageloader.InspectionKey{InspectionTime: inspectionTime, WaferKey: waferKey}, defectIDStrings, "stream")
-	return err
-}
-
-func (s *ScImageService) WarmScCache(ctx context.Context, req *imageparserv1.WarmScCacheRequest) (*imageparserv1.WarmScCacheResponse, error) {
-	defectIDs := make([]string, 0, len(req.DefectIds))
-	for _, defectID := range req.DefectIds {
-		defectIDs = append(defectIDs, fmt.Sprintf("%d", defectID))
-	}
-	warmed, err := s.images.WarmInspection(ctx, imageloader.InspectionKey{InspectionTime: req.InspectionTime, WaferKey: int(req.WaferKey)}, defectIDs, "warm")
+	opened, err := s.streams.Open(stream.Context(), useCase, imagestream.OpenRequest{
+		ContextID: request.ContextId, InspectionTime: request.InspectionTime, WaferKey: request.WaferKey, Roles: roles,
+	})
 	if err != nil {
-		return nil, err
+		return sendContextError(stream, request.ContextId, imagestream.ErrorCode(err), err.Error())
 	}
-
-	return &imageparserv1.WarmScCacheResponse{
-		Status:     "warming",
-		ZipsWarmed: int32(warmed),
-	}, nil
+	contexts[request.ContextId] = &activeImageContext{Context: opened, lastUsed: s.now()}
+	return stream.Send(&imageparserv1.StreamImagesResponse{Payload: &imageparserv1.StreamImagesResponse_ContextOpened{
+		ContextOpened: &imageparserv1.ImageContextOpened{
+			ContextId: request.ContextId,
+			EqpId:     opened.EquipmentID(),
+			Limits: &imageparserv1.ImageStreamLimits{
+				MaxBatchItems: limits.MaxBatchItems, MaxResponseBytes: limits.MaxResponseBytes, MaxActiveContexts: limits.MaxActiveContexts,
+			},
+		},
+	}})
 }
 
-func firstImageResult(results []imageloader.ImageBytes) imageloader.ImageBytes {
-	if len(results) == 0 {
-		return imageloader.ImageBytes{Err: fmt.Errorf("no image result")}
-	}
-	return results[0]
+func sendContextError(stream imageBidiStream, contextID, code, message string) error {
+	return stream.Send(&imageparserv1.StreamImagesResponse{Payload: &imageparserv1.StreamImagesResponse_ContextError{
+		ContextError: &imageparserv1.ImageContextError{ContextId: contextID, Code: code, Error: message},
+	}})
 }
 
-func errMissingParam(name string) error {
-	return fmt.Errorf("required parameter %s is missing or invalid", name)
+func orderSampleResults(requests []imagestream.SampleRequest, resolved []imagestream.SampleResult) ([]*imageparserv1.ImageSampleResult, error) {
+	bySequence := make(map[uint64]imagestream.SampleResult, len(resolved))
+	for _, item := range resolved {
+		if _, exists := bySequence[item.Sequence]; exists {
+			return nil, fmt.Errorf("image resolver returned duplicate sequence %d", item.Sequence)
+		}
+		bySequence[item.Sequence] = item
+	}
+	ordered := make([]*imageparserv1.ImageSampleResult, len(requests))
+	for index, request := range requests {
+		item, exists := bySequence[request.Sequence]
+		if !exists {
+			return nil, fmt.Errorf("image resolver omitted sequence %d", request.Sequence)
+		}
+		images := make([]*imageparserv1.ImageRoleResult, len(item.Images))
+		for imageIndex, image := range item.Images {
+			images[imageIndex] = &imageparserv1.ImageRoleResult{Role: image.Role, ImageData: image.Data, ContentType: image.ContentType}
+			if image.Err != nil {
+				images[imageIndex].Error = image.Err.Error()
+			}
+		}
+		ordered[index] = &imageparserv1.ImageSampleResult{Sequence: item.Sequence, SampleId: item.SampleID, DefectId: item.DefectID, Images: images}
+		if item.Err != nil {
+			ordered[index].Error = item.Err.Error()
+		}
+	}
+	if len(bySequence) != len(requests) {
+		return nil, fmt.Errorf("image resolver returned unexpected sequences")
+	}
+	return ordered, nil
 }
 
 func (s *ScImageService) Health(ctx context.Context, req *imageparserv1.HealthRequest) (*imageparserv1.HealthResponse, error) {
 	return &imageparserv1.HealthResponse{Status: "ok"}, nil
-}
-
-func (s *ScImageService) GetImage(ctx context.Context, req *imageparserv1.GetImageRequest) (*imageparserv1.GetImageResponse, error) {
-	return nil, nil
-}
-
-func (s *ScImageService) Sprite(ctx context.Context, req *imageparserv1.SpriteRequest) (*imageparserv1.SpriteResponse, error) {
-	return nil, nil
-}
-
-func (s *ScImageService) V2Sprite(ctx context.Context, req *imageparserv1.V2SpriteRequest) (*imageparserv1.V2SpriteResponse, error) {
-	return nil, nil
 }

@@ -242,8 +242,6 @@ class ScPipelineConfig(ConfigSection):
 
 
 class ScConfig(ConfigSection):
-    upstream_image_source_format: str = Field(min_length=1)
-    job_image_resolver_binary: str = Field(min_length=1)
     mock: ScMockConfig = Field(default_factory=ScMockConfig)
     data_provider: ScDataProviderConfig
     pipeline: ScPipelineConfig
@@ -430,12 +428,6 @@ def load_config(skip_runtime_validation: bool = False) -> AppConfig:
     startup_timeout = os.getenv("STARTUP_CHECK_DEPENDENCY_TIMEOUT_SECONDS")
     if startup_timeout:
         cfg.startup_checks.dependency_timeout_seconds = float(startup_timeout)
-    upstream_image_source_format = os.getenv("SC_UPSTREAM_IMAGE_SOURCE_FORMAT")
-    if upstream_image_source_format is not None:
-        cfg.sc.upstream_image_source_format = upstream_image_source_format
-    job_image_resolver_binary = os.getenv("SC_JOB_IMAGE_RESOLVER_BINARY")
-    if job_image_resolver_binary is not None:
-        cfg.sc.job_image_resolver_binary = job_image_resolver_binary
     data_provider_environment = {
         "SC_DATA_PROVIDER_IMPLEMENTATION": ("implementation", str),
         "SC_DATA_PROVIDER_MAX_RSS_MB": ("max_rss_mb", int),

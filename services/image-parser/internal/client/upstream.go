@@ -10,8 +10,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	scv1 "image-parser/gen/go/sc/v1"
-	imageloader "image-parser/internal/image_loader"
-	"image-parser/internal/mocksource"
+	"image-parser/internal/display"
+	"image-parser/internal/equipment"
 )
 
 type UpstreamClient struct {
@@ -19,13 +19,17 @@ type UpstreamClient struct {
 	stub scv1.ScUpstreamClient
 }
 
-var _ imageloader.UpstreamSource = (*UpstreamClient)(nil)
+var _ display.UpstreamSource = (*UpstreamClient)(nil)
 
 func NewUpstreamClient() (*UpstreamClient, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	conn, err := grpc.DialContext(ctx, upstreamGRPCAddress(),
+	address, err := upstreamGRPCAddress()
+	if err != nil {
+		return nil, err
+	}
+	conn, err := grpc.DialContext(ctx, address,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock(),
 	)
@@ -39,11 +43,11 @@ func NewUpstreamClient() (*UpstreamClient, error) {
 	}, nil
 }
 
-func upstreamGRPCAddress() string {
+func upstreamGRPCAddress() (string, error) {
 	if address := strings.TrimSpace(os.Getenv("SC_UPSTREAM_ADDR")); address != "" {
-		return strings.TrimPrefix(address, "grpc://")
+		return strings.TrimPrefix(address, "grpc://"), nil
 	}
-	return mocksource.UpstreamGRPCAddress
+	return "", fmt.Errorf("SC_UPSTREAM_ADDR is required")
 }
 
 func (c *UpstreamClient) Close() error {
@@ -57,6 +61,22 @@ func (c *UpstreamClient) GetInspection(ctx context.Context, inspectionTime strin
 		InspectionTime: inspectionTime,
 		WaferKey:       waferKey,
 	})
+}
+
+func (c *UpstreamClient) Resolve(ctx context.Context, inspectionTime string, waferKey int32) (equipment.Inspection, error) {
+	response, err := c.GetInspection(ctx, inspectionTime, waferKey)
+	if err != nil {
+		return equipment.Inspection{}, err
+	}
+	return equipment.Inspection{
+		InspectionTime: response.InspectionTime,
+		WaferKey:       response.WaferKey,
+		EquipmentID:    response.EqpId,
+		LotID:          response.LotId,
+		WaferID:        response.WaferId,
+		Device:         response.Device,
+		LayerID:        response.LayerId,
+	}, nil
 }
 
 func (c *UpstreamClient) GetInspectionPatchZips(ctx context.Context, inspectionTime, lotID, waferID, device, layerID string) (*scv1.GetInspectionPatchZipsResponse, error) {

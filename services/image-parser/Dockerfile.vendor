@@ -1,22 +1,6 @@
-FROM golang:1.26-bookworm
+FROM golang:1.26-alpine
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libvips-dev \
-    libglib2.0-0 \
-    libexpat1 \
-    libjpeg62-turbo \
-    libpng16-16 \
-    libwebp7 \
-    libtiff6 \
-    libheif1 \
-    liblcms2-2 \
-    libimagequant0 \
-    libcgif0 \
-    libexif12 \
-    libspng0 \
-    libopenjp2-7 \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache ca-certificates
 
 ENV GOBIN=/opt/proto-tools/bin
 ENV PATH=/opt/proto-tools/bin:/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin

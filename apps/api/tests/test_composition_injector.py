@@ -44,7 +44,6 @@ from app.modules.prediction.app.services.prediction_runtime import (
 from app.modules.jobs.schedules.port.local import ScheduleManagementPort
 from app.modules.models.port.http import deps as model_deps
 from app.modules.models.app.services.model_service import ModelService
-from app.modules.sc.domain.image_fetcher import ScImageFetcher
 from app.modules.sc.port.http import deps as sc_deps
 from app.modules.storage.port.local import DatasetStorageFactoryPort
 from app.modules.jobs.task_tracker.port.task_tracker_port import TaskTrackerPort
@@ -154,7 +153,6 @@ async def test_app_context_injector_binds_existing_instances() -> None:
             injector.get(ScInspectionMaterializerPort)
             is ctx.sc.sc_inspection_materializer
         )
-        assert injector.get(ScImageFetcher) is ctx.sc.image_fetcher
     finally:
         await close_flow_app_context(ctx)
 
@@ -192,7 +190,6 @@ async def test_migrated_http_deps_resolve_from_injector() -> None:
             is injector.get(TrainingSubmissionService)
         )
         assert sc_deps.get_prefect_client(request) is ctx.shared.prefect_client
-        assert sc_deps.get_image_fetcher(request) is ctx.sc.image_fetcher
         assert sc_deps.get_upstream_reader(request) is ctx.sc.upstream_reader
     finally:
         await close_flow_app_context(ctx)

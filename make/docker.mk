@@ -1,7 +1,7 @@
 # Local Compose, image, export, and Kubernetes targets.
 
 .PHONY: build-image-parser-vendor
-build-image-parser-vendor: ## Build amd64 Debian vendor/tooling image for image-parser offline builds
+build-image-parser-vendor: ## Build amd64 vendor/tooling image for image-parser offline builds
 	docker build --platform linux/amd64 -f services/image-parser/Dockerfile.vendor -t image-parser-vendor:local .
 
 # ──────────────────────────────────────────────

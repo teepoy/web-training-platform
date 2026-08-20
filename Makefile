@@ -21,8 +21,6 @@ WEB_URL                          ?= http://localhost:5173
 IMAGE_PARSER_GRPC_ADDR_HOST      ?= 127.0.0.1:9092
 ARTIFACTS_DIR                    ?= $(CURDIR)/artifacts
 HOST_BIN_DIR                     := $(ARTIFACTS_DIR)/bin
-JOB_IMAGE_RESOLVER_BINARY_HOST   ?= $(HOST_BIN_DIR)/image-parser-batch
-LOCAL_IMAGE_RESOLVER_BINARY_HOST ?= $(HOST_BIN_DIR)/image-parser-local
 MINIO_ENDPOINT_HOST              ?= localhost:9000
 UV_RUN_INSTALLED                 := uv run --no-sync --offline
 LITELLM_LOCAL_MODEL_COST_MAP="True"
@@ -63,7 +61,7 @@ SC_PATCH_ZIP_S3_ENDPOINT         ?= http://localhost:9000
 TEST_TIMEOUT                ?= 300
 PYTEST_FAULTHANDLER_TIMEOUT ?= 120
 SC_RUNTIME_BENCHMARK_SOURCE_DATASET_NAME ?= Dev SC Inspection - Sparse
-SC_RUNTIME_BENCHMARK_SAMPLES             ?= 2500
+SC_RUNTIME_BENCHMARK_SAMPLES             ?= 300000
 SC_RUNTIME_BENCHMARK_MIN_TRAIN_SPS       ?=
 SC_RUNTIME_BENCHMARK_MIN_PREDICT_SPS     ?= 3000
 
@@ -115,8 +113,6 @@ help: ## Show this help message
 	@printf '    \033[36m%-43s\033[0m %s\n' "WEB_URL" "Frontend base URL used by live E2E targets (default: http://localhost:5173)"
 	@printf '    \033[36m%-43s\033[0m %s\n' "IMAGE_PARSER_GRPC_ADDR_HOST" "Host image-parser gRPC address injected into host API and workers"
 	@printf '    \033[36m%-43s\033[0m %s\n' "ARTIFACTS_DIR" "Repository-local directory for generated host build artifacts"
-	@printf '    \033[36m%-43s\033[0m %s\n' "JOB_IMAGE_RESOLVER_BINARY_HOST" "Output path for the batch image resolver used by host workers"
-	@printf '    \033[36m%-43s\033[0m %s\n' "LOCAL_IMAGE_RESOLVER_BINARY_HOST" "Output path for the pure-local image resolver"
 	@printf '    \033[36m%-43s\033[0m %s\n' "MINIO_ENDPOINT_HOST" "Host MinIO endpoint used by host API and benchmark targets"
 	@printf '\n  Development seed data\n'
 	@printf '    \033[36m%-43s\033[0m %s\n' "SC_WAFER_MOCK_DEFECTS" "Number of defects in the repeatable mock SC inspection (default: 2500)"
@@ -130,7 +126,7 @@ help: ## Show this help message
 	@printf '    \033[36m%-43s\033[0m %s\n' "TEST_TIMEOUT" "Hard timeout for API test execution in seconds (default: 300)"
 	@printf '    \033[36m%-43s\033[0m %s\n' "PYTEST_FAULTHANDLER_TIMEOUT" "Per-test stack-dump timeout in seconds (default: 120)"
 	@printf '    \033[36m%-43s\033[0m %s\n' "SC_RUNTIME_BENCHMARK_SOURCE_DATASET_NAME" "Dataset consumed by the SC runtime data-path benchmark"
-	@printf '    \033[36m%-43s\033[0m %s\n' "SC_RUNTIME_BENCHMARK_SAMPLES" "Sample count processed by the SC runtime benchmark (default: 2500)"
+	@printf '    \033[36m%-43s\033[0m %s\n' "SC_RUNTIME_BENCHMARK_SAMPLES" "Sample count processed by the SC runtime benchmark (default: 300000)"
 	@printf '    \033[36m%-43s\033[0m %s\n' "SC_RUNTIME_BENCHMARK_MIN_TRAIN_SPS" "Optional minimum accepted training throughput"
 	@printf '    \033[36m%-43s\033[0m %s\n' "SC_RUNTIME_BENCHMARK_MIN_PREDICT_SPS" "Minimum accepted prediction throughput (default: 3000)"
 	@printf '\n  Schema generation and Graphify\n'

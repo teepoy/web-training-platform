@@ -32,29 +32,10 @@ dev-web: ## Start frontend dev server (default: 5173)
 	cd $(WEB_DIR) && pnpm dev
 
 # GPU worker (host) — only ONE of this OR compose --profile gpu should run at a time
-.PHONY: job-image-resolver-host
-job-image-resolver-host: ## Build the offline train/predict image resolver for the host GPU worker
-	mkdir -p "$(dir $(JOB_IMAGE_RESOLVER_BINARY_HOST))"
-	cd services/image-parser && go build -o "$(JOB_IMAGE_RESOLVER_BINARY_HOST)" ./cmd/batch-resolve
-
-.PHONY: local-image-resolver-host
-local-image-resolver-host: ## Build the pure-local resolver (configure IMAGE_SOURCE_ROOT/FORMAT on the worker)
-	mkdir -p "$(dir $(LOCAL_IMAGE_RESOLVER_BINARY_HOST))"
-	cd services/image-parser && go build -o "$(LOCAL_IMAGE_RESOLVER_BINARY_HOST)" ./cmd/local-resolve
-
 .PHONY: prefect-worker-gpu-host
-prefect-worker-gpu-host: job-image-resolver-host ## Start a host-side GPU Prefect worker (DO NOT run concurrently with compose --profile gpu)
+prefect-worker-gpu-host: ## Start a host-side GPU Prefect worker (DO NOT run concurrently with compose --profile gpu)
 	cd apps/api && $(UV_RUN_INSTALLED) python -m prefect init --profile local --no-prompt && \
 	$(DEV_API_HOST_ENV) \
-	SC_JOB_IMAGE_RESOLVER_BINARY=$(JOB_IMAGE_RESOLVER_BINARY_HOST) \
-	PLATFORM_API_URL=http://localhost:8000 \
-	LITELLM_LOCAL_MODEL_COST_MAP="True" $(UV_RUN_INSTALLED) python -m prefect worker start --pool default-gpu
-
-.PHONY: prefect-worker-gpu-local-host
-prefect-worker-gpu-local-host: local-image-resolver-host ## Start host GPU worker with the pure-local resolver (requires IMAGE_SOURCE_ROOT/FORMAT)
-	cd apps/api && $(UV_RUN_INSTALLED) python -m prefect init --profile local --no-prompt && \
-	$(DEV_API_HOST_ENV) \
-	SC_JOB_IMAGE_RESOLVER_BINARY=$(LOCAL_IMAGE_RESOLVER_BINARY_HOST) \
 	PLATFORM_API_URL=http://localhost:8000 \
 	LITELLM_LOCAL_MODEL_COST_MAP="True" $(UV_RUN_INSTALLED) python -m prefect worker start --pool default-gpu
 

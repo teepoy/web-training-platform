@@ -1,18 +1,6 @@
-FROM golang:1.26-bookworm AS image-parser-batch-builder
-
-WORKDIR /src
-COPY services/image-parser/go.mod services/image-parser/go.sum ./
-RUN --mount=type=cache,target=/go/pkg/mod go mod download
-COPY services/image-parser/ ./
-RUN --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 go build -ldflags="-s -w" -o /image-parser-batch ./cmd/batch-resolve && \
-    CGO_ENABLED=0 go build -ldflags="-s -w" -o /image-parser-local ./cmd/local-resolve
-
 FROM pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime AS base
 
 COPY --from=ghcr.io/astral-sh/uv:0.11.22 /uv /uvx /usr/local/bin/
-COPY --from=image-parser-batch-builder /image-parser-batch /usr/local/bin/image-parser-batch
-COPY --from=image-parser-batch-builder /image-parser-local /usr/local/bin/image-parser-local
 
 ARG UV_INDEX_URL=""
 ARG PIP_INDEX_URL=""

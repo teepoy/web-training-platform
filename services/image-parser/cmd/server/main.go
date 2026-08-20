@@ -3,17 +3,11 @@ package main
 import (
 	"log"
 	"os"
-
-	"image-parser/internal/handler"
 )
 
 func main() {
 	app := wire()
 	defer app.close()
-
-	protected := app.router.Group("/")
-	protected.Use(handler.JWTAuth())
-	protected.GET("/admin/health", handler.Health)
 
 	port := os.Getenv("PORT")
 	if port == "" {

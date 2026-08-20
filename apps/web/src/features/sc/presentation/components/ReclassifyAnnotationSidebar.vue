@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from "vue";
-import { NButton, NDivider, NInput, NModal, NScrollbar, NTag, NText } from "naive-ui";
+import { NButton, NDivider, NInput, NModal, NPopconfirm, NScrollbar, NTag, NText } from "naive-ui";
 import type { ReclassifyCodeLabel } from "../../application/useReclassifyPage";
 
 const props = defineProps<{
@@ -160,9 +160,17 @@ onBeforeUnmount(() => {
         >
           Submit {{ draftCount > 0 ? `(${draftCount})` : "" }}
         </NButton>
-        <NButton v-if="draftCount > 0" size="small" @click="emit('clear-drafts')">
-          Clear Drafts
-        </NButton>
+        <NPopconfirm
+          v-if="draftCount > 0"
+          negative-text="Cancel"
+          positive-text="Clear drafts"
+          @positive-click="emit('clear-drafts')"
+        >
+          <template #trigger>
+            <NButton data-testid="clear-drafts-trigger" size="small"> Clear Drafts </NButton>
+          </template>
+          Clear all pending annotation drafts? This cannot be undone.
+        </NPopconfirm>
         <NButton
           v-if="selectedCount > 0"
           size="small"

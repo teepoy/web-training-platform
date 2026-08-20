@@ -49,7 +49,13 @@ from app.modules.auth.app.services.oauth import (
 )
 from app.modules.auth.port.http.deps import get_repository
 
+# Authentication bootstrap must remain independently mountable. Password
+# bootstrap and the OAuth handshake are public, while account and organisation
+# management requires a user dependency. OAuth stays distinct to preserve the
+# historical contract ordering when the app exports OpenAPI.
+public_router = APIRouter(prefix="/api/v1", tags=["auth"])
 router = APIRouter(prefix="/api/v1", tags=["auth"])
+oauth_public_router = APIRouter(prefix="/api/v1", tags=["auth"])
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
 Repo = Annotated[AuthRepository, Depends(get_repository)]
@@ -71,7 +77,7 @@ def _oauth_callback_url(provider: str) -> str:
     )
 
 
-@router.post("/auth/register", response_model=UserResponse, status_code=201)
+@public_router.post("/auth/register", response_model=UserResponse, status_code=201)
 async def register(
     payload: RegisterRequest,
     repo: Repo,
@@ -95,7 +101,7 @@ async def register(
     )
 
 
-@router.post("/auth/login", response_model=LoginResponse)
+@public_router.post("/auth/login", response_model=LoginResponse)
 async def login(
     payload: LoginRequest,
     repo: Repo,
@@ -320,7 +326,9 @@ async def remove_org_member(
     return Response(status_code=204)
 
 
-@router.get("/auth/oauth/providers", response_model=list[OAuthProviderInfo])
+@oauth_public_router.get(
+    "/auth/oauth/providers", response_model=list[OAuthProviderInfo]
+)
 async def list_oauth_providers() -> list[OAuthProviderInfo]:
     cfg = load_config()
     if not bool(getattr(cfg.oauth, "enabled", False)):
@@ -341,7 +349,7 @@ async def list_oauth_providers() -> list[OAuthProviderInfo]:
     return providers
 
 
-@router.get("/auth/oauth/{provider}")
+@oauth_public_router.get("/auth/oauth/{provider}")
 async def oauth_authorize(provider: str) -> RedirectResponse:
     prov_cfg = get_oauth_provider_config(provider)
     if not prov_cfg or not prov_cfg.get("enabled"):
@@ -357,7 +365,7 @@ async def oauth_authorize(provider: str) -> RedirectResponse:
     return RedirectResponse(url=authorize_url)
 
 
-@router.get("/auth/oauth/{provider}/callback")
+@oauth_public_router.get("/auth/oauth/{provider}/callback")
 async def oauth_callback(
     provider: str,
     code: str,
@@ -410,7 +418,7 @@ async def oauth_callback(
     return RedirectResponse(url=f"{frontend_url}/auth/oauth/register?{params}")
 
 
-@router.post("/auth/oauth/register", response_model=LoginResponse)
+@oauth_public_router.post("/auth/oauth/register", response_model=LoginResponse)
 async def oauth_register(
     payload: OAuthRegisterRequest,
     repo: Repo,

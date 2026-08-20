@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import io
 import zipfile
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -32,7 +32,6 @@ from app.modules.sc.domain.prediction_export import (
 from app.shared.api.schemas import (
     Dataset,
     DatasetStorageMode,
-    ImageSourceBinding,
     TaskSpec,
 )
 
@@ -106,30 +105,37 @@ class _ImageResolver:
         self.fail_sample_id = fail_sample_id
         self.content_type = content_type
 
-    async def resolve_patch_images(
+    async def resolve_images(
         self,
         *,
-        source_format: str,
-        roles: list[str],
-        items: list[dict[str, object]],
-    ) -> AsyncIterator[dict[str, object]]:
-        assert source_format == "sc.legacy-range-zip.v1"
-        assert roles == ["patch_defective"]
+        roles: Sequence[str],
+        items: Sequence[dict[str, object]],
+    ) -> list[dict[str, object]]:
+        assert tuple(roles) == ("patch_defective",)
         self.call_sizes.append(len(items))
+        results: list[dict[str, object]] = []
         for item in items:
             sample_id = str(item["sample_id"])
             self.received_sample_ids.append(sample_id)
-            yield {
-                **item,
-                "role": "patch_defective",
-                "image_data": f"png:{sample_id}".encode(),
-                "content_type": self.content_type,
-                "error": (
-                    "source image missing"
-                    if sample_id == self.fail_sample_id
-                    else ""
-                ),
-            }
+            results.append(
+                {
+                    **item,
+                    "error": "",
+                    "images": [
+                        {
+                            "role": "patch_defective",
+                            "image_data": f"png:{sample_id}".encode(),
+                            "content_type": self.content_type,
+                            "error": (
+                                "source image missing"
+                                if sample_id == self.fail_sample_id
+                                else ""
+                            ),
+                        }
+                    ],
+                }
+            )
+        return results
 
 
 class _ImageSourceFactory:
@@ -202,10 +208,6 @@ def _service(
         dataset_type="image_sc",
         task_spec=TaskSpec(task_type="sc"),
         storage_mode=DatasetStorageMode.FILE_SHARD_SPARSE,
-        image_source=ImageSourceBinding(
-            contract="filesystem.image-source.v1",
-            format="sc.legacy-range-zip.v1",
-        ),
     )
     repository = AsyncMock()
     repository.get_dataset = AsyncMock(return_value=dataset)
@@ -222,7 +224,7 @@ def _service(
             collection_reader=collection_reader,
             storage_factory=storage_factory,
             artifact_storage=artifacts,
-            image_source_factory=_ImageSourceFactory(image_resolver),
+            image_stream_factory=_ImageSourceFactory(image_resolver),
             image_batch_rows=image_batch_rows,
         ),
         artifacts,
@@ -573,10 +575,6 @@ async def test_collection_export_packages_only_selected_members_by_inspection() 
         dataset_type="image_sc",
         task_spec=TaskSpec(task_type="sc"),
         storage_mode=DatasetStorageMode.FILE_SHARD_SPARSE,
-        image_source=ImageSourceBinding(
-            contract="filesystem.image-source.v1",
-            format="sc.legacy-range-zip.v1",
-        ),
     )
     dataset_2 = dataset_1.model_copy(
         update={"id": "dataset-2", "name": "Inspection 18"}
@@ -653,7 +651,7 @@ async def test_collection_export_packages_only_selected_members_by_inspection() 
         collection_reader=collection_reader,
         storage_factory=storage_factory,
         artifact_storage=artifacts,
-        image_source_factory=_ImageSourceFactory(_ImageResolver()),
+        image_stream_factory=_ImageSourceFactory(_ImageResolver()),
         image_batch_rows=512,
     )
 
@@ -770,7 +768,7 @@ async def test_collection_sampling_identity_includes_source_dataset() -> None:
         collection_reader=collection_reader,
         storage_factory=storage_factory,
         artifact_storage=artifacts,
-        image_source_factory=_ImageSourceFactory(_ImageResolver()),
+        image_stream_factory=_ImageSourceFactory(_ImageResolver()),
         image_batch_rows=512,
     )
 

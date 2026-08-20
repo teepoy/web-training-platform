@@ -7,6 +7,11 @@ from pathlib import Path
 
 import pytest
 import yaml
+from fastapi.openapi.utils import get_openapi
+
+from app.main import app
+from app.modules.auth.port.http.router import oauth_public_router, public_router
+from app.modules.registry import PUBLIC_ROUTERS
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 OPENAPI_SPEC = REPO_ROOT / "openapi" / "openapi.yaml"
@@ -33,6 +38,17 @@ def test_no_duplicate_operation_ids() -> None:
             else:
                 seen.append(op_id)
     assert not duplicates, f"Duplicate operationIds: {duplicates}"
+
+
+def test_public_auth_router_is_mounted_and_exported() -> None:
+    """Public auth operations must use the same runtime and OpenAPI assembly path."""
+    assert public_router in PUBLIC_ROUTERS
+    assert oauth_public_router in PUBLIC_ROUTERS
+
+    schema = get_openapi(title=app.title, version=app.version, routes=app.routes)
+    paths = schema["paths"]
+    assert "/api/v1/auth/login" in paths
+    assert "/api/v1/auth/oauth/providers" in paths
 
 
 @pytest.mark.regression

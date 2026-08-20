@@ -101,30 +101,32 @@ func (x *HealthResponse) GetStatus() string {
 	return ""
 }
 
-type GetImageRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Bucket        string                 `protobuf:"bytes,1,opt,name=bucket,proto3" json:"bucket,omitempty"`
-	Key           string                 `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
-	Prefix        string                 `protobuf:"bytes,3,opt,name=prefix,proto3" json:"prefix,omitempty"`
-	Cache         bool                   `protobuf:"varint,4,opt,name=cache,proto3" json:"cache,omitempty"`
+type StreamImagesRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Payload:
+	//
+	//	*StreamImagesRequest_OpenContext
+	//	*StreamImagesRequest_SampleBatch
+	//	*StreamImagesRequest_CloseContext
+	Payload       isStreamImagesRequest_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *GetImageRequest) Reset() {
-	*x = GetImageRequest{}
+func (x *StreamImagesRequest) Reset() {
+	*x = StreamImagesRequest{}
 	mi := &file_imageparser_v1_service_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *GetImageRequest) String() string {
+func (x *StreamImagesRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*GetImageRequest) ProtoMessage() {}
+func (*StreamImagesRequest) ProtoMessage() {}
 
-func (x *GetImageRequest) ProtoReflect() protoreflect.Message {
+func (x *StreamImagesRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_imageparser_v1_service_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -136,63 +138,91 @@ func (x *GetImageRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetImageRequest.ProtoReflect.Descriptor instead.
-func (*GetImageRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use StreamImagesRequest.ProtoReflect.Descriptor instead.
+func (*StreamImagesRequest) Descriptor() ([]byte, []int) {
 	return file_imageparser_v1_service_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *GetImageRequest) GetBucket() string {
+func (x *StreamImagesRequest) GetPayload() isStreamImagesRequest_Payload {
 	if x != nil {
-		return x.Bucket
+		return x.Payload
 	}
-	return ""
+	return nil
 }
 
-func (x *GetImageRequest) GetKey() string {
+func (x *StreamImagesRequest) GetOpenContext() *OpenImageContext {
 	if x != nil {
-		return x.Key
+		if x, ok := x.Payload.(*StreamImagesRequest_OpenContext); ok {
+			return x.OpenContext
+		}
 	}
-	return ""
+	return nil
 }
 
-func (x *GetImageRequest) GetPrefix() string {
+func (x *StreamImagesRequest) GetSampleBatch() *ImageSampleBatchRequest {
 	if x != nil {
-		return x.Prefix
+		if x, ok := x.Payload.(*StreamImagesRequest_SampleBatch); ok {
+			return x.SampleBatch
+		}
 	}
-	return ""
+	return nil
 }
 
-func (x *GetImageRequest) GetCache() bool {
+func (x *StreamImagesRequest) GetCloseContext() *CloseImageContext {
 	if x != nil {
-		return x.Cache
+		if x, ok := x.Payload.(*StreamImagesRequest_CloseContext); ok {
+			return x.CloseContext
+		}
 	}
-	return false
+	return nil
 }
 
-type GetImageResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ImageData     []byte                 `protobuf:"bytes,1,opt,name=image_data,json=imageData,proto3" json:"image_data,omitempty"`
-	Filename      string                 `protobuf:"bytes,2,opt,name=filename,proto3" json:"filename,omitempty"`
-	Width         int32                  `protobuf:"varint,3,opt,name=width,proto3" json:"width,omitempty"`
-	Height        int32                  `protobuf:"varint,4,opt,name=height,proto3" json:"height,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+type isStreamImagesRequest_Payload interface {
+	isStreamImagesRequest_Payload()
 }
 
-func (x *GetImageResponse) Reset() {
-	*x = GetImageResponse{}
+type StreamImagesRequest_OpenContext struct {
+	OpenContext *OpenImageContext `protobuf:"bytes,1,opt,name=open_context,json=openContext,proto3,oneof"`
+}
+
+type StreamImagesRequest_SampleBatch struct {
+	SampleBatch *ImageSampleBatchRequest `protobuf:"bytes,2,opt,name=sample_batch,json=sampleBatch,proto3,oneof"`
+}
+
+type StreamImagesRequest_CloseContext struct {
+	CloseContext *CloseImageContext `protobuf:"bytes,3,opt,name=close_context,json=closeContext,proto3,oneof"`
+}
+
+func (*StreamImagesRequest_OpenContext) isStreamImagesRequest_Payload() {}
+
+func (*StreamImagesRequest_SampleBatch) isStreamImagesRequest_Payload() {}
+
+func (*StreamImagesRequest_CloseContext) isStreamImagesRequest_Payload() {}
+
+type OpenImageContext struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	ContextId      string                 `protobuf:"bytes,1,opt,name=context_id,json=contextId,proto3" json:"context_id,omitempty"`
+	InspectionTime string                 `protobuf:"bytes,2,opt,name=inspection_time,json=inspectionTime,proto3" json:"inspection_time,omitempty"`
+	WaferKey       int32                  `protobuf:"varint,3,opt,name=wafer_key,json=waferKey,proto3" json:"wafer_key,omitempty"`
+	Roles          []string               `protobuf:"bytes,4,rep,name=roles,proto3" json:"roles,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *OpenImageContext) Reset() {
+	*x = OpenImageContext{}
 	mi := &file_imageparser_v1_service_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *GetImageResponse) String() string {
+func (x *OpenImageContext) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*GetImageResponse) ProtoMessage() {}
+func (*OpenImageContext) ProtoMessage() {}
 
-func (x *GetImageResponse) ProtoReflect() protoreflect.Message {
+func (x *OpenImageContext) ProtoReflect() protoreflect.Message {
 	mi := &file_imageparser_v1_service_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -204,830 +234,63 @@ func (x *GetImageResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetImageResponse.ProtoReflect.Descriptor instead.
-func (*GetImageResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use OpenImageContext.ProtoReflect.Descriptor instead.
+func (*OpenImageContext) Descriptor() ([]byte, []int) {
 	return file_imageparser_v1_service_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *GetImageResponse) GetImageData() []byte {
+func (x *OpenImageContext) GetContextId() string {
 	if x != nil {
-		return x.ImageData
-	}
-	return nil
-}
-
-func (x *GetImageResponse) GetFilename() string {
-	if x != nil {
-		return x.Filename
+		return x.ContextId
 	}
 	return ""
 }
 
-func (x *GetImageResponse) GetWidth() int32 {
-	if x != nil {
-		return x.Width
-	}
-	return 0
-}
-
-func (x *GetImageResponse) GetHeight() int32 {
-	if x != nil {
-		return x.Height
-	}
-	return 0
-}
-
-type SpriteRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Bucket        string                 `protobuf:"bytes,1,opt,name=bucket,proto3" json:"bucket,omitempty"`
-	Key           string                 `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
-	Prefixes      []string               `protobuf:"bytes,3,rep,name=prefixes,proto3" json:"prefixes,omitempty"`
-	Size          int32                  `protobuf:"varint,4,opt,name=size,proto3" json:"size,omitempty"`
-	Cache         bool                   `protobuf:"varint,5,opt,name=cache,proto3" json:"cache,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *SpriteRequest) Reset() {
-	*x = SpriteRequest{}
-	mi := &file_imageparser_v1_service_proto_msgTypes[4]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SpriteRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SpriteRequest) ProtoMessage() {}
-
-func (x *SpriteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_imageparser_v1_service_proto_msgTypes[4]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SpriteRequest.ProtoReflect.Descriptor instead.
-func (*SpriteRequest) Descriptor() ([]byte, []int) {
-	return file_imageparser_v1_service_proto_rawDescGZIP(), []int{4}
-}
-
-func (x *SpriteRequest) GetBucket() string {
-	if x != nil {
-		return x.Bucket
-	}
-	return ""
-}
-
-func (x *SpriteRequest) GetKey() string {
-	if x != nil {
-		return x.Key
-	}
-	return ""
-}
-
-func (x *SpriteRequest) GetPrefixes() []string {
-	if x != nil {
-		return x.Prefixes
-	}
-	return nil
-}
-
-func (x *SpriteRequest) GetSize() int32 {
-	if x != nil {
-		return x.Size
-	}
-	return 0
-}
-
-func (x *SpriteRequest) GetCache() bool {
-	if x != nil {
-		return x.Cache
-	}
-	return false
-}
-
-type SpriteResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ImageData     []byte                 `protobuf:"bytes,1,opt,name=image_data,json=imageData,proto3" json:"image_data,omitempty"`
-	Width         int32                  `protobuf:"varint,2,opt,name=width,proto3" json:"width,omitempty"`
-	Height        int32                  `protobuf:"varint,3,opt,name=height,proto3" json:"height,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *SpriteResponse) Reset() {
-	*x = SpriteResponse{}
-	mi := &file_imageparser_v1_service_proto_msgTypes[5]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SpriteResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SpriteResponse) ProtoMessage() {}
-
-func (x *SpriteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_imageparser_v1_service_proto_msgTypes[5]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SpriteResponse.ProtoReflect.Descriptor instead.
-func (*SpriteResponse) Descriptor() ([]byte, []int) {
-	return file_imageparser_v1_service_proto_rawDescGZIP(), []int{5}
-}
-
-func (x *SpriteResponse) GetImageData() []byte {
-	if x != nil {
-		return x.ImageData
-	}
-	return nil
-}
-
-func (x *SpriteResponse) GetWidth() int32 {
-	if x != nil {
-		return x.Width
-	}
-	return 0
-}
-
-func (x *SpriteResponse) GetHeight() int32 {
-	if x != nil {
-		return x.Height
-	}
-	return 0
-}
-
-type V2SpriteRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Bucket        string                 `protobuf:"bytes,1,opt,name=bucket,proto3" json:"bucket,omitempty"`
-	Record        string                 `protobuf:"bytes,2,opt,name=record,proto3" json:"record,omitempty"`
-	Items         []string               `protobuf:"bytes,3,rep,name=items,proto3" json:"items,omitempty"`
-	Size          int32                  `protobuf:"varint,4,opt,name=size,proto3" json:"size,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *V2SpriteRequest) Reset() {
-	*x = V2SpriteRequest{}
-	mi := &file_imageparser_v1_service_proto_msgTypes[6]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *V2SpriteRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*V2SpriteRequest) ProtoMessage() {}
-
-func (x *V2SpriteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_imageparser_v1_service_proto_msgTypes[6]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use V2SpriteRequest.ProtoReflect.Descriptor instead.
-func (*V2SpriteRequest) Descriptor() ([]byte, []int) {
-	return file_imageparser_v1_service_proto_rawDescGZIP(), []int{6}
-}
-
-func (x *V2SpriteRequest) GetBucket() string {
-	if x != nil {
-		return x.Bucket
-	}
-	return ""
-}
-
-func (x *V2SpriteRequest) GetRecord() string {
-	if x != nil {
-		return x.Record
-	}
-	return ""
-}
-
-func (x *V2SpriteRequest) GetItems() []string {
-	if x != nil {
-		return x.Items
-	}
-	return nil
-}
-
-func (x *V2SpriteRequest) GetSize() int32 {
-	if x != nil {
-		return x.Size
-	}
-	return 0
-}
-
-type V2SpriteResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ImageData     []byte                 `protobuf:"bytes,1,opt,name=image_data,json=imageData,proto3" json:"image_data,omitempty"`
-	Width         int32                  `protobuf:"varint,2,opt,name=width,proto3" json:"width,omitempty"`
-	Height        int32                  `protobuf:"varint,3,opt,name=height,proto3" json:"height,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *V2SpriteResponse) Reset() {
-	*x = V2SpriteResponse{}
-	mi := &file_imageparser_v1_service_proto_msgTypes[7]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *V2SpriteResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*V2SpriteResponse) ProtoMessage() {}
-
-func (x *V2SpriteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_imageparser_v1_service_proto_msgTypes[7]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use V2SpriteResponse.ProtoReflect.Descriptor instead.
-func (*V2SpriteResponse) Descriptor() ([]byte, []int) {
-	return file_imageparser_v1_service_proto_rawDescGZIP(), []int{7}
-}
-
-func (x *V2SpriteResponse) GetImageData() []byte {
-	if x != nil {
-		return x.ImageData
-	}
-	return nil
-}
-
-func (x *V2SpriteResponse) GetWidth() int32 {
-	if x != nil {
-		return x.Width
-	}
-	return 0
-}
-
-func (x *V2SpriteResponse) GetHeight() int32 {
-	if x != nil {
-		return x.Height
-	}
-	return 0
-}
-
-type GetScImageRequest struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	InspectionTime string                 `protobuf:"bytes,1,opt,name=inspection_time,json=inspectionTime,proto3" json:"inspection_time,omitempty"`
-	WaferKey       int32                  `protobuf:"varint,2,opt,name=wafer_key,json=waferKey,proto3" json:"wafer_key,omitempty"`
-	DefectId       string                 `protobuf:"bytes,3,opt,name=defect_id,json=defectId,proto3" json:"defect_id,omitempty"`
-	ImageType      string                 `protobuf:"bytes,4,opt,name=image_type,json=imageType,proto3" json:"image_type,omitempty"`
-	ReviewImageId  int32                  `protobuf:"varint,5,opt,name=review_image_id,json=reviewImageId,proto3" json:"review_image_id,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
-}
-
-func (x *GetScImageRequest) Reset() {
-	*x = GetScImageRequest{}
-	mi := &file_imageparser_v1_service_proto_msgTypes[8]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *GetScImageRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*GetScImageRequest) ProtoMessage() {}
-
-func (x *GetScImageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_imageparser_v1_service_proto_msgTypes[8]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use GetScImageRequest.ProtoReflect.Descriptor instead.
-func (*GetScImageRequest) Descriptor() ([]byte, []int) {
-	return file_imageparser_v1_service_proto_rawDescGZIP(), []int{8}
-}
-
-func (x *GetScImageRequest) GetInspectionTime() string {
+func (x *OpenImageContext) GetInspectionTime() string {
 	if x != nil {
 		return x.InspectionTime
 	}
 	return ""
 }
 
-func (x *GetScImageRequest) GetWaferKey() int32 {
+func (x *OpenImageContext) GetWaferKey() int32 {
 	if x != nil {
 		return x.WaferKey
 	}
 	return 0
 }
 
-func (x *GetScImageRequest) GetDefectId() string {
-	if x != nil {
-		return x.DefectId
-	}
-	return ""
-}
-
-func (x *GetScImageRequest) GetImageType() string {
-	if x != nil {
-		return x.ImageType
-	}
-	return ""
-}
-
-func (x *GetScImageRequest) GetReviewImageId() int32 {
-	if x != nil {
-		return x.ReviewImageId
-	}
-	return 0
-}
-
-type GetScImageResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ImageData     []byte                 `protobuf:"bytes,1,opt,name=image_data,json=imageData,proto3" json:"image_data,omitempty"`
-	ContentType   string                 `protobuf:"bytes,2,opt,name=content_type,json=contentType,proto3" json:"content_type,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *GetScImageResponse) Reset() {
-	*x = GetScImageResponse{}
-	mi := &file_imageparser_v1_service_proto_msgTypes[9]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *GetScImageResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*GetScImageResponse) ProtoMessage() {}
-
-func (x *GetScImageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_imageparser_v1_service_proto_msgTypes[9]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use GetScImageResponse.ProtoReflect.Descriptor instead.
-func (*GetScImageResponse) Descriptor() ([]byte, []int) {
-	return file_imageparser_v1_service_proto_rawDescGZIP(), []int{9}
-}
-
-func (x *GetScImageResponse) GetImageData() []byte {
-	if x != nil {
-		return x.ImageData
-	}
-	return nil
-}
-
-func (x *GetScImageResponse) GetContentType() string {
-	if x != nil {
-		return x.ContentType
-	}
-	return ""
-}
-
-type ScImageRef struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	DefectId      string                 `protobuf:"bytes,1,opt,name=defect_id,json=defectId,proto3" json:"defect_id,omitempty"`
-	ImageType     string                 `protobuf:"bytes,2,opt,name=image_type,json=imageType,proto3" json:"image_type,omitempty"`
-	ReviewImageId int32                  `protobuf:"varint,3,opt,name=review_image_id,json=reviewImageId,proto3" json:"review_image_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ScImageRef) Reset() {
-	*x = ScImageRef{}
-	mi := &file_imageparser_v1_service_proto_msgTypes[10]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ScImageRef) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ScImageRef) ProtoMessage() {}
-
-func (x *ScImageRef) ProtoReflect() protoreflect.Message {
-	mi := &file_imageparser_v1_service_proto_msgTypes[10]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ScImageRef.ProtoReflect.Descriptor instead.
-func (*ScImageRef) Descriptor() ([]byte, []int) {
-	return file_imageparser_v1_service_proto_rawDescGZIP(), []int{10}
-}
-
-func (x *ScImageRef) GetDefectId() string {
-	if x != nil {
-		return x.DefectId
-	}
-	return ""
-}
-
-func (x *ScImageRef) GetImageType() string {
-	if x != nil {
-		return x.ImageType
-	}
-	return ""
-}
-
-func (x *ScImageRef) GetReviewImageId() int32 {
-	if x != nil {
-		return x.ReviewImageId
-	}
-	return 0
-}
-
-type BatchGetScImageRequest struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	InspectionTime string                 `protobuf:"bytes,1,opt,name=inspection_time,json=inspectionTime,proto3" json:"inspection_time,omitempty"`
-	WaferKey       int32                  `protobuf:"varint,2,opt,name=wafer_key,json=waferKey,proto3" json:"wafer_key,omitempty"`
-	Images         []*ScImageRef          `protobuf:"bytes,3,rep,name=images,proto3" json:"images,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
-}
-
-func (x *BatchGetScImageRequest) Reset() {
-	*x = BatchGetScImageRequest{}
-	mi := &file_imageparser_v1_service_proto_msgTypes[11]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *BatchGetScImageRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*BatchGetScImageRequest) ProtoMessage() {}
-
-func (x *BatchGetScImageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_imageparser_v1_service_proto_msgTypes[11]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use BatchGetScImageRequest.ProtoReflect.Descriptor instead.
-func (*BatchGetScImageRequest) Descriptor() ([]byte, []int) {
-	return file_imageparser_v1_service_proto_rawDescGZIP(), []int{11}
-}
-
-func (x *BatchGetScImageRequest) GetInspectionTime() string {
-	if x != nil {
-		return x.InspectionTime
-	}
-	return ""
-}
-
-func (x *BatchGetScImageRequest) GetWaferKey() int32 {
-	if x != nil {
-		return x.WaferKey
-	}
-	return 0
-}
-
-func (x *BatchGetScImageRequest) GetImages() []*ScImageRef {
-	if x != nil {
-		return x.Images
-	}
-	return nil
-}
-
-type ScImageResult struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	DefectId      string                 `protobuf:"bytes,1,opt,name=defect_id,json=defectId,proto3" json:"defect_id,omitempty"`
-	ImageType     string                 `protobuf:"bytes,2,opt,name=image_type,json=imageType,proto3" json:"image_type,omitempty"`
-	ImageData     []byte                 `protobuf:"bytes,3,opt,name=image_data,json=imageData,proto3" json:"image_data,omitempty"`
-	ContentType   string                 `protobuf:"bytes,4,opt,name=content_type,json=contentType,proto3" json:"content_type,omitempty"`
-	Error         string                 `protobuf:"bytes,5,opt,name=error,proto3" json:"error,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ScImageResult) Reset() {
-	*x = ScImageResult{}
-	mi := &file_imageparser_v1_service_proto_msgTypes[12]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ScImageResult) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ScImageResult) ProtoMessage() {}
-
-func (x *ScImageResult) ProtoReflect() protoreflect.Message {
-	mi := &file_imageparser_v1_service_proto_msgTypes[12]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ScImageResult.ProtoReflect.Descriptor instead.
-func (*ScImageResult) Descriptor() ([]byte, []int) {
-	return file_imageparser_v1_service_proto_rawDescGZIP(), []int{12}
-}
-
-func (x *ScImageResult) GetDefectId() string {
-	if x != nil {
-		return x.DefectId
-	}
-	return ""
-}
-
-func (x *ScImageResult) GetImageType() string {
-	if x != nil {
-		return x.ImageType
-	}
-	return ""
-}
-
-func (x *ScImageResult) GetImageData() []byte {
-	if x != nil {
-		return x.ImageData
-	}
-	return nil
-}
-
-func (x *ScImageResult) GetContentType() string {
-	if x != nil {
-		return x.ContentType
-	}
-	return ""
-}
-
-func (x *ScImageResult) GetError() string {
-	if x != nil {
-		return x.Error
-	}
-	return ""
-}
-
-type BatchGetScImageResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Results       []*ScImageResult       `protobuf:"bytes,1,rep,name=results,proto3" json:"results,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *BatchGetScImageResponse) Reset() {
-	*x = BatchGetScImageResponse{}
-	mi := &file_imageparser_v1_service_proto_msgTypes[13]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *BatchGetScImageResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*BatchGetScImageResponse) ProtoMessage() {}
-
-func (x *BatchGetScImageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_imageparser_v1_service_proto_msgTypes[13]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use BatchGetScImageResponse.ProtoReflect.Descriptor instead.
-func (*BatchGetScImageResponse) Descriptor() ([]byte, []int) {
-	return file_imageparser_v1_service_proto_rawDescGZIP(), []int{13}
-}
-
-func (x *BatchGetScImageResponse) GetResults() []*ScImageResult {
-	if x != nil {
-		return x.Results
-	}
-	return nil
-}
-
-type StreamScInspectionImagesRequest struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	InspectionTime string                 `protobuf:"bytes,1,opt,name=inspection_time,json=inspectionTime,proto3" json:"inspection_time,omitempty"`
-	WaferKey       int32                  `protobuf:"varint,2,opt,name=wafer_key,json=waferKey,proto3" json:"wafer_key,omitempty"`
-	DefectIds      []int32                `protobuf:"varint,3,rep,packed,name=defect_ids,json=defectIds,proto3" json:"defect_ids,omitempty"`
-	ImageTypes     []string               `protobuf:"bytes,4,rep,name=image_types,json=imageTypes,proto3" json:"image_types,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
-}
-
-func (x *StreamScInspectionImagesRequest) Reset() {
-	*x = StreamScInspectionImagesRequest{}
-	mi := &file_imageparser_v1_service_proto_msgTypes[14]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *StreamScInspectionImagesRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*StreamScInspectionImagesRequest) ProtoMessage() {}
-
-func (x *StreamScInspectionImagesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_imageparser_v1_service_proto_msgTypes[14]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use StreamScInspectionImagesRequest.ProtoReflect.Descriptor instead.
-func (*StreamScInspectionImagesRequest) Descriptor() ([]byte, []int) {
-	return file_imageparser_v1_service_proto_rawDescGZIP(), []int{14}
-}
-
-func (x *StreamScInspectionImagesRequest) GetInspectionTime() string {
-	if x != nil {
-		return x.InspectionTime
-	}
-	return ""
-}
-
-func (x *StreamScInspectionImagesRequest) GetWaferKey() int32 {
-	if x != nil {
-		return x.WaferKey
-	}
-	return 0
-}
-
-func (x *StreamScInspectionImagesRequest) GetDefectIds() []int32 {
-	if x != nil {
-		return x.DefectIds
-	}
-	return nil
-}
-
-func (x *StreamScInspectionImagesRequest) GetImageTypes() []string {
-	if x != nil {
-		return x.ImageTypes
-	}
-	return nil
-}
-
-type ResolvePatchImagesRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Format identifies the code-registered filesystem driver. It is not a
-	// deployment profile and never carries a root path or credentials.
-	SourceFormat  string                   `protobuf:"bytes,1,opt,name=source_format,json=sourceFormat,proto3" json:"source_format,omitempty"`
-	Roles         []string                 `protobuf:"bytes,2,rep,name=roles,proto3" json:"roles,omitempty"`
-	Items         []*ResolvePatchImageItem `protobuf:"bytes,3,rep,name=items,proto3" json:"items,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ResolvePatchImagesRequest) Reset() {
-	*x = ResolvePatchImagesRequest{}
-	mi := &file_imageparser_v1_service_proto_msgTypes[15]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ResolvePatchImagesRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ResolvePatchImagesRequest) ProtoMessage() {}
-
-func (x *ResolvePatchImagesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_imageparser_v1_service_proto_msgTypes[15]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ResolvePatchImagesRequest.ProtoReflect.Descriptor instead.
-func (*ResolvePatchImagesRequest) Descriptor() ([]byte, []int) {
-	return file_imageparser_v1_service_proto_rawDescGZIP(), []int{15}
-}
-
-func (x *ResolvePatchImagesRequest) GetSourceFormat() string {
-	if x != nil {
-		return x.SourceFormat
-	}
-	return ""
-}
-
-func (x *ResolvePatchImagesRequest) GetRoles() []string {
+func (x *OpenImageContext) GetRoles() []string {
 	if x != nil {
 		return x.Roles
 	}
 	return nil
 }
 
-func (x *ResolvePatchImagesRequest) GetItems() []*ResolvePatchImageItem {
-	if x != nil {
-		return x.Items
-	}
-	return nil
-}
-
-type ResolvePatchImageItem struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	RequestId      string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	SampleId       string                 `protobuf:"bytes,2,opt,name=sample_id,json=sampleId,proto3" json:"sample_id,omitempty"`
-	InspectionTime string                 `protobuf:"bytes,3,opt,name=inspection_time,json=inspectionTime,proto3" json:"inspection_time,omitempty"`
-	WaferKey       int32                  `protobuf:"varint,4,opt,name=wafer_key,json=waferKey,proto3" json:"wafer_key,omitempty"`
-	DefectId       string                 `protobuf:"bytes,5,opt,name=defect_id,json=defectId,proto3" json:"defect_id,omitempty"`
-	// Direct-file drivers consume explicit role-relative paths. Layout-based
-	// compatibility drivers ignore this field and derive their own addresses.
-	RolePaths     map[string]string `protobuf:"bytes,6,rep,name=role_paths,json=rolePaths,proto3" json:"role_paths,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+type ImageSampleRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Sequence      uint64                 `protobuf:"varint,1,opt,name=sequence,proto3" json:"sequence,omitempty"`
+	SampleId      string                 `protobuf:"bytes,2,opt,name=sample_id,json=sampleId,proto3" json:"sample_id,omitempty"`
+	DefectId      string                 `protobuf:"bytes,3,opt,name=defect_id,json=defectId,proto3" json:"defect_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ResolvePatchImageItem) Reset() {
-	*x = ResolvePatchImageItem{}
-	mi := &file_imageparser_v1_service_proto_msgTypes[16]
+func (x *ImageSampleRequest) Reset() {
+	*x = ImageSampleRequest{}
+	mi := &file_imageparser_v1_service_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ResolvePatchImageItem) String() string {
+func (x *ImageSampleRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ResolvePatchImageItem) ProtoMessage() {}
+func (*ImageSampleRequest) ProtoMessage() {}
 
-func (x *ResolvePatchImageItem) ProtoReflect() protoreflect.Message {
-	mi := &file_imageparser_v1_service_proto_msgTypes[16]
+func (x *ImageSampleRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_imageparser_v1_service_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1038,83 +301,106 @@ func (x *ResolvePatchImageItem) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ResolvePatchImageItem.ProtoReflect.Descriptor instead.
-func (*ResolvePatchImageItem) Descriptor() ([]byte, []int) {
-	return file_imageparser_v1_service_proto_rawDescGZIP(), []int{16}
+// Deprecated: Use ImageSampleRequest.ProtoReflect.Descriptor instead.
+func (*ImageSampleRequest) Descriptor() ([]byte, []int) {
+	return file_imageparser_v1_service_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *ResolvePatchImageItem) GetRequestId() string {
+func (x *ImageSampleRequest) GetSequence() uint64 {
 	if x != nil {
-		return x.RequestId
+		return x.Sequence
 	}
-	return ""
+	return 0
 }
 
-func (x *ResolvePatchImageItem) GetSampleId() string {
+func (x *ImageSampleRequest) GetSampleId() string {
 	if x != nil {
 		return x.SampleId
 	}
 	return ""
 }
 
-func (x *ResolvePatchImageItem) GetInspectionTime() string {
-	if x != nil {
-		return x.InspectionTime
-	}
-	return ""
-}
-
-func (x *ResolvePatchImageItem) GetWaferKey() int32 {
-	if x != nil {
-		return x.WaferKey
-	}
-	return 0
-}
-
-func (x *ResolvePatchImageItem) GetDefectId() string {
+func (x *ImageSampleRequest) GetDefectId() string {
 	if x != nil {
 		return x.DefectId
 	}
 	return ""
 }
 
-func (x *ResolvePatchImageItem) GetRolePaths() map[string]string {
+type ImageSampleBatchRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ContextId     string                 `protobuf:"bytes,1,opt,name=context_id,json=contextId,proto3" json:"context_id,omitempty"`
+	Samples       []*ImageSampleRequest  `protobuf:"bytes,2,rep,name=samples,proto3" json:"samples,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ImageSampleBatchRequest) Reset() {
+	*x = ImageSampleBatchRequest{}
+	mi := &file_imageparser_v1_service_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImageSampleBatchRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImageSampleBatchRequest) ProtoMessage() {}
+
+func (x *ImageSampleBatchRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_imageparser_v1_service_proto_msgTypes[5]
 	if x != nil {
-		return x.RolePaths
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImageSampleBatchRequest.ProtoReflect.Descriptor instead.
+func (*ImageSampleBatchRequest) Descriptor() ([]byte, []int) {
+	return file_imageparser_v1_service_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *ImageSampleBatchRequest) GetContextId() string {
+	if x != nil {
+		return x.ContextId
+	}
+	return ""
+}
+
+func (x *ImageSampleBatchRequest) GetSamples() []*ImageSampleRequest {
+	if x != nil {
+		return x.Samples
 	}
 	return nil
 }
 
-type ResolvePatchImageResult struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	RequestId      string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	SampleId       string                 `protobuf:"bytes,2,opt,name=sample_id,json=sampleId,proto3" json:"sample_id,omitempty"`
-	InspectionTime string                 `protobuf:"bytes,3,opt,name=inspection_time,json=inspectionTime,proto3" json:"inspection_time,omitempty"`
-	WaferKey       int32                  `protobuf:"varint,4,opt,name=wafer_key,json=waferKey,proto3" json:"wafer_key,omitempty"`
-	DefectId       string                 `protobuf:"bytes,5,opt,name=defect_id,json=defectId,proto3" json:"defect_id,omitempty"`
-	Role           string                 `protobuf:"bytes,6,opt,name=role,proto3" json:"role,omitempty"`
-	ImageData      []byte                 `protobuf:"bytes,7,opt,name=image_data,json=imageData,proto3" json:"image_data,omitempty"`
-	ContentType    string                 `protobuf:"bytes,8,opt,name=content_type,json=contentType,proto3" json:"content_type,omitempty"`
-	Error          string                 `protobuf:"bytes,9,opt,name=error,proto3" json:"error,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+type CloseImageContext struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ContextId     string                 `protobuf:"bytes,1,opt,name=context_id,json=contextId,proto3" json:"context_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ResolvePatchImageResult) Reset() {
-	*x = ResolvePatchImageResult{}
-	mi := &file_imageparser_v1_service_proto_msgTypes[17]
+func (x *CloseImageContext) Reset() {
+	*x = CloseImageContext{}
+	mi := &file_imageparser_v1_service_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ResolvePatchImageResult) String() string {
+func (x *CloseImageContext) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ResolvePatchImageResult) ProtoMessage() {}
+func (*CloseImageContext) ProtoMessage() {}
 
-func (x *ResolvePatchImageResult) ProtoReflect() protoreflect.Message {
-	mi := &file_imageparser_v1_service_proto_msgTypes[17]
+func (x *CloseImageContext) ProtoReflect() protoreflect.Message {
+	mi := &file_imageparser_v1_service_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1125,204 +411,346 @@ func (x *ResolvePatchImageResult) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ResolvePatchImageResult.ProtoReflect.Descriptor instead.
-func (*ResolvePatchImageResult) Descriptor() ([]byte, []int) {
-	return file_imageparser_v1_service_proto_rawDescGZIP(), []int{17}
+// Deprecated: Use CloseImageContext.ProtoReflect.Descriptor instead.
+func (*CloseImageContext) Descriptor() ([]byte, []int) {
+	return file_imageparser_v1_service_proto_rawDescGZIP(), []int{6}
 }
 
-func (x *ResolvePatchImageResult) GetRequestId() string {
+func (x *CloseImageContext) GetContextId() string {
 	if x != nil {
-		return x.RequestId
+		return x.ContextId
 	}
 	return ""
 }
 
-func (x *ResolvePatchImageResult) GetSampleId() string {
-	if x != nil {
-		return x.SampleId
-	}
-	return ""
+type StreamImagesResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Payload:
+	//
+	//	*StreamImagesResponse_ContextOpened
+	//	*StreamImagesResponse_SampleBatch
+	//	*StreamImagesResponse_ContextError
+	//	*StreamImagesResponse_ContextClosed
+	Payload       isStreamImagesResponse_Payload `protobuf_oneof:"payload"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ResolvePatchImageResult) GetInspectionTime() string {
-	if x != nil {
-		return x.InspectionTime
-	}
-	return ""
+func (x *StreamImagesResponse) Reset() {
+	*x = StreamImagesResponse{}
+	mi := &file_imageparser_v1_service_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
-func (x *ResolvePatchImageResult) GetWaferKey() int32 {
+func (x *StreamImagesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StreamImagesResponse) ProtoMessage() {}
+
+func (x *StreamImagesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_imageparser_v1_service_proto_msgTypes[7]
 	if x != nil {
-		return x.WaferKey
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StreamImagesResponse.ProtoReflect.Descriptor instead.
+func (*StreamImagesResponse) Descriptor() ([]byte, []int) {
+	return file_imageparser_v1_service_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *StreamImagesResponse) GetPayload() isStreamImagesResponse_Payload {
+	if x != nil {
+		return x.Payload
+	}
+	return nil
+}
+
+func (x *StreamImagesResponse) GetContextOpened() *ImageContextOpened {
+	if x != nil {
+		if x, ok := x.Payload.(*StreamImagesResponse_ContextOpened); ok {
+			return x.ContextOpened
+		}
+	}
+	return nil
+}
+
+func (x *StreamImagesResponse) GetSampleBatch() *ImageSampleBatchResponse {
+	if x != nil {
+		if x, ok := x.Payload.(*StreamImagesResponse_SampleBatch); ok {
+			return x.SampleBatch
+		}
+	}
+	return nil
+}
+
+func (x *StreamImagesResponse) GetContextError() *ImageContextError {
+	if x != nil {
+		if x, ok := x.Payload.(*StreamImagesResponse_ContextError); ok {
+			return x.ContextError
+		}
+	}
+	return nil
+}
+
+func (x *StreamImagesResponse) GetContextClosed() *ImageContextClosed {
+	if x != nil {
+		if x, ok := x.Payload.(*StreamImagesResponse_ContextClosed); ok {
+			return x.ContextClosed
+		}
+	}
+	return nil
+}
+
+type isStreamImagesResponse_Payload interface {
+	isStreamImagesResponse_Payload()
+}
+
+type StreamImagesResponse_ContextOpened struct {
+	ContextOpened *ImageContextOpened `protobuf:"bytes,1,opt,name=context_opened,json=contextOpened,proto3,oneof"`
+}
+
+type StreamImagesResponse_SampleBatch struct {
+	SampleBatch *ImageSampleBatchResponse `protobuf:"bytes,2,opt,name=sample_batch,json=sampleBatch,proto3,oneof"`
+}
+
+type StreamImagesResponse_ContextError struct {
+	ContextError *ImageContextError `protobuf:"bytes,3,opt,name=context_error,json=contextError,proto3,oneof"`
+}
+
+type StreamImagesResponse_ContextClosed struct {
+	ContextClosed *ImageContextClosed `protobuf:"bytes,4,opt,name=context_closed,json=contextClosed,proto3,oneof"`
+}
+
+func (*StreamImagesResponse_ContextOpened) isStreamImagesResponse_Payload() {}
+
+func (*StreamImagesResponse_SampleBatch) isStreamImagesResponse_Payload() {}
+
+func (*StreamImagesResponse_ContextError) isStreamImagesResponse_Payload() {}
+
+func (*StreamImagesResponse_ContextClosed) isStreamImagesResponse_Payload() {}
+
+type ImageStreamLimits struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	MaxBatchItems     uint32                 `protobuf:"varint,1,opt,name=max_batch_items,json=maxBatchItems,proto3" json:"max_batch_items,omitempty"`
+	MaxResponseBytes  uint64                 `protobuf:"varint,2,opt,name=max_response_bytes,json=maxResponseBytes,proto3" json:"max_response_bytes,omitempty"`
+	MaxActiveContexts uint32                 `protobuf:"varint,3,opt,name=max_active_contexts,json=maxActiveContexts,proto3" json:"max_active_contexts,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *ImageStreamLimits) Reset() {
+	*x = ImageStreamLimits{}
+	mi := &file_imageparser_v1_service_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImageStreamLimits) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImageStreamLimits) ProtoMessage() {}
+
+func (x *ImageStreamLimits) ProtoReflect() protoreflect.Message {
+	mi := &file_imageparser_v1_service_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImageStreamLimits.ProtoReflect.Descriptor instead.
+func (*ImageStreamLimits) Descriptor() ([]byte, []int) {
+	return file_imageparser_v1_service_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *ImageStreamLimits) GetMaxBatchItems() uint32 {
+	if x != nil {
+		return x.MaxBatchItems
 	}
 	return 0
 }
 
-func (x *ResolvePatchImageResult) GetDefectId() string {
+func (x *ImageStreamLimits) GetMaxResponseBytes() uint64 {
 	if x != nil {
-		return x.DefectId
+		return x.MaxResponseBytes
+	}
+	return 0
+}
+
+func (x *ImageStreamLimits) GetMaxActiveContexts() uint32 {
+	if x != nil {
+		return x.MaxActiveContexts
+	}
+	return 0
+}
+
+type ImageContextOpened struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ContextId     string                 `protobuf:"bytes,1,opt,name=context_id,json=contextId,proto3" json:"context_id,omitempty"`
+	EqpId         string                 `protobuf:"bytes,2,opt,name=eqp_id,json=eqpId,proto3" json:"eqp_id,omitempty"`
+	Limits        *ImageStreamLimits     `protobuf:"bytes,3,opt,name=limits,proto3" json:"limits,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ImageContextOpened) Reset() {
+	*x = ImageContextOpened{}
+	mi := &file_imageparser_v1_service_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImageContextOpened) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImageContextOpened) ProtoMessage() {}
+
+func (x *ImageContextOpened) ProtoReflect() protoreflect.Message {
+	mi := &file_imageparser_v1_service_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImageContextOpened.ProtoReflect.Descriptor instead.
+func (*ImageContextOpened) Descriptor() ([]byte, []int) {
+	return file_imageparser_v1_service_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *ImageContextOpened) GetContextId() string {
+	if x != nil {
+		return x.ContextId
 	}
 	return ""
 }
 
-func (x *ResolvePatchImageResult) GetRole() string {
+func (x *ImageContextOpened) GetEqpId() string {
+	if x != nil {
+		return x.EqpId
+	}
+	return ""
+}
+
+func (x *ImageContextOpened) GetLimits() *ImageStreamLimits {
+	if x != nil {
+		return x.Limits
+	}
+	return nil
+}
+
+type ImageRoleResult struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Role          string                 `protobuf:"bytes,1,opt,name=role,proto3" json:"role,omitempty"`
+	ImageData     []byte                 `protobuf:"bytes,2,opt,name=image_data,json=imageData,proto3" json:"image_data,omitempty"`
+	ContentType   string                 `protobuf:"bytes,3,opt,name=content_type,json=contentType,proto3" json:"content_type,omitempty"`
+	Error         string                 `protobuf:"bytes,4,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ImageRoleResult) Reset() {
+	*x = ImageRoleResult{}
+	mi := &file_imageparser_v1_service_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImageRoleResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImageRoleResult) ProtoMessage() {}
+
+func (x *ImageRoleResult) ProtoReflect() protoreflect.Message {
+	mi := &file_imageparser_v1_service_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImageRoleResult.ProtoReflect.Descriptor instead.
+func (*ImageRoleResult) Descriptor() ([]byte, []int) {
+	return file_imageparser_v1_service_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *ImageRoleResult) GetRole() string {
 	if x != nil {
 		return x.Role
 	}
 	return ""
 }
 
-func (x *ResolvePatchImageResult) GetImageData() []byte {
+func (x *ImageRoleResult) GetImageData() []byte {
 	if x != nil {
 		return x.ImageData
 	}
 	return nil
 }
 
-func (x *ResolvePatchImageResult) GetContentType() string {
+func (x *ImageRoleResult) GetContentType() string {
 	if x != nil {
 		return x.ContentType
 	}
 	return ""
 }
 
-func (x *ResolvePatchImageResult) GetError() string {
+func (x *ImageRoleResult) GetError() string {
 	if x != nil {
 		return x.Error
 	}
 	return ""
 }
 
-// One ordered response frame used by stdin/stdout resolver processes. It is
-// deliberately not an RPC response: training, batch prediction, and pure-local
-// instant prediction never consume the display ImageParser service.
-type ResolvePatchImagesBatchResponse struct {
-	state         protoimpl.MessageState     `protogen:"open.v1"`
-	Results       []*ResolvePatchImageResult `protobuf:"bytes,1,rep,name=results,proto3" json:"results,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ResolvePatchImagesBatchResponse) Reset() {
-	*x = ResolvePatchImagesBatchResponse{}
-	mi := &file_imageparser_v1_service_proto_msgTypes[18]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ResolvePatchImagesBatchResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ResolvePatchImagesBatchResponse) ProtoMessage() {}
-
-func (x *ResolvePatchImagesBatchResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_imageparser_v1_service_proto_msgTypes[18]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ResolvePatchImagesBatchResponse.ProtoReflect.Descriptor instead.
-func (*ResolvePatchImagesBatchResponse) Descriptor() ([]byte, []int) {
-	return file_imageparser_v1_service_proto_rawDescGZIP(), []int{18}
-}
-
-func (x *ResolvePatchImagesBatchResponse) GetResults() []*ResolvePatchImageResult {
-	if x != nil {
-		return x.Results
-	}
-	return nil
-}
-
-type WarmScCacheRequest struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	InspectionTime string                 `protobuf:"bytes,1,opt,name=inspection_time,json=inspectionTime,proto3" json:"inspection_time,omitempty"`
-	WaferKey       int32                  `protobuf:"varint,2,opt,name=wafer_key,json=waferKey,proto3" json:"wafer_key,omitempty"`
-	DefectIds      []int32                `protobuf:"varint,3,rep,packed,name=defect_ids,json=defectIds,proto3" json:"defect_ids,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
-}
-
-func (x *WarmScCacheRequest) Reset() {
-	*x = WarmScCacheRequest{}
-	mi := &file_imageparser_v1_service_proto_msgTypes[19]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *WarmScCacheRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*WarmScCacheRequest) ProtoMessage() {}
-
-func (x *WarmScCacheRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_imageparser_v1_service_proto_msgTypes[19]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use WarmScCacheRequest.ProtoReflect.Descriptor instead.
-func (*WarmScCacheRequest) Descriptor() ([]byte, []int) {
-	return file_imageparser_v1_service_proto_rawDescGZIP(), []int{19}
-}
-
-func (x *WarmScCacheRequest) GetInspectionTime() string {
-	if x != nil {
-		return x.InspectionTime
-	}
-	return ""
-}
-
-func (x *WarmScCacheRequest) GetWaferKey() int32 {
-	if x != nil {
-		return x.WaferKey
-	}
-	return 0
-}
-
-func (x *WarmScCacheRequest) GetDefectIds() []int32 {
-	if x != nil {
-		return x.DefectIds
-	}
-	return nil
-}
-
-type WarmScCacheResponse struct {
+type ImageSampleResult struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Status        string                 `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"`
-	ZipsWarmed    int32                  `protobuf:"varint,2,opt,name=zips_warmed,json=zipsWarmed,proto3" json:"zips_warmed,omitempty"`
+	Sequence      uint64                 `protobuf:"varint,1,opt,name=sequence,proto3" json:"sequence,omitempty"`
+	SampleId      string                 `protobuf:"bytes,2,opt,name=sample_id,json=sampleId,proto3" json:"sample_id,omitempty"`
+	DefectId      string                 `protobuf:"bytes,3,opt,name=defect_id,json=defectId,proto3" json:"defect_id,omitempty"`
+	Images        []*ImageRoleResult     `protobuf:"bytes,4,rep,name=images,proto3" json:"images,omitempty"`
+	Error         string                 `protobuf:"bytes,5,opt,name=error,proto3" json:"error,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *WarmScCacheResponse) Reset() {
-	*x = WarmScCacheResponse{}
-	mi := &file_imageparser_v1_service_proto_msgTypes[20]
+func (x *ImageSampleResult) Reset() {
+	*x = ImageSampleResult{}
+	mi := &file_imageparser_v1_service_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *WarmScCacheResponse) String() string {
+func (x *ImageSampleResult) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*WarmScCacheResponse) ProtoMessage() {}
+func (*ImageSampleResult) ProtoMessage() {}
 
-func (x *WarmScCacheResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_imageparser_v1_service_proto_msgTypes[20]
+func (x *ImageSampleResult) ProtoReflect() protoreflect.Message {
+	mi := &file_imageparser_v1_service_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1333,23 +761,208 @@ func (x *WarmScCacheResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use WarmScCacheResponse.ProtoReflect.Descriptor instead.
-func (*WarmScCacheResponse) Descriptor() ([]byte, []int) {
-	return file_imageparser_v1_service_proto_rawDescGZIP(), []int{20}
+// Deprecated: Use ImageSampleResult.ProtoReflect.Descriptor instead.
+func (*ImageSampleResult) Descriptor() ([]byte, []int) {
+	return file_imageparser_v1_service_proto_rawDescGZIP(), []int{11}
 }
 
-func (x *WarmScCacheResponse) GetStatus() string {
+func (x *ImageSampleResult) GetSequence() uint64 {
 	if x != nil {
-		return x.Status
+		return x.Sequence
+	}
+	return 0
+}
+
+func (x *ImageSampleResult) GetSampleId() string {
+	if x != nil {
+		return x.SampleId
 	}
 	return ""
 }
 
-func (x *WarmScCacheResponse) GetZipsWarmed() int32 {
+func (x *ImageSampleResult) GetDefectId() string {
 	if x != nil {
-		return x.ZipsWarmed
+		return x.DefectId
+	}
+	return ""
+}
+
+func (x *ImageSampleResult) GetImages() []*ImageRoleResult {
+	if x != nil {
+		return x.Images
+	}
+	return nil
+}
+
+func (x *ImageSampleResult) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+type ImageSampleBatchResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ContextId     string                 `protobuf:"bytes,1,opt,name=context_id,json=contextId,proto3" json:"context_id,omitempty"`
+	Samples       []*ImageSampleResult   `protobuf:"bytes,2,rep,name=samples,proto3" json:"samples,omitempty"`
+	AckSequence   uint64                 `protobuf:"varint,3,opt,name=ack_sequence,json=ackSequence,proto3" json:"ack_sequence,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ImageSampleBatchResponse) Reset() {
+	*x = ImageSampleBatchResponse{}
+	mi := &file_imageparser_v1_service_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImageSampleBatchResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImageSampleBatchResponse) ProtoMessage() {}
+
+func (x *ImageSampleBatchResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_imageparser_v1_service_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImageSampleBatchResponse.ProtoReflect.Descriptor instead.
+func (*ImageSampleBatchResponse) Descriptor() ([]byte, []int) {
+	return file_imageparser_v1_service_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *ImageSampleBatchResponse) GetContextId() string {
+	if x != nil {
+		return x.ContextId
+	}
+	return ""
+}
+
+func (x *ImageSampleBatchResponse) GetSamples() []*ImageSampleResult {
+	if x != nil {
+		return x.Samples
+	}
+	return nil
+}
+
+func (x *ImageSampleBatchResponse) GetAckSequence() uint64 {
+	if x != nil {
+		return x.AckSequence
 	}
 	return 0
+}
+
+type ImageContextError struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ContextId     string                 `protobuf:"bytes,1,opt,name=context_id,json=contextId,proto3" json:"context_id,omitempty"`
+	Code          string                 `protobuf:"bytes,2,opt,name=code,proto3" json:"code,omitempty"`
+	Error         string                 `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ImageContextError) Reset() {
+	*x = ImageContextError{}
+	mi := &file_imageparser_v1_service_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImageContextError) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImageContextError) ProtoMessage() {}
+
+func (x *ImageContextError) ProtoReflect() protoreflect.Message {
+	mi := &file_imageparser_v1_service_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImageContextError.ProtoReflect.Descriptor instead.
+func (*ImageContextError) Descriptor() ([]byte, []int) {
+	return file_imageparser_v1_service_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *ImageContextError) GetContextId() string {
+	if x != nil {
+		return x.ContextId
+	}
+	return ""
+}
+
+func (x *ImageContextError) GetCode() string {
+	if x != nil {
+		return x.Code
+	}
+	return ""
+}
+
+func (x *ImageContextError) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+type ImageContextClosed struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ContextId     string                 `protobuf:"bytes,1,opt,name=context_id,json=contextId,proto3" json:"context_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ImageContextClosed) Reset() {
+	*x = ImageContextClosed{}
+	mi := &file_imageparser_v1_service_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImageContextClosed) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImageContextClosed) ProtoMessage() {}
+
+func (x *ImageContextClosed) ProtoReflect() protoreflect.Message {
+	mi := &file_imageparser_v1_service_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImageContextClosed.ProtoReflect.Descriptor instead.
+func (*ImageContextClosed) Descriptor() ([]byte, []int) {
+	return file_imageparser_v1_service_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *ImageContextClosed) GetContextId() string {
+	if x != nil {
+		return x.ContextId
+	}
+	return ""
 }
 
 var File_imageparser_v1_service_proto protoreflect.FileDescriptor
@@ -1359,126 +972,74 @@ const file_imageparser_v1_service_proto_rawDesc = "" +
 	"\x1cimageparser/v1/service.proto\x12\x0eimageparser.v1\"\x0f\n" +
 	"\rHealthRequest\"(\n" +
 	"\x0eHealthResponse\x12\x16\n" +
-	"\x06status\x18\x01 \x01(\tR\x06status\"i\n" +
-	"\x0fGetImageRequest\x12\x16\n" +
-	"\x06bucket\x18\x01 \x01(\tR\x06bucket\x12\x10\n" +
-	"\x03key\x18\x02 \x01(\tR\x03key\x12\x16\n" +
-	"\x06prefix\x18\x03 \x01(\tR\x06prefix\x12\x14\n" +
-	"\x05cache\x18\x04 \x01(\bR\x05cache\"{\n" +
-	"\x10GetImageResponse\x12\x1d\n" +
+	"\x06status\x18\x01 \x01(\tR\x06status\"\xff\x01\n" +
+	"\x13StreamImagesRequest\x12E\n" +
+	"\fopen_context\x18\x01 \x01(\v2 .imageparser.v1.OpenImageContextH\x00R\vopenContext\x12L\n" +
+	"\fsample_batch\x18\x02 \x01(\v2'.imageparser.v1.ImageSampleBatchRequestH\x00R\vsampleBatch\x12H\n" +
+	"\rclose_context\x18\x03 \x01(\v2!.imageparser.v1.CloseImageContextH\x00R\fcloseContextB\t\n" +
+	"\apayload\"\x8d\x01\n" +
+	"\x10OpenImageContext\x12\x1d\n" +
 	"\n" +
-	"image_data\x18\x01 \x01(\fR\timageData\x12\x1a\n" +
-	"\bfilename\x18\x02 \x01(\tR\bfilename\x12\x14\n" +
-	"\x05width\x18\x03 \x01(\x05R\x05width\x12\x16\n" +
-	"\x06height\x18\x04 \x01(\x05R\x06height\"\x7f\n" +
-	"\rSpriteRequest\x12\x16\n" +
-	"\x06bucket\x18\x01 \x01(\tR\x06bucket\x12\x10\n" +
-	"\x03key\x18\x02 \x01(\tR\x03key\x12\x1a\n" +
-	"\bprefixes\x18\x03 \x03(\tR\bprefixes\x12\x12\n" +
-	"\x04size\x18\x04 \x01(\x05R\x04size\x12\x14\n" +
-	"\x05cache\x18\x05 \x01(\bR\x05cache\"]\n" +
-	"\x0eSpriteResponse\x12\x1d\n" +
+	"context_id\x18\x01 \x01(\tR\tcontextId\x12'\n" +
+	"\x0finspection_time\x18\x02 \x01(\tR\x0einspectionTime\x12\x1b\n" +
+	"\twafer_key\x18\x03 \x01(\x05R\bwaferKey\x12\x14\n" +
+	"\x05roles\x18\x04 \x03(\tR\x05roles\"j\n" +
+	"\x12ImageSampleRequest\x12\x1a\n" +
+	"\bsequence\x18\x01 \x01(\x04R\bsequence\x12\x1b\n" +
+	"\tsample_id\x18\x02 \x01(\tR\bsampleId\x12\x1b\n" +
+	"\tdefect_id\x18\x03 \x01(\tR\bdefectId\"v\n" +
+	"\x17ImageSampleBatchRequest\x12\x1d\n" +
 	"\n" +
-	"image_data\x18\x01 \x01(\fR\timageData\x12\x14\n" +
-	"\x05width\x18\x02 \x01(\x05R\x05width\x12\x16\n" +
-	"\x06height\x18\x03 \x01(\x05R\x06height\"k\n" +
-	"\x0fV2SpriteRequest\x12\x16\n" +
-	"\x06bucket\x18\x01 \x01(\tR\x06bucket\x12\x16\n" +
-	"\x06record\x18\x02 \x01(\tR\x06record\x12\x14\n" +
-	"\x05items\x18\x03 \x03(\tR\x05items\x12\x12\n" +
-	"\x04size\x18\x04 \x01(\x05R\x04size\"_\n" +
-	"\x10V2SpriteResponse\x12\x1d\n" +
+	"context_id\x18\x01 \x01(\tR\tcontextId\x12<\n" +
+	"\asamples\x18\x02 \x03(\v2\".imageparser.v1.ImageSampleRequestR\asamples\"2\n" +
+	"\x11CloseImageContext\x12\x1d\n" +
 	"\n" +
-	"image_data\x18\x01 \x01(\fR\timageData\x12\x14\n" +
-	"\x05width\x18\x02 \x01(\x05R\x05width\x12\x16\n" +
-	"\x06height\x18\x03 \x01(\x05R\x06height\"\xbd\x01\n" +
-	"\x11GetScImageRequest\x12'\n" +
-	"\x0finspection_time\x18\x01 \x01(\tR\x0einspectionTime\x12\x1b\n" +
-	"\twafer_key\x18\x02 \x01(\x05R\bwaferKey\x12\x1b\n" +
-	"\tdefect_id\x18\x03 \x01(\tR\bdefectId\x12\x1d\n" +
+	"context_id\x18\x01 \x01(\tR\tcontextId\"\xd4\x02\n" +
+	"\x14StreamImagesResponse\x12K\n" +
+	"\x0econtext_opened\x18\x01 \x01(\v2\".imageparser.v1.ImageContextOpenedH\x00R\rcontextOpened\x12M\n" +
+	"\fsample_batch\x18\x02 \x01(\v2(.imageparser.v1.ImageSampleBatchResponseH\x00R\vsampleBatch\x12H\n" +
+	"\rcontext_error\x18\x03 \x01(\v2!.imageparser.v1.ImageContextErrorH\x00R\fcontextError\x12K\n" +
+	"\x0econtext_closed\x18\x04 \x01(\v2\".imageparser.v1.ImageContextClosedH\x00R\rcontextClosedB\t\n" +
+	"\apayload\"\x99\x01\n" +
+	"\x11ImageStreamLimits\x12&\n" +
+	"\x0fmax_batch_items\x18\x01 \x01(\rR\rmaxBatchItems\x12,\n" +
+	"\x12max_response_bytes\x18\x02 \x01(\x04R\x10maxResponseBytes\x12.\n" +
+	"\x13max_active_contexts\x18\x03 \x01(\rR\x11maxActiveContexts\"\x85\x01\n" +
+	"\x12ImageContextOpened\x12\x1d\n" +
 	"\n" +
-	"image_type\x18\x04 \x01(\tR\timageType\x12&\n" +
-	"\x0freview_image_id\x18\x05 \x01(\x05R\rreviewImageId\"V\n" +
-	"\x12GetScImageResponse\x12\x1d\n" +
+	"context_id\x18\x01 \x01(\tR\tcontextId\x12\x15\n" +
+	"\x06eqp_id\x18\x02 \x01(\tR\x05eqpId\x129\n" +
+	"\x06limits\x18\x03 \x01(\v2!.imageparser.v1.ImageStreamLimitsR\x06limits\"}\n" +
+	"\x0fImageRoleResult\x12\x12\n" +
+	"\x04role\x18\x01 \x01(\tR\x04role\x12\x1d\n" +
 	"\n" +
-	"image_data\x18\x01 \x01(\fR\timageData\x12!\n" +
-	"\fcontent_type\x18\x02 \x01(\tR\vcontentType\"p\n" +
+	"image_data\x18\x02 \x01(\fR\timageData\x12!\n" +
+	"\fcontent_type\x18\x03 \x01(\tR\vcontentType\x12\x14\n" +
+	"\x05error\x18\x04 \x01(\tR\x05error\"\xb8\x01\n" +
+	"\x11ImageSampleResult\x12\x1a\n" +
+	"\bsequence\x18\x01 \x01(\x04R\bsequence\x12\x1b\n" +
+	"\tsample_id\x18\x02 \x01(\tR\bsampleId\x12\x1b\n" +
+	"\tdefect_id\x18\x03 \x01(\tR\bdefectId\x127\n" +
+	"\x06images\x18\x04 \x03(\v2\x1f.imageparser.v1.ImageRoleResultR\x06images\x12\x14\n" +
+	"\x05error\x18\x05 \x01(\tR\x05error\"\x99\x01\n" +
+	"\x18ImageSampleBatchResponse\x12\x1d\n" +
 	"\n" +
-	"ScImageRef\x12\x1b\n" +
-	"\tdefect_id\x18\x01 \x01(\tR\bdefectId\x12\x1d\n" +
+	"context_id\x18\x01 \x01(\tR\tcontextId\x12;\n" +
+	"\asamples\x18\x02 \x03(\v2!.imageparser.v1.ImageSampleResultR\asamples\x12!\n" +
+	"\fack_sequence\x18\x03 \x01(\x04R\vackSequence\"\\\n" +
+	"\x11ImageContextError\x12\x1d\n" +
 	"\n" +
-	"image_type\x18\x02 \x01(\tR\timageType\x12&\n" +
-	"\x0freview_image_id\x18\x03 \x01(\x05R\rreviewImageId\"\x92\x01\n" +
-	"\x16BatchGetScImageRequest\x12'\n" +
-	"\x0finspection_time\x18\x01 \x01(\tR\x0einspectionTime\x12\x1b\n" +
-	"\twafer_key\x18\x02 \x01(\x05R\bwaferKey\x122\n" +
-	"\x06images\x18\x03 \x03(\v2\x1a.imageparser.v1.ScImageRefR\x06images\"\xa3\x01\n" +
-	"\rScImageResult\x12\x1b\n" +
-	"\tdefect_id\x18\x01 \x01(\tR\bdefectId\x12\x1d\n" +
+	"context_id\x18\x01 \x01(\tR\tcontextId\x12\x12\n" +
+	"\x04code\x18\x02 \x01(\tR\x04code\x12\x14\n" +
+	"\x05error\x18\x03 \x01(\tR\x05error\"3\n" +
+	"\x12ImageContextClosed\x12\x1d\n" +
 	"\n" +
-	"image_type\x18\x02 \x01(\tR\timageType\x12\x1d\n" +
-	"\n" +
-	"image_data\x18\x03 \x01(\fR\timageData\x12!\n" +
-	"\fcontent_type\x18\x04 \x01(\tR\vcontentType\x12\x14\n" +
-	"\x05error\x18\x05 \x01(\tR\x05error\"R\n" +
-	"\x17BatchGetScImageResponse\x127\n" +
-	"\aresults\x18\x01 \x03(\v2\x1d.imageparser.v1.ScImageResultR\aresults\"\xa7\x01\n" +
-	"\x1fStreamScInspectionImagesRequest\x12'\n" +
-	"\x0finspection_time\x18\x01 \x01(\tR\x0einspectionTime\x12\x1b\n" +
-	"\twafer_key\x18\x02 \x01(\x05R\bwaferKey\x12\x1d\n" +
-	"\n" +
-	"defect_ids\x18\x03 \x03(\x05R\tdefectIds\x12\x1f\n" +
-	"\vimage_types\x18\x04 \x03(\tR\n" +
-	"imageTypes\"\x93\x01\n" +
-	"\x19ResolvePatchImagesRequest\x12#\n" +
-	"\rsource_format\x18\x01 \x01(\tR\fsourceFormat\x12\x14\n" +
-	"\x05roles\x18\x02 \x03(\tR\x05roles\x12;\n" +
-	"\x05items\x18\x03 \x03(\v2%.imageparser.v1.ResolvePatchImageItemR\x05items\"\xc9\x02\n" +
-	"\x15ResolvePatchImageItem\x12\x1d\n" +
-	"\n" +
-	"request_id\x18\x01 \x01(\tR\trequestId\x12\x1b\n" +
-	"\tsample_id\x18\x02 \x01(\tR\bsampleId\x12'\n" +
-	"\x0finspection_time\x18\x03 \x01(\tR\x0einspectionTime\x12\x1b\n" +
-	"\twafer_key\x18\x04 \x01(\x05R\bwaferKey\x12\x1b\n" +
-	"\tdefect_id\x18\x05 \x01(\tR\bdefectId\x12S\n" +
-	"\n" +
-	"role_paths\x18\x06 \x03(\v24.imageparser.v1.ResolvePatchImageItem.RolePathsEntryR\trolePaths\x1a<\n" +
-	"\x0eRolePathsEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xa4\x02\n" +
-	"\x17ResolvePatchImageResult\x12\x1d\n" +
-	"\n" +
-	"request_id\x18\x01 \x01(\tR\trequestId\x12\x1b\n" +
-	"\tsample_id\x18\x02 \x01(\tR\bsampleId\x12'\n" +
-	"\x0finspection_time\x18\x03 \x01(\tR\x0einspectionTime\x12\x1b\n" +
-	"\twafer_key\x18\x04 \x01(\x05R\bwaferKey\x12\x1b\n" +
-	"\tdefect_id\x18\x05 \x01(\tR\bdefectId\x12\x12\n" +
-	"\x04role\x18\x06 \x01(\tR\x04role\x12\x1d\n" +
-	"\n" +
-	"image_data\x18\a \x01(\fR\timageData\x12!\n" +
-	"\fcontent_type\x18\b \x01(\tR\vcontentType\x12\x14\n" +
-	"\x05error\x18\t \x01(\tR\x05error\"d\n" +
-	"\x1fResolvePatchImagesBatchResponse\x12A\n" +
-	"\aresults\x18\x01 \x03(\v2'.imageparser.v1.ResolvePatchImageResultR\aresults\"y\n" +
-	"\x12WarmScCacheRequest\x12'\n" +
-	"\x0finspection_time\x18\x01 \x01(\tR\x0einspectionTime\x12\x1b\n" +
-	"\twafer_key\x18\x02 \x01(\x05R\bwaferKey\x12\x1d\n" +
-	"\n" +
-	"defect_ids\x18\x03 \x03(\x05R\tdefectIds\"N\n" +
-	"\x13WarmScCacheResponse\x12\x16\n" +
-	"\x06status\x18\x01 \x01(\tR\x06status\x12\x1f\n" +
-	"\vzips_warmed\x18\x02 \x01(\x05R\n" +
-	"zipsWarmed2\xbc\x05\n" +
+	"context_id\x18\x01 \x01(\tR\tcontextId2\x8b\x03\n" +
 	"\vImageParser\x12G\n" +
-	"\x06Health\x12\x1d.imageparser.v1.HealthRequest\x1a\x1e.imageparser.v1.HealthResponse\x12M\n" +
-	"\bGetImage\x12\x1f.imageparser.v1.GetImageRequest\x1a .imageparser.v1.GetImageResponse\x12G\n" +
-	"\x06Sprite\x12\x1d.imageparser.v1.SpriteRequest\x1a\x1e.imageparser.v1.SpriteResponse\x12M\n" +
-	"\bV2Sprite\x12\x1f.imageparser.v1.V2SpriteRequest\x1a .imageparser.v1.V2SpriteResponse\x12S\n" +
-	"\n" +
-	"GetScImage\x12!.imageparser.v1.GetScImageRequest\x1a\".imageparser.v1.GetScImageResponse\x12b\n" +
-	"\x0fBatchGetScImage\x12&.imageparser.v1.BatchGetScImageRequest\x1a'.imageparser.v1.BatchGetScImageResponse\x12l\n" +
-	"\x18StreamScInspectionImages\x12/.imageparser.v1.StreamScInspectionImagesRequest\x1a\x1d.imageparser.v1.ScImageResult0\x01\x12V\n" +
-	"\vWarmScCache\x12\".imageparser.v1.WarmScCacheRequest\x1a#.imageparser.v1.WarmScCacheResponseB8Z6ft-platform/protos/gen/go/imageparser/v1;imageparserv1b\x06proto3"
+	"\x06Health\x12\x1d.imageparser.v1.HealthRequest\x1a\x1e.imageparser.v1.HealthResponse\x12g\n" +
+	"\x16StreamPredictionImages\x12#.imageparser.v1.StreamImagesRequest\x1a$.imageparser.v1.StreamImagesResponse(\x010\x01\x12e\n" +
+	"\x14StreamTrainingImages\x12#.imageparser.v1.StreamImagesRequest\x1a$.imageparser.v1.StreamImagesResponse(\x010\x01\x12c\n" +
+	"\x12StreamExportImages\x12#.imageparser.v1.StreamImagesRequest\x1a$.imageparser.v1.StreamImagesResponse(\x010\x01B8Z6ft-platform/protos/gen/go/imageparser/v1;imageparserv1b\x06proto3"
 
 var (
 	file_imageparser_v1_service_proto_rawDescOnce sync.Once
@@ -1492,58 +1053,49 @@ func file_imageparser_v1_service_proto_rawDescGZIP() []byte {
 	return file_imageparser_v1_service_proto_rawDescData
 }
 
-var file_imageparser_v1_service_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
+var file_imageparser_v1_service_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
 var file_imageparser_v1_service_proto_goTypes = []any{
-	(*HealthRequest)(nil),                   // 0: imageparser.v1.HealthRequest
-	(*HealthResponse)(nil),                  // 1: imageparser.v1.HealthResponse
-	(*GetImageRequest)(nil),                 // 2: imageparser.v1.GetImageRequest
-	(*GetImageResponse)(nil),                // 3: imageparser.v1.GetImageResponse
-	(*SpriteRequest)(nil),                   // 4: imageparser.v1.SpriteRequest
-	(*SpriteResponse)(nil),                  // 5: imageparser.v1.SpriteResponse
-	(*V2SpriteRequest)(nil),                 // 6: imageparser.v1.V2SpriteRequest
-	(*V2SpriteResponse)(nil),                // 7: imageparser.v1.V2SpriteResponse
-	(*GetScImageRequest)(nil),               // 8: imageparser.v1.GetScImageRequest
-	(*GetScImageResponse)(nil),              // 9: imageparser.v1.GetScImageResponse
-	(*ScImageRef)(nil),                      // 10: imageparser.v1.ScImageRef
-	(*BatchGetScImageRequest)(nil),          // 11: imageparser.v1.BatchGetScImageRequest
-	(*ScImageResult)(nil),                   // 12: imageparser.v1.ScImageResult
-	(*BatchGetScImageResponse)(nil),         // 13: imageparser.v1.BatchGetScImageResponse
-	(*StreamScInspectionImagesRequest)(nil), // 14: imageparser.v1.StreamScInspectionImagesRequest
-	(*ResolvePatchImagesRequest)(nil),       // 15: imageparser.v1.ResolvePatchImagesRequest
-	(*ResolvePatchImageItem)(nil),           // 16: imageparser.v1.ResolvePatchImageItem
-	(*ResolvePatchImageResult)(nil),         // 17: imageparser.v1.ResolvePatchImageResult
-	(*ResolvePatchImagesBatchResponse)(nil), // 18: imageparser.v1.ResolvePatchImagesBatchResponse
-	(*WarmScCacheRequest)(nil),              // 19: imageparser.v1.WarmScCacheRequest
-	(*WarmScCacheResponse)(nil),             // 20: imageparser.v1.WarmScCacheResponse
-	nil,                                     // 21: imageparser.v1.ResolvePatchImageItem.RolePathsEntry
+	(*HealthRequest)(nil),            // 0: imageparser.v1.HealthRequest
+	(*HealthResponse)(nil),           // 1: imageparser.v1.HealthResponse
+	(*StreamImagesRequest)(nil),      // 2: imageparser.v1.StreamImagesRequest
+	(*OpenImageContext)(nil),         // 3: imageparser.v1.OpenImageContext
+	(*ImageSampleRequest)(nil),       // 4: imageparser.v1.ImageSampleRequest
+	(*ImageSampleBatchRequest)(nil),  // 5: imageparser.v1.ImageSampleBatchRequest
+	(*CloseImageContext)(nil),        // 6: imageparser.v1.CloseImageContext
+	(*StreamImagesResponse)(nil),     // 7: imageparser.v1.StreamImagesResponse
+	(*ImageStreamLimits)(nil),        // 8: imageparser.v1.ImageStreamLimits
+	(*ImageContextOpened)(nil),       // 9: imageparser.v1.ImageContextOpened
+	(*ImageRoleResult)(nil),          // 10: imageparser.v1.ImageRoleResult
+	(*ImageSampleResult)(nil),        // 11: imageparser.v1.ImageSampleResult
+	(*ImageSampleBatchResponse)(nil), // 12: imageparser.v1.ImageSampleBatchResponse
+	(*ImageContextError)(nil),        // 13: imageparser.v1.ImageContextError
+	(*ImageContextClosed)(nil),       // 14: imageparser.v1.ImageContextClosed
 }
 var file_imageparser_v1_service_proto_depIdxs = []int32{
-	10, // 0: imageparser.v1.BatchGetScImageRequest.images:type_name -> imageparser.v1.ScImageRef
-	12, // 1: imageparser.v1.BatchGetScImageResponse.results:type_name -> imageparser.v1.ScImageResult
-	16, // 2: imageparser.v1.ResolvePatchImagesRequest.items:type_name -> imageparser.v1.ResolvePatchImageItem
-	21, // 3: imageparser.v1.ResolvePatchImageItem.role_paths:type_name -> imageparser.v1.ResolvePatchImageItem.RolePathsEntry
-	17, // 4: imageparser.v1.ResolvePatchImagesBatchResponse.results:type_name -> imageparser.v1.ResolvePatchImageResult
-	0,  // 5: imageparser.v1.ImageParser.Health:input_type -> imageparser.v1.HealthRequest
-	2,  // 6: imageparser.v1.ImageParser.GetImage:input_type -> imageparser.v1.GetImageRequest
-	4,  // 7: imageparser.v1.ImageParser.Sprite:input_type -> imageparser.v1.SpriteRequest
-	6,  // 8: imageparser.v1.ImageParser.V2Sprite:input_type -> imageparser.v1.V2SpriteRequest
-	8,  // 9: imageparser.v1.ImageParser.GetScImage:input_type -> imageparser.v1.GetScImageRequest
-	11, // 10: imageparser.v1.ImageParser.BatchGetScImage:input_type -> imageparser.v1.BatchGetScImageRequest
-	14, // 11: imageparser.v1.ImageParser.StreamScInspectionImages:input_type -> imageparser.v1.StreamScInspectionImagesRequest
-	19, // 12: imageparser.v1.ImageParser.WarmScCache:input_type -> imageparser.v1.WarmScCacheRequest
-	1,  // 13: imageparser.v1.ImageParser.Health:output_type -> imageparser.v1.HealthResponse
-	3,  // 14: imageparser.v1.ImageParser.GetImage:output_type -> imageparser.v1.GetImageResponse
-	5,  // 15: imageparser.v1.ImageParser.Sprite:output_type -> imageparser.v1.SpriteResponse
-	7,  // 16: imageparser.v1.ImageParser.V2Sprite:output_type -> imageparser.v1.V2SpriteResponse
-	9,  // 17: imageparser.v1.ImageParser.GetScImage:output_type -> imageparser.v1.GetScImageResponse
-	13, // 18: imageparser.v1.ImageParser.BatchGetScImage:output_type -> imageparser.v1.BatchGetScImageResponse
-	12, // 19: imageparser.v1.ImageParser.StreamScInspectionImages:output_type -> imageparser.v1.ScImageResult
-	20, // 20: imageparser.v1.ImageParser.WarmScCache:output_type -> imageparser.v1.WarmScCacheResponse
-	13, // [13:21] is the sub-list for method output_type
-	5,  // [5:13] is the sub-list for method input_type
-	5,  // [5:5] is the sub-list for extension type_name
-	5,  // [5:5] is the sub-list for extension extendee
-	0,  // [0:5] is the sub-list for field type_name
+	3,  // 0: imageparser.v1.StreamImagesRequest.open_context:type_name -> imageparser.v1.OpenImageContext
+	5,  // 1: imageparser.v1.StreamImagesRequest.sample_batch:type_name -> imageparser.v1.ImageSampleBatchRequest
+	6,  // 2: imageparser.v1.StreamImagesRequest.close_context:type_name -> imageparser.v1.CloseImageContext
+	4,  // 3: imageparser.v1.ImageSampleBatchRequest.samples:type_name -> imageparser.v1.ImageSampleRequest
+	9,  // 4: imageparser.v1.StreamImagesResponse.context_opened:type_name -> imageparser.v1.ImageContextOpened
+	12, // 5: imageparser.v1.StreamImagesResponse.sample_batch:type_name -> imageparser.v1.ImageSampleBatchResponse
+	13, // 6: imageparser.v1.StreamImagesResponse.context_error:type_name -> imageparser.v1.ImageContextError
+	14, // 7: imageparser.v1.StreamImagesResponse.context_closed:type_name -> imageparser.v1.ImageContextClosed
+	8,  // 8: imageparser.v1.ImageContextOpened.limits:type_name -> imageparser.v1.ImageStreamLimits
+	10, // 9: imageparser.v1.ImageSampleResult.images:type_name -> imageparser.v1.ImageRoleResult
+	11, // 10: imageparser.v1.ImageSampleBatchResponse.samples:type_name -> imageparser.v1.ImageSampleResult
+	0,  // 11: imageparser.v1.ImageParser.Health:input_type -> imageparser.v1.HealthRequest
+	2,  // 12: imageparser.v1.ImageParser.StreamPredictionImages:input_type -> imageparser.v1.StreamImagesRequest
+	2,  // 13: imageparser.v1.ImageParser.StreamTrainingImages:input_type -> imageparser.v1.StreamImagesRequest
+	2,  // 14: imageparser.v1.ImageParser.StreamExportImages:input_type -> imageparser.v1.StreamImagesRequest
+	1,  // 15: imageparser.v1.ImageParser.Health:output_type -> imageparser.v1.HealthResponse
+	7,  // 16: imageparser.v1.ImageParser.StreamPredictionImages:output_type -> imageparser.v1.StreamImagesResponse
+	7,  // 17: imageparser.v1.ImageParser.StreamTrainingImages:output_type -> imageparser.v1.StreamImagesResponse
+	7,  // 18: imageparser.v1.ImageParser.StreamExportImages:output_type -> imageparser.v1.StreamImagesResponse
+	15, // [15:19] is the sub-list for method output_type
+	11, // [11:15] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_imageparser_v1_service_proto_init() }
@@ -1551,13 +1103,24 @@ func file_imageparser_v1_service_proto_init() {
 	if File_imageparser_v1_service_proto != nil {
 		return
 	}
+	file_imageparser_v1_service_proto_msgTypes[2].OneofWrappers = []any{
+		(*StreamImagesRequest_OpenContext)(nil),
+		(*StreamImagesRequest_SampleBatch)(nil),
+		(*StreamImagesRequest_CloseContext)(nil),
+	}
+	file_imageparser_v1_service_proto_msgTypes[7].OneofWrappers = []any{
+		(*StreamImagesResponse_ContextOpened)(nil),
+		(*StreamImagesResponse_SampleBatch)(nil),
+		(*StreamImagesResponse_ContextError)(nil),
+		(*StreamImagesResponse_ContextClosed)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_imageparser_v1_service_proto_rawDesc), len(file_imageparser_v1_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   22,
+			NumMessages:   15,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

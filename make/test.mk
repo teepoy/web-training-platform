@@ -25,10 +25,13 @@ test-web: ## Run frontend unit tests (vitest)
 benchmark-sc-prediction: ## Require >3000 samples/s for bounded SC prediction preprocessing
 	$(UV_RUN_INSTALLED) --package ml-library python libs/ml/benchmarks/sc_prediction_stream_throughput.py --minimum-samples-per-second 3000
 
+.PHONY: benchmark-image-stream-receipt
+benchmark-image-stream-receipt: ## Gate 300k warm-cache ZIP parsing through Python receipt at >=3000 samples/s
+	cd services/image-parser && SC_IMAGE_STREAM_ACCEPTANCE=1 GOCACHE=/tmp/web-training-platform-go-cache go test ./internal/service -run '^TestPredictionImageStreamWarmCache300KToPython$$' -count=1 -v
+
 .PHONY: benchmark-sc-runtime-data-paths
-benchmark-sc-runtime-data-paths: job-image-resolver-host ## Benchmark real SC train/predict data paths with fake GPU kernels
+benchmark-sc-runtime-data-paths: ## Benchmark real SC train/predict data paths with fake GPU kernels
 	cd $(API_DIR) && $(DEV_API_HOST_ENV) \
-		SC_JOB_IMAGE_RESOLVER_BINARY=$(JOB_IMAGE_RESOLVER_BINARY_HOST) \
 		SC_PATCH_S3_ENDPOINT=$(MINIO_ENDPOINT_HOST) \
 		SC_PATCH_S3_ACCESS_KEY=minioadmin \
 		SC_PATCH_S3_SECRET_KEY=minioadmin \

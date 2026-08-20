@@ -1,37 +1,26 @@
-FROM golang:1.26-bookworm AS base
+FROM golang:1.26-alpine AS build-base
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libvips-dev \
-    libglib2.0-0 \
-    libexpat1 \
-    libjpeg62-turbo \
-    libpng16-16 \
-    libwebp7 \
-    libtiff6 \
-    libheif1 \
-    liblcms2-2 \
-    libimagequant0 \
-    libcgif0 \
-    libexif12 \
-    libspng0 \
-    libopenjp2-7 \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
-
-FROM base AS builder
+FROM build-base AS builder
 ARG TARGETOS
 ARG TARGETARCH
 WORKDIR /app
+COPY services/image-parser/go.mod services/image-parser/go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
 COPY services/image-parser/ ./
-RUN CGO_ENABLED=1 GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" \
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" \
     go build -ldflags="-s -w" -o /server ./cmd/server/
 
-FROM base AS dev
+FROM build-base AS dev
 WORKDIR /app/services/image-parser
 RUN go install github.com/air-verse/air@v1.63.0
 CMD ["air", "-c", ".air.toml"]
 
-FROM base
+FROM alpine:3.23 AS runtime
+
+RUN apk add --no-cache ca-certificates
+
 COPY --from=builder /server /usr/local/bin/server
 EXPOSE 8090 9092
 CMD ["/usr/local/bin/server"]

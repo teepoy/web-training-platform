@@ -12,16 +12,19 @@ import (
 	"time"
 
 	imageparserv1 "image-parser/gen/go/imageparser/v1"
+	"image-parser/internal/artifactcache"
 	"image-parser/internal/client"
-	"image-parser/internal/filesource"
+	"image-parser/internal/display"
+	"image-parser/internal/equipment"
+	equipmentlegacy "image-parser/internal/equipment/legacyrangezip"
 	"image-parser/internal/handler"
+	"image-parser/internal/imagestream"
 	"image-parser/internal/metrics"
-	"image-parser/internal/sourceformat/legacyrangezip"
+	"image-parser/internal/objectstore"
 
 	"github.com/gin-gonic/gin"
 	"google.golang.org/grpc"
 
-	imageloader "image-parser/internal/image_loader"
 	"image-parser/internal/service"
 )
 
@@ -54,34 +57,97 @@ func wire() *serverApp {
 		log.Fatalf("failed to init upstream client: %v", err)
 	}
 
-	imageLoader, closeImageLoader, err := imageloader.Initialize(imageloader.Options{
-		Upstream:             upstream,
-		CacheTTL:             *cacheTTL,
-		CacheCleanupInterval: *cacheCleanupInterval,
-		CacheMaxBytes:        *cacheMaxBytes,
-		PatchSource: imageloader.PatchSourceConfig{
-			Format:    legacyrangezip.FormatID,
-			Root:      filepath.Join(*cacheDir, "patch-source"),
-			Kind:      filesource.KindDirectory,
-			Ownership: filesource.OwnershipSharedCache,
-			Stager:    imageloader.PatchSourceStagerScUpstream,
+	patchStore, err := objectstore.NewPatchStoreFromEnvironment()
+	if err != nil {
+		_ = upstream.Close()
+		log.Fatalf("failed to init patch object store: %v", err)
+	}
+	reviewStore, err := objectstore.NewReviewStoreFromEnvironment()
+	if err != nil {
+		_ = upstream.Close()
+		log.Fatalf("failed to init review object store: %v", err)
+	}
+	streamCaches := make(map[imagestream.UseCase]*artifactcache.Manager, 4)
+	for _, useCase := range []imagestream.UseCase{imagestream.UseCaseDisplay, imagestream.UseCasePrediction, imagestream.UseCaseTraining, imagestream.UseCaseExport} {
+		cacheOptions, err := artifactCacheOptions(useCase, artifactcache.Options{
+			TTL: *cacheTTL, CleanupInterval: *cacheCleanupInterval, MaxBytes: *cacheMaxBytes,
+		})
+		if err != nil {
+			log.Fatalf("invalid %s artifact cache configuration: %v", useCase, err)
+		}
+		manager, err := artifactcache.New(filepath.Join(*cacheDir, string(useCase)), cacheOptions)
+		if err != nil {
+			for _, opened := range streamCaches {
+				opened.Close()
+			}
+			_ = upstream.Close()
+			log.Fatalf("failed to init %s image artifact cache: %v", useCase, err)
+		}
+		streamCaches[useCase] = manager
+		metrics.RegisterArtifactCache(string(useCase), manager)
+	}
+	registry, err := equipment.NewRegistry([]equipment.Registration{{
+		EquipmentIDs: equipmentlegacy.DefaultEquipmentIDs,
+		Factory:      equipmentlegacy.NewFactory(upstream, patchStore),
+	}})
+	if err != nil {
+		log.Fatalf("failed to init equipment image registry: %v", err)
+	}
+	caches := make(map[imagestream.UseCase]artifactcache.Cache, len(streamCaches))
+	for useCase, manager := range streamCaches {
+		caches[useCase] = manager
+	}
+	streamEngine, err := equipment.NewEngine(upstream, registry, caches, equipment.LimitsByUseCase{
+		Display:    imagestream.Limits{MaxBatchItems: 512, MaxResponseBytes: 64 << 20, MaxActiveContexts: 32},
+		Prediction: imagestream.Limits{MaxBatchItems: 512, MaxResponseBytes: 64 << 20, MaxActiveContexts: 32},
+		Training:   imagestream.Limits{MaxBatchItems: 512, MaxResponseBytes: 64 << 20, MaxActiveContexts: 32},
+		Export:     imagestream.Limits{MaxBatchItems: 512, MaxResponseBytes: 64 << 20, MaxActiveContexts: 32},
+	})
+	if err != nil {
+		log.Fatalf("failed to init image stream engine: %v", err)
+	}
+	limiter, err := imagestream.NewFairLimiter(imagestream.GovernorConfig{
+		GlobalConcurrency: 16,
+		PerUseCase: map[imagestream.UseCase]int{
+			imagestream.UseCaseDisplay: 8, imagestream.UseCasePrediction: 12,
+			imagestream.UseCaseTraining: 2, imagestream.UseCaseExport: 4,
+		},
+		Weights: map[imagestream.UseCase]int{
+			imagestream.UseCaseDisplay: 2, imagestream.UseCasePrediction: 6,
+			imagestream.UseCaseTraining: 1, imagestream.UseCaseExport: 2,
 		},
 	})
 	if err != nil {
+		log.Fatalf("failed to init image stream fair limiter: %v", err)
+	}
+	governedEngine, err := imagestream.NewGovernedEngine(streamEngine, limiter)
+	if err != nil {
+		log.Fatalf("failed to init governed image stream engine: %v", err)
+	}
+	cachedReviewStore, err := objectstore.NewCachedReader(reviewStore, streamCaches[imagestream.UseCaseDisplay], "sc.review-object.v1")
+	if err != nil {
+		log.Fatalf("failed to init cached review object reader: %v", err)
+	}
+	displayReader, err := display.New(upstream, cachedReviewStore, governedEngine)
+	if err != nil {
 		_ = upstream.Close()
-		log.Fatalf("failed to init image loader: %v", err)
+		for _, manager := range streamCaches {
+			manager.Close()
+		}
+		log.Fatalf("failed to init display image reader: %v", err)
 	}
 
-	var httpHandler HTTPHandler = handler.NewSCRoutes(imageLoader)
-	var grpcHandler imageparserv1.ImageParserServer = service.NewScImageService(imageLoader)
+	var httpHandler HTTPHandler = handler.NewSCRoutes(displayReader)
+	var grpcHandler imageparserv1.ImageParserServer = service.NewScImageService(governedEngine)
 
 	grpcLis, grpcAddress, removeSocket, err := listenGRPC()
 	if err != nil {
 		_ = upstream.Close()
-		closeImageLoader()
 		log.Fatalf("failed to listen gRPC: %v", err)
 	}
 	grpcServer := grpc.NewServer(
+		grpc.MaxRecvMsgSize(72<<20),
+		grpc.MaxSendMsgSize(72<<20),
 		grpc.UnaryInterceptor(metrics.GRPCUnaryInterceptor()),
 		grpc.StreamInterceptor(metrics.GRPCStreamInterceptor()),
 	)
@@ -94,10 +160,16 @@ func wire() *serverApp {
 	}()
 
 	r := gin.New()
-	r.Use(handler.CORSMiddleware(), handler.StableRecovery(), metrics.GinTrafficMiddleware(), gin.Logger(), gin.Recovery())
+	r.Use(handler.CORSMiddleware(), handler.StableRecovery(), metrics.GinTrafficMiddleware(), handler.SafeRequestLogger(), gin.Recovery())
 	r.GET("/health", handler.Health)
 	r.GET("/metrics", metrics.Handler)
-	RegisterHandler(&r.RouterGroup, httpHandler)
+	auth, err := handler.JWTAuthFromEnvironment()
+	if err != nil {
+		log.Fatalf("failed to configure image HTTP authentication: %v", err)
+	}
+	protected := r.Group("/")
+	protected.Use(auth)
+	RegisterHandler(protected, httpHandler)
 
 	return &serverApp{
 		router:        r,
@@ -109,9 +181,37 @@ func wire() *serverApp {
 			_ = grpcLis.Close()
 			removeSocket()
 			_ = upstream.Close()
-			closeImageLoader()
+			for _, manager := range streamCaches {
+				manager.Close()
+			}
 		},
 	}
+}
+
+func artifactCacheOptions(useCase imagestream.UseCase, base artifactcache.Options) (artifactcache.Options, error) {
+	prefix := strings.ToUpper(string(useCase)) + "_CACHE_"
+	if value := strings.TrimSpace(os.Getenv(prefix + "TTL")); value != "" {
+		parsed, err := time.ParseDuration(value)
+		if err != nil {
+			return base, fmt.Errorf("%sTTL must be a Go duration: %w", prefix, err)
+		}
+		base.TTL = parsed
+	}
+	if value := strings.TrimSpace(os.Getenv(prefix + "CLEANUP_INTERVAL")); value != "" {
+		parsed, err := time.ParseDuration(value)
+		if err != nil {
+			return base, fmt.Errorf("%sCLEANUP_INTERVAL must be a Go duration: %w", prefix, err)
+		}
+		base.CleanupInterval = parsed
+	}
+	if value := strings.TrimSpace(os.Getenv(prefix + "MAX_BYTES")); value != "" {
+		parsed, err := strconv.ParseInt(value, 10, 64)
+		if err != nil {
+			return base, fmt.Errorf("%sMAX_BYTES must be an integer byte count: %w", prefix, err)
+		}
+		base.MaxBytes = parsed
+	}
+	return base, nil
 }
 
 func listenGRPC() (net.Listener, string, func(), error) {

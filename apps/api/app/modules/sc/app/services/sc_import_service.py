@@ -13,7 +13,6 @@ import pyarrow as pa
 from app.modules.datasets.domain.entities import DatasetRevisionOperation
 from app.modules.datasets.port.local import DatasetRevisionPublisherPort
 from app.modules.sc.domain.entities.sc_import import ScImportStatus
-from app.modules.sc.domain.image_source import FILESYSTEM_IMAGE_SOURCE_CONTRACT
 from app.modules.sc.domain.models import _coerce_naive_to_upstream_tz
 from app.modules.sc.domain.upstream_reader import ScUpstreamReader
 from app.modules.sc.port.local import ScImportProgressCallback
@@ -27,7 +26,6 @@ from app.modules.sc.schema import (
 from app.shared.api.schemas import (
     Dataset,
     DatasetStorageMode,
-    ImageSourceBinding,
     SPARSE_NO_LS,
     TaskSpec,
 )
@@ -183,7 +181,6 @@ class ScImportService:
         payload_store: ScImportPayloadStore,
         revision_publisher: DatasetRevisionPublisherPort,
         upstream_reader: ScUpstreamReader,
-        upstream_image_source_format: str,
         import_batch_rows: int,
         index_row_group_rows: int,
     ) -> None:
@@ -191,14 +188,10 @@ class ScImportService:
             raise ValueError("import_batch_rows must be greater than zero")
         if index_row_group_rows <= 0:
             raise ValueError("index_row_group_rows must be greater than zero")
-        upstream_image_source_format = upstream_image_source_format.strip()
-        if not upstream_image_source_format:
-            raise ValueError("upstream_image_source_format is required")
         self._repo = repository
         self._payload_store = payload_store
         self._revision_publisher = revision_publisher
         self._upstream = upstream_reader
-        self._upstream_image_source_format = upstream_image_source_format
         self._sparse_import_factory = sparse_import_factory
         self._import_batch_rows = import_batch_rows
         self._index_row_group_rows = index_row_group_rows
@@ -218,7 +211,6 @@ class ScImportService:
         return await self.submit_import(
             source_inspection_time=source_inspection_time,
             source_wafer_key=source_wafer_key,
-            image_source_format=self._upstream_image_source_format,
             dataset_name=dataset_name,
             org_id=org_id,
             created_by=created_by,
@@ -231,7 +223,6 @@ class ScImportService:
         self,
         source_inspection_time: str,
         source_wafer_key: int,
-        image_source_format: str,
         dataset_name: str,
         org_id: str,
         created_by: str = "system",
@@ -239,9 +230,6 @@ class ScImportService:
         max_rows: int | None = None,
         on_progress: ScImportProgressCallback | None = None,
     ) -> ScImportStatus:
-        image_source_format = image_source_format.strip()
-        if not image_source_format:
-            raise ValueError("image_source_format is required")
         # ── Pre-check: skip dataset creation when upstream has no data ──
         try:
             insp_dt = _parse_source_inspection_time(source_inspection_time)
@@ -276,7 +264,6 @@ class ScImportService:
             dataset = await self._create_dataset(
                 source_inspection_time=source_inspection_time,
                 source_wafer_key=source_wafer_key,
-                image_source_format=image_source_format,
                 dataset_name=dataset_name,
                 org_id=org_id,
                 created_by=created_by,
@@ -539,7 +526,6 @@ class ScImportService:
         *,
         source_inspection_time: str,
         source_wafer_key: int,
-        image_source_format: str,
         dataset_name: str,
         org_id: str,
         created_by: str,
@@ -559,10 +545,6 @@ class ScImportService:
             created_by=created_by,
             ls_project_id=SPARSE_NO_LS,
             storage_mode=DatasetStorageMode.FILE_SHARD_SPARSE,
-            image_source=ImageSourceBinding(
-                contract=FILESYSTEM_IMAGE_SOURCE_CONTRACT,
-                format=image_source_format,
-            ),
         )
         dataset = await self._repo.create_dataset(dataset, org_id=org_id)
         await self._payload_store.put_manifest(

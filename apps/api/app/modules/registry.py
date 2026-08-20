@@ -4,6 +4,10 @@ from fastapi import APIRouter
 
 from app.modules.agent.port.http.router import router as agent_router
 from app.modules.automations.port.http.router import router as automations_router
+from app.modules.auth.port.http.router import public_router as auth_public_router
+from app.modules.auth.port.http.router import (
+    oauth_public_router as auth_oauth_public_router,
+)
 from app.modules.auth.port.http.router import router as auth_router
 from app.modules.agent.classify.port.http.router import router as classify_router
 from app.modules.dashboard.port.http.router import (
@@ -47,6 +51,12 @@ from app.modules.source_discovery.port.http.router import (
     runs_router as source_discovery_runs_router,
 )
 
+PUBLIC_ROUTERS: list[APIRouter] = [
+    auth_public_router,
+    auth_oauth_public_router,
+]
+
+
 MODULE_ROUTERS: list[APIRouter] = [
     import_parquet_router,
     export_parquet_router,
@@ -55,7 +65,9 @@ MODULE_ROUTERS: list[APIRouter] = [
     dataset_collections_router,
     agent_router,
     automations_router,
+    auth_public_router,
     auth_router,
+    auth_oauth_public_router,
     classify_router,
     dashboard_router,
     models_router,

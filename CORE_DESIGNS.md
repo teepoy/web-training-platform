@@ -230,29 +230,33 @@ SC Import as Dataset 当前使用 API service 内的 direct sparse import 路径
 
 平台 sample storage identity 与 module domain identity 必须解耦。`Sample.id` 是平台存储身份；SC `defect_id`、`sample_id`、`inspection_time`、`wafer_key` 等是 domain/upstream identity，不应默认写入全局主键。
 
-Dataset image access 必须通过平台后端代理表达。`file_shard_sparse` 中嵌入的图片通过 `/api/v1/samples/{sample_id}/images/{image_id}?dataset_id=...` 读取；对象存储 URI 通过 `/api/v1/images/resolve?uri=...` 读取；SC upstream/mock 图片通过 `/api/v1/sc/images/...` 作为兼容入口。前端 `<img>` / blink table / preview grid 不能携带自定义 header，因此图片 URL 必须显式携带 token 与 org context query 参数。前端不得把 raw image path helper 的返回值直接作为图片源，必须通过共享 authenticated URL helper 或 image adapter 生成最终 URL。
+通用 Dataset-owned 嵌入图片仍通过平台后端的认证 route 表达；SC 图片是独立的
+display/runtime data-plane。Web gateway 将 `/api/v1/sc/images/...` 与
+`/api/v1/sc/sprites/...` 直接转发到 image-parser，FastAPI 不注册 SC bytes proxy，也不提供
+Python fallback。image-parser HTTP route 必须验证与 API 相同密钥签发的 HS256 token；前端
+`<img>` / blink table / preview grid 不能携带自定义 header，因此使用共享 helper 把短期 token
+放入 query。浏览器、Dataset、Import profile 与 runtime request 都不能选择 parser、source
+root、下载方式或 format ID。
 
-需要在运行时取图的 Dataset 必须保存显式的 image source binding：稳定 contract 为
-`filesystem.image-source.v1`，并保存代码注册的 format ID；Dataset 不保存本地/SMB 绝对
-路径、对象存储凭据、staging 实现、ownership、缓存或清理策略。format 是数据布局/容器
-契约，不是部署 profile。历史 Dataset 不回填新字段，metadata 仍可读；首次相关
-training/prediction 遇到缺失 format 时必须明确失败，不得从旧 profile、扩展名或
-`dataset_type` 推断。Direct SC preview/import 使用 API 配置
-`sc.upstream_image_source_format`；Source Discovery 从版本化 Import profile 显式读取
-`image_source_format`，public request 与浏览器不能选择 source root 或 staging 实现。
+SC 图片来源由 `(inspection_time, wafer_key)` 标识。image-parser 打开 context 时只查询一次
+Inspection 并取得精确 `eqp_id`，再从代码拥有的 exact registry 选择 Equipment image entry。
+EntryFactory 组合设备固定的 Artifact downloader 与 Artifact parser；多个明确列出的设备 ID
+可以注册到同一 factory，空 ID、重复 ID 与未知设备直接失败。设备规则不得由启动配置、文件
+扩展名、request 字段或 sniffing 改变。当前 legacy entry 固定使用 500-defect range ZIP 与
+`PatchReference` / `PatchDefective` / `PatchDifference` 成员命名；新增 SQLite、Parquet、目录或
+其他设备布局时，应新增并显式注册 Equipment entry，而不是恢复通用 format switch。
 
-图片 source 的通用边界是“已在本机可见的 regular file 或 directory”；SMB 通过挂载目录
-进入同一边界。通用层只负责 rooted path 安全、source ownership、format driver contract
-与稳定 item error，不假定 ZIP、按 defect index 分桶或固定成员命名。路径解析和容器读取
-由代码注册的 format driver 拥有：`filesystem.role-paths.v1` 使用数据行显式提供的
-`role_paths` 相对路径映射，且不要求 SC inspection/wafer/defect identity；
-旧 SC 的 500-defect ZIP 范围和成员命名只存在于可选的
-`sc.legacy-range-zip.v1` driver。format mismatch 必须失败，不得 sniff 或 fallback。
+Artifact downloader 把 upstream source 描述为稳定 `ArtifactRef(entry_id, source_identity,
+revision, kind)` 并将文件或目录流式写入 staging path；Artifact parser 只从本地已发布 artifact
+读取目标图片。对象存储 revision 优先使用 VersionId，其次 ETag；两者都没有时，文件可使用
+可靠的 source `mtime + size`。目录必须由 provider 给出 generation、manifest revision 或可靠
+整体更新时间。下载后的本地 mtime 只用于 eviction，不能作为 source freshness。
 
-Source Stager 是入口级可选组合，不是 format driver 的隐式能力：关闭表示该入口根本不安装
-stager，要求 source 已是 local file/directory/SMB；远端下载、重试和发布到本地目录由具体
-入口拥有。ownership 固定为 `borrowed`（resolver 永不写删）、`job_owned`（任务退出清理）或
-`shared_cache`（仅 cache policy 清理），不得跨 ownership 复用删除逻辑。
+image-parser 的统一 Artifact Cache Manager 在下载前获取 target-keyed process singleflight 与
+跨进程 advisory lock，并在锁内 recheck；miss 写 sibling temp、校验、fsync 后 atomic rename。
+Janitor 删除 final target 前获取同一锁，不计算 staging 或持久 coordination 文件。Display、
+Prediction、Training、Export 使用同一个 Manager contract，但拥有独立目录、TTL、容量、
+并发预算和 metrics；非服务端入口不拥有 cache manager。
 
 大数据集模式不追求与小数据集完全功能对齐。`file_shard_sparse` 的目标是大规模 ingest、批量预测、稀疏人工修正；不是重建完整 `SampleORM + Label Studio` 流程。
 
@@ -266,38 +270,46 @@ SC 当前只注册 `yolo-sc-v1` 算法，不保留 ResNet compatibility 分支�
 `patch_defective` 与 `patch_template` 两张灰度图：每张独立 resize 到 `128x128`，
 再按 channel 顺序叠成 `[2, 128, 128]`，禁止在空间维纵向或横向拼图。训练固定
 50 epochs；预测模型 batch 固定 256。Training 继续使用可重放、可 shuffle 的
-materialized Parquet/DataLoader。Training 与 batch Prediction 共用 job-local resolver
-factory：每个 job 启动一个独立进程，通过有界、顺序的 length-prefixed protobuf frame
-按 512 行读取 source format 对应图片，任务结束关闭进程。默认 job 入口组合 upstream
-stager + job-owned source + legacy driver；部署可将 binary 切换为纯本地入口，并显式提供
-borrowed root/kind/format。两者都不监听端口、不调用 display image-parser RPC、也不在失败
-后 fallback 到线上服务。之后的图片解码、灰度转换、resize 和 channel stack 属于算法
-Dataset preprocess；训练由多进程 DataLoader worker 执行，预测由其有界 preprocess pool
-执行。
+materialized Parquet/DataLoader，但图片 bytes 通过 Training stream 获取；batch Prediction
+不生成图片 Parquet。两条路径都不启动 job-local resolver。Prediction、Training 与含图 Export
+各自打开语义独立的
+bidirectional gRPC stream；一条 stream 可显式打开多个 Inspection context，每个 sequence
+对应一个 sample 及其全部 requested roles。服务可在内部并发下载/解析，但必须在有界 reorder
+后严格按 sequence 返回，并在 open acknowledgement 中公布 batch、response bytes 与 active
+context 上限。客户端只从第一个未 ack sequence 重发；服务不持久化 session，交付语义为
+stateless at-least-once。context 通过显式 close、stream cancellation 或 idle timeout 释放，
+不设置总运行时长。不得使用 gRPC gzip，也不得 fallback 到已删除的 subprocess/frame path。
 
-image-parser 保留三个独立入口组合：display server 使用 upstream stager + shared cache，
-只提供前端/兼容展示 API；train/batch-predict job resolver 使用可替换 stager + job-owned
-source；online/instant prediction 使用纯本地 borrowed source、无 upstream/S3 client。
-三者共享 rooted filesystem、format driver 和 framed transport 等稳定 primitive，不共享
-下载、缓存生命周期、清理、认证或并发预算。display server 不暴露 job batch resolve RPC。
+一个 image-parser deployment 同时服务 Display、Prediction、Training、Export。各 lane 内 FIFO
+且有独立 semaphore；global weighted round-robin limiter 在共享并发上保证 Display latency、
+优先 Prediction throughput，并防止 Training/Export 饥饿。服务只返回原始压缩 bytes 与
+content type。图片 decode、灰度转换、resize、channel stack 和 tensor/model batch 属于算法
+preprocess：训练由可 shuffle 的 DataLoader 路径执行，预测由 4 个 spawn worker、每 task 64、
+最多 8 个预取 task、模型 batch 256 的有界 pool 执行。
 
-SC prediction result export 可选携带缺陷图片。它先执行 Annotation Sampling，再通过同一个
-job-local resolver factory 按 512 行有界读取每个保留 sample 的 `patch_defective`，不得调用
-display image-parser 网络接口。包含图片的 KLARF/ZIP 导出必须返回 ZIP，KLARF 中每个非零
+SC prediction result export 可选携带缺陷图片。它先执行 Annotation Sampling，再通过独立
+Export image stream 按 512 行有界读取每个保留 sample 的 `patch_defective`，不得伪装成
+Prediction 或占用 Display lane。包含图片的 KLARF/ZIP 导出必须返回 ZIP，KLARF 中每个非零
 图片引用必须精确对应包内文件；缺图、损坏、未知 content type 或 source format 整体不可用
 使整个导出失败，不得静默写成零图片。导出允许以临时文件换取有界内存，但图片 bytes 不得
 按 Dataset 总量聚合在进程内存中。
 
 SC v3 Prediction 不生成完整临时图片 Parquet，也不为进度预先 collect/count 全量数据。
-它从 Dataset 当前持久化数据以 512 行有界扫描；Collection 按 `source_dataset_id` 映射
-各成员的 source format，通过本 job 的 local resolver frame 批量取 `sample × role` 图片。
+它从 Dataset 当前持久化数据以 512 行有界扫描；Collection 按成员的
+`(inspection_time, wafer_key)` context 映射，通过 Prediction image stream 批量取
+`sample × role` 图片。
 预处理固定 4 个 spawn 进程，每个 task 最多 64 条、最多预取 8 个
 task；主进程聚合为 256 条模型 batch，prediction 每 5,000 条批量写回，结束时写入实际
 processed total。因此内存上界由各批次和队列上限决定，不随 Dataset 总样本数线性增长。
 图片缺失、损坏等稳定 item error 只生成该 sample 的 prediction error，其他 sample 继续；
-模型加载失败、worker 崩溃、source format/stager 整体不可用或本地 frame 中断使整个任务
-失败。取消时必须关闭 pipe、job resolver、队列与子进程。Collection prediction 仍按源
+模型加载失败、worker 崩溃、Inspection context/source 整体不可用或 gRPC transport 重试耗尽
+使整个任务失败。取消时必须关闭 stream、context、队列与子进程。Collection prediction 仍按源
 Dataset 拆分写回。
+
+阻塞性能门槛使用 300,000 samples、每 sample 两张代表性压缩图片，测量 warm Artifact Cache
+下 production range-ZIP parser 经公共 Prediction gRPC 到 Python 顺序收包，必须至少达到
+3,000 samples/s。fixture 生成、cold source 下载和 decode/fake predictor 分开计时，不能混入
+该门槛；基准 request batch 固定使用服务公布上限（当前 512）。
 
 完整 capability matrix 和 SC sparse 路径详见 `docs/architecture/dataset-storage-modes.md`。Smoke 验证使用 `make smoke-tests`。
 

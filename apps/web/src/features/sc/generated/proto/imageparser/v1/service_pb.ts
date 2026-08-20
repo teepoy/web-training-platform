@@ -10,7 +10,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file imageparser/v1/service.proto.
  */
 export const file_imageparser_v1_service: GenFile = /*@__PURE__*/
-  fileDesc("ChxpbWFnZXBhcnNlci92MS9zZXJ2aWNlLnByb3RvEg5pbWFnZXBhcnNlci52MSIPCg1IZWFsdGhSZXF1ZXN0IiAKDkhlYWx0aFJlc3BvbnNlEg4KBnN0YXR1cxgBIAEoCSJNCg9HZXRJbWFnZVJlcXVlc3QSDgoGYnVja2V0GAEgASgJEgsKA2tleRgCIAEoCRIOCgZwcmVmaXgYAyABKAkSDQoFY2FjaGUYBCABKAgiVwoQR2V0SW1hZ2VSZXNwb25zZRISCgppbWFnZV9kYXRhGAEgASgMEhAKCGZpbGVuYW1lGAIgASgJEg0KBXdpZHRoGAMgASgFEg4KBmhlaWdodBgEIAEoBSJbCg1TcHJpdGVSZXF1ZXN0Eg4KBmJ1Y2tldBgBIAEoCRILCgNrZXkYAiABKAkSEAoIcHJlZml4ZXMYAyADKAkSDAoEc2l6ZRgEIAEoBRINCgVjYWNoZRgFIAEoCCJDCg5TcHJpdGVSZXNwb25zZRISCgppbWFnZV9kYXRhGAEgASgMEg0KBXdpZHRoGAIgASgFEg4KBmhlaWdodBgDIAEoBSJOCg9WMlNwcml0ZVJlcXVlc3QSDgoGYnVja2V0GAEgASgJEg4KBnJlY29yZBgCIAEoCRINCgVpdGVtcxgDIAMoCRIMCgRzaXplGAQgASgFIkUKEFYyU3ByaXRlUmVzcG9uc2USEgoKaW1hZ2VfZGF0YRgBIAEoDBINCgV3aWR0aBgCIAEoBRIOCgZoZWlnaHQYAyABKAUifwoRR2V0U2NJbWFnZVJlcXVlc3QSFwoPaW5zcGVjdGlvbl90aW1lGAEgASgJEhEKCXdhZmVyX2tleRgCIAEoBRIRCglkZWZlY3RfaWQYAyABKAkSEgoKaW1hZ2VfdHlwZRgEIAEoCRIXCg9yZXZpZXdfaW1hZ2VfaWQYBSABKAUiPgoSR2V0U2NJbWFnZVJlc3BvbnNlEhIKCmltYWdlX2RhdGEYASABKAwSFAoMY29udGVudF90eXBlGAIgASgJIkwKClNjSW1hZ2VSZWYSEQoJZGVmZWN0X2lkGAEgASgJEhIKCmltYWdlX3R5cGUYAiABKAkSFwoPcmV2aWV3X2ltYWdlX2lkGAMgASgFInAKFkJhdGNoR2V0U2NJbWFnZVJlcXVlc3QSFwoPaW5zcGVjdGlvbl90aW1lGAEgASgJEhEKCXdhZmVyX2tleRgCIAEoBRIqCgZpbWFnZXMYAyADKAsyGi5pbWFnZXBhcnNlci52MS5TY0ltYWdlUmVmIm8KDVNjSW1hZ2VSZXN1bHQSEQoJZGVmZWN0X2lkGAEgASgJEhIKCmltYWdlX3R5cGUYAiABKAkSEgoKaW1hZ2VfZGF0YRgDIAEoDBIUCgxjb250ZW50X3R5cGUYBCABKAkSDQoFZXJyb3IYBSABKAkiSQoXQmF0Y2hHZXRTY0ltYWdlUmVzcG9uc2USLgoHcmVzdWx0cxgBIAMoCzIdLmltYWdlcGFyc2VyLnYxLlNjSW1hZ2VSZXN1bHQidgofU3RyZWFtU2NJbnNwZWN0aW9uSW1hZ2VzUmVxdWVzdBIXCg9pbnNwZWN0aW9uX3RpbWUYASABKAkSEQoJd2FmZXJfa2V5GAIgASgFEhIKCmRlZmVjdF9pZHMYAyADKAUSEwoLaW1hZ2VfdHlwZXMYBCADKAkidwoZUmVzb2x2ZVBhdGNoSW1hZ2VzUmVxdWVzdBIVCg1zb3VyY2VfZm9ybWF0GAEgASgJEg0KBXJvbGVzGAIgAygJEjQKBWl0ZW1zGAMgAygLMiUuaW1hZ2VwYXJzZXIudjEuUmVzb2x2ZVBhdGNoSW1hZ2VJdGVtIvkBChVSZXNvbHZlUGF0Y2hJbWFnZUl0ZW0SEgoKcmVxdWVzdF9pZBgBIAEoCRIRCglzYW1wbGVfaWQYAiABKAkSFwoPaW5zcGVjdGlvbl90aW1lGAMgASgJEhEKCXdhZmVyX2tleRgEIAEoBRIRCglkZWZlY3RfaWQYBSABKAkSSAoKcm9sZV9wYXRocxgGIAMoCzI0LmltYWdlcGFyc2VyLnYxLlJlc29sdmVQYXRjaEltYWdlSXRlbS5Sb2xlUGF0aHNFbnRyeRowCg5Sb2xlUGF0aHNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIsYBChdSZXNvbHZlUGF0Y2hJbWFnZVJlc3VsdBISCgpyZXF1ZXN0X2lkGAEgASgJEhEKCXNhbXBsZV9pZBgCIAEoCRIXCg9pbnNwZWN0aW9uX3RpbWUYAyABKAkSEQoJd2FmZXJfa2V5GAQgASgFEhEKCWRlZmVjdF9pZBgFIAEoCRIMCgRyb2xlGAYgASgJEhIKCmltYWdlX2RhdGEYByABKAwSFAoMY29udGVudF90eXBlGAggASgJEg0KBWVycm9yGAkgASgJIlsKH1Jlc29sdmVQYXRjaEltYWdlc0JhdGNoUmVzcG9uc2USOAoHcmVzdWx0cxgBIAMoCzInLmltYWdlcGFyc2VyLnYxLlJlc29sdmVQYXRjaEltYWdlUmVzdWx0IlQKEldhcm1TY0NhY2hlUmVxdWVzdBIXCg9pbnNwZWN0aW9uX3RpbWUYASABKAkSEQoJd2FmZXJfa2V5GAIgASgFEhIKCmRlZmVjdF9pZHMYAyADKAUiOgoTV2FybVNjQ2FjaGVSZXNwb25zZRIOCgZzdGF0dXMYASABKAkSEwoLemlwc193YXJtZWQYAiABKAUyvAUKC0ltYWdlUGFyc2VyEkcKBkhlYWx0aBIdLmltYWdlcGFyc2VyLnYxLkhlYWx0aFJlcXVlc3QaHi5pbWFnZXBhcnNlci52MS5IZWFsdGhSZXNwb25zZRJNCghHZXRJbWFnZRIfLmltYWdlcGFyc2VyLnYxLkdldEltYWdlUmVxdWVzdBogLmltYWdlcGFyc2VyLnYxLkdldEltYWdlUmVzcG9uc2USRwoGU3ByaXRlEh0uaW1hZ2VwYXJzZXIudjEuU3ByaXRlUmVxdWVzdBoeLmltYWdlcGFyc2VyLnYxLlNwcml0ZVJlc3BvbnNlEk0KCFYyU3ByaXRlEh8uaW1hZ2VwYXJzZXIudjEuVjJTcHJpdGVSZXF1ZXN0GiAuaW1hZ2VwYXJzZXIudjEuVjJTcHJpdGVSZXNwb25zZRJTCgpHZXRTY0ltYWdlEiEuaW1hZ2VwYXJzZXIudjEuR2V0U2NJbWFnZVJlcXVlc3QaIi5pbWFnZXBhcnNlci52MS5HZXRTY0ltYWdlUmVzcG9uc2USYgoPQmF0Y2hHZXRTY0ltYWdlEiYuaW1hZ2VwYXJzZXIudjEuQmF0Y2hHZXRTY0ltYWdlUmVxdWVzdBonLmltYWdlcGFyc2VyLnYxLkJhdGNoR2V0U2NJbWFnZVJlc3BvbnNlEmwKGFN0cmVhbVNjSW5zcGVjdGlvbkltYWdlcxIvLmltYWdlcGFyc2VyLnYxLlN0cmVhbVNjSW5zcGVjdGlvbkltYWdlc1JlcXVlc3QaHS5pbWFnZXBhcnNlci52MS5TY0ltYWdlUmVzdWx0MAESVgoLV2FybVNjQ2FjaGUSIi5pbWFnZXBhcnNlci52MS5XYXJtU2NDYWNoZVJlcXVlc3QaIy5pbWFnZXBhcnNlci52MS5XYXJtU2NDYWNoZVJlc3BvbnNlQjhaNmZ0LXBsYXRmb3JtL3Byb3Rvcy9nZW4vZ28vaW1hZ2VwYXJzZXIvdjE7aW1hZ2VwYXJzZXJ2MWIGcHJvdG8z");
+  fileDesc("ChxpbWFnZXBhcnNlci92MS9zZXJ2aWNlLnByb3RvEg5pbWFnZXBhcnNlci52MSIPCg1IZWFsdGhSZXF1ZXN0IiAKDkhlYWx0aFJlc3BvbnNlEg4KBnN0YXR1cxgBIAEoCSLXAQoTU3RyZWFtSW1hZ2VzUmVxdWVzdBI4CgxvcGVuX2NvbnRleHQYASABKAsyIC5pbWFnZXBhcnNlci52MS5PcGVuSW1hZ2VDb250ZXh0SAASPwoMc2FtcGxlX2JhdGNoGAIgASgLMicuaW1hZ2VwYXJzZXIudjEuSW1hZ2VTYW1wbGVCYXRjaFJlcXVlc3RIABI6Cg1jbG9zZV9jb250ZXh0GAMgASgLMiEuaW1hZ2VwYXJzZXIudjEuQ2xvc2VJbWFnZUNvbnRleHRIAEIJCgdwYXlsb2FkImEKEE9wZW5JbWFnZUNvbnRleHQSEgoKY29udGV4dF9pZBgBIAEoCRIXCg9pbnNwZWN0aW9uX3RpbWUYAiABKAkSEQoJd2FmZXJfa2V5GAMgASgFEg0KBXJvbGVzGAQgAygJIkwKEkltYWdlU2FtcGxlUmVxdWVzdBIQCghzZXF1ZW5jZRgBIAEoBBIRCglzYW1wbGVfaWQYAiABKAkSEQoJZGVmZWN0X2lkGAMgASgJImIKF0ltYWdlU2FtcGxlQmF0Y2hSZXF1ZXN0EhIKCmNvbnRleHRfaWQYASABKAkSMwoHc2FtcGxlcxgCIAMoCzIiLmltYWdlcGFyc2VyLnYxLkltYWdlU2FtcGxlUmVxdWVzdCInChFDbG9zZUltYWdlQ29udGV4dBISCgpjb250ZXh0X2lkGAEgASgJIpsCChRTdHJlYW1JbWFnZXNSZXNwb25zZRI8Cg5jb250ZXh0X29wZW5lZBgBIAEoCzIiLmltYWdlcGFyc2VyLnYxLkltYWdlQ29udGV4dE9wZW5lZEgAEkAKDHNhbXBsZV9iYXRjaBgCIAEoCzIoLmltYWdlcGFyc2VyLnYxLkltYWdlU2FtcGxlQmF0Y2hSZXNwb25zZUgAEjoKDWNvbnRleHRfZXJyb3IYAyABKAsyIS5pbWFnZXBhcnNlci52MS5JbWFnZUNvbnRleHRFcnJvckgAEjwKDmNvbnRleHRfY2xvc2VkGAQgASgLMiIuaW1hZ2VwYXJzZXIudjEuSW1hZ2VDb250ZXh0Q2xvc2VkSABCCQoHcGF5bG9hZCJlChFJbWFnZVN0cmVhbUxpbWl0cxIXCg9tYXhfYmF0Y2hfaXRlbXMYASABKA0SGgoSbWF4X3Jlc3BvbnNlX2J5dGVzGAIgASgEEhsKE21heF9hY3RpdmVfY29udGV4dHMYAyABKA0iawoSSW1hZ2VDb250ZXh0T3BlbmVkEhIKCmNvbnRleHRfaWQYASABKAkSDgoGZXFwX2lkGAIgASgJEjEKBmxpbWl0cxgDIAEoCzIhLmltYWdlcGFyc2VyLnYxLkltYWdlU3RyZWFtTGltaXRzIlgKD0ltYWdlUm9sZVJlc3VsdBIMCgRyb2xlGAEgASgJEhIKCmltYWdlX2RhdGEYAiABKAwSFAoMY29udGVudF90eXBlGAMgASgJEg0KBWVycm9yGAQgASgJIosBChFJbWFnZVNhbXBsZVJlc3VsdBIQCghzZXF1ZW5jZRgBIAEoBBIRCglzYW1wbGVfaWQYAiABKAkSEQoJZGVmZWN0X2lkGAMgASgJEi8KBmltYWdlcxgEIAMoCzIfLmltYWdlcGFyc2VyLnYxLkltYWdlUm9sZVJlc3VsdBINCgVlcnJvchgFIAEoCSJ4ChhJbWFnZVNhbXBsZUJhdGNoUmVzcG9uc2USEgoKY29udGV4dF9pZBgBIAEoCRIyCgdzYW1wbGVzGAIgAygLMiEuaW1hZ2VwYXJzZXIudjEuSW1hZ2VTYW1wbGVSZXN1bHQSFAoMYWNrX3NlcXVlbmNlGAMgASgEIkQKEUltYWdlQ29udGV4dEVycm9yEhIKCmNvbnRleHRfaWQYASABKAkSDAoEY29kZRgCIAEoCRINCgVlcnJvchgDIAEoCSIoChJJbWFnZUNvbnRleHRDbG9zZWQSEgoKY29udGV4dF9pZBgBIAEoCTKLAwoLSW1hZ2VQYXJzZXISRwoGSGVhbHRoEh0uaW1hZ2VwYXJzZXIudjEuSGVhbHRoUmVxdWVzdBoeLmltYWdlcGFyc2VyLnYxLkhlYWx0aFJlc3BvbnNlEmcKFlN0cmVhbVByZWRpY3Rpb25JbWFnZXMSIy5pbWFnZXBhcnNlci52MS5TdHJlYW1JbWFnZXNSZXF1ZXN0GiQuaW1hZ2VwYXJzZXIudjEuU3RyZWFtSW1hZ2VzUmVzcG9uc2UoATABEmUKFFN0cmVhbVRyYWluaW5nSW1hZ2VzEiMuaW1hZ2VwYXJzZXIudjEuU3RyZWFtSW1hZ2VzUmVxdWVzdBokLmltYWdlcGFyc2VyLnYxLlN0cmVhbUltYWdlc1Jlc3BvbnNlKAEwARJjChJTdHJlYW1FeHBvcnRJbWFnZXMSIy5pbWFnZXBhcnNlci52MS5TdHJlYW1JbWFnZXNSZXF1ZXN0GiQuaW1hZ2VwYXJzZXIudjEuU3RyZWFtSW1hZ2VzUmVzcG9uc2UoATABQjhaNmZ0LXBsYXRmb3JtL3Byb3Rvcy9nZW4vZ28vaW1hZ2VwYXJzZXIvdjE7aW1hZ2VwYXJzZXJ2MWIGcHJvdG8z");
 
 /**
  * @generated from message imageparser.v1.HealthRequest
@@ -43,205 +43,278 @@ export const HealthResponseSchema: GenMessage<HealthResponse> = /*@__PURE__*/
   messageDesc(file_imageparser_v1_service, 1);
 
 /**
- * @generated from message imageparser.v1.GetImageRequest
+ * @generated from message imageparser.v1.StreamImagesRequest
  */
-export type GetImageRequest = Message<"imageparser.v1.GetImageRequest"> & {
+export type StreamImagesRequest = Message<"imageparser.v1.StreamImagesRequest"> & {
   /**
-   * @generated from field: string bucket = 1;
+   * @generated from oneof imageparser.v1.StreamImagesRequest.payload
    */
-  bucket: string;
-
-  /**
-   * @generated from field: string key = 2;
-   */
-  key: string;
-
-  /**
-   * @generated from field: string prefix = 3;
-   */
-  prefix: string;
-
-  /**
-   * @generated from field: bool cache = 4;
-   */
-  cache: boolean;
+  payload: {
+    /**
+     * @generated from field: imageparser.v1.OpenImageContext open_context = 1;
+     */
+    value: OpenImageContext;
+    case: "openContext";
+  } | {
+    /**
+     * @generated from field: imageparser.v1.ImageSampleBatchRequest sample_batch = 2;
+     */
+    value: ImageSampleBatchRequest;
+    case: "sampleBatch";
+  } | {
+    /**
+     * @generated from field: imageparser.v1.CloseImageContext close_context = 3;
+     */
+    value: CloseImageContext;
+    case: "closeContext";
+  } | { case: undefined; value?: undefined };
 };
 
 /**
- * Describes the message imageparser.v1.GetImageRequest.
- * Use `create(GetImageRequestSchema)` to create a new message.
+ * Describes the message imageparser.v1.StreamImagesRequest.
+ * Use `create(StreamImagesRequestSchema)` to create a new message.
  */
-export const GetImageRequestSchema: GenMessage<GetImageRequest> = /*@__PURE__*/
+export const StreamImagesRequestSchema: GenMessage<StreamImagesRequest> = /*@__PURE__*/
   messageDesc(file_imageparser_v1_service, 2);
 
 /**
- * @generated from message imageparser.v1.GetImageResponse
+ * @generated from message imageparser.v1.OpenImageContext
  */
-export type GetImageResponse = Message<"imageparser.v1.GetImageResponse"> & {
+export type OpenImageContext = Message<"imageparser.v1.OpenImageContext"> & {
   /**
-   * @generated from field: bytes image_data = 1;
+   * @generated from field: string context_id = 1;
    */
-  imageData: Uint8Array;
+  contextId: string;
 
   /**
-   * @generated from field: string filename = 2;
-   */
-  filename: string;
-
-  /**
-   * @generated from field: int32 width = 3;
-   */
-  width: number;
-
-  /**
-   * @generated from field: int32 height = 4;
-   */
-  height: number;
-};
-
-/**
- * Describes the message imageparser.v1.GetImageResponse.
- * Use `create(GetImageResponseSchema)` to create a new message.
- */
-export const GetImageResponseSchema: GenMessage<GetImageResponse> = /*@__PURE__*/
-  messageDesc(file_imageparser_v1_service, 3);
-
-/**
- * @generated from message imageparser.v1.SpriteRequest
- */
-export type SpriteRequest = Message<"imageparser.v1.SpriteRequest"> & {
-  /**
-   * @generated from field: string bucket = 1;
-   */
-  bucket: string;
-
-  /**
-   * @generated from field: string key = 2;
-   */
-  key: string;
-
-  /**
-   * @generated from field: repeated string prefixes = 3;
-   */
-  prefixes: string[];
-
-  /**
-   * @generated from field: int32 size = 4;
-   */
-  size: number;
-
-  /**
-   * @generated from field: bool cache = 5;
-   */
-  cache: boolean;
-};
-
-/**
- * Describes the message imageparser.v1.SpriteRequest.
- * Use `create(SpriteRequestSchema)` to create a new message.
- */
-export const SpriteRequestSchema: GenMessage<SpriteRequest> = /*@__PURE__*/
-  messageDesc(file_imageparser_v1_service, 4);
-
-/**
- * @generated from message imageparser.v1.SpriteResponse
- */
-export type SpriteResponse = Message<"imageparser.v1.SpriteResponse"> & {
-  /**
-   * @generated from field: bytes image_data = 1;
-   */
-  imageData: Uint8Array;
-
-  /**
-   * @generated from field: int32 width = 2;
-   */
-  width: number;
-
-  /**
-   * @generated from field: int32 height = 3;
-   */
-  height: number;
-};
-
-/**
- * Describes the message imageparser.v1.SpriteResponse.
- * Use `create(SpriteResponseSchema)` to create a new message.
- */
-export const SpriteResponseSchema: GenMessage<SpriteResponse> = /*@__PURE__*/
-  messageDesc(file_imageparser_v1_service, 5);
-
-/**
- * @generated from message imageparser.v1.V2SpriteRequest
- */
-export type V2SpriteRequest = Message<"imageparser.v1.V2SpriteRequest"> & {
-  /**
-   * @generated from field: string bucket = 1;
-   */
-  bucket: string;
-
-  /**
-   * @generated from field: string record = 2;
-   */
-  record: string;
-
-  /**
-   * @generated from field: repeated string items = 3;
-   */
-  items: string[];
-
-  /**
-   * @generated from field: int32 size = 4;
-   */
-  size: number;
-};
-
-/**
- * Describes the message imageparser.v1.V2SpriteRequest.
- * Use `create(V2SpriteRequestSchema)` to create a new message.
- */
-export const V2SpriteRequestSchema: GenMessage<V2SpriteRequest> = /*@__PURE__*/
-  messageDesc(file_imageparser_v1_service, 6);
-
-/**
- * @generated from message imageparser.v1.V2SpriteResponse
- */
-export type V2SpriteResponse = Message<"imageparser.v1.V2SpriteResponse"> & {
-  /**
-   * @generated from field: bytes image_data = 1;
-   */
-  imageData: Uint8Array;
-
-  /**
-   * @generated from field: int32 width = 2;
-   */
-  width: number;
-
-  /**
-   * @generated from field: int32 height = 3;
-   */
-  height: number;
-};
-
-/**
- * Describes the message imageparser.v1.V2SpriteResponse.
- * Use `create(V2SpriteResponseSchema)` to create a new message.
- */
-export const V2SpriteResponseSchema: GenMessage<V2SpriteResponse> = /*@__PURE__*/
-  messageDesc(file_imageparser_v1_service, 7);
-
-/**
- * @generated from message imageparser.v1.GetScImageRequest
- */
-export type GetScImageRequest = Message<"imageparser.v1.GetScImageRequest"> & {
-  /**
-   * @generated from field: string inspection_time = 1;
+   * @generated from field: string inspection_time = 2;
    */
   inspectionTime: string;
 
   /**
-   * @generated from field: int32 wafer_key = 2;
+   * @generated from field: int32 wafer_key = 3;
    */
   waferKey: number;
+
+  /**
+   * @generated from field: repeated string roles = 4;
+   */
+  roles: string[];
+};
+
+/**
+ * Describes the message imageparser.v1.OpenImageContext.
+ * Use `create(OpenImageContextSchema)` to create a new message.
+ */
+export const OpenImageContextSchema: GenMessage<OpenImageContext> = /*@__PURE__*/
+  messageDesc(file_imageparser_v1_service, 3);
+
+/**
+ * @generated from message imageparser.v1.ImageSampleRequest
+ */
+export type ImageSampleRequest = Message<"imageparser.v1.ImageSampleRequest"> & {
+  /**
+   * @generated from field: uint64 sequence = 1;
+   */
+  sequence: bigint;
+
+  /**
+   * @generated from field: string sample_id = 2;
+   */
+  sampleId: string;
+
+  /**
+   * @generated from field: string defect_id = 3;
+   */
+  defectId: string;
+};
+
+/**
+ * Describes the message imageparser.v1.ImageSampleRequest.
+ * Use `create(ImageSampleRequestSchema)` to create a new message.
+ */
+export const ImageSampleRequestSchema: GenMessage<ImageSampleRequest> = /*@__PURE__*/
+  messageDesc(file_imageparser_v1_service, 4);
+
+/**
+ * @generated from message imageparser.v1.ImageSampleBatchRequest
+ */
+export type ImageSampleBatchRequest = Message<"imageparser.v1.ImageSampleBatchRequest"> & {
+  /**
+   * @generated from field: string context_id = 1;
+   */
+  contextId: string;
+
+  /**
+   * @generated from field: repeated imageparser.v1.ImageSampleRequest samples = 2;
+   */
+  samples: ImageSampleRequest[];
+};
+
+/**
+ * Describes the message imageparser.v1.ImageSampleBatchRequest.
+ * Use `create(ImageSampleBatchRequestSchema)` to create a new message.
+ */
+export const ImageSampleBatchRequestSchema: GenMessage<ImageSampleBatchRequest> = /*@__PURE__*/
+  messageDesc(file_imageparser_v1_service, 5);
+
+/**
+ * @generated from message imageparser.v1.CloseImageContext
+ */
+export type CloseImageContext = Message<"imageparser.v1.CloseImageContext"> & {
+  /**
+   * @generated from field: string context_id = 1;
+   */
+  contextId: string;
+};
+
+/**
+ * Describes the message imageparser.v1.CloseImageContext.
+ * Use `create(CloseImageContextSchema)` to create a new message.
+ */
+export const CloseImageContextSchema: GenMessage<CloseImageContext> = /*@__PURE__*/
+  messageDesc(file_imageparser_v1_service, 6);
+
+/**
+ * @generated from message imageparser.v1.StreamImagesResponse
+ */
+export type StreamImagesResponse = Message<"imageparser.v1.StreamImagesResponse"> & {
+  /**
+   * @generated from oneof imageparser.v1.StreamImagesResponse.payload
+   */
+  payload: {
+    /**
+     * @generated from field: imageparser.v1.ImageContextOpened context_opened = 1;
+     */
+    value: ImageContextOpened;
+    case: "contextOpened";
+  } | {
+    /**
+     * @generated from field: imageparser.v1.ImageSampleBatchResponse sample_batch = 2;
+     */
+    value: ImageSampleBatchResponse;
+    case: "sampleBatch";
+  } | {
+    /**
+     * @generated from field: imageparser.v1.ImageContextError context_error = 3;
+     */
+    value: ImageContextError;
+    case: "contextError";
+  } | {
+    /**
+     * @generated from field: imageparser.v1.ImageContextClosed context_closed = 4;
+     */
+    value: ImageContextClosed;
+    case: "contextClosed";
+  } | { case: undefined; value?: undefined };
+};
+
+/**
+ * Describes the message imageparser.v1.StreamImagesResponse.
+ * Use `create(StreamImagesResponseSchema)` to create a new message.
+ */
+export const StreamImagesResponseSchema: GenMessage<StreamImagesResponse> = /*@__PURE__*/
+  messageDesc(file_imageparser_v1_service, 7);
+
+/**
+ * @generated from message imageparser.v1.ImageStreamLimits
+ */
+export type ImageStreamLimits = Message<"imageparser.v1.ImageStreamLimits"> & {
+  /**
+   * @generated from field: uint32 max_batch_items = 1;
+   */
+  maxBatchItems: number;
+
+  /**
+   * @generated from field: uint64 max_response_bytes = 2;
+   */
+  maxResponseBytes: bigint;
+
+  /**
+   * @generated from field: uint32 max_active_contexts = 3;
+   */
+  maxActiveContexts: number;
+};
+
+/**
+ * Describes the message imageparser.v1.ImageStreamLimits.
+ * Use `create(ImageStreamLimitsSchema)` to create a new message.
+ */
+export const ImageStreamLimitsSchema: GenMessage<ImageStreamLimits> = /*@__PURE__*/
+  messageDesc(file_imageparser_v1_service, 8);
+
+/**
+ * @generated from message imageparser.v1.ImageContextOpened
+ */
+export type ImageContextOpened = Message<"imageparser.v1.ImageContextOpened"> & {
+  /**
+   * @generated from field: string context_id = 1;
+   */
+  contextId: string;
+
+  /**
+   * @generated from field: string eqp_id = 2;
+   */
+  eqpId: string;
+
+  /**
+   * @generated from field: imageparser.v1.ImageStreamLimits limits = 3;
+   */
+  limits?: ImageStreamLimits | undefined;
+};
+
+/**
+ * Describes the message imageparser.v1.ImageContextOpened.
+ * Use `create(ImageContextOpenedSchema)` to create a new message.
+ */
+export const ImageContextOpenedSchema: GenMessage<ImageContextOpened> = /*@__PURE__*/
+  messageDesc(file_imageparser_v1_service, 9);
+
+/**
+ * @generated from message imageparser.v1.ImageRoleResult
+ */
+export type ImageRoleResult = Message<"imageparser.v1.ImageRoleResult"> & {
+  /**
+   * @generated from field: string role = 1;
+   */
+  role: string;
+
+  /**
+   * @generated from field: bytes image_data = 2;
+   */
+  imageData: Uint8Array;
+
+  /**
+   * @generated from field: string content_type = 3;
+   */
+  contentType: string;
+
+  /**
+   * @generated from field: string error = 4;
+   */
+  error: string;
+};
+
+/**
+ * Describes the message imageparser.v1.ImageRoleResult.
+ * Use `create(ImageRoleResultSchema)` to create a new message.
+ */
+export const ImageRoleResultSchema: GenMessage<ImageRoleResult> = /*@__PURE__*/
+  messageDesc(file_imageparser_v1_service, 10);
+
+/**
+ * @generated from message imageparser.v1.ImageSampleResult
+ */
+export type ImageSampleResult = Message<"imageparser.v1.ImageSampleResult"> & {
+  /**
+   * @generated from field: uint64 sequence = 1;
+   */
+  sequence: bigint;
+
+  /**
+   * @generated from field: string sample_id = 2;
+   */
+  sampleId: string;
 
   /**
    * @generated from field: string defect_id = 3;
@@ -249,122 +322,9 @@ export type GetScImageRequest = Message<"imageparser.v1.GetScImageRequest"> & {
   defectId: string;
 
   /**
-   * @generated from field: string image_type = 4;
+   * @generated from field: repeated imageparser.v1.ImageRoleResult images = 4;
    */
-  imageType: string;
-
-  /**
-   * @generated from field: int32 review_image_id = 5;
-   */
-  reviewImageId: number;
-};
-
-/**
- * Describes the message imageparser.v1.GetScImageRequest.
- * Use `create(GetScImageRequestSchema)` to create a new message.
- */
-export const GetScImageRequestSchema: GenMessage<GetScImageRequest> = /*@__PURE__*/
-  messageDesc(file_imageparser_v1_service, 8);
-
-/**
- * @generated from message imageparser.v1.GetScImageResponse
- */
-export type GetScImageResponse = Message<"imageparser.v1.GetScImageResponse"> & {
-  /**
-   * @generated from field: bytes image_data = 1;
-   */
-  imageData: Uint8Array;
-
-  /**
-   * @generated from field: string content_type = 2;
-   */
-  contentType: string;
-};
-
-/**
- * Describes the message imageparser.v1.GetScImageResponse.
- * Use `create(GetScImageResponseSchema)` to create a new message.
- */
-export const GetScImageResponseSchema: GenMessage<GetScImageResponse> = /*@__PURE__*/
-  messageDesc(file_imageparser_v1_service, 9);
-
-/**
- * @generated from message imageparser.v1.ScImageRef
- */
-export type ScImageRef = Message<"imageparser.v1.ScImageRef"> & {
-  /**
-   * @generated from field: string defect_id = 1;
-   */
-  defectId: string;
-
-  /**
-   * @generated from field: string image_type = 2;
-   */
-  imageType: string;
-
-  /**
-   * @generated from field: int32 review_image_id = 3;
-   */
-  reviewImageId: number;
-};
-
-/**
- * Describes the message imageparser.v1.ScImageRef.
- * Use `create(ScImageRefSchema)` to create a new message.
- */
-export const ScImageRefSchema: GenMessage<ScImageRef> = /*@__PURE__*/
-  messageDesc(file_imageparser_v1_service, 10);
-
-/**
- * @generated from message imageparser.v1.BatchGetScImageRequest
- */
-export type BatchGetScImageRequest = Message<"imageparser.v1.BatchGetScImageRequest"> & {
-  /**
-   * @generated from field: string inspection_time = 1;
-   */
-  inspectionTime: string;
-
-  /**
-   * @generated from field: int32 wafer_key = 2;
-   */
-  waferKey: number;
-
-  /**
-   * @generated from field: repeated imageparser.v1.ScImageRef images = 3;
-   */
-  images: ScImageRef[];
-};
-
-/**
- * Describes the message imageparser.v1.BatchGetScImageRequest.
- * Use `create(BatchGetScImageRequestSchema)` to create a new message.
- */
-export const BatchGetScImageRequestSchema: GenMessage<BatchGetScImageRequest> = /*@__PURE__*/
-  messageDesc(file_imageparser_v1_service, 11);
-
-/**
- * @generated from message imageparser.v1.ScImageResult
- */
-export type ScImageResult = Message<"imageparser.v1.ScImageResult"> & {
-  /**
-   * @generated from field: string defect_id = 1;
-   */
-  defectId: string;
-
-  /**
-   * @generated from field: string image_type = 2;
-   */
-  imageType: string;
-
-  /**
-   * @generated from field: bytes image_data = 3;
-   */
-  imageData: Uint8Array;
-
-  /**
-   * @generated from field: string content_type = 4;
-   */
-  contentType: string;
+  images: ImageRoleResult[];
 
   /**
    * @generated from field: string error = 5;
@@ -373,262 +333,82 @@ export type ScImageResult = Message<"imageparser.v1.ScImageResult"> & {
 };
 
 /**
- * Describes the message imageparser.v1.ScImageResult.
- * Use `create(ScImageResultSchema)` to create a new message.
+ * Describes the message imageparser.v1.ImageSampleResult.
+ * Use `create(ImageSampleResultSchema)` to create a new message.
  */
-export const ScImageResultSchema: GenMessage<ScImageResult> = /*@__PURE__*/
+export const ImageSampleResultSchema: GenMessage<ImageSampleResult> = /*@__PURE__*/
+  messageDesc(file_imageparser_v1_service, 11);
+
+/**
+ * @generated from message imageparser.v1.ImageSampleBatchResponse
+ */
+export type ImageSampleBatchResponse = Message<"imageparser.v1.ImageSampleBatchResponse"> & {
+  /**
+   * @generated from field: string context_id = 1;
+   */
+  contextId: string;
+
+  /**
+   * @generated from field: repeated imageparser.v1.ImageSampleResult samples = 2;
+   */
+  samples: ImageSampleResult[];
+
+  /**
+   * @generated from field: uint64 ack_sequence = 3;
+   */
+  ackSequence: bigint;
+};
+
+/**
+ * Describes the message imageparser.v1.ImageSampleBatchResponse.
+ * Use `create(ImageSampleBatchResponseSchema)` to create a new message.
+ */
+export const ImageSampleBatchResponseSchema: GenMessage<ImageSampleBatchResponse> = /*@__PURE__*/
   messageDesc(file_imageparser_v1_service, 12);
 
 /**
- * @generated from message imageparser.v1.BatchGetScImageResponse
+ * @generated from message imageparser.v1.ImageContextError
  */
-export type BatchGetScImageResponse = Message<"imageparser.v1.BatchGetScImageResponse"> & {
+export type ImageContextError = Message<"imageparser.v1.ImageContextError"> & {
   /**
-   * @generated from field: repeated imageparser.v1.ScImageResult results = 1;
+   * @generated from field: string context_id = 1;
    */
-  results: ScImageResult[];
-};
+  contextId: string;
 
-/**
- * Describes the message imageparser.v1.BatchGetScImageResponse.
- * Use `create(BatchGetScImageResponseSchema)` to create a new message.
- */
-export const BatchGetScImageResponseSchema: GenMessage<BatchGetScImageResponse> = /*@__PURE__*/
-  messageDesc(file_imageparser_v1_service, 13);
-
-/**
- * @generated from message imageparser.v1.StreamScInspectionImagesRequest
- */
-export type StreamScInspectionImagesRequest = Message<"imageparser.v1.StreamScInspectionImagesRequest"> & {
   /**
-   * @generated from field: string inspection_time = 1;
+   * @generated from field: string code = 2;
    */
-  inspectionTime: string;
+  code: string;
 
   /**
-   * @generated from field: int32 wafer_key = 2;
-   */
-  waferKey: number;
-
-  /**
-   * @generated from field: repeated int32 defect_ids = 3;
-   */
-  defectIds: number[];
-
-  /**
-   * @generated from field: repeated string image_types = 4;
-   */
-  imageTypes: string[];
-};
-
-/**
- * Describes the message imageparser.v1.StreamScInspectionImagesRequest.
- * Use `create(StreamScInspectionImagesRequestSchema)` to create a new message.
- */
-export const StreamScInspectionImagesRequestSchema: GenMessage<StreamScInspectionImagesRequest> = /*@__PURE__*/
-  messageDesc(file_imageparser_v1_service, 14);
-
-/**
- * @generated from message imageparser.v1.ResolvePatchImagesRequest
- */
-export type ResolvePatchImagesRequest = Message<"imageparser.v1.ResolvePatchImagesRequest"> & {
-  /**
-   * Format identifies the code-registered filesystem driver. It is not a
-   * deployment profile and never carries a root path or credentials.
-   *
-   * @generated from field: string source_format = 1;
-   */
-  sourceFormat: string;
-
-  /**
-   * @generated from field: repeated string roles = 2;
-   */
-  roles: string[];
-
-  /**
-   * @generated from field: repeated imageparser.v1.ResolvePatchImageItem items = 3;
-   */
-  items: ResolvePatchImageItem[];
-};
-
-/**
- * Describes the message imageparser.v1.ResolvePatchImagesRequest.
- * Use `create(ResolvePatchImagesRequestSchema)` to create a new message.
- */
-export const ResolvePatchImagesRequestSchema: GenMessage<ResolvePatchImagesRequest> = /*@__PURE__*/
-  messageDesc(file_imageparser_v1_service, 15);
-
-/**
- * @generated from message imageparser.v1.ResolvePatchImageItem
- */
-export type ResolvePatchImageItem = Message<"imageparser.v1.ResolvePatchImageItem"> & {
-  /**
-   * @generated from field: string request_id = 1;
-   */
-  requestId: string;
-
-  /**
-   * @generated from field: string sample_id = 2;
-   */
-  sampleId: string;
-
-  /**
-   * @generated from field: string inspection_time = 3;
-   */
-  inspectionTime: string;
-
-  /**
-   * @generated from field: int32 wafer_key = 4;
-   */
-  waferKey: number;
-
-  /**
-   * @generated from field: string defect_id = 5;
-   */
-  defectId: string;
-
-  /**
-   * Direct-file drivers consume explicit role-relative paths. Layout-based
-   * compatibility drivers ignore this field and derive their own addresses.
-   *
-   * @generated from field: map<string, string> role_paths = 6;
-   */
-  rolePaths: { [key: string]: string };
-};
-
-/**
- * Describes the message imageparser.v1.ResolvePatchImageItem.
- * Use `create(ResolvePatchImageItemSchema)` to create a new message.
- */
-export const ResolvePatchImageItemSchema: GenMessage<ResolvePatchImageItem> = /*@__PURE__*/
-  messageDesc(file_imageparser_v1_service, 16);
-
-/**
- * @generated from message imageparser.v1.ResolvePatchImageResult
- */
-export type ResolvePatchImageResult = Message<"imageparser.v1.ResolvePatchImageResult"> & {
-  /**
-   * @generated from field: string request_id = 1;
-   */
-  requestId: string;
-
-  /**
-   * @generated from field: string sample_id = 2;
-   */
-  sampleId: string;
-
-  /**
-   * @generated from field: string inspection_time = 3;
-   */
-  inspectionTime: string;
-
-  /**
-   * @generated from field: int32 wafer_key = 4;
-   */
-  waferKey: number;
-
-  /**
-   * @generated from field: string defect_id = 5;
-   */
-  defectId: string;
-
-  /**
-   * @generated from field: string role = 6;
-   */
-  role: string;
-
-  /**
-   * @generated from field: bytes image_data = 7;
-   */
-  imageData: Uint8Array;
-
-  /**
-   * @generated from field: string content_type = 8;
-   */
-  contentType: string;
-
-  /**
-   * @generated from field: string error = 9;
+   * @generated from field: string error = 3;
    */
   error: string;
 };
 
 /**
- * Describes the message imageparser.v1.ResolvePatchImageResult.
- * Use `create(ResolvePatchImageResultSchema)` to create a new message.
+ * Describes the message imageparser.v1.ImageContextError.
+ * Use `create(ImageContextErrorSchema)` to create a new message.
  */
-export const ResolvePatchImageResultSchema: GenMessage<ResolvePatchImageResult> = /*@__PURE__*/
-  messageDesc(file_imageparser_v1_service, 17);
+export const ImageContextErrorSchema: GenMessage<ImageContextError> = /*@__PURE__*/
+  messageDesc(file_imageparser_v1_service, 13);
 
 /**
- * One ordered response frame used by stdin/stdout resolver processes. It is
- * deliberately not an RPC response: training, batch prediction, and pure-local
- * instant prediction never consume the display ImageParser service.
- *
- * @generated from message imageparser.v1.ResolvePatchImagesBatchResponse
+ * @generated from message imageparser.v1.ImageContextClosed
  */
-export type ResolvePatchImagesBatchResponse = Message<"imageparser.v1.ResolvePatchImagesBatchResponse"> & {
+export type ImageContextClosed = Message<"imageparser.v1.ImageContextClosed"> & {
   /**
-   * @generated from field: repeated imageparser.v1.ResolvePatchImageResult results = 1;
+   * @generated from field: string context_id = 1;
    */
-  results: ResolvePatchImageResult[];
+  contextId: string;
 };
 
 /**
- * Describes the message imageparser.v1.ResolvePatchImagesBatchResponse.
- * Use `create(ResolvePatchImagesBatchResponseSchema)` to create a new message.
+ * Describes the message imageparser.v1.ImageContextClosed.
+ * Use `create(ImageContextClosedSchema)` to create a new message.
  */
-export const ResolvePatchImagesBatchResponseSchema: GenMessage<ResolvePatchImagesBatchResponse> = /*@__PURE__*/
-  messageDesc(file_imageparser_v1_service, 18);
-
-/**
- * @generated from message imageparser.v1.WarmScCacheRequest
- */
-export type WarmScCacheRequest = Message<"imageparser.v1.WarmScCacheRequest"> & {
-  /**
-   * @generated from field: string inspection_time = 1;
-   */
-  inspectionTime: string;
-
-  /**
-   * @generated from field: int32 wafer_key = 2;
-   */
-  waferKey: number;
-
-  /**
-   * @generated from field: repeated int32 defect_ids = 3;
-   */
-  defectIds: number[];
-};
-
-/**
- * Describes the message imageparser.v1.WarmScCacheRequest.
- * Use `create(WarmScCacheRequestSchema)` to create a new message.
- */
-export const WarmScCacheRequestSchema: GenMessage<WarmScCacheRequest> = /*@__PURE__*/
-  messageDesc(file_imageparser_v1_service, 19);
-
-/**
- * @generated from message imageparser.v1.WarmScCacheResponse
- */
-export type WarmScCacheResponse = Message<"imageparser.v1.WarmScCacheResponse"> & {
-  /**
-   * @generated from field: string status = 1;
-   */
-  status: string;
-
-  /**
-   * @generated from field: int32 zips_warmed = 2;
-   */
-  zipsWarmed: number;
-};
-
-/**
- * Describes the message imageparser.v1.WarmScCacheResponse.
- * Use `create(WarmScCacheResponseSchema)` to create a new message.
- */
-export const WarmScCacheResponseSchema: GenMessage<WarmScCacheResponse> = /*@__PURE__*/
-  messageDesc(file_imageparser_v1_service, 20);
+export const ImageContextClosedSchema: GenMessage<ImageContextClosed> = /*@__PURE__*/
+  messageDesc(file_imageparser_v1_service, 14);
 
 /**
  * @generated from service imageparser.v1.ImageParser
@@ -643,60 +423,28 @@ export const ImageParser: GenService<{
     output: typeof HealthResponseSchema;
   },
   /**
-   * @generated from rpc imageparser.v1.ImageParser.GetImage
+   * @generated from rpc imageparser.v1.ImageParser.StreamPredictionImages
    */
-  getImage: {
-    methodKind: "unary";
-    input: typeof GetImageRequestSchema;
-    output: typeof GetImageResponseSchema;
+  streamPredictionImages: {
+    methodKind: "bidi_streaming";
+    input: typeof StreamImagesRequestSchema;
+    output: typeof StreamImagesResponseSchema;
   },
   /**
-   * @generated from rpc imageparser.v1.ImageParser.Sprite
+   * @generated from rpc imageparser.v1.ImageParser.StreamTrainingImages
    */
-  sprite: {
-    methodKind: "unary";
-    input: typeof SpriteRequestSchema;
-    output: typeof SpriteResponseSchema;
+  streamTrainingImages: {
+    methodKind: "bidi_streaming";
+    input: typeof StreamImagesRequestSchema;
+    output: typeof StreamImagesResponseSchema;
   },
   /**
-   * @generated from rpc imageparser.v1.ImageParser.V2Sprite
+   * @generated from rpc imageparser.v1.ImageParser.StreamExportImages
    */
-  v2Sprite: {
-    methodKind: "unary";
-    input: typeof V2SpriteRequestSchema;
-    output: typeof V2SpriteResponseSchema;
-  },
-  /**
-   * @generated from rpc imageparser.v1.ImageParser.GetScImage
-   */
-  getScImage: {
-    methodKind: "unary";
-    input: typeof GetScImageRequestSchema;
-    output: typeof GetScImageResponseSchema;
-  },
-  /**
-   * @generated from rpc imageparser.v1.ImageParser.BatchGetScImage
-   */
-  batchGetScImage: {
-    methodKind: "unary";
-    input: typeof BatchGetScImageRequestSchema;
-    output: typeof BatchGetScImageResponseSchema;
-  },
-  /**
-   * @generated from rpc imageparser.v1.ImageParser.StreamScInspectionImages
-   */
-  streamScInspectionImages: {
-    methodKind: "server_streaming";
-    input: typeof StreamScInspectionImagesRequestSchema;
-    output: typeof ScImageResultSchema;
-  },
-  /**
-   * @generated from rpc imageparser.v1.ImageParser.WarmScCache
-   */
-  warmScCache: {
-    methodKind: "unary";
-    input: typeof WarmScCacheRequestSchema;
-    output: typeof WarmScCacheResponseSchema;
+  streamExportImages: {
+    methodKind: "bidi_streaming";
+    input: typeof StreamImagesRequestSchema;
+    output: typeof StreamImagesResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_imageparser_v1_service, 0);

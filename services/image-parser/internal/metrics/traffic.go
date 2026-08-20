@@ -14,6 +14,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
+	"image-parser/internal/artifactcache"
+	"image-parser/internal/imagestream"
 )
 
 type counterVec struct {
@@ -71,7 +73,25 @@ var (
 	grpcRequestBytesTotal  = newCounterVec()
 	grpcResponseBytesTotal = newCounterVec()
 	grpcInFlightRequests   atomic.Int64
+	imageSamplesTotal      = newCounterVec()
+	imageSampleErrorsTotal = newCounterVec()
+	imageBytesTotal        = newCounterVec()
+	artifactCachesMu       sync.RWMutex
+	artifactCaches         = map[string]*artifactcache.Manager{}
 )
+
+func RegisterArtifactCache(namespace string, manager *artifactcache.Manager) {
+	artifactCachesMu.Lock()
+	defer artifactCachesMu.Unlock()
+	artifactCaches[namespace] = manager
+}
+
+func ObserveImageSamples(useCase imagestream.UseCase, samples, errors, bytes int64) {
+	label := labels(map[string]string{"use_case": string(useCase)})
+	imageSamplesTotal.add(label, samples)
+	imageSampleErrorsTotal.add(label, errors)
+	imageBytesTotal.add(label, bytes)
+}
 
 func GinTrafficMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -134,7 +154,33 @@ func Render() string {
 	writeCounter(&b, "image_parser_grpc_requests_total", "Total image-parser gRPC requests.", grpcRequestsTotal.snapshot())
 	writeCounter(&b, "image_parser_grpc_request_bytes_total", "Total image-parser gRPC protobuf request bytes.", grpcRequestBytesTotal.snapshot())
 	writeCounter(&b, "image_parser_grpc_response_bytes_total", "Total image-parser gRPC protobuf response bytes.", grpcResponseBytesTotal.snapshot())
+	writeCounter(&b, "image_parser_image_samples_total", "Total image samples resolved by semantic use case.", imageSamplesTotal.snapshot())
+	writeCounter(&b, "image_parser_image_sample_errors_total", "Total image sample errors by semantic use case.", imageSampleErrorsTotal.snapshot())
+	writeCounter(&b, "image_parser_image_bytes_total", "Total image payload bytes returned by semantic use case.", imageBytesTotal.snapshot())
+	writeArtifactCacheCounters(&b)
 	return b.String()
+}
+
+func writeArtifactCacheCounters(b *strings.Builder) {
+	artifactCachesMu.RLock()
+	defer artifactCachesMu.RUnlock()
+	metrics := []struct {
+		name string
+		help string
+		read func(artifactcache.Stats) int64
+	}{
+		{"image_parser_artifact_cache_hits_total", "Total artifact cache hits.", func(stats artifactcache.Stats) int64 { return stats.Hits }},
+		{"image_parser_artifact_cache_misses_total", "Total artifact cache misses.", func(stats artifactcache.Stats) int64 { return stats.Misses }},
+		{"image_parser_artifact_cache_downloads_total", "Total artifacts published after download.", func(stats artifactcache.Stats) int64 { return stats.Downloads }},
+		{"image_parser_artifact_cache_evictions_total", "Total artifact cache evictions.", func(stats artifactcache.Stats) int64 { return stats.Evictions }},
+	}
+	for _, metric := range metrics {
+		samples := make(map[string]int64, len(artifactCaches))
+		for namespace, manager := range artifactCaches {
+			samples[labels(map[string]string{"namespace": namespace})] = metric.read(manager.Stats())
+		}
+		writeCounter(b, metric.name, metric.help, samples)
+	}
 }
 
 type meteredServerStream struct {

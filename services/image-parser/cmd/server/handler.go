@@ -9,22 +9,17 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"image-parser/internal/display"
 	"image-parser/internal/handler"
-	imageloader "image-parser/internal/image_loader"
 )
 
 type HTTPHandler interface {
 	GetSCImage(context.Context, handler.SCImageRequest) (handler.ImageResponse, error)
 	GetSCSprite(context.Context, handler.SCSpriteRequest) (handler.ImageResponse, error)
-	WarmSC(context.Context, handler.SCWarmRequest) (handler.WarmResponse, error)
-}
-
-type warmRequest struct {
-	DefectIDs []string `json:"defect_ids"`
 }
 
 type routeParams struct {
-	inspection imageloader.InspectionKey
+	inspection display.InspectionKey
 	defectID   string
 }
 
@@ -77,26 +72,6 @@ func RegisterHandler(r *gin.RouterGroup, h HTTPHandler) {
 		writeImage(c, resp, err, http.StatusInternalServerError)
 	})
 
-	r.POST("/sc/warm/:inspection_time/:wafer_key", func(c *gin.Context) {
-		params, ok := parseRouteParams(c)
-		if !ok {
-			return
-		}
-		var body warmRequest
-		if err := c.ShouldBindJSON(&body); err != nil {
-			body = warmRequest{}
-		}
-		resp, err := h.WarmSC(c.Request.Context(), handler.SCWarmRequest{
-			Inspection:   params.inspection,
-			DefectIDs:    body.DefectIDs,
-			RecordPrefix: "warm",
-		})
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-		c.JSON(http.StatusAccepted, gin.H{"status": "warming", "zips": resp.Zips})
-	})
 }
 
 func parseRouteParams(c *gin.Context) (routeParams, bool) {
@@ -106,7 +81,7 @@ func parseRouteParams(c *gin.Context) (routeParams, bool) {
 		return routeParams{}, false
 	}
 	return routeParams{
-		inspection: imageloader.InspectionKey{
+		inspection: display.InspectionKey{
 			InspectionTime: normalizeInspectionTime(c.Param("inspection_time")),
 			WaferKey:       waferKey,
 		},
@@ -172,7 +147,7 @@ func parseSpriteImage(raw string) (handler.SCSpriteImage, bool, error) {
 			return handler.SCSpriteImage{}, false, err
 		}
 		return handler.SCSpriteImage{
-			Kind:          imageloader.ImageKindReview,
+			Kind:          display.ImageKindReview,
 			ReviewImageID: reviewImageID,
 		}, true, nil
 	}
@@ -180,7 +155,7 @@ func parseSpriteImage(raw string) (handler.SCSpriteImage, bool, error) {
 	switch normalized {
 	case "Defective", "Reference", "Difference":
 		return handler.SCSpriteImage{
-			Kind:      imageloader.ImageKindPatch,
+			Kind:      display.ImageKindPatch,
 			ImageType: normalized,
 		}, true, nil
 	default:

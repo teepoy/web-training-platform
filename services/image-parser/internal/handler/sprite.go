@@ -5,28 +5,74 @@ import (
 	"image"
 	"image/color"
 	"image/draw"
+	_ "image/jpeg"
 	"image/png"
-
-	"github.com/h2non/bimg"
 )
 
 func resizeSquarePNG(raw []byte, size int) ([]byte, error) {
-	opts := bimg.Options{
-		Width:  size,
-		Height: size,
-		Force:  true,
-		Type:   bimg.PNG,
-	}
-
-	metadata, err := bimg.Metadata(raw)
+	source, _, err := image.Decode(bytes.NewReader(raw))
 	if err != nil {
 		return nil, err
 	}
-	if metadata.Size.Width < size || metadata.Size.Height < size {
-		opts.Interpolator = bimg.Nearest
+	if source.Bounds().Dx() == size && source.Bounds().Dy() == size {
+		var output bytes.Buffer
+		if err := png.Encode(&output, source); err != nil {
+			return nil, err
+		}
+		return output.Bytes(), nil
 	}
 
-	return bimg.Resize(raw, opts)
+	target := image.NewNRGBA(image.Rect(0, 0, size, size))
+	resizeBilinear(target, source)
+	var output bytes.Buffer
+	if err := png.Encode(&output, target); err != nil {
+		return nil, err
+	}
+	return output.Bytes(), nil
+}
+
+func resizeBilinear(target *image.NRGBA, source image.Image) {
+	sourceBounds := source.Bounds()
+	sourceWidth := sourceBounds.Dx()
+	sourceHeight := sourceBounds.Dy()
+	targetWidth := target.Bounds().Dx()
+	targetHeight := target.Bounds().Dy()
+	for targetY := range targetHeight {
+		sourceY := (float64(targetY)+0.5)*float64(sourceHeight)/float64(targetHeight) - 0.5
+		y0, y1, yWeight := interpolationPoints(sourceY, sourceHeight)
+		for targetX := range targetWidth {
+			sourceX := (float64(targetX)+0.5)*float64(sourceWidth)/float64(targetWidth) - 0.5
+			x0, x1, xWeight := interpolationPoints(sourceX, sourceWidth)
+			upperLeft := color.NRGBAModel.Convert(source.At(sourceBounds.Min.X+x0, sourceBounds.Min.Y+y0)).(color.NRGBA)
+			upperRight := color.NRGBAModel.Convert(source.At(sourceBounds.Min.X+x1, sourceBounds.Min.Y+y0)).(color.NRGBA)
+			lowerLeft := color.NRGBAModel.Convert(source.At(sourceBounds.Min.X+x0, sourceBounds.Min.Y+y1)).(color.NRGBA)
+			lowerRight := color.NRGBAModel.Convert(source.At(sourceBounds.Min.X+x1, sourceBounds.Min.Y+y1)).(color.NRGBA)
+			target.SetNRGBA(targetX, targetY, color.NRGBA{
+				R: bilinearChannel(upperLeft.R, upperRight.R, lowerLeft.R, lowerRight.R, xWeight, yWeight),
+				G: bilinearChannel(upperLeft.G, upperRight.G, lowerLeft.G, lowerRight.G, xWeight, yWeight),
+				B: bilinearChannel(upperLeft.B, upperRight.B, lowerLeft.B, lowerRight.B, xWeight, yWeight),
+				A: bilinearChannel(upperLeft.A, upperRight.A, lowerLeft.A, lowerRight.A, xWeight, yWeight),
+			})
+		}
+	}
+}
+
+func interpolationPoints(position float64, length int) (int, int, float64) {
+	if position <= 0 {
+		return 0, min(1, length-1), 0
+	}
+	left := int(position)
+	if left >= length-1 {
+		return length - 1, length - 1, 0
+	}
+	return left, left + 1, position - float64(left)
+}
+
+func bilinearChannel(upperLeft, upperRight, lowerLeft, lowerRight uint8, xWeight, yWeight float64) uint8 {
+	upper := float64(upperLeft)*(1-xWeight) + float64(upperRight)*xWeight
+	lower := float64(lowerLeft)*(1-xWeight) + float64(lowerRight)*xWeight
+	value := upper*(1-yWeight) + lower*yWeight
+	return uint8(value + 0.5)
 }
 
 func createSpriteFromResized(pngs [][]byte, size int) ([]byte, error) {

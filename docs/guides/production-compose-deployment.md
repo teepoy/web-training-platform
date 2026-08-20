@@ -172,13 +172,6 @@ IMAGE_PARSER_IMAGE=registry.example.com/finetune-image-parser:<release>
 PLATFORM_DATA_DIR=/srv/finetune/platform/data
 SC_UPSTREAM_DATA_DIR=/srv/finetune/platform/sc-upstream
 IMAGE_PARSER_DATA_DIR=/srv/finetune/platform/image-parser
-SC_UPSTREAM_IMAGE_SOURCE_FORMAT=sc.legacy-range-zip.v1
-SC_JOB_IMAGE_RESOLVER_BINARY=/usr/local/bin/image-parser-batch
-# Pure-local alternative:
-# SC_JOB_IMAGE_RESOLVER_BINARY=/usr/local/bin/image-parser-local
-# IMAGE_SOURCE_ROOT=/data
-# IMAGE_SOURCE_KIND=directory
-# IMAGE_SOURCE_FORMAT=filesystem.role-paths.v1
 PREFECT_SERVER_MEMORY=4g
 API_MEMORY=8g
 API_SHM_SIZE=1g
@@ -197,26 +190,24 @@ IMAGE_PARSER_SHM_SIZE=2g
 PLATFORM_PREPARE_MEMORY=2g
 ```
 
-Dataset metadata stores `filesystem.image-source.v1` and a code-registered
-format ID, never a root path, credentials, staging policy, or cleanup policy.
-`SC_UPSTREAM_IMAGE_SOURCE_FORMAT` is the binding used by direct SC import;
-versioned Source Discovery profiles carry their own explicit
-`image_source_format`. Browsers never choose roots or staging implementations.
+SC Datasets store only scalar Inspection identity. They do not persist an image
+parser choice, source root, credentials, staging policy, or cache path. The
+image-parser service resolves the Inspection once, dispatches by its exact
+`eqp_id` through the code-owned equipment registry, downloads source artifacts
+into its use-case cache, and parses images with the registered equipment entry.
 
-The display image-parser composes an upstream stager, shared cache, and the
-legacy range-ZIP driver in code. It does not expose the train/predict batch RPC.
-Both SC training and batch prediction start the baked
-`/usr/local/bin/image-parser-batch` process once per job and send ordered,
-bounded protobuf frames over stdin/stdout. `SC_JOB_IMAGE_RESOLVER_CACHE_ROOT`
-selects the parent directory for the per-job staging directory; that directory
-is deleted when the resolver process exits.
+Browser display and sprites are forwarded directly to image-parser. Prediction,
+Training, and image-bearing Export use their distinct bidirectional gRPC stream
+RPCs. Worker and API images contain no local image-parser executable and there
+is no subprocess or Python image-bytes fallback. The service owns four separate
+cache namespaces (Display, Prediction, Training, Export) and one global weighted
+fairness controller, so Training or Export cannot consume all display or
+prediction capacity.
 
-For data already present as a local file/directory or mounted SMB share, switch
-the worker to `/usr/local/bin/image-parser-local` with
-`SC_JOB_IMAGE_RESOLVER_BINARY`, `IMAGE_SOURCE_ROOT`, `IMAGE_SOURCE_KIND`, and
-`IMAGE_SOURCE_FORMAT`. That entrypoint has no remote stager and never deletes
-the borrowed source. It also supports an online/instant prediction host without
-starting the display service.
+Every downloadable source must expose a stable revision: S3 VersionId, then
+ETag, then LastModified plus size. A directory-like artifact requires an
+explicit generation or manifest identity. Local filesystem mtime is used only
+for cache eviction and is not treated as source identity.
 
 All service ceilings use `deploy.resources.limits.memory`, which is honored by
 current Docker Compose without requiring Swarm mode. Do not reintroduce the

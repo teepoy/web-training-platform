@@ -25,6 +25,7 @@ import pyarrow.parquet as _pq
 from sqlalchemy import select
 
 from app.modules.sc.schema import find_images_by_role
+from app.modules.sc.domain.image_url import build_sc_image_url
 from app.shared.db.registry import AnnotationORM
 from app.modules.storage.domain.sparse import DatasetPayloadStore, SparseManifestReader
 
@@ -39,8 +40,14 @@ logger = logging.getLogger(__name__)
 _SPARSE_EXPORT_COLUMNS = ["sample_id", "image_uris", "metadata"]
 """Columns read from Parquet shards during export assembly (v1)."""
 
-_SPARSE_EXPORT_COLUMNS_V2 = ["sample_id", "images"]
-"""Columns read from v2 shards — sample_id + embedded image list<struct>."""
+_SPARSE_EXPORT_COLUMNS_V2 = [
+    "sample_id",
+    "defect_id",
+    "inspection_time",
+    "wafer_key",
+    "images",
+]
+"""Scalar image identity plus the v2 embedded image list<struct>."""
 
 _FINAL_PREDICTION_DIR = "final"
 _ACCUMULATED_PREDICTION_FILE = "accumulated.parquet"
@@ -362,10 +369,11 @@ class SparseExportAssembler:
                 "role": role,
                 "content_type": "image/png",
                 "filename": f"{image_type}.png",
-                "access_url": SparseExportAssembler._make_sc_sample_image_url(
-                    dataset_id,
-                    sample_id,
-                    f"{sample_id}_{image_type}",
+                "access_url": build_sc_image_url(
+                    inspection_time=row.get("inspection_time"),
+                    wafer_key=row.get("wafer_key"),
+                    defect_id=row.get("defect_id") or sample_id,
+                    image_type=image_type,
                 ),
             }
             for image_type, role in image_specs
@@ -400,9 +408,8 @@ class SparseExportAssembler:
         images_list = SparseExportAssembler._parse_images_column(row.get("images"))
 
         # Build compact image references (no bytes, no source_uri).
-        image_refs = SparseExportAssembler._build_image_refs_v2(
-            images_list, dataset_id, sample_id
-        )
+        image_refs = SparseExportAssembler._build_image_refs_v2(images_list, row)
+        refs_by_id = {str(ref["image_id"]): ref for ref in image_refs}
 
         # Derive primary fields from role-matched images.
         review_imgs = find_images_by_role(images_list, "review")
@@ -413,23 +420,17 @@ class SparseExportAssembler:
             "sample_id": sample_id,
             "defect_id": sample_id,
             "image_uri": (
-                SparseExportAssembler._make_sample_image_url(
-                    dataset_id, sample_id, str(review_imgs[0]["image_id"])
-                )
+                refs_by_id[str(review_imgs[0]["image_id"])]["access_url"]
                 if review_imgs
                 else None
             ),
             "defective_uri": (
-                SparseExportAssembler._make_sample_image_url(
-                    dataset_id, sample_id, str(defective_imgs[0]["image_id"])
-                )
+                refs_by_id[str(defective_imgs[0]["image_id"])]["access_url"]
                 if defective_imgs
                 else None
             ),
             "reference_uri": (
-                SparseExportAssembler._make_sample_image_url(
-                    dataset_id, sample_id, str(reference_imgs[0]["image_id"])
-                )
+                refs_by_id[str(reference_imgs[0]["image_id"])]["access_url"]
                 if reference_imgs
                 else None
             ),
@@ -441,8 +442,7 @@ class SparseExportAssembler:
     @staticmethod
     def _build_image_refs_v2(
         images_list: list[dict[str, object]],
-        dataset_id: str,
-        sample_id: str,
+        row: dict[str, object],
     ) -> list[dict[str, object]]:
         """Convert v2 image structs into compact export references.
 
@@ -459,27 +459,16 @@ class SparseExportAssembler:
                     "role": str(img.get("role", "")),
                     "content_type": str(img.get("content_type", "")),
                     "filename": str(img.get("filename", "")),
-                    "access_url": SparseExportAssembler._make_sample_image_url(
-                        dataset_id, sample_id, image_id
+                    "access_url": build_sc_image_url(
+                        inspection_time=row.get("inspection_time"),
+                        wafer_key=row.get("wafer_key"),
+                        defect_id=row.get("defect_id") or row.get("sample_id"),
+                        image_type=img.get("image_type") or img.get("role"),
+                        review_image_id=img.get("review_image_id"),
                     ),
                 }
             )
         return refs
-
-    @staticmethod
-    def _make_sample_image_url(dataset_id: str, sample_id: str, image_id: str) -> str:
-        """Build a storage-relative API access URL for a sample image.
-
-        Uses sample identity (sample_id + image_id), not upstream
-        object-store URIs.
-        """
-        return f"/api/v1/datasets/{dataset_id}/samples/{sample_id}/images/{image_id}"
-
-    @staticmethod
-    def _make_sc_sample_image_url(
-        dataset_id: str, sample_id: str, image_id: str
-    ) -> str:
-        return f"/api/v1/sc/datasets/{dataset_id}/samples/{sample_id}/images/{image_id}"
 
     @staticmethod
     def _parse_images_column(value: object) -> list[dict[str, object]]:
