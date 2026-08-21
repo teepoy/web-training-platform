@@ -44,6 +44,31 @@ func BenchmarkResizeSquarePNG128To64(b *testing.B) {
 	}
 }
 
+func BenchmarkResizeSquarePNGGray16Viridis128To64(b *testing.B) {
+	img := image.NewGray16(image.Rect(0, 0, 128, 128))
+	for y := range 128 {
+		for x := range 128 {
+			img.SetGray16(x, y, color.Gray16{Y: uint16((x*257 + y*509) % 65536)})
+		}
+	}
+	var encoded bytes.Buffer
+	if err := png.Encode(&encoded, img); err != nil {
+		b.Fatal(err)
+	}
+	raw := encoded.Bytes()
+	mapping := GrayMapping{LUT: GrayLUTViridis, ZMin: 0.05, ZMax: 0.95}
+	b.SetBytes(int64(len(raw)))
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		resized, err := resizeSquarePNGWithGrayMapping(raw, 64, mapping)
+		if err != nil {
+			b.Fatal(err)
+		}
+		benchmarkSpriteSink = resized
+	}
+}
+
 func BenchmarkCreateSpriteThreeCells64(b *testing.B) {
 	raw := benchmarkPatternPNG(b, 64)
 	cells := [][]byte{raw, raw, raw}

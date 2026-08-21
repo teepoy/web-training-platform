@@ -56,11 +56,17 @@ func RegisterHandler(r *gin.RouterGroup, h HTTPHandler) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
+		grayMapping, err := grayMappingFromQuery(c)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
 		req := handler.SCSpriteRequest{
-			Inspection: params.inspection,
-			DefectID:   params.defectID,
-			CellSize:   queryInt(c, "cell_size", 64, 16, 512),
-			Images:     images,
+			Inspection:  params.inspection,
+			DefectID:    params.defectID,
+			CellSize:    queryInt(c, "cell_size", 64, 16, 512),
+			Images:      images,
+			GrayMapping: grayMapping,
 		}
 		switch c.Param("mode") {
 		case "patch", "review":
@@ -72,6 +78,35 @@ func RegisterHandler(r *gin.RouterGroup, h HTTPHandler) {
 		writeImage(c, resp, err, http.StatusInternalServerError)
 	})
 
+}
+
+func grayMappingFromQuery(c *gin.Context) (*handler.GrayMapping, error) {
+	lutRaw, hasLUT := c.GetQuery("gray_lut")
+	zMinRaw, hasZMin := c.GetQuery("z_min")
+	zMaxRaw, hasZMax := c.GetQuery("z_max")
+	if !hasLUT && !hasZMin && !hasZMax {
+		return nil, nil
+	}
+	if !hasLUT || !hasZMin || !hasZMax {
+		return nil, fmt.Errorf("gray_lut, z_min, and z_max must be provided together")
+	}
+	lut, err := handler.ParseGrayLUT(lutRaw)
+	if err != nil {
+		return nil, err
+	}
+	zMin, err := strconv.ParseFloat(zMinRaw, 64)
+	if err != nil {
+		return nil, fmt.Errorf("invalid z_min %q", zMinRaw)
+	}
+	zMax, err := strconv.ParseFloat(zMaxRaw, 64)
+	if err != nil {
+		return nil, fmt.Errorf("invalid z_max %q", zMaxRaw)
+	}
+	mapping := &handler.GrayMapping{LUT: lut, ZMin: zMin, ZMax: zMax}
+	if err := mapping.Validate(); err != nil {
+		return nil, err
+	}
+	return mapping, nil
 }
 
 func parseRouteParams(c *gin.Context) (routeParams, bool) {

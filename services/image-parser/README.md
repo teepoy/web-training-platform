@@ -11,6 +11,13 @@ images do not embed a second parser binary.
   display. The web gateway forwards `/api/v1/sc/images/...` and
   `/api/v1/sc/sprites/...` directly here. A browser may provide the API access
   token through the `token` query parameter; normal clients use a Bearer header.
+  Sprite requests may opt into display-only grayscale mapping with the complete
+  query tuple `gray_lut`, `z_min`, and `z_max`. The renderer accepts 8-bit and
+  16-bit grayscale content, including opaque RGB containers whose channels are
+  exactly equal, applies normalized `[0, 1]` z-limits before resize, and
+  resolves a fixed 256-entry grayscale, inverted, Viridis, Inferno, or Turbo
+  LUT. Mapping applies only to Patch cells; Review cells remain in their source
+  colors. Raw `/sc/images/...` responses are never transformed.
 - gRPC `StreamPredictionImages`, `StreamTrainingImages`, and
   `StreamExportImages` are separate bidirectional streams with independent
   traffic metrics and resource lanes. They share request/result messages but
@@ -27,9 +34,11 @@ requested roles. The service may work concurrently but sends results in
 sequence order. Clients reopen contexts and resend from the first unacknowledged
 sequence after a transport failure.
 
-The service returns raw compressed image bytes and content type. Decode,
-resize, channel stacking, tensor construction, model batching, and inference
-remain algorithm responsibilities.
+The gRPC stream surfaces return raw compressed image bytes and content type.
+Decode, resize, channel stacking, tensor construction, model batching, and
+inference remain algorithm responsibilities. The HTTP sprite surface is the
+display-only exception: it already decodes and resizes cells, and may apply the
+explicit grayscale LUT described above.
 
 ## Equipment entries
 

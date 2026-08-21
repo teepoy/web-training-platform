@@ -19,10 +19,11 @@ type SCImageRequest struct {
 }
 
 type SCSpriteRequest struct {
-	Inspection display.InspectionKey
-	DefectID   string
-	CellSize   int
-	Images     []SCSpriteImage
+	Inspection  display.InspectionKey
+	DefectID    string
+	CellSize    int
+	Images      []SCSpriteImage
+	GrayMapping *GrayMapping
 }
 
 type SCSpriteImage struct {
@@ -67,7 +68,7 @@ func (s *scRoutes) GetSCSprite(ctx context.Context, req SCSpriteRequest) (ImageR
 	for _, image := range req.Images {
 		switch image.Kind {
 		case display.ImageKindPatch:
-			resized, err := patchSpriteCell(ctx, s.images, req.Inspection, req.DefectID, image.ImageType, req.CellSize)
+			resized, err := patchSpriteCell(ctx, s.images, req.Inspection, req.DefectID, image.ImageType, req.CellSize, req.GrayMapping)
 			if err != nil {
 				return ImageResponse{}, err
 			}
@@ -94,7 +95,7 @@ func (s *scRoutes) GetSCSprite(ctx context.Context, req SCSpriteRequest) (ImageR
 	return ImageResponse{Data: result, ContentType: "image/png"}, nil
 }
 
-func patchSpriteCell(ctx context.Context, images display.Reader, inspection display.InspectionKey, defectID string, imageType string, cellSize int) ([]byte, error) {
+func patchSpriteCell(ctx context.Context, images display.Reader, inspection display.InspectionKey, defectID string, imageType string, cellSize int, mapping *GrayMapping) ([]byte, error) {
 	result := firstImageResult(images.GetImageBytes(ctx, []display.ImageKey{{
 		Kind:          display.ImageKindPatch,
 		InspectionKey: inspection,
@@ -105,7 +106,13 @@ func patchSpriteCell(ctx context.Context, images display.Reader, inspection disp
 		return blankSquarePNG(cellSize)
 	}
 	acquireResize()
-	resized, err := resizeSquarePNG(result.Data, cellSize)
+	var resized []byte
+	var err error
+	if mapping == nil {
+		resized, err = resizeSquarePNG(result.Data, cellSize)
+	} else {
+		resized, err = resizeSquarePNGWithGrayMapping(result.Data, cellSize, *mapping)
+	}
 	releaseResize()
 	if err != nil {
 		return blankSquarePNG(cellSize)

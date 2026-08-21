@@ -13,6 +13,8 @@ import {
   NInput,
   NModal,
   NImage,
+  NTabs,
+  NTabPane,
 } from "naive-ui";
 import { withAuthQueryParams } from "@/shared/api/client";
 import { useBlinkController } from "@/shared/composables/useBlinkController";
@@ -28,6 +30,14 @@ import {
   usePagedDataGallery,
 } from "@/features/sc/presentation/composables/usePagedDataGallery";
 import { cssBackgroundImageUrl } from "@/features/sc/presentation/components/scSpriteStyle";
+import ScGalleryColorSettings from "@/features/sc/presentation/components/ScGalleryColorSettings.vue";
+import {
+  appendGrayMappingQuery,
+  DEFAULT_SC_GALLERY_TONE_MAPPING,
+  isGrayLUT,
+  isValidGrayWindow,
+  type GrayLUT,
+} from "@/features/sc/presentation/components/scGalleryToneMapping";
 import type {
   ScGalleryDataQuery,
   ScWorkbenchDataSource,
@@ -129,7 +139,7 @@ const PATCH_IMAGE_SPRITE_TOKENS: Record<PatchImageType, string> = {
   Difference: "patchDifference",
 };
 const DEFAULT_PATCH_IMAGE_TYPES: PatchImageType[] = ["Defective", "Reference", "Difference"];
-const SC_SPRITE_RENDER_VERSION = "3";
+const SC_SPRITE_RENDER_VERSION = "5";
 const patchImageTypeByInput: Record<string, PatchImageType> = {
   defective: "Defective",
   reference: "Reference",
@@ -144,6 +154,10 @@ const patchImagesInput = ref(DEFAULT_PATCH_IMAGE_TYPES.join(","));
 const patchDefectiveEnabled = ref(true);
 const patchReferenceEnabled = ref(true);
 const patchDifferenceEnabled = ref(true);
+const grayMappingEnabled = ref(DEFAULT_SC_GALLERY_TONE_MAPPING.enabled);
+const grayMappingLUT = ref<GrayLUT>(DEFAULT_SC_GALLERY_TONE_MAPPING.lut);
+const grayMappingZMin = ref(DEFAULT_SC_GALLERY_TONE_MAPPING.zMin);
+const grayMappingZMax = ref(DEFAULT_SC_GALLERY_TONE_MAPPING.zMax);
 
 function rebuildPatchImagesInput() {
   const parts: string[] = [];
@@ -667,6 +681,12 @@ function getSpriteUrl(sample: BlinkSample): string {
   const params = new URLSearchParams();
   params.set("cell_size", String(cs));
   params.set("render_version", SC_SPRITE_RENDER_VERSION);
+  appendGrayMappingQuery(params, {
+    enabled: grayMappingEnabled.value,
+    lut: grayMappingLUT.value,
+    zMin: grayMappingZMin.value,
+    zMax: grayMappingZMax.value,
+  });
   for (const type of spriteImageTypesForSample(sample)) {
     params.append("image_types", type);
   }
@@ -927,6 +947,10 @@ interface PersistedSettings {
   patchImageSize?: number;
   reviewImageSize?: number;
   patchImagesInput?: string;
+  grayMappingEnabled?: boolean;
+  grayMappingLUT?: string;
+  grayMappingZMin?: number;
+  grayMappingZMax?: number;
 }
 
 function loadSettings() {
@@ -948,6 +972,19 @@ function loadSettings() {
     if (typeof saved.reviewImageSize === "number")
       reviewImageSize.value = normalizeImageSize(saved.reviewImageSize);
     if (typeof saved.patchImagesInput === "string") patchImagesInput.value = saved.patchImagesInput;
+    if (typeof saved.grayMappingEnabled === "boolean")
+      grayMappingEnabled.value = saved.grayMappingEnabled;
+    if (isGrayLUT(saved.grayMappingLUT)) grayMappingLUT.value = saved.grayMappingLUT;
+    const savedWindow = {
+      enabled: true,
+      lut: grayMappingLUT.value,
+      zMin: saved.grayMappingZMin ?? grayMappingZMin.value,
+      zMax: saved.grayMappingZMax ?? grayMappingZMax.value,
+    };
+    if (isValidGrayWindow(savedWindow)) {
+      grayMappingZMin.value = savedWindow.zMin;
+      grayMappingZMax.value = savedWindow.zMax;
+    }
     syncPatchSwitchesFromInput();
   } catch {
     /* ignore */
@@ -963,6 +1000,10 @@ function saveSettings() {
     patchImageSize: patchImageSize.value,
     reviewImageSize: reviewImageSize.value,
     patchImagesInput: patchImagesInput.value,
+    grayMappingEnabled: grayMappingEnabled.value,
+    grayMappingLUT: grayMappingLUT.value,
+    grayMappingZMin: grayMappingZMin.value,
+    grayMappingZMax: grayMappingZMax.value,
   };
   try {
     localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(data));
@@ -1045,106 +1086,121 @@ defineExpose({ scrollRef });
     <n-modal
       v-model:show="settingsOpen"
       preset="card"
-      title="Table Settings"
+      title="Gallery Settings"
+      role="dialog"
+      aria-label="Gallery Settings"
+      data-testid="gallery-settings-modal"
       class="sbt-settings-modal"
-      :style="{ width: '380px' }"
+      :style="{ width: '440px' }"
     >
-      <div class="sbt-settings">
-        <div class="sbt-setting-row">
-          <n-text class="sbt-control-label">Per Row</n-text>
-          <div class="sbt-per-row">
-            <n-button
-              size="tiny"
-              quaternary
-              class="sbt-per-row-button"
-              aria-label="Decrease samples per row"
-              :disabled="samplesPerRow <= 1"
-              @click="adjustSamplesPerRow(-1)"
-            >
-              &minus;
-            </n-button>
-            <n-text class="sbt-per-row-value" aria-live="polite">
-              {{ samplesPerRow }}
-            </n-text>
-            <n-button
-              size="tiny"
-              quaternary
-              class="sbt-per-row-button"
-              aria-label="Increase samples per row"
-              :disabled="samplesPerRow >= MAX_SAMPLES_PER_ROW"
-              @click="adjustSamplesPerRow(1)"
-            >
-              +
-            </n-button>
-          </div>
-        </div>
+      <n-tabs type="line" animated>
+        <n-tab-pane name="layout" tab="Layout">
+          <div class="sbt-settings">
+            <div class="sbt-setting-row">
+              <n-text class="sbt-control-label">Per Row</n-text>
+              <div class="sbt-per-row">
+                <n-button
+                  size="tiny"
+                  quaternary
+                  class="sbt-per-row-button"
+                  aria-label="Decrease samples per row"
+                  :disabled="samplesPerRow <= 1"
+                  @click="adjustSamplesPerRow(-1)"
+                >
+                  &minus;
+                </n-button>
+                <n-text class="sbt-per-row-value" aria-live="polite">
+                  {{ samplesPerRow }}
+                </n-text>
+                <n-button
+                  size="tiny"
+                  quaternary
+                  class="sbt-per-row-button"
+                  aria-label="Increase samples per row"
+                  :disabled="samplesPerRow >= MAX_SAMPLES_PER_ROW"
+                  @click="adjustSamplesPerRow(1)"
+                >
+                  +
+                </n-button>
+              </div>
+            </div>
 
-        <div class="sbt-setting-row">
-          <n-text class="sbt-control-label">Size</n-text>
-          <n-select
-            v-model:value="imageSize"
-            size="small"
-            class="sbt-size-select"
-            :options="IMAGE_SIZE_SELECT_OPTIONS"
-            :consistent-menu-width="false"
+            <div class="sbt-setting-row">
+              <n-text class="sbt-control-label">Size</n-text>
+              <n-select
+                v-model:value="imageSize"
+                size="small"
+                class="sbt-size-select"
+                :options="IMAGE_SIZE_SELECT_OPTIONS"
+                :consistent-menu-width="false"
+              />
+            </div>
+
+            <div class="sbt-setting-block">
+              <n-text class="sbt-control-label">Patch Image</n-text>
+              <div class="sbt-setting-row">
+                <n-text class="sbt-control-label">Blink</n-text>
+                <n-switch :value="blinkEnabled" size="small" @update:value="toggleBlink" />
+              </div>
+              <div class="sbt-setting-row">
+                <n-text class="sbt-control-label">ID Label</n-text>
+                <n-switch v-model:value="showDefectIdLabel" size="small" />
+              </div>
+              <div class="sbt-setting-row">
+                <n-text class="sbt-control-label">Defective</n-text>
+                <n-switch
+                  :value="patchDefectiveEnabled"
+                  size="small"
+                  @update:value="
+                    patchDefectiveEnabled = $event;
+                    rebuildPatchImagesInput();
+                  "
+                />
+              </div>
+              <div class="sbt-setting-row">
+                <n-text class="sbt-control-label">Reference</n-text>
+                <n-switch
+                  :value="patchReferenceEnabled"
+                  size="small"
+                  @update:value="
+                    patchReferenceEnabled = $event;
+                    rebuildPatchImagesInput();
+                  "
+                />
+              </div>
+              <div class="sbt-setting-row">
+                <n-text class="sbt-control-label">Difference</n-text>
+                <n-switch
+                  :value="patchDifferenceEnabled"
+                  size="small"
+                  @update:value="
+                    patchDifferenceEnabled = $event;
+                    rebuildPatchImagesInput();
+                  "
+                />
+              </div>
+            </div>
+
+            <div class="sbt-setting-block">
+              <n-text class="sbt-control-label">Review Images</n-text>
+              <n-input
+                v-model:value="reviewImagesInput"
+                size="small"
+                placeholder="Inferred from review images"
+                @update:value="reviewImagesInputEdited = true"
+              />
+            </div>
+          </div>
+        </n-tab-pane>
+        <n-tab-pane name="color" tab="Color">
+          <sc-gallery-color-settings
+            v-model:enabled="grayMappingEnabled"
+            v-model:lut="grayMappingLUT"
+            v-model:z-min="grayMappingZMin"
+            v-model:z-max="grayMappingZMax"
           />
-        </div>
-
-        <div class="sbt-setting-block">
-          <n-text class="sbt-control-label">Patch Image</n-text>
-          <div class="sbt-setting-row">
-            <n-text class="sbt-control-label">Blink</n-text>
-            <n-switch :value="blinkEnabled" size="small" @update:value="toggleBlink" />
-          </div>
-          <div class="sbt-setting-row">
-            <n-text class="sbt-control-label">ID Label</n-text>
-            <n-switch v-model:value="showDefectIdLabel" size="small" />
-          </div>
-          <div class="sbt-setting-row">
-            <n-text class="sbt-control-label">Defective</n-text>
-            <n-switch
-              :value="patchDefectiveEnabled"
-              size="small"
-              @update:value="
-                patchDefectiveEnabled = $event;
-                rebuildPatchImagesInput();
-              "
-            />
-          </div>
-          <div class="sbt-setting-row">
-            <n-text class="sbt-control-label">Reference</n-text>
-            <n-switch
-              :value="patchReferenceEnabled"
-              size="small"
-              @update:value="
-                patchReferenceEnabled = $event;
-                rebuildPatchImagesInput();
-              "
-            />
-          </div>
-          <div class="sbt-setting-row">
-            <n-text class="sbt-control-label">Difference</n-text>
-            <n-switch
-              :value="patchDifferenceEnabled"
-              size="small"
-              @update:value="
-                patchDifferenceEnabled = $event;
-                rebuildPatchImagesInput();
-              "
-            />
-          </div>
-        </div>
-
-        <div class="sbt-setting-block">
-          <n-text class="sbt-control-label">Review Images</n-text>
-          <n-input
-            v-model:value="reviewImagesInput"
-            size="small"
-            placeholder="Inferred from review images"
-            @update:value="reviewImagesInputEdited = true"
-          />
-        </div>
-      </div>
+        </n-tab-pane>
+      </n-tabs>
     </n-modal>
 
     <NImage

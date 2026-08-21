@@ -2,12 +2,22 @@ package handler
 
 import (
 	"bytes"
+	"errors"
 	"image"
 	"image/color"
 	"image/jpeg"
 	"image/png"
 	"testing"
 )
+
+func encodeTestPNG(t *testing.T, img image.Image) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
 
 func generateTestPNG(c color.Color, w, h int) []byte {
 	img := image.NewRGBA(image.Rect(0, 0, w, h))
@@ -109,6 +119,112 @@ func TestResizeSquarePNGUsesBilinearInterpolationAndDecodesJPEG(t *testing.T) {
 		if channel < 95 || channel > 170 {
 			t.Fatalf("bilinear center %s channel = %d, want a blended value", name, channel)
 		}
+	}
+}
+
+func TestResizeSquarePNGWithGrayMappingSupportsGray8AndGray16(t *testing.T) {
+	tests := []struct {
+		name string
+		img  image.Image
+	}{
+		{
+			name: "gray8",
+			img: func() image.Image {
+				img := image.NewGray(image.Rect(0, 0, 3, 1))
+				img.SetGray(0, 0, color.Gray{Y: 0})
+				img.SetGray(1, 0, color.Gray{Y: 128})
+				img.SetGray(2, 0, color.Gray{Y: 255})
+				return img
+			}(),
+		},
+		{
+			name: "gray16",
+			img: func() image.Image {
+				img := image.NewGray16(image.Rect(0, 0, 3, 1))
+				img.SetGray16(0, 0, color.Gray16{Y: 0})
+				img.SetGray16(1, 0, color.Gray16{Y: 32768})
+				img.SetGray16(2, 0, color.Gray16{Y: 65535})
+				return img
+			}(),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mapped, err := resizeSquarePNGWithGrayMapping(
+				encodeTestPNG(t, tt.img),
+				3,
+				GrayMapping{LUT: GrayLUTGrayscale, ZMin: 0.25, ZMax: 0.75},
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			decoded, _, err := image.Decode(bytes.NewReader(mapped))
+			if err != nil {
+				t.Fatal(err)
+			}
+			left := color.NRGBAModel.Convert(decoded.At(0, 0)).(color.NRGBA)
+			middle := color.NRGBAModel.Convert(decoded.At(1, 0)).(color.NRGBA)
+			right := color.NRGBAModel.Convert(decoded.At(2, 0)).(color.NRGBA)
+			if left.R != 0 || right.R != 255 {
+				t.Fatalf("window endpoints = (%d, %d), want (0, 255)", left.R, right.R)
+			}
+			if middle.R < 126 || middle.R > 130 || middle.R != middle.G || middle.G != middle.B {
+				t.Fatalf("window midpoint = %#v, want neutral gray near 128", middle)
+			}
+		})
+	}
+}
+
+func TestResizeSquarePNGWithGrayMappingAppliesColorLUT(t *testing.T) {
+	img := image.NewGray16(image.Rect(0, 0, 1, 1))
+	img.SetGray16(0, 0, color.Gray16{Y: 32768})
+
+	mapped, err := resizeSquarePNGWithGrayMapping(
+		encodeTestPNG(t, img),
+		1,
+		GrayMapping{LUT: GrayLUTViridis, ZMin: 0, ZMax: 1},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, _, err := image.Decode(bytes.NewReader(mapped))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := color.NRGBAModel.Convert(decoded.At(0, 0)).(color.NRGBA)
+	if got.R == got.G && got.G == got.B {
+		t.Fatalf("viridis midpoint stayed grayscale: %#v", got)
+	}
+}
+
+func TestResizeSquarePNGWithGrayMappingAcceptsEqualChannelRGBEncoding(t *testing.T) {
+	mapped, err := resizeSquarePNGWithGrayMapping(
+		generateTestPNG(color.RGBA{R: 128, G: 128, B: 128, A: 255}, 2, 2),
+		2,
+		GrayMapping{LUT: GrayLUTViridis, ZMin: 0, ZMax: 1},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, _, err := image.Decode(bytes.NewReader(mapped))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := color.NRGBAModel.Convert(decoded.At(0, 0)).(color.NRGBA)
+	if got.R == got.G && got.G == got.B {
+		t.Fatalf("equal-channel RGB source stayed grayscale: %#v", got)
+	}
+}
+
+func TestResizeSquarePNGWithGrayMappingRejectsColorImages(t *testing.T) {
+	_, err := resizeSquarePNGWithGrayMapping(
+		generateTestPNG(color.RGBA{R: 10, G: 20, B: 30, A: 255}, 2, 2),
+		2,
+		GrayMapping{LUT: GrayLUTGrayscale, ZMin: 0, ZMax: 1},
+	)
+	if !errors.Is(err, ErrUnsupportedGrayImage) {
+		t.Fatalf("error = %v, want ErrUnsupportedGrayImage", err)
 	}
 }
 

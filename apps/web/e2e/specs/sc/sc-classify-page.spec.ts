@@ -127,3 +127,27 @@ test("SC classify opens the current-results export flow from the header @mock", 
   await expect(exportDialog.getByText("KLARF", { exact: true })).toBeVisible();
   await expect(exportDialog.getByText("ZIP package", { exact: true })).toBeVisible();
 });
+
+test("Gallery settings exposes Gray8 and Gray16 LUT window controls @mock", async ({
+  authedPage,
+}) => {
+  const colorDatasetId = "sc-classify-gallery-color";
+  await mockScDataset(authedPage, colorDatasetId);
+  await mockScPlotPoints(authedPage, colorDatasetId, 20);
+  await mockScDefectIds(authedPage, colorDatasetId, 20);
+  await mockScViewSamplesPaged(authedPage, colorDatasetId, "patch_image_v1", 20, 20);
+  await mockScSamplesWithLabels(authedPage, colorDatasetId, 20, 20);
+
+  await authedPage.goto(`/datasets/${colorDatasetId}/sc/classify`);
+  await authedPage.getByRole("button", { name: "Settings", exact: true }).click();
+
+  const settings = authedPage.getByRole("dialog", { name: "Gallery Settings" });
+  await expect(settings).toBeVisible();
+  await settings.getByText("Color", { exact: true }).click();
+  await settings.getByTestId("gallery-gray-mapping-toggle").click();
+
+  await expect(settings.getByTestId("gallery-gray-lut")).toBeEnabled();
+  await expect(settings.getByRole("slider")).toHaveCount(2);
+  await expect(settings).toContainText("Gray8 0–255");
+  await expect(settings).toContainText("Gray16 0–65,535");
+});

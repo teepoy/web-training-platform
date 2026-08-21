@@ -238,6 +238,15 @@ Python fallback。image-parser HTTP route 必须验证与 API 相同密钥签发
 放入 query。浏览器、Dataset、Import profile 与 runtime request 都不能选择 parser、source
 root、下载方式或 format ID。
 
+Gallery 的 Colormapping 是 display-only sprite 能力，不改变 `/sc/images` 原始图片、Artifact
+Cache、Prediction、Training 或 Export。Gallery Settings 可为 Patch cell 显式提交完整的
+`gray_lut + z_min + z_max` 参数组；zlims 使用归一化 `[0, 1]`，因此同一设置同时适用于原生
+Gray8 与 Gray16；RGB/RGBA 容器只有在不透明且每个像素的 RGB channel 精确相等时才视为对应
+位深的灰度内容。image-parser 必须先在原始灰度位深上 windowing，再 resize 并查询固定
+256-entry LUT；当前支持 grayscale、inverted grayscale、Viridis、Inferno 与 Turbo。真正的
+非灰度 Patch 不得隐式转灰度，Review cell 保留原始颜色。参数缺失、未知 LUT 与非法 window
+必须返回明确的 client error，不能 clamp 或 fallback。
+
 SC 图片来源由 `(inspection_time, wafer_key)` 标识。image-parser 打开 context 时只查询一次
 Inspection 并取得精确 `eqp_id`，再从代码拥有的 exact registry 选择 Equipment image entry。
 EntryFactory 组合设备固定的 Artifact downloader 与 Artifact parser；多个明确列出的设备 ID
