@@ -9,15 +9,9 @@ from fastapi import Depends, HTTPException, Request
 from jose import JWTError
 from sqlalchemy import select
 
-from app.core.config import load_config
 from app.modules.auth.app.services.auth_service import (
     decode_access_token,
     verify_personal_access_token,
-)
-from app.modules.auth.app.services.dev_auth_context import (
-    DevAuthContext,
-    orm_to_organization,
-    orm_to_user,
 )
 from app.modules.auth.domain.repository import AuthRepository
 from app.shared.api.schemas import Organization, User
@@ -59,11 +53,6 @@ def _get_session_factory(request: Request | None = None):
             create_engine(db_url=str(cfg.db.url), echo=bool(cfg.db.echo))
         )
     )
-
-
-def _auth_enabled() -> bool:
-    cfg = load_config()
-    return bool(getattr(cfg.auth, "enabled", True))
 
 
 async def _maybe_await(value: object) -> object:
@@ -109,13 +98,26 @@ async def _record_daily_jwt_login_seen(request: Request, user_id: str) -> None:
         logger.debug("failed to record daily JWT login event", exc_info=True)
 
 
-def _initialized_dev_auth_context(request: Request) -> DevAuthContext:
-    context = getattr(request.app.state, "dev_auth_context", None)
-    if not isinstance(context, DevAuthContext):
-        raise RuntimeError(
-            "Dev auth context was not initialized during application startup"
-        )
-    return context
+def _orm_to_user(orm: UserORM) -> User:
+    return User(
+        id=orm.id,
+        email=orm.email,
+        name=orm.name,
+        is_superadmin=orm.is_superadmin,
+        is_active=orm.is_active,
+        created_at=orm.created_at,
+        oauth_provider=orm.oauth_provider,
+        oauth_provider_id=orm.oauth_provider_id,
+    )
+
+
+def _orm_to_organization(orm: OrganizationORM) -> Organization:
+    return Organization(
+        id=orm.id,
+        name=orm.name,
+        slug=orm.slug,
+        created_at=orm.created_at,
+    )
 
 
 async def _verify_jwt(token: str, request: Request) -> User:
@@ -135,7 +137,7 @@ async def _verify_jwt(token: str, request: Request) -> User:
     if user_orm is None or not user_orm.is_active:
         raise HTTPException(status_code=401, detail="User not found or inactive")
     await _record_daily_jwt_login_seen(request, user_orm.id)
-    return orm_to_user(user_orm)
+    return _orm_to_user(user_orm)
 
 
 async def _verify_pat(token: str, request: Request) -> User:
@@ -167,7 +169,7 @@ async def _verify_pat(token: str, request: Request) -> User:
 
     if user_orm is None or not user_orm.is_active:
         raise HTTPException(status_code=401, detail="User not found or inactive")
-    return orm_to_user(user_orm)
+    return _orm_to_user(user_orm)
 
 
 async def get_current_user(request: Request) -> User:
@@ -178,9 +180,6 @@ async def get_current_user(request: Request) -> User:
     2. ``?token=`` query parameter (for EventSource / SSE clients)
     3. If the resolved token starts with ``ftp_``, treat as a Personal Access Token.
     """
-    if not _auth_enabled():
-        return _initialized_dev_auth_context(request).user
-
     token: str | None = None
 
     auth_header = request.headers.get("Authorization", "")
@@ -212,22 +211,6 @@ async def get_current_org(
     4. Return 400 (ambiguous) if the user has multiple orgs and no context.
     5. Return 400 (no org) if the user has zero orgs and no context.
     """
-    if not _auth_enabled():
-        dev_org = _initialized_dev_auth_context(request).organization
-        org_id_header = request.headers.get("X-Organization-ID")
-        if not org_id_header or org_id_header == dev_org.id:
-            return dev_org
-
-        session_factory = _get_session_factory(request)
-        async with session_factory() as session:
-            org_result = await session.execute(
-                select(OrganizationORM).where(OrganizationORM.id == org_id_header)
-            )
-            org_orm = org_result.scalar_one_or_none()
-        if org_orm is None:
-            raise HTTPException(status_code=404, detail="Organization not found")
-        return orm_to_organization(org_orm)
-
     session_factory = _get_session_factory(request)
     org_id = request.headers.get("X-Organization-ID") or request.query_params.get(
         "org_id"
@@ -254,7 +237,7 @@ async def get_current_org(
             org_orm = org_result.scalar_one_or_none()
             if org_orm is None:
                 raise HTTPException(status_code=404, detail="Organization not found")
-            return orm_to_organization(org_orm)
+            return _orm_to_organization(org_orm)
 
         if len(memberships) == 1:
             org_result = await session.execute(
@@ -265,7 +248,7 @@ async def get_current_org(
             org_orm = org_result.scalar_one_or_none()
             if org_orm is None:
                 raise HTTPException(status_code=404, detail="Organization not found")
-        return orm_to_organization(org_orm)
+        return _orm_to_organization(org_orm)
 
         raise HTTPException(
             status_code=400,

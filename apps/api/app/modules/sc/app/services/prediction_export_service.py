@@ -37,6 +37,10 @@ from app.modules.sc.domain.prediction_export import (
     ScKlarfVersion,
     ScPredictionExportFormat,
     ScPredictionExportResult,
+    ScPredictionExportResultSource,
+)
+from app.modules.sc.app.services.sample_filter import (
+    parse_and_apply_workflow_sample_filter,
 )
 from app.modules.sc.domain.image_stream import ScExportImageStreamFactory
 from app.modules.sc.runtime.streaming_prediction import (
@@ -132,9 +136,13 @@ class ScPredictionExportService:
         org_id: str,
         created_by: str,
         export_format: ScPredictionExportFormat,
+        result_source: ScPredictionExportResultSource = (
+            ScPredictionExportResultSource.FINAL_CLASS
+        ),
         klarf_version: ScKlarfVersion = ScKlarfVersion.V1_2,
         sampling_program: ReviewSamplingProgram | None,
         sampling_seed: int | None,
+        sampling_extra_filter: dict[str, object] | None = None,
         include_images: bool = False,
     ) -> ScPredictionExportResult:
         dataset = await self._repository.get_dataset(dataset_id, org_id=org_id)
@@ -143,10 +151,12 @@ class ScPredictionExportService:
         self._validate_dataset(dataset)
         if (sampling_program is None) != (sampling_seed is None):
             raise ScPredictionExportError(
-                "Annotation Sampling program and seed must be provided together"
+                "Review Sampling program and seed must be provided together"
             )
 
-        lazy_frame = await self._load_datasets((dataset,), org_id=org_id)
+        lazy_frame = await self._load_datasets(
+            (dataset,), org_id=org_id, result_source=result_source
+        )
         return await self._persist_export(
             org_id=org_id,
             scope_id=dataset.id,
@@ -157,9 +167,11 @@ class ScPredictionExportService:
             lazy_frame=lazy_frame,
             created_by=created_by,
             export_format=export_format,
+            result_source=result_source,
             klarf_version=klarf_version,
             sampling_program=sampling_program,
             sampling_seed=sampling_seed,
+            sampling_extra_filter=sampling_extra_filter,
             include_images=include_images,
         )
 
@@ -171,9 +183,13 @@ class ScPredictionExportService:
         org_id: str,
         created_by: str,
         export_format: ScPredictionExportFormat,
+        result_source: ScPredictionExportResultSource = (
+            ScPredictionExportResultSource.FINAL_CLASS
+        ),
         klarf_version: ScKlarfVersion = ScKlarfVersion.V1_2,
         sampling_program: ReviewSamplingProgram | None,
         sampling_seed: int | None,
+        sampling_extra_filter: dict[str, object] | None = None,
         include_images: bool = False,
     ) -> ScPredictionExportResult:
         if not member_ids:
@@ -184,7 +200,7 @@ class ScPredictionExportService:
             raise ScPredictionExportError("Collection export member IDs must be unique")
         if (sampling_program is None) != (sampling_seed is None):
             raise ScPredictionExportError(
-                "Annotation Sampling program and seed must be provided together"
+                "Review Sampling program and seed must be provided together"
             )
 
         collection = await self._collection_reader.get_collection(collection_id, org_id)
@@ -218,7 +234,9 @@ class ScPredictionExportService:
         )
         for dataset in ordered_datasets:
             self._validate_dataset(dataset)
-        lazy_frame = await self._load_datasets(ordered_datasets, org_id=org_id)
+        lazy_frame = await self._load_datasets(
+            ordered_datasets, org_id=org_id, result_source=result_source
+        )
         return await self._persist_export(
             org_id=org_id,
             scope_id=collection.id,
@@ -229,9 +247,11 @@ class ScPredictionExportService:
             lazy_frame=lazy_frame,
             created_by=created_by,
             export_format=export_format,
+            result_source=result_source,
             klarf_version=klarf_version,
             sampling_program=sampling_program,
             sampling_seed=sampling_seed,
+            sampling_extra_filter=sampling_extra_filter,
             include_images=include_images,
         )
 
@@ -240,6 +260,7 @@ class ScPredictionExportService:
         datasets: tuple[Dataset, ...],
         *,
         org_id: str,
+        result_source: ScPredictionExportResultSource,
     ) -> pl.LazyFrame:
         lazy_frames: list[pl.LazyFrame] = []
         for dataset in datasets:
@@ -260,7 +281,9 @@ class ScPredictionExportService:
                 )
             )
         combined = pl.concat(lazy_frames, how="diagonal_relaxed")
-        return await asyncio.to_thread(_prepare_export_lazyframe, combined)
+        return await asyncio.to_thread(
+            _prepare_export_lazyframe, combined, result_source
+        )
 
     async def _persist_export(
         self,
@@ -274,9 +297,11 @@ class ScPredictionExportService:
         lazy_frame: pl.LazyFrame,
         created_by: str,
         export_format: ScPredictionExportFormat,
+        result_source: ScPredictionExportResultSource,
         klarf_version: ScKlarfVersion,
         sampling_program: ReviewSamplingProgram | None,
         sampling_seed: int | None,
+        sampling_extra_filter: dict[str, object] | None,
         include_images: bool,
     ) -> ScPredictionExportResult:
         if include_images and export_format is ScPredictionExportFormat.PARQUET:
@@ -290,6 +315,13 @@ class ScPredictionExportService:
             f"exports/orgs/{org_id}/{scope_kind}s/{scope_id}/predictions/{export_id}"
         )
         sampled = sampling_program is not None
+        if sampling_extra_filter is not None:
+            try:
+                lazy_frame = parse_and_apply_workflow_sample_filter(
+                    lazy_frame, sampling_extra_filter
+                )
+            except ValueError as exc:
+                raise ScPredictionExportError(str(exc)) from exc
 
         with tempfile.TemporaryDirectory(prefix="sc-prediction-export-") as temp_dir:
             directory = Path(temp_dir)
@@ -312,7 +344,7 @@ class ScPredictionExportService:
                 if sampling_program is not None:
                     assert sampling_seed is not None
                     frame = await asyncio.to_thread(
-                        _apply_annotation_sampling,
+                        _apply_review_sampling,
                         frame,
                         sampling_program,
                         sampling_seed,
@@ -344,7 +376,7 @@ class ScPredictionExportService:
                     )
 
             manifest = {
-                "contract": "sc.prediction-export.v2",
+                "contract": "sc.prediction-export.v3",
                 "scope_kind": scope_kind,
                 "scope_id": scope_id,
                 "scope_name": scope_name,
@@ -354,11 +386,13 @@ class ScPredictionExportService:
                 "created_by": created_by,
                 "row_count": row_count,
                 "inspection_count": len(klarf_paths),
-                "annotation_sampling_applied": sampled,
-                "annotation_sampling": _sampling_manifest(
+                "result_source": result_source.value,
+                "review_sampling_applied": sampled,
+                "review_sampling": _sampling_manifest(
                     sampling_program,
                     sampling_seed,
                 ),
+                "review_sampling_extra_filter": sampling_extra_filter,
                 "image_binaries_included": include_images,
                 "image_count": len(export_images),
                 "image_role": _EXPORT_IMAGE_ROLE if include_images else None,
@@ -514,7 +548,10 @@ def _safe_filename(value: str) -> str:
     return normalized or "dataset"
 
 
-def _prepare_export_lazyframe(lazy_rows: object) -> pl.LazyFrame:
+def _prepare_export_lazyframe(
+    lazy_rows: object,
+    result_source: ScPredictionExportResultSource,
+) -> pl.LazyFrame:
     if not isinstance(lazy_rows, pl.LazyFrame):
         raise ScPredictionExportError(
             "SC prediction export requires a bulk LazyFrame data source"
@@ -565,7 +602,20 @@ def _prepare_export_lazyframe(lazy_rows: object) -> pl.LazyFrame:
     if missing:
         lazy_rows = lazy_rows.with_columns(missing)
 
-    return lazy_rows.with_columns(
+    annotation = pl.col("label").cast(pl.Utf8)
+    prediction = pl.col("predicted_label").cast(pl.Utf8)
+    if result_source is ScPredictionExportResultSource.ANNOTATION:
+        result_expression = annotation
+    elif result_source is ScPredictionExportResultSource.PREDICTION:
+        result_expression = prediction
+    else:
+        result_expression = (
+            pl.when(annotation.is_not_null() & ~annotation.is_in(["", "0"]))
+            .then(annotation)
+            .otherwise(prediction)
+        )
+
+    prepared = lazy_rows.with_columns(
         pl.col("sample_id").cast(pl.Utf8),
         pl.concat_str(
             [
@@ -574,14 +624,14 @@ def _prepare_export_lazyframe(lazy_rows: object) -> pl.LazyFrame:
                 pl.col("sample_id").cast(pl.Utf8),
             ]
         ).alias("export_row_id"),
-        pl.when(
-            pl.col("label").is_not_null()
-            & ~pl.col("label").cast(pl.Utf8).is_in(["", "0"])
-        )
-        .then(pl.col("label").cast(pl.Utf8))
-        .otherwise(pl.col("predicted_label").cast(pl.Utf8))
-        .alias("final_class"),
-    ).sort(["inspection_time", "wafer_key", "defect_id", "sample_id"])
+        result_expression.alias("final_class"),
+    )
+    available = pl.col("final_class").is_not_null() & (pl.col("final_class") != "")
+    if result_source is ScPredictionExportResultSource.ANNOTATION:
+        available = available & (pl.col("final_class") != "0")
+    return prepared.filter(available).sort(
+        ["inspection_time", "wafer_key", "defect_id", "sample_id"]
+    )
 
 
 def _collect_export_frame(lazy_rows: object) -> pl.DataFrame:
@@ -592,7 +642,7 @@ def _collect_export_frame(lazy_rows: object) -> pl.DataFrame:
     return lazy_rows.collect(engine="streaming")
 
 
-def _apply_annotation_sampling(
+def _apply_review_sampling(
     frame: pl.DataFrame,
     program: ReviewSamplingProgram,
     seed: int,
@@ -1123,7 +1173,7 @@ def _sampling_manifest(
     if program is None:
         return None
     if seed is None:
-        raise ScPredictionExportError("Annotation Sampling seed is missing")
+        raise ScPredictionExportError("Review Sampling seed is missing")
     rules: list[dict[str, object]] = []
     for rule in program.rules:
         descriptor = next(
@@ -1136,7 +1186,7 @@ def _sampling_manifest(
         )
         if descriptor is None:
             raise ScPredictionExportError(
-                f"Unsupported Annotation Sampling rule: {type(rule).__name__}"
+                f"Unsupported Review Sampling rule: {type(rule).__name__}"
             )
         rules.append({"type": descriptor.id, **asdict(rule)})
     return {"seed": seed, "rules": rules}

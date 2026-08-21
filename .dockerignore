@@ -5,6 +5,7 @@ __pycache__
 node_modules
 apps/web/dist
 apps/web/node_modules
+services/image-parser/tmp
 .mypy_cache
 .pytest_cache
 *.db

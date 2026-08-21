@@ -535,26 +535,29 @@ def sample_review(
         SizeRangeRule,
         IncludeClassCodesRule,
     )
-    eligible = list(rows)
-    for rule in program.rules:
-        if isinstance(rule, filter_types):
-            eligible = [row for row in eligible if _eligible(row, rule)]
-
     cap_types = (
         PerDieLimitRule,
         PerClusterLimitRule,
         PerRepeaterLimitRule,
         PerWaferLimitRule,
     )
-    selector_rules = [
-        rule
-        for rule in program.rules
-        if not isinstance(rule, filter_types) and not isinstance(rule, cap_types)
-    ]
-    selected: dict[object, ReviewRowT] = {}
-    for rule in selector_rules:
+    current = list(rows)
+    for rule in program.rules:
+        if isinstance(rule, filter_types):
+            current = [row for row in current if _eligible(row, rule)]
+            continue
+        if isinstance(rule, cap_types):
+            current = _cap_groups(
+                current,
+                rule=rule,
+                identity_field=identity_field,
+                seed=seed,
+            )
+            continue
+
         namespace = type(rule).__name__
         if isinstance(rule, FinalClassDistributionRule):
+            selected: dict[object, ReviewRowT] = {}
             for target, quota in zip(
                 rule.targets,
                 _distribution_quotas(rule),
@@ -562,7 +565,7 @@ def sample_review(
             ):
                 candidates = [
                     row
-                    for row in eligible
+                    for row in current
                     if _scalar(row, "final_class") == target.value
                 ]
                 chosen = sorted(
@@ -575,15 +578,16 @@ def sample_review(
                 )[:quota]
                 for row in chosen:
                     selected[_scalar(row, identity_field)] = row
+            current = list(selected.values())
             continue
         if isinstance(rule, ClusterPercentageRule | ClusterCountRule):
-            candidates = [row for row in eligible if _positive_id(row, "cluster_id")]
+            candidates = [row for row in current if _positive_id(row, "cluster_id")]
         elif isinstance(rule, RepeaterPercentageRule | RepeaterCountRule):
-            candidates = [row for row in eligible if _positive_id(row, "repeater_id")]
+            candidates = [row for row in current if _positive_id(row, "repeater_id")]
         elif isinstance(rule, LargeDefectPercentageRule | LargeDefectCountRule):
             candidates = [
                 row
-                for row in eligible
+                for row in current
                 if _at_least(
                     row,
                     field=rule.size_field,
@@ -591,7 +595,7 @@ def sample_review(
                 )
             ]
         else:
-            candidates = list(eligible)
+            candidates = list(current)
 
         if isinstance(
             rule,
@@ -608,7 +612,7 @@ def sample_review(
         else:
             quota = min(len(candidates), _positive_count(rule.count))
 
-        chosen = sorted(
+        current = sorted(
             candidates,
             key=lambda row: _priority(
                 seed=seed,
@@ -616,27 +620,6 @@ def sample_review(
                 identity=_scalar(row, identity_field),
             ),
         )[:quota]
-        for row in chosen:
-            selected[_scalar(row, identity_field)] = row
-
-    current = list(selected.values()) if selector_rules else eligible
-    cap_rank = {
-        PerDieLimitRule: 0,
-        PerClusterLimitRule: 1,
-        PerRepeaterLimitRule: 2,
-        PerWaferLimitRule: 3,
-    }
-    cap_rules = sorted(
-        (rule for rule in program.rules if isinstance(rule, cap_types)),
-        key=lambda rule: cap_rank[type(rule)],
-    )
-    for rule in cap_rules:
-        current = _cap_groups(
-            current,
-            rule=rule,
-            identity_field=identity_field,
-            seed=seed,
-        )
 
     return sorted(
         current,

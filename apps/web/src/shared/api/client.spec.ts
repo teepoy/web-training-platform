@@ -27,7 +27,6 @@ describe("API transport", () => {
       getToken: () => "test-token",
       getOrgId: () => "org-1",
       onAuthError,
-      authEnabled: () => true,
       apiBase: "/api/v1",
     });
   });

@@ -22,7 +22,12 @@ describe("SC sampling rule editors", () => {
     const { wrapper } = await mountWithProviders(ClusterPercentageRuleEditor, {
       props: {
         rule: { type: "cluster_percentage", percentage: 10, rounding: "floor" },
-        context: { classCodeOptions: [], finalClassOptions: [], loading: false },
+        context: {
+          classCodeOptions: [],
+          finalClassOptions: [],
+          distributionLabel: "Final Class",
+          loading: false,
+        },
       },
     });
 

@@ -19,6 +19,8 @@ import {
 } from "naive-ui";
 import { useRoute, useRouter } from "vue-router";
 import { FullScreenLayout } from "@/shared/components/full-screen-layout";
+import { FlowModal, type FlowCard } from "@/shared";
+import { widgetRegistry } from "@/app/registrations";
 import { useReclassifyPage } from "../../application/useReclassifyPage";
 import { toUserMessage } from "@/shared/api";
 import InspectionQuad from "@/features/sc/presentation/components/InspectionQuad.vue";
@@ -37,6 +39,7 @@ import type {
   ScSamplingProgram,
 } from "@/features/sc/domain/samplingRules";
 import { SC_SAMPLING_RANDOM_SEED } from "@/features/sc/domain/samplingRules";
+import { supportsScPredictionExport } from "@/features/sc/domain/predictionExportCapability";
 import type { ScSamplingCandidateScope } from "@/features/sc/application/inspectionFilterPolicy";
 import {
   getCollectionApiV1DatasetCollectionsCollectionIdGet,
@@ -136,6 +139,23 @@ const samplingMapSelectionCount = ref(0);
 const samplingTableSelectionAvailable = ref(false);
 const samplingExtraFilter = ref<ScGlobalFilter>(emptyScGlobalFilter());
 const isPreparingSampling = ref(false);
+const exportVisible = ref(false);
+const predictionExportFlows: FlowCard[] = widgetRegistry
+  .getExporters("prediction")
+  .map((exporter) => ({
+    id: exporter.id,
+    label: exporter.label,
+    description: exporter.description,
+    icon: exporter.icon,
+    component: exporter.component,
+  }));
+const canExport = computed(
+  () => !collectionId.value && supportsScPredictionExport(page.dataset.value ?? null),
+);
+
+function openExport(): void {
+  exportVisible.value = true;
+}
 
 const samplingOptions = computed(() => ({
   scope: page.samplingScope.value,
@@ -418,6 +438,16 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
             </div>
             <div class="sc-utility-actions">
               <NButton
+                v-if="canExport"
+                data-testid="sc-classify-export"
+                size="small"
+                aria-haspopup="dialog"
+                :aria-expanded="exportVisible"
+                @click.stop="openExport"
+              >
+                Export
+              </NButton>
+              <NButton
                 v-if="page.trainPredictTaskId.value"
                 size="small"
                 quaternary
@@ -638,6 +668,13 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
       :prediction-processing="page.trainPredictPredictionProcessing.value"
     />
   </FullScreenLayout>
+  <FlowModal
+    v-model:show="exportVisible"
+    :flows="predictionExportFlows"
+    kind="export"
+    title="Export current results"
+    :dataset-id="datasetId"
+  />
 </template>
 
 <style scoped>

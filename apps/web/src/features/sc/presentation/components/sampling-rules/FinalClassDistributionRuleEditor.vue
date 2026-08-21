@@ -19,6 +19,7 @@ const emit = defineEmits<{
       :count="rule.count"
       :targets="rule.targets"
       :options="context.finalClassOptions"
+      :distribution-label="context.distributionLabel"
       :loading="context.loading"
       @update:count="emit('update:rule', { ...props.rule, count: $event })"
       @update:targets="emit('update:rule', { ...props.rule, targets: $event })"

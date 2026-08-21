@@ -9,9 +9,11 @@ from sampling_rules import (
     ExcludeClassCodesRule,
     FinalClassDistributionRule,
     FinalClassTarget,
+    LargeDefectPercentageRule,
     PerDieLimitRule,
     PerWaferLimitRule,
     RandomCountRule,
+    Rounding,
     RepeaterCountRule,
     RequireImageRule,
     ReviewSamplingProgram,
@@ -86,6 +88,51 @@ def test_executes_combined_review_rules_over_arrow_without_row_materialization()
         )
     )
     assert len(die_keys) == len(set(die_keys))
+
+
+def test_executes_limit_and_selector_in_declared_order() -> None:
+    connection = duckdb.connect(":memory:")
+    connection.register(
+        "candidates",
+        pa.table(
+            {
+                "map_id": list(range(10_000)),
+                "inspection_time": ["2026-08-20T10:00:00+08:00"] * 10_000,
+                "wafer_key": [1] * 10_000,
+                "size_d": [200] * 10_000,
+            }
+        ),
+    )
+    source = DuckDbSamplingSource.relation(
+        "candidates",
+        identity_field="map_id",
+        output_field="defect_id",
+    )
+    limit = PerWaferLimitRule(limit=200)
+    take_large = LargeDefectPercentageRule(
+        percentage=10,
+        rounding=Rounding.FLOOR,
+        size_field=SizeField.DIAMETER,
+        minimum=100,
+    )
+
+    limit_then_take = execute_duckdb_review_sampling(
+        connection,
+        source,
+        program=ReviewSamplingProgram(rules=(limit, take_large)),
+        seed=42,
+        batch_rows=512,
+    ).reader.read_all()
+    take_then_limit = execute_duckdb_review_sampling(
+        connection,
+        source,
+        program=ReviewSamplingProgram(rules=(take_large, limit)),
+        seed=42,
+        batch_rows=512,
+    ).reader.read_all()
+
+    assert limit_then_take.num_rows == 20
+    assert take_then_limit.num_rows == 200
 
 
 def test_executes_final_class_distribution_with_exact_largest_remainder_quotas() -> (

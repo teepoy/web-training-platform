@@ -5,11 +5,13 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ScPredictionExportFormat } from './scPredictionExportFormat';
+import type { ScPredictionExportResultSource } from './scPredictionExportResultSource';
 import type { ScCollectionPredictionExportRequestKlarfVersion } from './scCollectionPredictionExportRequestKlarfVersion';
 import type { ScCollectionPredictionExportRequestSampling } from './scCollectionPredictionExportRequestSampling';
 
 export interface ScCollectionPredictionExportRequest {
   format: ScPredictionExportFormat;
+  result_source?: ScPredictionExportResultSource;
   klarf_version?: ScCollectionPredictionExportRequestKlarfVersion;
   include_images?: boolean;
   sampling?: ScCollectionPredictionExportRequestSampling;

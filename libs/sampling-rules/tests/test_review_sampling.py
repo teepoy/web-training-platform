@@ -54,7 +54,7 @@ def test_cluster_percentage_selects_from_clustered_defects_only() -> None:
     assert all(int(row["cluster_id"]) > 0 for row in selected)
 
 
-def test_selector_rules_draw_independently_and_union_unique_rows() -> None:
+def test_each_selector_uses_the_previous_step_output() -> None:
     rows = [
         {
             "id": index,
@@ -82,10 +82,7 @@ def test_selector_rules_draw_independently_and_union_unique_rows() -> None:
         seed=7,
     )
 
-    assert len(selected) == 5
-    assert sum(int(row["cluster_id"]) > 0 for row in selected) == 2
-    assert sum(int(row["repeater_id"]) > 0 for row in selected) == 2
-    assert sum(int(row["size_d"]) >= 9 for row in selected) == 1
+    assert selected == []
 
 
 def test_all_count_and_percentage_selector_types_are_executable() -> None:
@@ -149,7 +146,7 @@ def test_eligibility_rules_filter_before_random_selection() -> None:
     assert {row["id"] for row in selected} == {"keep-1", "keep-2"}
 
 
-def test_group_caps_compose_in_canonical_order_independent_of_rule_order() -> None:
+def test_group_caps_apply_in_declared_order() -> None:
     rows = [
         {
             "id": index,
@@ -184,22 +181,58 @@ def test_group_caps_compose_in_canonical_order_independent_of_rule_order() -> No
         seed=17,
     )
 
-    assert {row["id"] for row in selected} == {row["id"] for row in reordered}
-    for wafer_key in (1, 2):
-        assert sum(row["wafer_key"] == wafer_key for row in selected) <= 4
-    for index_x in (0, 1):
+    assert {row["id"] for row in selected} != {row["id"] for row in reordered}
+    for result in (selected, reordered):
         for wafer_key in (1, 2):
-            assert (
-                sum(
-                    row["wafer_key"] == wafer_key and row["index_x"] == index_x
-                    for row in selected
+            assert sum(row["wafer_key"] == wafer_key for row in result) <= 4
+        for index_x in (0, 1):
+            for wafer_key in (1, 2):
+                assert (
+                    sum(
+                        row["wafer_key"] == wafer_key and row["index_x"] == index_x
+                        for row in result
+                    )
+                    <= 2
                 )
-                <= 2
-            )
-    for cluster_id in (1, 2):
-        assert sum(row["cluster_id"] == cluster_id for row in selected) <= 3
-    for repeater_id in (1, 2, 3):
-        assert sum(row["repeater_id"] == repeater_id for row in selected) <= 2
+        for cluster_id in (1, 2):
+            assert sum(row["cluster_id"] == cluster_id for row in result) <= 3
+        for repeater_id in (1, 2, 3):
+            assert sum(row["repeater_id"] == repeater_id for row in result) <= 2
+
+
+def test_pipeline_applies_limit_and_selector_in_declared_order() -> None:
+    rows = [
+        {
+            "id": index,
+            "inspection_time": "2026-08-20T10:00:00+08:00",
+            "wafer_key": 1,
+            "size_d": 200,
+        }
+        for index in range(10_000)
+    ]
+    limit = PerWaferLimitRule(limit=200)
+    take_large = LargeDefectPercentageRule(
+        percentage=10,
+        rounding=Rounding.FLOOR,
+        size_field=SizeField.DIAMETER,
+        minimum=100,
+    )
+
+    limit_then_take = sample_review(
+        rows,
+        program=ReviewSamplingProgram(rules=(limit, take_large)),
+        identity_field="id",
+        seed=42,
+    )
+    take_then_limit = sample_review(
+        rows,
+        program=ReviewSamplingProgram(rules=(take_large, limit)),
+        identity_field="id",
+        seed=42,
+    )
+
+    assert len(limit_then_take) == 20
+    assert len(take_then_limit) == 200
 
 
 def test_final_class_distribution_uses_exact_largest_remainder_quotas() -> None:
@@ -270,7 +303,7 @@ def test_review_sampling_program_rejects_duplicates_and_filter_only_programs() -
         )
 
 
-def test_all_seventeen_rules_compose_with_order_independent_results() -> None:
+def test_all_seventeen_rules_compose_as_one_declared_pipeline() -> None:
     rows = [
         {
             "id": index,
@@ -278,47 +311,44 @@ def test_all_seventeen_rules_compose_with_order_independent_results() -> None:
             "wafer_key": 1 + index // 24,
             "index_x": (index // 4) % 3,
             "index_y": index % 2,
-            "cluster_id": 1 + index % 4 if index % 3 else 0,
-            "repeater_id": 1 + index % 5 if index % 4 else 0,
-            "class_number": 99 if index % 13 == 0 else 1 + index % 3,
-            "images": 0 if index % 11 == 0 else 1,
-            "size_d": 3 + index % 18,
-            "final_class": "Scratch" if index % 2 else "Particle",
+            "cluster_id": 1 + index % 4,
+            "repeater_id": 1 + index % 5,
+            "class_number": 1,
+            "images": 1,
+            "size_d": 12,
+            "final_class": "Scratch",
         }
         for index in range(48)
     ]
     rules = (
-        ClusterPercentageRule(percentage=40, rounding=Rounding.NEAREST),
-        RepeaterPercentageRule(percentage=35, rounding=Rounding.NEAREST),
-        RandomPercentageRule(percentage=20, rounding=Rounding.NEAREST),
+        ClusterPercentageRule(percentage=100, rounding=Rounding.FLOOR),
+        RepeaterPercentageRule(percentage=100, rounding=Rounding.FLOOR),
+        RandomPercentageRule(percentage=100, rounding=Rounding.FLOOR),
         ExcludeClassCodesRule(class_codes=(99,)),
-        PerDieLimitRule(limit=2),
-        ClusterCountRule(count=5),
-        RepeaterCountRule(count=5),
-        RandomCountRule(count=6),
-        PerClusterLimitRule(limit=4),
-        PerRepeaterLimitRule(limit=3),
-        PerWaferLimitRule(limit=8),
+        PerDieLimitRule(limit=48),
+        ClusterCountRule(count=48),
+        RepeaterCountRule(count=48),
+        RandomCountRule(count=48),
+        PerClusterLimitRule(limit=48),
+        PerRepeaterLimitRule(limit=48),
+        PerWaferLimitRule(limit=48),
         RequireImageRule(),
         SizeRangeRule(size_field=SizeField.DIAMETER, minimum=5, maximum=18),
-        IncludeClassCodesRule(class_codes=(1, 2, 3)),
+        IncludeClassCodesRule(class_codes=(1,)),
         LargeDefectPercentageRule(
-            percentage=25,
-            rounding=Rounding.NEAREST,
+            percentage=100,
+            rounding=Rounding.FLOOR,
             size_field=SizeField.DIAMETER,
-            minimum=12,
+            minimum=5,
         ),
         LargeDefectCountRule(
-            count=4,
+            count=48,
             size_field=SizeField.DIAMETER,
-            minimum=12,
+            minimum=5,
         ),
         FinalClassDistributionRule(
-            count=6,
-            targets=(
-                FinalClassTarget(value="Scratch", percentage=50),
-                FinalClassTarget(value="Particle", percentage=50),
-            ),
+            count=48,
+            targets=(FinalClassTarget(value="Scratch", percentage=100),),
         ),
     )
 
@@ -328,31 +358,7 @@ def test_all_seventeen_rules_compose_with_order_independent_results() -> None:
         identity_field="id",
         seed=31,
     )
-    reordered = sample_review(
-        rows,
-        program=ReviewSamplingProgram(rules=tuple(reversed(rules))),
-        identity_field="id",
-        seed=31,
-    )
-
-    assert [row["id"] for row in selected] == [row["id"] for row in reordered]
-    assert selected
-    assert all(row["class_number"] in {1, 2, 3} for row in selected)
+    assert len(selected) == 48
+    assert all(row["class_number"] == 1 for row in selected)
     assert all(row["images"] > 0 for row in selected)
     assert all(5 <= row["size_d"] <= 18 for row in selected)
-    for wafer_key in (1, 2):
-        assert sum(row["wafer_key"] == wafer_key for row in selected) <= 8
-    for cluster_id in (1, 2, 3, 4):
-        assert sum(row["cluster_id"] == cluster_id for row in selected) <= 4
-    for repeater_id in (1, 2, 3, 4, 5):
-        assert sum(row["repeater_id"] == repeater_id for row in selected) <= 3
-    die_counts: dict[tuple[object, ...], int] = {}
-    for row in selected:
-        die = (
-            row["inspection_time"],
-            row["wafer_key"],
-            row["index_x"],
-            row["index_y"],
-        )
-        die_counts[die] = die_counts.get(die, 0) + 1
-    assert all(count <= 2 for count in die_counts.values())

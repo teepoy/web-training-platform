@@ -138,7 +138,6 @@ Slow acceptance hosts may override a named value with its corresponding
 `PLAYWRIGHT_*_TIMEOUT_MS` environment variable. Avoid inline multi-minute
 literals in specs and page objects.
 
-The default Compose dev profile disables authentication. Auth-only live tests
-therefore skip unless `PLAYWRIGHT_AUTH_ENABLED=1` is supplied for a stack where
-both the frontend route guard and API authentication are enabled. Mock auth
-coverage always runs.
+Authentication is enforced in every profile. Live auth tests remain opt-in via
+`PLAYWRIGHT_AUTH_ENABLED=1` because they create and mutate real login state;
+mock auth coverage always runs.

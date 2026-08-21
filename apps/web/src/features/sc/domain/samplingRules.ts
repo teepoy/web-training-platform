@@ -98,77 +98,77 @@ export const SC_REVIEW_SAMPLING_RULE_CATALOG: readonly ScSamplingRuleCatalogItem
     id: "cluster_percentage",
     order: "01",
     title: "Cluster defects by percentage",
-    description: "Randomly choose N% from defects whose Cluster ID is positive.",
+    description: "Randomly choose N% of current rows whose Cluster ID is positive.",
     phase: "selector",
   },
   {
     id: "repeater_percentage",
     order: "02",
     title: "Repeater defects by percentage",
-    description: "Randomly choose N% from defects whose Repeater ID is positive.",
+    description: "Randomly choose N% of current rows whose Repeater ID is positive.",
     phase: "selector",
   },
   {
     id: "random_percentage",
     order: "03",
     title: "All defects by percentage",
-    description: "Randomly choose N% from all eligible defects.",
+    description: "Randomly choose N% from the rows produced by the previous step.",
     phase: "selector",
   },
   {
     id: "exclude_class_codes",
     order: "04",
     title: "Ignore Class Codes",
-    description: "Remove specified Class Codes before any random draw.",
+    description: "Remove specified Class Codes from the current rows.",
     phase: "eligibility",
   },
   {
     id: "per_die_limit",
     order: "05",
     title: "Maximum per Die",
-    description: "Keep at most N selected defects on each Die.",
+    description: "Keep at most N current defects on each Die.",
     phase: "cap",
   },
   {
     id: "cluster_count",
     order: "06",
     title: "Cluster defects by count",
-    description: "Randomly choose up to N Cluster defects.",
+    description: "Randomly choose up to N Cluster defects from the current rows.",
     phase: "selector",
   },
   {
     id: "repeater_count",
     order: "07",
     title: "Repeater defects by count",
-    description: "Randomly choose up to N Repeater defects.",
+    description: "Randomly choose up to N Repeater defects from the current rows.",
     phase: "selector",
   },
   {
     id: "random_count",
     order: "08",
     title: "All defects by count",
-    description: "Randomly choose up to N eligible defects.",
+    description: "Randomly choose up to N from the current rows.",
     phase: "selector",
   },
   {
     id: "per_cluster_limit",
     order: "09",
     title: "Maximum per Cluster ID",
-    description: "Keep at most N selected defects for each positive Cluster ID.",
+    description: "Keep at most N current defects for each positive Cluster ID.",
     phase: "cap",
   },
   {
     id: "per_repeater_limit",
     order: "10",
     title: "Maximum per Repeater ID",
-    description: "Keep at most N selected defects for each positive Repeater ID.",
+    description: "Keep at most N current defects for each positive Repeater ID.",
     phase: "cap",
   },
   {
     id: "per_wafer_limit",
     order: "11",
     title: "Maximum per Wafer",
-    description: "Keep at most N selected defects on each Wafer.",
+    description: "Keep at most N current defects on each Wafer.",
     phase: "cap",
   },
   {
@@ -196,14 +196,14 @@ export const SC_REVIEW_SAMPLING_RULE_CATALOG: readonly ScSamplingRuleCatalogItem
     id: "large_defect_percentage",
     order: "15",
     title: "Large defects by percentage",
-    description: "Randomly choose N% of defects at or above a Size threshold.",
+    description: "Randomly choose N% of current rows at or above a Size threshold.",
     phase: "selector",
   },
   {
     id: "large_defect_count",
     order: "16",
     title: "Large defects by count",
-    description: "Randomly choose up to N defects at or above a Size threshold.",
+    description: "Randomly choose up to N current rows at or above a Size threshold.",
     phase: "selector",
   },
   {
@@ -270,10 +270,20 @@ export function createDefaultScSamplingRule(type: ScSamplingRuleId): ScSamplingR
   }
 }
 
-export function createDefaultScSamplingProgram(): ScSamplingProgram {
+export function createDefaultScAnnotationSamplingProgram(): ScSamplingProgram {
   return {
     extraFilterEnabled: true,
-    rules: [{ type: "random_count", count: 200 }],
+    rules: [
+      { type: "per_die_limit", limit: 10 },
+      { type: "per_wafer_limit", limit: 200 },
+    ],
+  };
+}
+
+export function createDefaultScReviewSamplingProgram(): ScSamplingProgram {
+  return {
+    extraFilterEnabled: true,
+    rules: [{ type: "per_wafer_limit", limit: 100 }],
   };
 }
 

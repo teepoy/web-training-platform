@@ -2,7 +2,7 @@ import { tableFromArrays, tableToIPC } from "apache-arrow";
 import { http, HttpResponse } from "msw";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { server } from "@/testing/msw/server";
-import { createDefaultScSamplingProgram } from "@/features/sc/domain/samplingRules";
+import { createDefaultScAnnotationSamplingProgram } from "@/features/sc/domain/samplingRules";
 import {
   compileScSamplingSelection,
   compileScWhere,
@@ -813,7 +813,7 @@ describe("SQL workbench data source", () => {
     );
     const source = new SqlWorkbenchDataSource({ kind: "dataset", datasetId: "ds-1" });
     sources.push(source);
-    const program = createDefaultScSamplingProgram();
+    const program = createDefaultScAnnotationSamplingProgram();
     program.rules = [
       { type: "cluster_count", count: 3 },
       { type: "per_die_limit", limit: 2 },
@@ -840,7 +840,7 @@ describe("SQL workbench data source", () => {
   });
 
   it("keeps percentage semantics in the structured backend program", () => {
-    const program = createDefaultScSamplingProgram();
+    const program = createDefaultScAnnotationSamplingProgram();
     program.rules = [{ type: "cluster_percentage", percentage: 2, rounding: "floor" }];
 
     const compiled = compileScSamplingSelection([], program, 42);

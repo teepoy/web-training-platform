@@ -12,7 +12,6 @@ const liveAuthEnabled = process.env.PLAYWRIGHT_AUTH_ENABLED === "1";
 test("redirects unauthenticated users to login @mock", async ({ page }) => {
   // Uses plain page (no authedPage) — no localStorage token set.
   // The auth guard redirects to /login purely client-side.
-  // VITE_AUTH_ENABLED=true (set in playwright.config.ts) enables auth.
   await page.goto("/datasets");
   await expect(page).toHaveURL(/\/login$/);
   await expect(page.getByTestId("login-email")).toBeVisible();

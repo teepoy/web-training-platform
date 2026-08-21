@@ -10,6 +10,7 @@ from app.modules.sc.domain.prediction_export import (
     ScKlarfVersion,
     ScPredictionExportFormat,
     ScPredictionExportResult,
+    ScPredictionExportResultSource,
 )
 
 ScImportProgressCallback = Callable[[ScImportStatus], Awaitable[None]]
@@ -59,9 +60,11 @@ class ScPredictionExportPort(Protocol):
         org_id: str,
         created_by: str,
         export_format: ScPredictionExportFormat,
+        result_source: ScPredictionExportResultSource,
         klarf_version: ScKlarfVersion,
         sampling_program: ReviewSamplingProgram | None,
         sampling_seed: int | None,
+        sampling_extra_filter: dict[str, object] | None,
         include_images: bool,
     ) -> ScPredictionExportResult: ...
 
@@ -73,9 +76,11 @@ class ScPredictionExportPort(Protocol):
         org_id: str,
         created_by: str,
         export_format: ScPredictionExportFormat,
+        result_source: ScPredictionExportResultSource,
         klarf_version: ScKlarfVersion,
         sampling_program: ReviewSamplingProgram | None,
         sampling_seed: int | None,
+        sampling_extra_filter: dict[str, object] | None,
         include_images: bool,
     ) -> ScPredictionExportResult: ...
 

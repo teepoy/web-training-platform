@@ -71,13 +71,6 @@ router.beforeEach((to) => {
     return "/library";
   }
 
-  if (!authStore.authEnabled) {
-    if (isAuthRoute) {
-      return "/library";
-    }
-    return true;
-  }
-
   if (isAuthRoute && token) {
     return "/library";
   }

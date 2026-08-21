@@ -7,6 +7,7 @@ const props = defineProps<{
   count: number;
   targets: ScSamplingFinalClassTarget[];
   options: Array<{ label: string; value: string }>;
+  distributionLabel: string;
   loading: boolean;
 }>();
 
@@ -50,7 +51,11 @@ function updateTarget(index: number, percentage: number | null): void {
         </NInputNumber>
       </div>
       <div v-if="targets.length === 0" class="empty-state">
-        {{ loading ? "Loading Final Class values…" : "No Final Class values are available." }}
+        {{
+          loading
+            ? `Loading ${distributionLabel} values…`
+            : `No ${distributionLabel} values are available.`
+        }}
       </div>
     </div>
   </div>

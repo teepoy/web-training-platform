@@ -10128,6 +10128,9 @@ components:
       properties:
         format:
           $ref: "#/components/schemas/ScPredictionExportFormat"
+        result_source:
+          $ref: "#/components/schemas/ScPredictionExportResultSource"
+          default: final_class
         klarf_version:
           anyOf:
             - $ref: "#/components/schemas/ScKlarfVersion"
@@ -10138,7 +10141,7 @@ components:
           default: false
         sampling:
           anyOf:
-            - $ref: "#/components/schemas/ScSamplingSelectionRequest"
+            - $ref: "#/components/schemas/ScPredictionExportSamplingRequest"
             - type: "null"
         member_ids:
           items:
@@ -10341,6 +10344,9 @@ components:
       properties:
         format:
           $ref: "#/components/schemas/ScPredictionExportFormat"
+        result_source:
+          $ref: "#/components/schemas/ScPredictionExportResultSource"
+          default: final_class
         klarf_version:
           anyOf:
             - $ref: "#/components/schemas/ScKlarfVersion"
@@ -10351,13 +10357,38 @@ components:
           default: false
         sampling:
           anyOf:
-            - $ref: "#/components/schemas/ScSamplingSelectionRequest"
+            - $ref: "#/components/schemas/ScPredictionExportSamplingRequest"
             - type: "null"
       additionalProperties: false
       type: object
       required:
         - format
       title: ScPredictionExportRequest
+    ScPredictionExportResultSource:
+      type: string
+      enum:
+        - annotation
+        - prediction
+        - final_class
+      title: ScPredictionExportResultSource
+    ScPredictionExportSamplingRequest:
+      properties:
+        program:
+          $ref: "#/components/schemas/ScSamplingProgramRequest"
+        seed:
+          type: integer
+          minimum: 0.0
+          title: Seed
+        extra_filter:
+          anyOf:
+            - $ref: "#/components/schemas/ScWorkflowSampleFilter"
+            - type: "null"
+      additionalProperties: false
+      type: object
+      required:
+        - program
+        - seed
+      title: ScPredictionExportSamplingRequest
     ScReviewImageItem:
       properties:
         image_name:
@@ -10861,20 +10892,6 @@ components:
       required:
         - type
       title: ScSamplingRequireImageRule
-    ScSamplingSelectionRequest:
-      properties:
-        program:
-          $ref: "#/components/schemas/ScSamplingProgramRequest"
-        seed:
-          type: integer
-          minimum: 0.0
-          title: Seed
-      additionalProperties: false
-      type: object
-      required:
-        - program
-        - seed
-      title: ScSamplingSelectionRequest
     ScSamplingSizeRangeRule:
       properties:
         type:
@@ -10905,6 +10922,74 @@ components:
         - minimum
         - maximum
       title: ScSamplingSizeRangeRule
+    ScWorkflowSampleFilter:
+      properties:
+        combinator:
+          type: string
+          enum:
+            - and
+            - or
+          title: Combinator
+        items:
+          items:
+            anyOf:
+              - $ref: "#/components/schemas/ScWorkflowSampleFilterItem"
+              - $ref: "#/components/schemas/ScWorkflowSampleFilterGroup"
+          type: array
+          minItems: 1
+          title: Items
+      type: object
+      required:
+        - combinator
+        - items
+      title: ScWorkflowSampleFilter
+    ScWorkflowSampleFilterGroup:
+      properties:
+        kind:
+          type: string
+          const: group
+          title: Kind
+        combinator:
+          type: string
+          enum:
+            - and
+            - or
+          title: Combinator
+        items:
+          items:
+            anyOf:
+              - $ref: "#/components/schemas/ScWorkflowSampleFilterItem"
+              - $ref: "#/components/schemas/ScWorkflowSampleFilterGroup"
+          type: array
+          minItems: 1
+          title: Items
+      type: object
+      required:
+        - kind
+        - combinator
+        - items
+      title: ScWorkflowSampleFilterGroup
+    ScWorkflowSampleFilterItem:
+      properties:
+        kind:
+          type: string
+          const: condition
+          title: Kind
+        field:
+          type: string
+          minLength: 1
+          title: Field
+        condition:
+          anyOf:
+            - $ref: "#/components/schemas/ScSampleTableSetFilter"
+            - $ref: "#/components/schemas/ScSampleTableRangeFilter"
+          title: Condition
+      type: object
+      required:
+        - kind
+        - field
+        - condition
+      title: ScWorkflowSampleFilterItem
     ScheduleCapabilityResponse:
       properties:
         flow_name:

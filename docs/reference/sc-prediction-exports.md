@@ -2,37 +2,45 @@
 
 The Dataset detail **Export** tab exports one Dataset. A Collection's **Data**
 tab lets the user select linked Dataset records and export only that selection.
-Both surfaces export the current accumulated prediction state in three formats:
+Both surfaces export the current accumulated classification state in three formats. The user first
+selects Annotation, Prediction, or Final Class as the exported result source:
 
-| Format           | Contents                                                                                                                                                                                                                                                                                                                                                                                                        |
-| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Parquet          | Current sparse Dataset columns plus the latest annotation, prediction label, confidence, and resolved `final_class`.                                                                                                                                                                                                                                                                                            |
-| KLARF 1.2 or 1.8 | One complete file per `(inspection_time, wafer_key)`, named `{layer_id}-{lot_id}-{wafer_id}.{partition}`. The three-digit partition starts at `.000` for each filename base. The user selects the version before export. `CLASSNUMBER` contains the resolved Final Class; prediction-only fields stay out of the KLARF schema. Multiple files, or any export with defect images, are returned as a ZIP package. |
-| ZIP package      | One combined Parquet file, all inspection-level numbered KLARF files in the selected version, `manifest.json`, and optional defect images.                                                                                                                                                                                                                                                                      |
+- **Annotation** exports only non-empty, non-zero human annotations.
+- **Prediction** exports only rows with a current prediction.
+- **Final Class** uses a non-empty, non-zero annotation, otherwise the current prediction.
 
-The export is a current-state handoff, not a frozen Dataset Revision. For each
-sample, a non-empty, non-zero human annotation wins when resolving `final_class`;
-otherwise the current accumulated prediction label is used. SC code `0` means
-Unclassified and clears the human annotation.
+The source selector also controls the distribution shown in the UI and the class distribution used
+by Review Sampling.
+
+| Format           | Contents                                                                                                                                                                                                                                                                                                                                                                                                           |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Parquet          | Current sparse Dataset columns plus annotation, prediction label, confidence, and `final_class` resolved from the selected result source.                                                                                                                                                                                                                                                                          |
+| KLARF 1.2 or 1.8 | One complete file per `(inspection_time, wafer_key)`, named `{layer_id}-{lot_id}-{wafer_id}.{partition}`. The three-digit partition starts at `.000` for each filename base. The user selects the version before export. `CLASSNUMBER` contains the selected exported class; prediction-only fields stay out of the KLARF schema. Multiple files, or any export with defect images, are returned as a ZIP package. |
+| ZIP package      | One combined Parquet file, all inspection-level numbered KLARF files in the selected version, `manifest.json`, and optional defect images.                                                                                                                                                                                                                                                                         |
+
+The export is a current-state handoff, not a frozen Dataset Revision. In Final Class mode, SC code
+`0` means Unclassified and does not override a prediction.
 
 ```text
 Final Class = Annotation && Annotation !== 0 ? Annotation : Prediction
 ```
 
-## Annotation Sampling
+## Review Sampling
 
-Annotation Sampling is optional. The export UI uses the same 17 typed rules and
-fixed seed contract as the SC review workbench. Rules execute in the server-side
-DuckDB sampling engine before any output writer runs, so KLARF, Parquet, and ZIP
-receive the same selected sample set. The browser never downloads all candidate
-rows to perform sampling.
+Review Sampling is optional and has its own browser preference, separate from Classify workspace
+Annotation Sampling. Its first-use default is `Maximum per Wafer = 100`. An optional recursive Extra
+Filter runs first; the same 17 typed rules then execute top to bottom in the server-side DuckDB
+sampling engine. Every rule receives only the preceding rule's output. KLARF, Parquet, and ZIP
+therefore receive the same selected sample set, and the browser never downloads all candidate rows
+to perform sampling.
 
 ## API
 
 `POST /api/v1/sc/datasets/{dataset_id}/prediction-exports/stream` returns SSE
-progress, data, and terminal events. The request selects `klarf`, `parquet`, or
-`zip`; KLARF and ZIP requests may select `klarf_version` as `1.2` or `1.8` and
-may include a typed sampling program and seed. Omitted versions keep the earlier
+progress, data, and terminal events. The request selects `result_source` as `annotation`,
+`prediction`, or `final_class`, and `format` as `klarf`, `parquet`, or `zip`; KLARF and ZIP requests
+may select `klarf_version` as `1.2` or `1.8`. Review Sampling carries a typed ordered program, seed,
+and optional recursive `extra_filter`. Omitted result sources keep Final Class behavior, and omitted versions keep the earlier
 `1.2` behavior for existing clients. A Parquet request carrying a KLARF version
 is rejected instead of silently ignoring it. KLARF and ZIP requests may set
 `include_images`; Parquet requests carrying that option are rejected. The endpoint currently requires an
@@ -65,7 +73,7 @@ The flat KLARF 1.2 document is intentionally limited to fields backed by the
 imported inspection. It includes the standard flat `DefectRecordSpec` /
 `DefectList` and `SummarySpec` / `SummaryList` structures. Summary counts are
 computed from the rows in that numbered export file; they are not copied from
-an upstream summary that could disagree after Annotation Sampling. The exporter
+an upstream summary that could disagree after Review Sampling. The exporter
 does not synthesize an inspection-station vendor, orientation, full-wafer
 SampleTestPlan, class descriptions, or TIFF references when those values are
 unavailable.
@@ -84,7 +92,7 @@ KLARF 1.8 `ImageList` cell. Existing sample metadata such as an upstream image
 count does not justify emitting a file reference when that file is absent from
 the export.
 
-When enabled, Annotation Sampling runs first. The exporter then resolves exactly
+When enabled, Review Sampling runs first. The exporter then resolves exactly
 one `patch_defective` image for every retained row through the semantic Export
 image-parser stream in bounded 512-row batches. The Export lane has its own
 cache namespace and concurrency budget. KLARF 1.2 writes `IMAGECOUNT 1`, one `IMAGELIST` pair, and the

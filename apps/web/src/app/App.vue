@@ -185,9 +185,7 @@ const avatarDropdownOptions = computed(() => {
   if (isAdmin.value) {
     options.push({ label: "Admin", key: "admin", disabled: false });
   }
-  if (authStore.authEnabled) {
-    options.push({ label: "Logout", key: "logout", disabled: false });
-  }
+  options.push({ label: "Logout", key: "logout", disabled: false });
   return options;
 });
 

@@ -5,7 +5,7 @@ import type {
   ScWorkbenchDataSource,
 } from "@/features/sc/domain/workbenchDataSource";
 import { emptyScGlobalFilter, type ScGlobalFilter } from "@/features/sc/domain/globalFilter";
-import { createDefaultScSamplingProgram } from "@/features/sc/domain/samplingRules";
+import { createDefaultScAnnotationSamplingProgram } from "@/features/sc/domain/samplingRules";
 import type { ScLegendSource } from "@/features/sc/domain/workbenchInteraction";
 import { useSqlInspectionModel } from "../useSqlInspectionModel";
 
@@ -315,7 +315,7 @@ describe("useSqlInspectionModel", () => {
     await model.applyMapSelection([7, 3]);
     vi.mocked(source.resolveSelection).mockClear();
 
-    const program = createDefaultScSamplingProgram();
+    const program = createDefaultScAnnotationSamplingProgram();
     program.rules = [{ type: "random_count", count: 25 }];
     await model.querySamplingDefectIds(program, 1234, {
       scope: "map",

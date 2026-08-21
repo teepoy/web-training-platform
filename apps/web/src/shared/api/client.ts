@@ -2,7 +2,6 @@ let _getToken: (() => string | null) | null = null;
 let _getOrgId: (() => string | null) | null = null;
 let _onAuthError: (() => void) | null = null;
 let _apiBase: string = "/api/v1";
-let _authEnabled: (() => boolean) | null = null;
 
 export type ApiErrorKind = "http" | "network" | "timeout";
 
@@ -11,13 +10,11 @@ export function configureTransport(config: {
   getOrgId?: () => string | null;
   onAuthError?: () => void;
   apiBase?: string;
-  authEnabled?: () => boolean;
 }) {
   if (config.getToken !== undefined) _getToken = config.getToken;
   if (config.getOrgId !== undefined) _getOrgId = config.getOrgId;
   if (config.onAuthError !== undefined) _onAuthError = config.onAuthError;
   if (config.apiBase !== undefined) _apiBase = config.apiBase;
-  if (config.authEnabled !== undefined) _authEnabled = config.authEnabled;
 }
 
 export class ApiError<ErrorBody = unknown> extends Error {
@@ -183,7 +180,7 @@ export async function requestRaw(
 
   if (!response.ok) {
     const body = await parseResponseBody(response);
-    if (response.status === 401 && token && (_authEnabled?.() ?? true)) {
+    if (response.status === 401 && token) {
       try {
         _onAuthError?.();
       } catch {

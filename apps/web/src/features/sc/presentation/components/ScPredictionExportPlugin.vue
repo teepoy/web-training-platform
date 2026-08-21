@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref } from "vue";
+import { computed, onUnmounted, ref, watch } from "vue";
 import { useMessage, useThemeVars } from "naive-ui";
 import type {
   ScCollectionPredictionExportRequest,
   ScKlarfVersion,
   ScPredictionExportRequest,
+  ScPredictionExportResultSource,
 } from "@/generated/orval/models";
 import type { ExporterResult } from "@/shared/widgets/sdk";
 import { buildExportDownloadUrl } from "@/shared/api/datasets";
@@ -12,13 +13,18 @@ import { streamApiSse } from "@/shared/api/sse";
 import { toUserMessage } from "@/shared/api";
 import type { ScSamplingCandidateScope } from "@/features/sc/application/inspectionFilterPolicy";
 import { SqlWorkbenchDataSource } from "@/features/sc/api/sqlWorkbenchDataSource";
-import { emptyScGlobalFilter } from "@/features/sc/domain/globalFilter";
+import type { ScDataFilterExpression } from "@/features/sc/domain/workbenchDataSource";
+import { emptyScGlobalFilter, toScWorkflowSampleFilter } from "@/features/sc/domain/globalFilter";
+import { buildScGlobalDataFilters } from "@/features/sc/application/workbenchDataFilter";
 import {
-  createDefaultScSamplingProgram,
   SC_SAMPLING_RANDOM_SEED,
   type ScSamplingGroupPopulation,
   type ScSamplingProgram,
 } from "@/features/sc/domain/samplingRules";
+import {
+  loadScSamplingPreference,
+  saveScSamplingPreference,
+} from "@/features/sc/application/samplingPreferences";
 import ReviewSamplingModal from "./ReviewSamplingModal.vue";
 
 const props = withDefaults(
@@ -51,6 +57,7 @@ const exportSurfaceStyle = computed(() => ({
 }));
 
 const format = ref<ScPredictionExportRequest["format"]>("parquet");
+const resultSource = ref<ScPredictionExportResultSource>("final_class");
 const klarfVersion = ref<ScKlarfVersion>("1.2");
 const includeImages = ref(false);
 const loading = ref(false);
@@ -59,9 +66,16 @@ const samplingEnabled = ref(false);
 const samplingVisible = ref(false);
 const samplingLoading = ref(false);
 const samplingAvailableCount = ref(0);
-const samplingProgram = ref<ScSamplingProgram>(createDefaultScSamplingProgram());
+const samplingProgram = ref<ScSamplingProgram>(loadScSamplingPreference("review"));
 const samplingScope = ref<ScSamplingCandidateScope>("all");
 const samplingExtraFilter = ref(emptyScGlobalFilter());
+const extraFilterDistinctValues = ref<Record<string, Array<string | number>>>({});
+const extraFilterNumericRanges = ref<Record<string, { min: number; max: number } | null>>({});
+const extraFilterNumericRangeLoading = ref<Record<string, boolean>>({});
+const extraFilterNumericRangeErrors = ref<Record<string, boolean>>({});
+const resultDistribution = ref<Record<string, number>>({});
+const distributionLoading = ref(false);
+let distributionVersion = 0;
 const result = ref<{
   uri: string;
   rows: number;
@@ -75,23 +89,81 @@ const isCollectionExport = computed(() => !!props.collectionId);
 const targetDatasetIds = computed(() =>
   isCollectionExport.value ? props.memberDatasetIds : props.datasetId ? [props.datasetId] : [],
 );
+const resultSourceOptions = [
+  {
+    value: "annotation" as const,
+    label: "Annotation",
+    description: "Only manually classified rows; empty and 0 annotations are omitted.",
+    field: "annotation_label",
+  },
+  {
+    value: "prediction" as const,
+    label: "Prediction",
+    description: "Only rows with a current prediction are exported.",
+    field: "prediction_label",
+  },
+  {
+    value: "final_class" as const,
+    label: "Final Class",
+    description: "Uses a non-zero annotation first, otherwise the current prediction.",
+    field: "final_class",
+  },
+] satisfies Array<{
+  value: ScPredictionExportResultSource;
+  label: string;
+  description: string;
+  field: string;
+}>;
+const activeResultSource = computed(
+  () => resultSourceOptions.find((option) => option.value === resultSource.value)!,
+);
+const resultAvailabilityFilters = computed<readonly ScDataFilterExpression[]>(() => [
+  [
+    activeResultSource.value.field,
+    "not in and not null",
+    resultSource.value === "annotation" ? ["", "0"] : [""],
+  ],
+]);
+const distributionEntries = computed(() => {
+  const eligible = Object.entries(resultDistribution.value).filter(([value, count]) => {
+    if (count <= 0 || value.startsWith("__") || value === "") return false;
+    return resultSource.value !== "annotation" || value !== "0";
+  });
+  const total = eligible.reduce((sum, [, count]) => sum + count, 0);
+  return eligible
+    .sort((left, right) => right[1] - left[1])
+    .map(([value, count]) => ({
+      value,
+      count,
+      percentage: total > 0 ? Math.round((count / total) * 1000) / 10 : 0,
+    }));
+});
+
+watch(samplingProgram, (program) => saveScSamplingPreference("review", program), { deep: true });
+
+watch(
+  [resultSource, targetDatasetIds],
+  () => {
+    void refreshResultDistribution();
+  },
+  { immediate: true },
+);
 
 const formatOptions = [
   {
     value: "parquet" as const,
     title: "Parquet",
-    description: "Columnar current results for analytics and downstream processing.",
+    description: "Columnar results for analytics.",
   },
   {
     value: "klarf" as const,
     title: "KLARF",
-    description: "One complete numbered .000/.001 file per inspection, using Final Class.",
+    description: "Numbered .000/.001 files by inspection.",
   },
   {
     value: "zip" as const,
     title: "ZIP package",
-    description:
-      "Combined Parquet, inspection-level KLARF files, and a manifest. Defect images are optional.",
+    description: "Parquet, KLARF, manifest, and optional images.",
   },
 ];
 const samplingSummary = computed(() =>
@@ -103,19 +175,99 @@ const samplingSummary = computed(() =>
 async function prepareSampling(): Promise<void> {
   samplingLoading.value = true;
   try {
-    const groups = await loadMergedGroups("wafer_key");
+    const groups = await loadMergedGroups("wafer_key", true);
     samplingAvailableCount.value = Object.values(groups).reduce((sum, count) => sum + count, 0);
     samplingVisible.value = true;
   } catch (error) {
-    message.error(toUserMessage(error, "Failed to prepare Annotation Sampling"));
+    message.error(toUserMessage(error, "Failed to prepare Review Sampling"));
   } finally {
     samplingLoading.value = false;
   }
 }
 
 async function loadSamplingGroups(field: string): Promise<ScSamplingGroupPopulation[]> {
-  const groups = await loadMergedGroups(field);
+  const resolvedField = field === "final_class" ? activeResultSource.value.field : field;
+  const groups = await loadMergedGroups(resolvedField, true);
   return Object.entries(groups).map(([value, count]) => ({ value, count }));
+}
+
+async function refreshResultDistribution(): Promise<void> {
+  if (targetDatasetIds.value.length === 0) {
+    resultDistribution.value = {};
+    return;
+  }
+  const version = ++distributionVersion;
+  distributionLoading.value = true;
+  try {
+    const groups = await loadMergedGroups(activeResultSource.value.field);
+    if (version === distributionVersion) resultDistribution.value = groups;
+  } catch {
+    if (version === distributionVersion) resultDistribution.value = {};
+  } finally {
+    if (version === distributionVersion) distributionLoading.value = false;
+  }
+}
+
+async function searchExtraFilterOptions(payload: { field: string; search: string }): Promise<void> {
+  const values = await Promise.all(
+    targetDatasetIds.value.map((datasetId) =>
+      sourceFor(datasetId).loadDistinctValues({
+        field: payload.field,
+        search: payload.search,
+        limit: 100,
+        filters: resultAvailabilityFilters.value,
+      }),
+    ),
+  );
+  extraFilterDistinctValues.value = {
+    ...extraFilterDistinctValues.value,
+    [payload.field]: [...new Set(values.flat())],
+  };
+}
+
+async function requestExtraFilterRange(payload: { field: string; itemId?: string }): Promise<void> {
+  const key = payload.itemId ?? `draft:${payload.field}`;
+  extraFilterNumericRangeLoading.value = {
+    ...extraFilterNumericRangeLoading.value,
+    [key]: true,
+  };
+  extraFilterNumericRangeErrors.value = {
+    ...extraFilterNumericRangeErrors.value,
+    [key]: false,
+  };
+  try {
+    const filters = [
+      ...resultAvailabilityFilters.value,
+      ...buildScGlobalDataFilters(samplingExtraFilter.value, {
+        omitItemId: payload.itemId,
+      }),
+    ];
+    const ranges = await Promise.all(
+      targetDatasetIds.value.map((datasetId) =>
+        sourceFor(datasetId).loadNumericRange({ field: payload.field, filters }),
+      ),
+    );
+    const valid = ranges.filter((range): range is { min: number; max: number } => range !== null);
+    extraFilterNumericRanges.value = {
+      ...extraFilterNumericRanges.value,
+      [key]: valid.length
+        ? {
+            min: Math.min(...valid.map((range) => range.min)),
+            max: Math.max(...valid.map((range) => range.max)),
+          }
+        : null,
+    };
+  } catch {
+    extraFilterNumericRangeErrors.value = {
+      ...extraFilterNumericRangeErrors.value,
+      [key]: true,
+    };
+  } finally {
+    extraFilterNumericRangeLoading.value = {
+      ...extraFilterNumericRangeLoading.value,
+      [key]: false,
+    };
+  }
 }
 
 function sourceFor(datasetId: string): SqlWorkbenchDataSource {
@@ -126,12 +278,20 @@ function sourceFor(datasetId: string): SqlWorkbenchDataSource {
   return source;
 }
 
-async function loadMergedGroups(field: string): Promise<Record<string, number>> {
+async function loadMergedGroups(
+  field: string,
+  restrictToResultSource = false,
+): Promise<Record<string, number>> {
   if (targetDatasetIds.value.length === 0) {
     throw new Error("No Dataset records are selected for export");
   }
   const groupResults = await Promise.all(
-    targetDatasetIds.value.map((datasetId) => sourceFor(datasetId).loadAggregates({ field })),
+    targetDatasetIds.value.map((datasetId) =>
+      sourceFor(datasetId).loadAggregates({
+        field,
+        ...(restrictToResultSource ? { filters: resultAvailabilityFilters.value } : {}),
+      }),
+    ),
   );
   const merged: Record<string, number> = {};
   for (const groups of groupResults) {
@@ -153,12 +313,16 @@ async function runExport(): Promise<void> {
   statusMessage.value = "Preparing current prediction results...";
   const datasetBody: ScPredictionExportRequest = {
     format: format.value,
+    result_source: resultSource.value,
     ...(format.value === "parquet" ? {} : { klarf_version: klarfVersion.value }),
     include_images: format.value === "parquet" ? false : includeImages.value,
     sampling: samplingEnabled.value
       ? {
           seed: SC_SAMPLING_RANDOM_SEED,
           program: { rules: samplingProgram.value.rules },
+          extra_filter: samplingProgram.value.extraFilterEnabled
+            ? (toScWorkflowSampleFilter(samplingExtraFilter.value) ?? undefined)
+            : undefined,
         }
       : null,
   };
@@ -215,6 +379,36 @@ onUnmounted(() => {
 
 <template>
   <div class="prediction-export" data-testid="sc-prediction-export" :style="exportSurfaceStyle">
+    <n-card size="small" class="result-source-card">
+      <div class="result-source-row">
+        <div>
+          <strong>Exported class</strong>
+          <n-text depth="3">{{ activeResultSource.description }}</n-text>
+        </div>
+        <n-radio-group v-model:value="resultSource" :disabled="loading" size="small">
+          <n-radio-button
+            v-for="option in resultSourceOptions"
+            :key="option.value"
+            :value="option.value"
+            :aria-label="`Export ${option.label} results`"
+          >
+            {{ option.label }}
+          </n-radio-button>
+        </n-radio-group>
+      </div>
+      <n-divider />
+      <div class="distribution-row">
+        <strong>{{ activeResultSource.label }} distribution</strong>
+        <n-spin v-if="distributionLoading" size="small" />
+        <n-space v-else-if="distributionEntries.length" size="small">
+          <n-tag v-for="entry in distributionEntries" :key="entry.value" size="small">
+            {{ entry.value }} · {{ entry.count.toLocaleString() }} · {{ entry.percentage }}%
+          </n-tag>
+        </n-space>
+        <n-text v-else depth="3">No classified rows</n-text>
+      </div>
+    </n-card>
+
     <div class="format-grid" role="radiogroup" aria-label="Export format">
       <button
         v-for="option in formatOptions"
@@ -249,10 +443,7 @@ onUnmounted(() => {
       <div class="image-export-row">
         <div>
           <strong>Include defect images</strong>
-          <n-text depth="3">
-            Adds one defective patch for every row retained after Annotation Sampling. The result is
-            packaged as ZIP.
-          </n-text>
+          <n-text depth="3"> One defective patch per retained row; packaged as ZIP. </n-text>
         </div>
         <n-switch
           v-model:value="includeImages"
@@ -265,14 +456,14 @@ onUnmounted(() => {
     <n-card size="small" class="sampling-card">
       <div class="sampling-row">
         <div>
-          <strong>Annotation Sampling</strong>
+          <strong>Review Sampling</strong>
           <n-text depth="3">{{ samplingSummary }}</n-text>
         </div>
         <n-space align="center">
           <n-switch
             v-model:value="samplingEnabled"
             :disabled="loading"
-            aria-label="Apply Annotation Sampling"
+            aria-label="Apply Review Sampling"
           />
           <n-button :loading="samplingLoading" :disabled="loading" @click="prepareSampling">
             Configure
@@ -281,22 +472,12 @@ onUnmounted(() => {
       </div>
     </n-card>
 
-    <n-alert type="info" :show-icon="false">
+    <n-text depth="3" class="export-note">
       <template v-if="isCollectionExport">
-        Parquet combines the selected Collection records. KLARF groups their rows by inspection and
-        creates complete numbered files; it does not split files by byte size.
+        Selected Collection records are combined; KLARF remains grouped by inspection.
       </template>
-      <template v-else>
-        Exports use the Dataset's current accumulated prediction state. A newer run can replace the
-        current result for individual samples.
-      </template>
-    </n-alert>
-
-    <n-alert type="warning" title="Large exports may take several minutes">
-      Packages can exceed 100 MB. Keep this tab open until the download link appears. Generation
-      sends periodic progress, uploads use multipart object storage, and downloads are streamed in
-      bounded chunks with byte-range resume support.
-    </n-alert>
+      <template v-else> Large exports can exceed 100 MB; keep this tab open until ready. </template>
+    </n-text>
 
     <n-text v-if="statusMessage" depth="3">{{ statusMessage }}</n-text>
 
@@ -334,14 +515,21 @@ onUnmounted(() => {
       v-model:program="samplingProgram"
       v-model:scope="samplingScope"
       v-model:extra-filter="samplingExtraFilter"
-      title="Annotation Sampling for export"
+      title="Review Sampling for export"
+      :distribution-label="activeResultSource.label"
       :loading="samplingLoading"
       :available-count="samplingAvailableCount"
       :map-selection-count="0"
       :table-selection-available="false"
       :show-candidate-scope="false"
-      :show-extra-filter="false"
+      :show-extra-filter="true"
+      :extra-filter-distinct-values="extraFilterDistinctValues"
+      :extra-filter-numeric-ranges="extraFilterNumericRanges"
+      :extra-filter-numeric-range-loading="extraFilterNumericRangeLoading"
+      :extra-filter-numeric-range-errors="extraFilterNumericRangeErrors"
       :load-groups="loadSamplingGroups"
+      @search-extra-filter-options="searchExtraFilterOptions"
+      @request-extra-filter-range="requestExtraFilterRange"
       @confirm="confirmSampling"
     />
   </div>
@@ -357,6 +545,31 @@ onUnmounted(() => {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
+}
+
+.result-source-row,
+.distribution-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.result-source-row strong,
+.result-source-row .n-text {
+  display: block;
+}
+
+.result-source-row .n-text {
+  margin-top: 4px;
+}
+
+.distribution-row > strong {
+  flex: 0 0 auto;
+}
+
+.export-note {
+  line-height: 1.5;
 }
 
 .format-option {
@@ -429,6 +642,8 @@ onUnmounted(() => {
   .klarf-version-row,
   .image-export-row,
   .sampling-row,
+  .result-source-row,
+  .distribution-row,
   .result-row {
     align-items: stretch;
     flex-direction: column;

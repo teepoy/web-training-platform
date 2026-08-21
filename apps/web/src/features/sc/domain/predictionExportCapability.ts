@@ -1,6 +1,8 @@
-import type { Dataset } from "@/generated/orval/models";
-
-type ScPredictionExportCandidate = Pick<Dataset, "dataset_type" | "storage_mode" | "task_spec">;
+type ScPredictionExportCandidate = {
+  dataset_type?: string | null;
+  storage_mode?: string | null;
+  task_spec?: { task_type?: unknown } | null;
+};
 
 export function supportsScPredictionExport(dataset: ScPredictionExportCandidate | null): boolean {
   return (

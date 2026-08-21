@@ -2,7 +2,7 @@ import { h, nextTick } from "vue";
 import { describe, expect, it } from "vitest";
 import { NMessageProvider } from "naive-ui";
 import { mountWithProviders } from "@/testing";
-import { createDefaultScSamplingProgram } from "@/features/sc/domain/samplingRules";
+import { createDefaultScAnnotationSamplingProgram } from "@/features/sc/domain/samplingRules";
 import ReviewSamplingModal from "./ReviewSamplingModal.vue";
 import ClusterCountRuleEditor from "./sampling-rules/ClusterCountRuleEditor.vue";
 
@@ -26,7 +26,7 @@ describe("ReviewSamplingModal", () => {
             mapSelectionCount: 0,
             tableSelectionAvailable: false,
             extraFilter: { combinator: "and", items: [] },
-            program: createDefaultScSamplingProgram(),
+            program: createDefaultScAnnotationSamplingProgram(),
             scope: "all",
             loadGroups: async () => [],
           }),
@@ -64,7 +64,9 @@ describe("ReviewSamplingModal", () => {
     expect(document.body.textContent).toContain("Cluster defects by count");
     expect(document.body.textContent).not.toContain("Random seed");
     const updates = modal.emitted("update:program") ?? [];
-    const latest = updates.at(-1)?.[0] as ReturnType<typeof createDefaultScSamplingProgram>;
+    const latest = updates.at(-1)?.[0] as ReturnType<
+      typeof createDefaultScAnnotationSamplingProgram
+    >;
     expect(latest.rules).toContainEqual({ type: "cluster_count", count: 50 });
 
     modal.findComponent(ClusterCountRuleEditor).vm.$emit("update:rule", {
@@ -74,7 +76,7 @@ describe("ReviewSamplingModal", () => {
     await nextTick();
     const inlineUpdates = modal.emitted("update:program") ?? [];
     const afterInlineEdit = inlineUpdates.at(-1)?.[0] as ReturnType<
-      typeof createDefaultScSamplingProgram
+      typeof createDefaultScAnnotationSamplingProgram
     >;
     expect(afterInlineEdit.rules).toContainEqual({ type: "cluster_count", count: 75 });
     wrapper.unmount();
@@ -93,7 +95,7 @@ describe("ReviewSamplingModal", () => {
               mapSelectionCount: 0,
               tableSelectionAvailable: false,
               extraFilter: { combinator: "and", items: [] },
-              program: createDefaultScSamplingProgram(),
+              program: createDefaultScAnnotationSamplingProgram(),
               scope: "all",
               confirmDisabled: true,
               loadGroups: async () => [],
@@ -121,6 +123,57 @@ describe("ReviewSamplingModal", () => {
     );
     expect(applyButton?.disabled).toBe(true);
     expect(modal.emitted("confirm")).toBeUndefined();
+    wrapper.unmount();
+  });
+
+  it("lets the user reorder pipeline steps and emits the declared order", async () => {
+    const { wrapper } = await mountWithProviders(NMessageProvider, {
+      slots: {
+        default: () =>
+          h(ReviewSamplingModal, {
+            show: true,
+            loading: false,
+            availableCount: 100,
+            mapSelectionCount: 0,
+            tableSelectionAvailable: false,
+            extraFilter: { combinator: "and", items: [] },
+            program: {
+              extraFilterEnabled: true,
+              rules: [
+                { type: "per_wafer_limit", limit: 200 },
+                {
+                  type: "large_defect_percentage",
+                  sizeField: "size_d",
+                  minimum: 100,
+                  percentage: 10,
+                  rounding: "floor",
+                },
+              ],
+            },
+            scope: "all",
+            loadGroups: async () => [],
+          }),
+      },
+      global: { stubs: { NModal: modalStub } },
+    });
+    const modal = wrapper.findComponent(ReviewSamplingModal);
+
+    await nextTick();
+    const moveDown = document.body.querySelector<HTMLButtonElement>(
+      '[data-testid="move-sampling-rule-per_wafer_limit-down"]',
+    );
+    expect(moveDown).not.toBeNull();
+    moveDown?.click();
+    await nextTick();
+
+    const updates = modal.emitted("update:program") ?? [];
+    const latest = updates.at(-1)?.[0] as ReturnType<
+      typeof createDefaultScAnnotationSamplingProgram
+    >;
+    expect(latest.rules.map((rule) => rule.type)).toEqual([
+      "large_defect_percentage",
+      "per_wafer_limit",
+    ]);
     wrapper.unmount();
   });
 });

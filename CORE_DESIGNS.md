@@ -243,8 +243,11 @@ Inspection 并取得精确 `eqp_id`，再从代码拥有的 exact registry 选�
 EntryFactory 组合设备固定的 Artifact downloader 与 Artifact parser；多个明确列出的设备 ID
 可以注册到同一 factory，空 ID、重复 ID 与未知设备直接失败。设备规则不得由启动配置、文件
 扩展名、request 字段或 sniffing 改变。当前 legacy entry 固定使用 500-defect range ZIP 与
-`PatchReference` / `PatchDefective` / `PatchDifference` 成员命名；新增 SQLite、Parquet、目录或
-其他设备布局时，应新增并显式注册 Equipment entry，而不是恢复通用 format switch。
+`PatchReference` / `PatchDefective` / `PatchDifference` 成员命名。仓库另提供固定
+`images(sample_id, role, image_bytes, content_type)` schema 的 SQLite Equipment Entry 示例，
+使用 `modernc.org/sqlite v1.55.0` 只读解析缓存文件；它仍须由具体 provider 与明确 `eqp_id`
+注册后才启用。仓库不提供 Parquet Equipment Entry。其他设备布局应新增并显式注册 Equipment
+Entry，而不是恢复通用 format switch。
 
 Artifact downloader 把 upstream source 描述为稳定 `ArtifactRef(entry_id, source_identity,
 revision, kind)` 并将文件或目录流式写入 staging path；Artifact parser 只从本地已发布 artifact
@@ -287,7 +290,10 @@ content type。图片 decode、灰度转换、resize、channel stack 和 tensor/
 preprocess：训练由可 shuffle 的 DataLoader 路径执行，预测由 4 个 spawn worker、每 task 64、
 最多 8 个预取 task、模型 batch 256 的有界 pool 执行。
 
-SC prediction result export 可选携带缺陷图片。它先执行 Annotation Sampling，再通过独立
+SC prediction result export 由用户显式选择 Annotation、Prediction 或 Final Class 作为导出
+类别；Annotation 与 Prediction 模式先排除没有对应结果的行，Final Class 使用非零 Annotation，
+否则使用 Prediction。可选 Review Sampling 先应用 recursive Extra Filter，再按用户声明顺序
+逐条执行 typed rules；每一步只消费上一步输出，不得按 filter/selector/cap 重新分组。之后通过独立
 Export image stream 按 512 行有界读取每个保留 sample 的 `patch_defective`，不得伪装成
 Prediction 或占用 Display lane。包含图片的 KLARF/ZIP 导出必须返回 ZIP，KLARF 中每个非零
 图片引用必须精确对应包内文件；缺图、损坏、未知 content type 或 source format 整体不可用
@@ -461,6 +467,8 @@ action。Prefect UI 与 MinIO Console 是 operator console，只进入受保护�
 ## 10. Auth 与组织上下文
 
 后端 route 是否真正受保护必须以当前实现为准，不能因为存在 auth scaffold 就假设所有 route 已经安全。
+
+API、SC data provider 与 image-parser 在 dev、test、pre-release、prod 全部 profile 中始终启用认证；不得提供 auth-disabled profile、隐式开发身份或前端免登录构建开关。公开注册、登录与 OAuth callback 只能通过显式 public router 暴露。
 
 前端 auth state 必须在 route view mount 前完成同步 hydration，避免页面首屏请求先发出后再读取 token，导致错误 `401` 并清空有效 session。
 

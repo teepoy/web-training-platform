@@ -40,3 +40,14 @@ def test_image_parser_runtime_is_static_and_healthchecks_use_runtime_tools() -> 
     assert "libvips" not in dockerfile
     assert 'test: ["CMD", "wget"' in dev_compose
     assert 'test: ["CMD", "wget"' in prod_compose
+
+
+def test_image_parser_pins_sqlite_entry_without_parquet_driver() -> None:
+    image_parser = _ROOT / "services/image-parser"
+    go_mod = (image_parser / "go.mod").read_text(encoding="utf-8")
+    dockerignore = (_ROOT / ".dockerignore").read_text(encoding="utf-8")
+
+    assert "modernc.org/sqlite v1.55.0" in go_mod
+    assert "github.com/parquet-go/parquet-go" not in go_mod
+    assert not (image_parser / "internal/equipment/parquetbytes").exists()
+    assert "services/image-parser/tmp" in dockerignore

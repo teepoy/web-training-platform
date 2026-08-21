@@ -49,6 +49,26 @@ The current `sc.legacy-range-zip.v1` entry owns these fixed rules:
 Another equipment layout belongs in another registered entry. Do not restore a
 generic source-format switch or infer behavior from extensions.
 
+`sc.sqlite-image-rows.v1` is the included second entry example. It reads one
+service-cached SQLite artifact through the pinned pure-Go
+`modernc.org/sqlite v1.55.0` driver. Its fixed table contract is:
+
+```sql
+CREATE TABLE images (
+  sample_id TEXT NOT NULL,
+  role TEXT NOT NULL,
+  image_bytes BLOB NOT NULL,
+  content_type TEXT NOT NULL,
+  PRIMARY KEY (sample_id, role)
+);
+```
+
+A concrete provider must implement inspection-to-artifact discovery and
+download, then register the factory for explicit equipment IDs. The entry opens
+the cached database read-only, batches sample/role lookup, preserves request
+order, and reports missing rows as item errors. No Parquet equipment entry is
+provided.
+
 ## Artifact cache
 
 Every equipment entry separates two interfaces:

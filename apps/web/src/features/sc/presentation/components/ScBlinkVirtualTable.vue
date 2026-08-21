@@ -23,7 +23,10 @@ import {
 } from "@/features/sc/presentation/composables/useBlinkVirtualScroll";
 import { useBlinkRubberBand } from "@/features/sc/presentation/composables/useBlinkRubberBand";
 import { scReviewUrl } from "@/features/sc/domain/models";
-import { usePagedDataGallery } from "@/features/sc/presentation/composables/usePagedDataGallery";
+import {
+  loadAllGalleryItems,
+  usePagedDataGallery,
+} from "@/features/sc/presentation/composables/usePagedDataGallery";
 import { cssBackgroundImageUrl } from "@/features/sc/presentation/components/scSpriteStyle";
 import type {
   ScGalleryDataQuery,
@@ -98,6 +101,8 @@ const emit = defineEmits<{
 
 const showDefectIdLabel = ref(true);
 const mode = ref<"patch" | "review">("patch");
+const selectingAll = ref(false);
+const selectAllError = ref<string | null>(null);
 
 watch(mode, (value) => emit("modeChange", value), { immediate: true });
 const settingsOpen = ref(false);
@@ -539,6 +544,51 @@ function isSelected(sampleKey: string): boolean {
   return props.selectedDefectIds.includes(sampleKey);
 }
 
+const selectedCount = computed(() =>
+  props.selectedDefectIds instanceof Set
+    ? props.selectedDefectIds.size
+    : new Set(props.selectedDefectIds).size,
+);
+
+async function selectAllGallerySamples(): Promise<void> {
+  const source = props.dataSource;
+  if (!source || totalSamples.value === 0 || selectingAll.value) return;
+  const startScope = source.scopeKey;
+  const startMode = mode.value;
+  const query = JSON.parse(
+    JSON.stringify({ ...(props.galleryQuery ?? {}), mode: startMode }),
+  ) as Omit<ScGalleryDataQuery, "offset" | "limit">;
+  selectingAll.value = true;
+  selectAllError.value = null;
+  try {
+    const rowKeys = await loadAllGalleryItems(source, query, (ipc, offset) =>
+      samplesFromArrow(ipc, offset, startMode === "review").map((row) => row.rowKey),
+    );
+    if (props.dataSource?.scopeKey !== startScope || mode.value !== startMode) {
+      throw new Error("Gallery changed while selecting all rows; try again");
+    }
+    emit("selectSamples", [...new Set(rowKeys)], {
+      shift: false,
+      ctrl: false,
+      meta: false,
+      selectionMode: "replace",
+    });
+  } catch (error) {
+    selectAllError.value = error instanceof Error ? error.message : String(error);
+  } finally {
+    selectingAll.value = false;
+  }
+}
+
+function clearGallerySelection(): void {
+  emit("selectSamples", [], {
+    shift: false,
+    ctrl: false,
+    meta: false,
+    selectionMode: "replace",
+  });
+}
+
 const selectionAnchorRowIndex = ref<number | null>(null);
 
 async function defectIdsBetween(start: number, end: number): Promise<string[]> {
@@ -964,6 +1014,28 @@ defineExpose({ scrollRef });
         <n-button size="tiny" quaternary @click="settingsOpen = true"> Settings </n-button>
       </div>
       <div class="sbt-toolbar-right">
+        <n-text v-if="selectAllError" type="error" class="sbt-selection-error" aria-live="polite">
+          {{ selectAllError }}
+        </n-text>
+        <n-button
+          v-if="selectedCount > 0"
+          size="tiny"
+          secondary
+          type="primary"
+          :disabled="selectingAll"
+          @click="clearGallerySelection"
+        >
+          Clear selection ({{ selectedCount.toLocaleString() }})
+        </n-button>
+        <n-button
+          v-if="totalSamples > 0 && selectedCount < totalSamples"
+          size="tiny"
+          :loading="selectingAll"
+          :disabled="currentLoading"
+          @click="selectAllGallerySamples"
+        >
+          Select all ({{ totalSamples.toLocaleString() }})
+        </n-button>
         <n-text class="sbt-row-count" depth="3">
           {{ totalSamples.toLocaleString() }} samples
         </n-text>
@@ -1301,6 +1373,17 @@ defineExpose({ scrollRef });
 .sbt-toolbar-right {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.sbt-selection-error {
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .sbt-blink-label {

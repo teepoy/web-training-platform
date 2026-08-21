@@ -32,7 +32,6 @@
 **New:**
 
 - `apps/api/app/modules/sc/views/patch_image/v2/` — `ScPatchImageV2Row` schema (`die_x: int`, `die_y: int`)
-- `apps/api/app/modules/sc/app/services/sprite_service.py` — pyvips-based sprite generation (patch/review/patch-batch/review-batch)
 - `apps/api/app/modules/sc/adapter/_wafer_mock/redis_cache.py` — `RedisPatchImageCache`: TTL, distributed lock dedup, LRU eviction
 
 **Modified:**
@@ -44,8 +43,6 @@
 - `apps/api/app/modules/sc/adapter/flows/sc_import.py` — uses `mapper.get_mapper()` instead of `.to_sample()`; `view_types` includes `"patch_image_v2"`
 - `apps/api/app/modules/sc/views/patch_image/v1/schemas.py` — `@view` decorator on schema
 - `apps/api/app/modules/sc/views/review_image/v1/schemas.py` — `@view` decorator on schema
-
-**New dependency:** `pyvips-binary` (pyproject.toml)
 
 ---
 
@@ -172,7 +169,7 @@ Die coordinate resolution was originally externalized via a `DieResolverProtocol
 **Modified:**
 
 - `scripts/smoke_wafer_e2e.py` — enhanced prediction count assertions
-- `apps/api/pyproject.toml` — `pyvips-binary`, `redis>=5.0`
+- `apps/api/pyproject.toml` — `redis>=5.0`
 - `uv.lock` — updated
 
 ---

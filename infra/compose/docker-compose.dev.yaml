@@ -12,6 +12,7 @@
 x-platform-environment: &platform-environment
   PYTHONPATH: /app/libs/protos/src
   APP_CONFIG_PROFILE: dev
+  JWT_SECRET_KEY: ${JWT_SECRET_KEY:-local-development-jwt-secret-not-for-shared-host}
   DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/finetune
   PREFECT_API_URL: http://prefect-server:4200/api
   PREFECT_UI_URL: http://localhost:4200
@@ -242,7 +243,7 @@ services:
     environment:
       PORT: "8090"
       GRPC_PORT: "9092"
-      JWT_SECRET_KEY: replace-me-in-production
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-local-development-jwt-secret-not-for-shared-host}
       SC_UPSTREAM_ADDR: sc-upstream:9091
       SC_PATCH_S3_ENDPOINT: http://minio:9000
       SC_PATCH_S3_REGION: us-east-1

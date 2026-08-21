@@ -2,6 +2,7 @@ import { test, expect } from "../../fixtures";
 import { tableFromArrays, tableToIPC } from "apache-arrow";
 import { ReclassifyPagePom } from "../../pages/sc/ReclassifyPagePom";
 import {
+  mockListTrainers,
   mockScDataset,
   mockScDefectIds,
   mockScPlotPoints,
@@ -10,6 +11,10 @@ import {
 } from "../../mocks/handlers";
 
 const DATASET_ID = "sampling-rules-sc";
+
+test.beforeEach(async ({ authedPage }) => {
+  await mockListTrainers(authedPage);
+});
 
 test("Global Filter waits for explicit confirmation before refreshing consumers @mock", async ({
   authedPage,
@@ -319,18 +324,30 @@ test("Review Sampling manages rules and sends the backend sampling program from 
   );
   await page.reviewSamplingDialog.getByText("Sampling rules", { exact: true }).click();
   await expect(page.reviewSamplingDialog.getByRole("radio", { name: "All" })).toBeChecked();
+  await expect(
+    page.reviewSamplingDialog
+      .getByTestId("sampling-rule-per_die_limit")
+      .getByLabel("Maximum selected defects per Die")
+      .locator("input"),
+  ).toHaveValue("10");
+  await expect(
+    page.reviewSamplingDialog
+      .getByTestId("sampling-rule-per_wafer_limit")
+      .getByLabel("Maximum selected defects per Wafer")
+      .locator("input"),
+  ).toHaveValue("200");
+  await page.reviewSamplingDialog.getByRole("button", { name: "Add sampling rule" }).click();
+  await expect(authedPage.getByTestId("sampling-rule-catalog")).toBeVisible();
+  await expect(
+    authedPage.getByTestId("sampling-rule-catalog").getByTestId(/^add-sampling-rule-/),
+  ).toHaveCount(17);
+  await authedPage.getByTestId("add-sampling-rule-random_count").click();
   const inlineRandomCount = page.reviewSamplingDialog
     .getByTestId("sampling-rule-random_count")
     .getByTestId("sampling-random-count")
     .locator("input");
   await expect(inlineRandomCount).toHaveValue("200");
   await inlineRandomCount.fill("250");
-  await page.reviewSamplingDialog.getByRole("button", { name: "Add sampling rule" }).click();
-  await expect(authedPage.getByTestId("sampling-rule-catalog")).toBeVisible();
-  await expect(
-    authedPage.getByTestId("sampling-rule-catalog").getByTestId(/^add-sampling-rule-/),
-  ).toHaveCount(17);
-  await authedPage.keyboard.press("Escape");
   await page.reviewSamplingDialog.getByText("Extra filter", { exact: true }).click();
   await expect(page.reviewSamplingDialog.getByText("Extra filter", { exact: true })).toHaveCount(2);
   await expect(page.reviewSamplingDialog.getByTestId("query-add-condition")).toBeVisible();
@@ -360,11 +377,19 @@ test("Review Sampling manages rules and sends the backend sampling program from 
     (body) => body.description === "sc-workbench.selection.sampling-program",
   );
   expect(samplingRequests).toHaveLength(1);
-  expect(samplingRequests[0]?.sql).toBe('SELECT "map_id" FROM samples');
+  expect(samplingRequests[0]?.sql).toBe(
+    'SELECT "map_id", "index_x", "index_y", "inspection_time", "wafer_key" FROM samples',
+  );
   expect(samplingRequests[0]?.parameters).toEqual([]);
   expect(samplingRequests[0]?.sampling).toMatchObject({
     seed: 42,
-    program: { rules: [{ type: "random_count", count: 250 }] },
+    program: {
+      rules: [
+        { type: "per_die_limit", limit: 10 },
+        { type: "per_wafer_limit", limit: 200 },
+        { type: "random_count", count: 250 },
+      ],
+    },
   });
 
   await page.clearRandomFilterButton.click();

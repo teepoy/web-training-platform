@@ -6,15 +6,16 @@ import logging
 from types import SimpleNamespace
 from typing import cast
 
-from fastapi import Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.testclient import TestClient
 from httpx import Response
 from sqlalchemy import select
 
 import app.modules.auth.port.http.deps as auth_deps
 import app.modules.auth.port.http.router as auth_router
+from app.core.config import load_config
 from app.main import app
-from app.shared.api.schemas import Organization, User
+from app.shared.api.schemas import User
 from app.shared.db.models import UserORM
 
 
@@ -140,32 +141,25 @@ def _request_with_redis(redis_client: object) -> Request:
     return cast(Request, SimpleNamespace(app=SimpleNamespace(state=state)))
 
 
-def test_auth_disabled_dependencies_reuse_initialized_dev_context(monkeypatch) -> None:
-    user = User(email="seed@example.com", name="Seed Admin", is_superadmin=True)
-    organization = Organization(name="Dev No Auth", slug="dev-no-auth")
-    state = SimpleNamespace(
-        dev_auth_context=auth_deps.DevAuthContext(
-            user=user,
-            organization=organization,
-        )
-    )
-    request = cast(
-        Request,
-        SimpleNamespace(
-            app=SimpleNamespace(state=state),
-            headers={"X-Organization-ID": organization.id},
-            query_params={},
-        ),
-    )
-    monkeypatch.setattr(auth_deps, "_auth_enabled", lambda: False)
+def test_dev_profile_requires_authentication(monkeypatch) -> None:
+    monkeypatch.setenv("APP_CONFIG_PROFILE", "dev")
+    load_config.cache_clear()
+    protected_app = FastAPI()
 
-    def fail_on_request_time_session(_request: Request | None = None) -> None:
-        raise AssertionError("dev auth dependencies must not open a request-time session")
+    @protected_app.get("/protected")
+    async def protected_route(
+        _user: User = Depends(auth_deps.get_current_user),
+    ) -> dict[str, bool]:
+        return {"authenticated": True}
 
-    monkeypatch.setattr(auth_deps, "_get_session_factory", fail_on_request_time_session)
+    try:
+        with TestClient(protected_app, raise_server_exceptions=False) as client:
+            response = client.get("/protected")
+    finally:
+        load_config.cache_clear()
 
-    assert asyncio.run(auth_deps.get_current_user(request)) is user
-    assert asyncio.run(auth_deps.get_current_org(request, user)) is organization
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Not authenticated"}
 
 
 def test_jwt_decode_daily_login_event_is_deduped_by_redis(caplog) -> None:

@@ -4,6 +4,6 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { ScSamplingSelectionRequest } from './scSamplingSelectionRequest';
+import type { ScPredictionExportSamplingRequest } from './scPredictionExportSamplingRequest';
 
-export type ScCollectionPredictionExportRequestSampling = ScSamplingSelectionRequest | null;
+export type ScCollectionPredictionExportRequestSampling = ScPredictionExportSamplingRequest | null;

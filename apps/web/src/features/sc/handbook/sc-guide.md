@@ -59,7 +59,7 @@ The Reclassify page (`/datasets/:id/sc/classify`) provides a full annotation and
 
 ### Navigation
 
-- The header shows the dataset name and a **← Back** button to return to the previous page.
+- The header shows the dataset name and a **← Back** button that always returns to Dataset detail.
 - Dataset metadata (sample count, wafer key, inspection time) is available via the **…** menu.
 
 ### Annotation Workflow
@@ -77,6 +77,8 @@ A virtualized image grid showing each defect with three patch images:
 Key actions:
 
 - **Select defects** by clicking checkboxes or clicking directly on images.
+- **Select all (N)** pages through every row in the current filtered Gallery without a hidden total
+  limit. **Clear selection (N)** removes the active Gallery selection.
 - **Assign labels** using the dropdowns on each card or the bulk annotation sidebar.
 - **Drafts** are saved locally; click **Submit Annotations** to persist them to the backend.
 - A live draft count and annotated count track your progress.
@@ -116,7 +118,12 @@ Click **Annotation Sampling** beside **Global Filter** to open the sampling moda
 
 - Choose All, Map Selection, or Table Selection as the candidate scope.
 - Configure the enabled sampling rules and optional Extra filter.
+- Rules run from top to bottom; use the move controls when a later rule must consume an earlier
+  rule's limited result.
 - Percentage rules always round down to a whole sample; rounding is not configurable.
+- The first-use default is Maximum per Die 10 followed by Maximum per Wafer 200. The browser saves
+  this Annotation Sampling pipeline separately from export Review Sampling, whose default is
+  Maximum per Wafer 100.
 - In **After sampling**, draft-label assignment is enabled by default and uses the selected label.
   Disable it when the sampled cohort should not change annotation drafts. Existing drafts outside the
   sample are preserved.

@@ -36,7 +36,10 @@ const modalTitle = computed(() => {
     return selectedFlow.value.label;
   }
 
-  return props.title ?? (props.kind === "import" ? "Import" : props.kind === "export" ? "Export" : "Preview");
+  return (
+    props.title ??
+    (props.kind === "import" ? "Import" : props.kind === "export" ? "Export" : "Preview")
+  );
 });
 
 function handleSelect(plugin: FlowCard): void {
@@ -67,28 +70,31 @@ function handleBack(): void {
 
 <template>
   <NModal
-    :show="show"
+    :show="props.show"
     preset="card"
     :title="modalTitle"
+    :aria-label="modalTitle"
+    data-testid="flow-modal"
     style="max-width: 640px"
     :mask-closable="false"
     @update:show="emit('update:show', $event)"
   >
     <template v-if="step === 'select'">
-      <FlowTypeSelector :flows="flows" @select="handleSelect" />
+      <FlowTypeSelector :flows="props.flows" @select="handleSelect" />
     </template>
     <template v-else-if="step === 'execute' && selectedFlow">
       <component
         :is="selectedFlow.component"
-        v-if="kind === 'import'"
-        :dataset-id="datasetId ?? ''"
+        v-if="props.kind === 'import'"
+        :dataset-id="props.datasetId ?? ''"
         :on-complete="handleComplete"
         :on-cancel="handleCancel"
       />
       <component
         :is="selectedFlow.component"
-        v-else-if="kind === 'export'"
-        :dataset-id="datasetId ?? ''"
+        v-else-if="props.kind === 'export'"
+        :dataset-id="props.datasetId ?? ''"
+        embedded
         :on-complete="handleComplete"
         :on-cancel="handleCancel"
       />
@@ -101,13 +107,9 @@ function handleBack(): void {
     </template>
     <template #footer>
       <NSpace justify="space-between">
-        <NButton v-if="step === 'execute'" @click="handleBack">
-          &larr; Back
-        </NButton>
+        <NButton v-if="step === 'execute'" @click="handleBack"> &larr; Back </NButton>
         <span v-else />
-        <NButton @click="emit('update:show', false)">
-          Cancel
-        </NButton>
+        <NButton @click="emit('update:show', false)"> Cancel </NButton>
       </NSpace>
     </template>
   </NModal>

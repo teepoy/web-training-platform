@@ -5,16 +5,37 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { mountWithProviders } from "@/testing";
 import ScPredictionExportPlugin from "./ScPredictionExportPlugin.vue";
 
-const { streamApiSseMock } = vi.hoisted(() => ({ streamApiSseMock: vi.fn() }));
+const { streamApiSseMock, loadAggregatesMock } = vi.hoisted(() => ({
+  streamApiSseMock: vi.fn(),
+  loadAggregatesMock: vi.fn(),
+}));
 
 vi.mock("@/shared/api/sse", () => ({ streamApiSse: streamApiSseMock }));
+vi.mock("@/features/sc/api/sqlWorkbenchDataSource", () => ({
+  SqlWorkbenchDataSource: class {
+    loadAggregates = loadAggregatesMock;
+    loadDistinctValues = vi.fn().mockResolvedValue([]);
+    loadNumericRange = vi.fn().mockResolvedValue(null);
+    close = vi.fn();
+  },
+}));
 
 describe("ScPredictionExportPlugin", () => {
   beforeEach(() => {
     streamApiSseMock.mockReset();
+    loadAggregatesMock.mockReset();
+    loadAggregatesMock.mockImplementation(({ field }: { field: string }) =>
+      Promise.resolve(
+        field === "annotation_label"
+          ? { "60": 4, __unlabeled__: 3 }
+          : field === "prediction_label"
+            ? { "40": 5, "60": 2 }
+            : { "40": 3, "60": 4 },
+      ),
+    );
   });
 
-  it("offers KLARF, Parquet, and ZIP with optional Annotation Sampling", async () => {
+  it("offers result-source distribution, formats, and Review Sampling with Extra Filter", async () => {
     const { wrapper } = await mountWithProviders(NMessageProvider, {
       slots: {
         default: () =>
@@ -27,15 +48,17 @@ describe("ScPredictionExportPlugin", () => {
       },
     });
 
-    const formatButtons = wrapper.findAll('[role="radio"]');
+    const formatButtons = wrapper.findAll('.format-grid [role="radio"]');
     expect(formatButtons).toHaveLength(3);
     expect(wrapper.text()).toContain("Parquet");
     expect(wrapper.text()).toContain("KLARF");
     expect(wrapper.text()).toContain("ZIP package");
-    expect(wrapper.text()).toContain("Defect images are optional");
-    expect(wrapper.text()).toContain("Annotation Sampling");
-    expect(wrapper.text()).toContain("Large exports may take several minutes");
-    expect(wrapper.text()).toContain("byte-range resume support");
+    expect(wrapper.get('[aria-label="Export Annotation results"]').exists()).toBe(true);
+    expect(wrapper.get('[aria-label="Export Prediction results"]').exists()).toBe(true);
+    expect(wrapper.get('[aria-label="Export Final Class results"]').exists()).toBe(true);
+    expect(wrapper.text()).toContain("Final Class distribution");
+    expect(wrapper.text()).toContain("Review Sampling");
+    expect(wrapper.text()).not.toContain("byte-range resume support");
     expect(wrapper.text()).not.toContain("Close");
     expect(formatButtons[0]?.attributes("aria-checked")).toBe("true");
     expect(wrapper.text()).not.toContain("KLARF version");
@@ -47,6 +70,15 @@ describe("ScPredictionExportPlugin", () => {
     expect(wrapper.get('[aria-label="KLARF version 1.2"]').exists()).toBe(true);
     expect(wrapper.get('[aria-label="KLARF version 1.8"]').exists()).toBe(true);
     expect(wrapper.get('[aria-label="Include defect images"]').exists()).toBe(true);
+
+    await wrapper.get('[aria-label="Export Annotation results"]').trigger("click");
+    await wrapper.get(".sampling-card button").trigger("click");
+    await flushPromises();
+    expect(document.body.textContent).toContain("Extra filter");
+    expect(loadAggregatesMock).toHaveBeenCalledWith({
+      field: "wafer_key",
+      filters: [["annotation_label", "not in and not null", ["", "0"]]],
+    });
 
     wrapper.unmount();
   });
@@ -65,13 +97,12 @@ describe("ScPredictionExportPlugin", () => {
       },
     });
 
-    expect(wrapper.text()).toContain("Parquet combines the selected Collection records");
-    expect(wrapper.text()).toContain("complete numbered files");
-    expect(wrapper.text()).toContain("does not split files by byte size");
+    expect(wrapper.text()).toContain("Selected Collection records are combined");
+    expect(wrapper.text()).toContain("KLARF remains grouped by inspection");
     wrapper.unmount();
   });
 
-  it("submits the selected KLARF version and defect-image choice", async () => {
+  it("submits the selected result source, KLARF version, and defect-image choice", async () => {
     streamApiSseMock.mockResolvedValue({
       payload: {
         uri: "exports/dataset-1/predictions.zip",
@@ -94,7 +125,8 @@ describe("ScPredictionExportPlugin", () => {
       },
     });
 
-    await wrapper.findAll('[role="radio"]')[1]?.trigger("click");
+    await wrapper.findAll('.format-grid [role="radio"]')[1]?.trigger("click");
+    await wrapper.get('[aria-label="Export Annotation results"]').trigger("click");
     await wrapper.get('[aria-label="KLARF version 1.8"]').trigger("click");
     await wrapper.get('[aria-label="Include defect images"]').trigger("click");
     await wrapper.get(".actions button").trigger("click");
@@ -106,6 +138,7 @@ describe("ScPredictionExportPlugin", () => {
         method: "POST",
         body: expect.objectContaining({
           format: "klarf",
+          result_source: "annotation",
           klarf_version: "1.8",
           include_images: true,
         }),

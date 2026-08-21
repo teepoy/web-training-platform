@@ -71,38 +71,15 @@ export function clearStoredAuth(): void {
   localStorage.removeItem("current_org_id");
 }
 
-/**
- * Resolve auth-enabled mode from VITE_AUTH_ENABLED env var.
- *
- * - `VITE_AUTH_ENABLED=true` or `'1'` → enabled
- * - `VITE_AUTH_ENABLED=false` or `'0'` → disabled
- * - Not set → enabled in production (`!import.meta.env.DEV`)
- */
-function resolveAuthEnabled(): boolean {
-  const val = import.meta.env.VITE_AUTH_ENABLED;
-  if (val === "true" || val === "1") return true;
-  if (val === "false" || val === "0") return false;
-  return !import.meta.env.DEV;
-}
-
 export const useAuthStore = defineStore("auth", {
   state: () => ({
     user: parseStoredUser(),
     token: getStoredToken(),
-    authEnabled: resolveAuthEnabled(),
   }),
   getters: {
-    isAuthenticated: (state) => (state.authEnabled ? state.token !== null : state.user !== null),
+    isAuthenticated: (state) => state.token !== null,
   },
   actions: {
-    setAuthEnabled(authEnabled: boolean) {
-      this.authEnabled = authEnabled;
-      if (!authEnabled) {
-        this.token = null;
-        localStorage.removeItem(TOKEN_KEY);
-      }
-    },
-
     async login(email: string, password: string) {
       const loginData: LoginResponse = await loginApiV1AuthLoginPost({ email, password });
       const token = loginData.access_token;
@@ -148,30 +125,12 @@ export const useAuthStore = defineStore("auth", {
     },
 
     hydrateFromStorage() {
-      this.token = this.authEnabled ? getStoredToken() : null;
+      this.token = getStoredToken();
       this.user = parseStoredUser();
     },
 
     async initFromStorage() {
       this.hydrateFromStorage();
-      if (!this.authEnabled) {
-        try {
-          const user = await authMeApiV1AuthMeGet();
-          this.token = null;
-          this.user = user;
-          localStorage.setItem(USER_KEY, JSON.stringify(user));
-          try {
-            useOrgStore().syncFromMeResponse(user.organizations ?? []);
-          } catch {
-            // org store may not be available
-          }
-        } catch {
-          this.user = null;
-          localStorage.removeItem(USER_KEY);
-        }
-        return;
-      }
-
       const token = this.token;
       if (!token) return;
       try {

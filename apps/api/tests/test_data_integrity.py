@@ -98,7 +98,7 @@ RUNTIME_BUCKET = "finetune-runtime-inputs"
 SEED_EMAIL = "seed@example.com"
 SEED_PASSWORD = "seed1234"
 
-# The dev org is seeded at startup when auth.enabled=false (dev profile).
+# The development seed command creates this user and organization explicitly.
 DEV_ORG_ID = DEFAULT_ORG_ID  # "00000000-0000-0000-0000-000000000001"
 
 SAMPLE_COUNT = 1000

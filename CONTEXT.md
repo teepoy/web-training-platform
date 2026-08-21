@@ -146,6 +146,16 @@ SC Dataset 或 SC Collection 中浏览、筛选、抽样和标注缺陷样本的
 
 Avoid: 将 SC Samples 呈现为通用原始行表格，或把 Classify workspace 当作独立资源。
 
+### Annotation sampling pipeline
+
+Classify workspace 中按用户声明顺序执行的 17 类抽样规则。每一步只接收上一步留下的行，因此移动规则会改变结果。默认先执行 `Maximum per Die = 10`，再执行 `Maximum per Wafer = 200`；浏览器为当前用户单独保存该 pipeline，不与导出偏好共用。
+
+### Review sampling
+
+SC 结果导出前可选执行的有序抽样 pipeline。默认 `Maximum per Wafer = 100`，并使用独立于 Annotation sampling pipeline 的浏览器偏好。Extra Filter 在规则 pipeline 前执行；Annotation、Prediction 或 Final Class 结果来源决定空结果排除、分布展示、分布抽样和最终导出类别。
+
+Avoid: 将 Review Sampling 称为 Annotation Sampling，或让它与 Classify workspace 共用同一个 localStorage 配置。
+
 ### Image resolution service
 
 把一组顺序的领域图片引用解析为原始图片 bytes、content type 与稳定错误的共享 data-plane 服务。Display、Prediction 与 Training 使用语义分离的入口、资源预算和缓存 namespace，但共用同一套设备入口、下载与解析契约。

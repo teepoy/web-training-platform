@@ -5,9 +5,11 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ScSamplingProgramRequest } from './scSamplingProgramRequest';
+import type { ScPredictionExportSamplingRequestExtraFilter } from './scPredictionExportSamplingRequestExtraFilter';
 
-export interface ScSamplingSelectionRequest {
+export interface ScPredictionExportSamplingRequest {
   program: ScSamplingProgramRequest;
   /** @minimum 0 */
   seed: number;
+  extra_filter?: ScPredictionExportSamplingRequestExtraFilter;
 }

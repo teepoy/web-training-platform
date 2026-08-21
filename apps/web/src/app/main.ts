@@ -39,13 +39,6 @@ configureTransport({
       router.push("/login");
     } catch {}
   },
-  authEnabled: () => {
-    try {
-      return useAuthStore(pinia).authEnabled;
-    } catch {
-      return true;
-    }
-  },
 });
 
 const app = createApp(App);

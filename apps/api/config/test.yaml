@@ -33,9 +33,6 @@ agent:
   max_panels: 8
   metadata_sample_size: 50
 
-auth:
-  enabled: true
-
 sc:
   mock:
     db_url: "sqlite:////tmp/test_wafer.db"

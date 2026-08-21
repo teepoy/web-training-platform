@@ -60,6 +60,7 @@ const props = withDefaults(
     scope: ScSamplingCandidateScope;
     loadGroups: (field: string) => Promise<ScSamplingGroupPopulation[]>;
     title?: string;
+    distributionLabel?: string;
     showCandidateScope?: boolean;
     showExtraFilter?: boolean;
   }>(),
@@ -70,6 +71,7 @@ const props = withDefaults(
     extraFilterNumericRangeErrors: () => ({}),
     confirmDisabled: false,
     title: "Annotation Sampling",
+    distributionLabel: "Final Class",
     showCandidateScope: true,
     showExtraFilter: true,
   },
@@ -134,10 +136,21 @@ const scopeModel = computed({
   get: () => props.scope,
   set: (scope: ScSamplingCandidateScope) => emit("update:scope", scope),
 });
+const catalogItems = computed(() =>
+  SC_REVIEW_SAMPLING_RULE_CATALOG.map((item) =>
+    item.id === "final_class_distribution"
+      ? {
+          ...item,
+          title: `${props.distributionLabel} distribution`,
+          description: `Split a total N by ${props.distributionLabel} percentages, then draw randomly.`,
+        }
+      : item,
+  ),
+);
 const enabledRules = computed(() =>
-  SC_REVIEW_SAMPLING_RULE_CATALOG.flatMap((item) => {
-    const rule = draft.value.rules.find((candidate) => candidate.type === item.id);
-    return rule ? [{ item, rule }] : [];
+  draft.value.rules.flatMap((rule, index) => {
+    const item = catalogItems.value.find((candidate) => candidate.id === rule.type);
+    return item ? [{ item, rule, index }] : [];
   }),
 );
 const enabledIds = computed(() => new Set(draft.value.rules.map((rule) => rule.type)));
@@ -145,14 +158,18 @@ const editingRule = computed(
   () => draft.value.rules.find((rule) => rule.type === editingRuleId.value) ?? null,
 );
 const editingDescriptor = computed(
-  () => SC_REVIEW_SAMPLING_RULE_CATALOG.find((item) => item.id === editingRuleId.value) ?? null,
+  () => catalogItems.value.find((item) => item.id === editingRuleId.value) ?? null,
 );
 const editingEditor = computed<ScSamplingRuleEditorDescriptor | null>(() =>
   editingRuleId.value ? scSamplingRuleEditor(editingRuleId.value) : null,
 );
+const configTitle = computed(() =>
+  editingDescriptor.value ? `Configure ${editingDescriptor.value.title}` : "Configure rule",
+);
 const editorContext = computed<ScSamplingRuleEditorContext>(() => ({
   classCodeOptions: classCodeOptions.value,
   finalClassOptions: finalClassOptions.value,
+  distributionLabel: props.distributionLabel,
   loading: groupLoading.value,
 }));
 const configurationError = computed(() => scSamplingProgramError(draft.value));
@@ -223,9 +240,13 @@ function ruleSummary(rule: ScSamplingRule): string {
 }
 
 function phaseLabel(phase: "eligibility" | "selector" | "cap"): string {
-  if (phase === "eligibility") return "Eligibility";
-  if (phase === "selector") return "Random selector";
-  return "Post-selection cap";
+  if (phase === "eligibility") return "Filter step";
+  if (phase === "selector") return "Take step";
+  return "Limit step";
+}
+
+function stepNumber(index: number): string {
+  return String(index + 1).padStart(2, "0");
 }
 
 function addRule(id: ScSamplingRuleId): void {
@@ -237,6 +258,14 @@ function addRule(id: ScSamplingRuleId): void {
 function removeRule(id: ScSamplingRuleId): void {
   draft.value.rules = draft.value.rules.filter((rule) => rule.type !== id);
   if (editingRuleId.value === id) configVisible.value = false;
+}
+
+function moveRule(index: number, offset: -1 | 1): void {
+  const target = index + offset;
+  if (target < 0 || target >= draft.value.rules.length) return;
+  const rules = [...draft.value.rules];
+  [rules[index], rules[target]] = [rules[target]!, rules[index]!];
+  draft.value.rules = rules;
 }
 
 function updateRule(updatedRule: ScSamplingRule): void {
@@ -323,6 +352,7 @@ watch(draft, (program) => emit("update:program", cloneScSamplingProgram(program)
     v-model:show="showModel"
     preset="card"
     :title="title"
+    :aria-label="title"
     :bordered="false"
     :style="reviewModalStyle"
     data-testid="review-sampling-modal"
@@ -356,7 +386,7 @@ watch(draft, (program) => emit("update:program", cloneScSamplingProgram(program)
         <div class="section-heading rules-heading">
           <div>
             <strong>Active pipeline</strong>
-            <small>Eligibility → independent random selectors → post-selection caps.</small>
+            <small>Runs from top to bottom. Every step receives the previous step's output.</small>
           </div>
           <NButton secondary type="primary" @click="catalogVisible = true">
             Add sampling rule
@@ -365,12 +395,36 @@ watch(draft, (program) => emit("update:program", cloneScSamplingProgram(program)
 
         <div class="active-rules">
           <article
-            v-for="{ item, rule } in enabledRules"
+            v-for="{ item, rule, index } in enabledRules"
             :key="item.id"
             class="active-rule"
             :data-testid="`sampling-rule-${item.id}`"
           >
-            <span class="rule-order">{{ item.order }}</span>
+            <div class="rule-order-control">
+              <span class="rule-order">{{ stepNumber(index) }}</span>
+              <div class="rule-move-actions">
+                <NButton
+                  size="tiny"
+                  text
+                  :disabled="index === 0"
+                  :aria-label="`Move ${item.title} up`"
+                  :data-testid="`move-sampling-rule-${item.id}-up`"
+                  @click="moveRule(index, -1)"
+                >
+                  ↑
+                </NButton>
+                <NButton
+                  size="tiny"
+                  text
+                  :disabled="index === enabledRules.length - 1"
+                  :aria-label="`Move ${item.title} down`"
+                  :data-testid="`move-sampling-rule-${item.id}-down`"
+                  @click="moveRule(index, 1)"
+                >
+                  ↓
+                </NButton>
+              </div>
+            </div>
             <div class="rule-copy">
               <div class="rule-title-line">
                 <strong>{{ item.title }}</strong>
@@ -471,16 +525,17 @@ watch(draft, (program) => emit("update:program", cloneScSamplingProgram(program)
     v-model:show="catalogVisible"
     preset="card"
     title="Add sampling rule"
+    aria-label="Add sampling rule"
     :bordered="false"
     :style="catalogModalStyle"
     data-testid="sampling-rule-catalog"
   >
     <NAlert type="info" :show-icon="false">
-      Multiple selectors draw independently from the same eligible candidates and are combined
-      without duplicates.
+      New rules are appended to the pipeline. Reorder active rules to control which rows each next
+      step receives.
     </NAlert>
     <div class="catalog-grid">
-      <article v-for="item in SC_REVIEW_SAMPLING_RULE_CATALOG" :key="item.id" class="catalog-item">
+      <article v-for="item in catalogItems" :key="item.id" class="catalog-item">
         <div class="catalog-order">{{ item.order }}</div>
         <div>
           <div class="rule-title-line">
@@ -504,7 +559,8 @@ watch(draft, (program) => emit("update:program", cloneScSamplingProgram(program)
   <NModal
     v-model:show="configVisible"
     preset="card"
-    :title="editingDescriptor ? `Configure ${editingDescriptor.title}` : 'Configure rule'"
+    :title="configTitle"
+    :aria-label="configTitle"
     :bordered="false"
     :style="configModalStyle"
     data-testid="sampling-rule-config"
@@ -576,7 +632,7 @@ watch(draft, (program) => emit("update:program", cloneScSamplingProgram(program)
 
 .active-rule {
   display: grid;
-  grid-template-columns: 36px minmax(260px, 1fr) minmax(130px, auto) auto;
+  grid-template-columns: 62px minmax(260px, 1fr) minmax(130px, auto) auto;
   gap: 12px;
   align-items: center;
   min-height: 76px;
@@ -594,6 +650,21 @@ watch(draft, (program) => emit("update:program", cloneScSamplingProgram(program)
   color: var(--cv-primary, #4c80f0);
   font-size: 11px;
   font-weight: 700;
+}
+
+.rule-order-control,
+.rule-move-actions {
+  display: flex;
+  align-items: center;
+}
+
+.rule-order-control {
+  gap: 7px;
+}
+
+.rule-move-actions {
+  flex-direction: column;
+  line-height: 1;
 }
 
 .rule-title-line {

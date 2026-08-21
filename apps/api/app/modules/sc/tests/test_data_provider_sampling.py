@@ -56,8 +56,12 @@ def test_compiles_and_executes_structured_sc_sampling_in_the_library() -> None:
 
     assert result.column_names == ["defect_id"]
     assert result.num_rows <= 5
-    assert "__review_selector_ranked" in compiled.sql
-    assert "__review_cap_ranked" in compiled.sql
+    assert '"__review_step_1_ranked"' in compiled.sql
+    assert 'FROM "__review_step_0"' in compiled.sql
+    assert '"__review_step_2_ranked"' in compiled.sql
+    assert 'FROM "__review_step_1"' in compiled.sql
+    assert '"__review_step_3_ranked"' in compiled.sql
+    assert 'FROM "__review_step_2"' in compiled.sql
 
 
 def test_maps_the_sc_missing_group_sentinel_to_sql_null() -> None:

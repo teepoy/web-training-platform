@@ -11,7 +11,6 @@ from alembic.script import ScriptDirectory
 from sqlalchemy import text
 
 from app.core.config import AppConfig
-from app.modules.auth.app.services.dev_auth_context import prepare_dev_auth_context
 from app.shared.infrastructure.prefect.deployments import (
     platform_prefect_deployment_specs,
     prefect_work_pool_names,
@@ -51,8 +50,6 @@ async def prepare_platform(config: AppConfig) -> None:
                     "head",
                 )
                 await validate_database_revision(shared)
-                if not bool(getattr(config.auth, "enabled", True)):
-                    await prepare_dev_auth_context(shared.session_factory)
                 await asyncio.to_thread(_prepare_minio, config, shared)
                 await prepare_prefect(shared)
                 await validate_platform_dependencies(config, shared)

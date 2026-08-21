@@ -4,7 +4,7 @@ from collections.abc import Iterator
 
 import pytest
 
-from app.core.config import load_config
+from app.core.config import AuthConfig, load_config
 
 
 @pytest.fixture(autouse=True)
@@ -42,6 +42,12 @@ def test_supported_profile_sets_matching_environment(
     cfg = load_config(skip_runtime_validation=True)
 
     assert cfg.app.env == expected_env
+    assert cfg.auth.enabled is True
+
+
+def test_auth_configuration_cannot_be_disabled() -> None:
+    with pytest.raises(ValueError, match="enabled"):
+        AuthConfig.model_validate({"enabled": False})
 
 
 @pytest.mark.parametrize("profile", ["pre-release", "prod"])

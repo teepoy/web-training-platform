@@ -22,21 +22,35 @@ const emit = defineEmits<{
         :key="flow.id"
         hoverable
         size="small"
+        role="button"
+        tabindex="0"
+        :aria-label="flow.label"
         style="cursor: pointer"
         @click="emit('select', flow)"
+        @keydown.enter="emit('select', flow)"
+        @keydown.space.prevent="emit('select', flow)"
       >
         <div style="display: flex; align-items: center; gap: 12px">
           <span v-if="flow.icon" class="flow-type-icon">{{ flow.icon }}</span>
           <div style="flex: 1; min-width: 0">
             <NText tag="div" style="font-weight: 500">{{ flow.label }}</NText>
-            <NText v-if="flow.description" tag="div" depth="3" style="font-size: 13px; margin-top: 2px">
+            <NText
+              v-if="flow.description"
+              tag="div"
+              depth="3"
+              style="font-size: 13px; margin-top: 2px"
+            >
               {{ flow.description }}
             </NText>
           </div>
         </div>
       </NCard>
     </NSpace>
-    <NText v-if="flows.length === 0" depth="3" style="display: block; text-align: center; padding: 24px 0">
+    <NText
+      v-if="flows.length === 0"
+      depth="3"
+      style="display: block; text-align: center; padding: 24px 0"
+    >
       No importers or exporters available.
     </NText>
   </div>

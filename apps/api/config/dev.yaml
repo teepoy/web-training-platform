@@ -2,7 +2,7 @@ execution:
   engine: prefect
 
 auth:
-  enabled: false
+  jwt_secret_key: "local-development-jwt-secret-not-for-shared-host"
 
 db:
   url: "postgresql+asyncpg://postgres:postgres@localhost:5432/finetune"

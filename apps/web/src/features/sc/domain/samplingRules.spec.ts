@@ -1,14 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
+  createDefaultScAnnotationSamplingProgram,
+  createDefaultScReviewSamplingProgram,
   createDefaultScSamplingRule,
-  createDefaultScSamplingProgram,
   SC_REVIEW_SAMPLING_RULE_CATALOG,
   scSamplingProgramError,
   scSamplingRequiredFields,
 } from "./samplingRules";
 
 describe("SC review sampling rules", () => {
-  it("declares the same seventeen product rules and keeps bounded random count as default", () => {
+  it("declares the same seventeen product rules and starts with a per-Wafer cap", () => {
     expect(SC_REVIEW_SAMPLING_RULE_CATALOG.map((item) => item.id)).toEqual([
       "cluster_percentage",
       "repeater_percentage",
@@ -29,10 +30,18 @@ describe("SC review sampling rules", () => {
       "final_class_distribution",
     ]);
 
-    const program = createDefaultScSamplingProgram();
+    const program = createDefaultScAnnotationSamplingProgram();
     expect(program.extraFilterEnabled).toBe(true);
-    expect(program.rules).toEqual([{ type: "random_count", count: 200 }]);
+    expect(program.rules).toEqual([
+      { type: "per_die_limit", limit: 10 },
+      { type: "per_wafer_limit", limit: 200 },
+    ]);
     expect(scSamplingProgramError(program)).toBeNull();
+
+    const reviewProgram = createDefaultScReviewSamplingProgram();
+    expect(reviewProgram.extraFilterEnabled).toBe(true);
+    expect(reviewProgram.rules).toEqual([{ type: "per_wafer_limit", limit: 100 }]);
+    expect(scSamplingProgramError(reviewProgram)).toBeNull();
   });
 
   it("uses floor rounding for every percentage rule", () => {
@@ -45,7 +54,7 @@ describe("SC review sampling rules", () => {
   });
 
   it("derives every source column required by a combined program", () => {
-    const program = createDefaultScSamplingProgram();
+    const program = createDefaultScAnnotationSamplingProgram();
     program.rules = [
       { type: "cluster_percentage", percentage: 10, rounding: "floor" },
       { type: "repeater_count", count: 20 },
@@ -80,7 +89,7 @@ describe("SC review sampling rules", () => {
   });
 
   it("rejects duplicate rules and invalid final-class distributions", () => {
-    const program = createDefaultScSamplingProgram();
+    const program = createDefaultScAnnotationSamplingProgram();
     program.rules = [
       { type: "random_count", count: 10 },
       { type: "random_count", count: 20 },

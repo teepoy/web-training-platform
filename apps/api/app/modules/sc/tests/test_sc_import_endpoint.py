@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock, MagicMock  # noqa: E402
 
 import pytest  # noqa: E402
 
-# Force test profile so auth.enabled=true (dev profile has auth disabled).
+# Force the isolated test profile before importing the application.
 # Must run BEFORE any app-level imports.
 os.environ["APP_CONFIG_PROFILE"] = "test"
 

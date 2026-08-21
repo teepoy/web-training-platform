@@ -2,20 +2,33 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.modules.sc.data_provider.schemas import ScSamplingSelectionRequest
+from app.modules.sc.data_provider.schemas import ScSamplingProgramRequest
 from app.modules.sc.domain.prediction_export import (
     ScKlarfVersion,
     ScPredictionExportFormat,
+    ScPredictionExportResultSource,
 )
+from app.modules.sc.schemas import ScWorkflowSampleFilter
+
+
+class ScPredictionExportSamplingRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    program: ScSamplingProgramRequest
+    seed: int = Field(ge=0)
+    extra_filter: ScWorkflowSampleFilter | None = None
 
 
 class ScPredictionExportRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     format: ScPredictionExportFormat
+    result_source: ScPredictionExportResultSource = (
+        ScPredictionExportResultSource.FINAL_CLASS
+    )
     klarf_version: ScKlarfVersion | None = None
     include_images: bool = False
-    sampling: ScSamplingSelectionRequest | None = None
+    sampling: ScPredictionExportSamplingRequest | None = None
 
     @model_validator(mode="after")
     def validate_klarf_version_scope(self) -> ScPredictionExportRequest:

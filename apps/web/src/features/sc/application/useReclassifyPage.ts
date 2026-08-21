@@ -37,12 +37,13 @@ import {
   type ScGlobalFilter,
   type ScGlobalFilterNode,
 } from "../domain/globalFilter";
-import { createDefaultScSamplingProgram, type ScSamplingProgram } from "../domain/samplingRules";
+import type { ScSamplingProgram } from "../domain/samplingRules";
 import type { ScSamplingCandidateScope } from "./inspectionFilterPolicy";
 import type { ScSelectionAction } from "../domain/workbenchInteraction";
 import { useScReclassifyStore } from "./reclassifyStore";
 import type { ScDatasetInfo, ScAnnotationItem } from "../domain/models";
 import { DEFAULT_RECLASSIFY_CODE_NAMES } from "./reclassifyCodeNames";
+import { loadScSamplingPreference, saveScSamplingPreference } from "./samplingPreferences";
 
 const DEFAULT_SAMPLING_DRAFT_LABEL = "60";
 
@@ -625,7 +626,7 @@ export function useReclassifyPage(): ReclassifyPageState {
   // ── Sampling ───────────────────────────────────────────────────────
 
   const showSamplingModal = ref(false);
-  const samplingProgram = ref(createDefaultScSamplingProgram());
+  const samplingProgram = ref(loadScSamplingPreference("annotation"));
   const samplingScope = ref<ScSamplingCandidateScope>("all");
   const assignSampledDraftLabel = ref(true);
   const samplingDraftLabel = ref<string | null>(
@@ -640,6 +641,10 @@ export function useReclassifyPage(): ReclassifyPageState {
         ? DEFAULT_SAMPLING_DRAFT_LABEL
         : (labels[0] ?? null);
     }
+  });
+
+  watch(samplingProgram, (program) => saveScSamplingPreference("annotation", program), {
+    deep: true,
   });
 
   watch(workspaceKey, (id) => {

@@ -17,14 +17,10 @@ function ignoreExportCompletion(): void {}
         <n-text depth="3" class="eyebrow">Export</n-text>
         <n-h3>Export current results</n-h3>
         <n-text depth="3">
-          Create a downstream artifact from this Dataset's current classification result.
+          Choose the class result, optional Review Sampling, and file format.
         </n-text>
       </div>
     </header>
-
-    <n-alert type="info" title="Final Class result" :show-icon="false">
-      Uses the annotation when it is classified; otherwise it uses the latest prediction.
-    </n-alert>
 
     <n-empty v-if="!exporter" description="No prediction result exporter is registered." />
     <component

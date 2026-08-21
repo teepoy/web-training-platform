@@ -200,11 +200,12 @@ selected = execution.reader.read_all()
 
 The production SC Reclassify view exposes the same ordered rule forms through
 `ReviewSamplingModal.vue`. Its dedicated `REVIEW_SAMPLING_RULE_CATALOG` contains
-one concrete dataclass for each of the 17 rules: eligibility filters, independent
-selectors, and post-selection caps. Eligibility is evaluated first, selector
-results are unioned by the configured identity, and caps are always applied in
-the canonical die -> cluster -> repeater -> wafer order. Therefore reordering UI
-cards does not silently change a result.
+one concrete dataclass for each of the 17 rules. The program is a sequential
+pipeline: every filter, selector, distribution draw, and cap receives only the
+rows produced by the previous step. Reordering rules therefore intentionally
+changes the result. For example, `Maximum per Wafer = 200` followed by `Large
+defects by percentage = 10%` can return at most 20 rows per Wafer, while the
+reverse order can return up to 200.
 
 The web data source sends only a scoped candidate query and structured program.
 The SC data-provider maps that transport shape to `ReviewSamplingProgram`, and
@@ -212,7 +213,9 @@ this package compiles the complete program into one production DuckDB query.
 Only sampled defect IDs are returned; the service does not materialize candidate
 rows in Python.
 
-Final Class distribution uses exact largest-remainder quotas. Target percentages
+Result distribution uses exact largest-remainder quotas. The ordinary SC
+workbench binds it to Final Class; prediction export may bind the same rule to
+Annotation or Prediction after empty results are removed. Target percentages
 must total 100%. If a target group is smaller than its quota, all available rows
 are selected and the missing quota is not redistributed implicitly.
 

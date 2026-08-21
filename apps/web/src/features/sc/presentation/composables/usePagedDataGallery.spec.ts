@@ -2,7 +2,7 @@ import { computed, effectScope, ref } from "vue";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ScWorkbenchDataSource } from "@/features/sc/domain/workbenchDataSource";
 import { SC_SCROLL_QUERY_DEBOUNCE_MS } from "./scrollQueryDebounce";
-import { usePagedDataGallery } from "./usePagedDataGallery";
+import { loadAllGalleryItems, usePagedDataGallery } from "./usePagedDataGallery";
 
 function createDataSource(): ScWorkbenchDataSource {
   return {
@@ -112,5 +112,46 @@ describe("usePagedDataGallery", () => {
     await vi.advanceTimersByTimeAsync(SC_SCROLL_QUERY_DEBOUNCE_MS * 2);
     expect(source.loadGallery).toHaveBeenCalledTimes(1);
     scope.stop();
+  });
+});
+
+describe("loadAllGalleryItems", () => {
+  it("walks every server page without imposing a total-row limit", async () => {
+    const source = createDataSource();
+    source.loadGallery = vi.fn(async ({ offset }) => ({
+      ipc: new Uint8Array([offset]),
+      total: 5,
+      nextOffset: offset < 4 ? offset + 2 : null,
+    }));
+
+    const items = await loadAllGalleryItems(
+      source,
+      { mode: "patch", filters: [["images", ">", 0]] },
+      (ipc, offset) =>
+        Array.from({ length: Math.min(2, 5 - offset) }, (_, index) => ipc[0]! + index),
+      2,
+    );
+
+    expect(items).toEqual([0, 1, 2, 3, 4]);
+    expect(source.loadGallery).toHaveBeenCalledTimes(3);
+    expect(source.loadGallery).toHaveBeenNthCalledWith(1, {
+      mode: "patch",
+      filters: [["images", ">", 0]],
+      offset: 0,
+      limit: 2,
+    });
+  });
+
+  it("rejects a stalled server cursor instead of silently selecting a partial gallery", async () => {
+    const source = createDataSource();
+    source.loadGallery = vi.fn(async () => ({
+      ipc: new Uint8Array([0]),
+      total: 5,
+      nextOffset: 0,
+    }));
+
+    await expect(
+      loadAllGalleryItems(source, { mode: "patch" }, () => ["row-1"], 2),
+    ).rejects.toThrow("did not advance");
   });
 });

@@ -15,6 +15,12 @@ class ScKlarfVersion(StrEnum):
     V1_8 = "1.8"
 
 
+class ScPredictionExportResultSource(StrEnum):
+    ANNOTATION = "annotation"
+    PREDICTION = "prediction"
+    FINAL_CLASS = "final_class"
+
+
 @dataclass(frozen=True, slots=True)
 class ScPredictionExportResult:
     uri: str

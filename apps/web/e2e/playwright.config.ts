@@ -39,9 +39,6 @@ export default defineConfig({
           url: e2eBaseURL,
           reuseExistingServer: process.env.PLAYWRIGHT_REUSE_EXISTING_SERVER === "1",
           timeout: E2E_TIMEOUTS.webServer,
-          env: {
-            VITE_AUTH_ENABLED: "true",
-          },
         },
   globalSetup: path.join(E2E_PATHS.root, "global-setup.ts"),
   projects: [

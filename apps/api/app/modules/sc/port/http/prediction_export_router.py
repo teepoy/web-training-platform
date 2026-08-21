@@ -83,6 +83,7 @@ async def export_sc_predictions_stream(
             org_id=org.id,
             created_by=current_user.id,
             export_format=body.format,
+            result_source=body.result_source,
             klarf_version=body.klarf_version or ScKlarfVersion.V1_2,
             sampling_program=(
                 sampling_program_from_request(sampling.program)
@@ -90,6 +91,11 @@ async def export_sc_predictions_stream(
                 else None
             ),
             sampling_seed=(sampling.seed if sampling is not None else None),
+            sampling_extra_filter=(
+                sampling.extra_filter.model_dump(by_alias=True)
+                if sampling is not None and sampling.extra_filter is not None
+                else None
+            ),
             include_images=body.include_images,
         ),
     )
@@ -122,6 +128,7 @@ async def export_sc_collection_predictions_stream(
             org_id=org.id,
             created_by=current_user.id,
             export_format=body.format,
+            result_source=body.result_source,
             klarf_version=body.klarf_version or ScKlarfVersion.V1_2,
             sampling_program=(
                 sampling_program_from_request(sampling.program)
@@ -129,6 +136,11 @@ async def export_sc_collection_predictions_stream(
                 else None
             ),
             sampling_seed=(sampling.seed if sampling is not None else None),
+            sampling_extra_filter=(
+                sampling.extra_filter.model_dump(by_alias=True)
+                if sampling is not None and sampling.extra_filter is not None
+                else None
+            ),
             include_images=body.include_images,
         ),
     )

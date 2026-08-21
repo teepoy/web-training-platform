@@ -244,6 +244,13 @@ quota, and total-limit CTE stages. The final statement is validated again and
 executed over the materialized `samples` view, returning Arrow IPC containing
 only `defect_id`. No user value is interpolated into SQL text.
 
+The structured program is an ordered pipeline. Each of the 17 typed rules
+consumes only the rows emitted by the previous rule; filters, selectors,
+distribution draws, and caps are not regrouped into canonical phases. The UI
+must preserve this order and expose explicit move controls. With a fixed seed,
+replaying the same candidate relation and the same ordered program is
+deterministic; changing the order is a semantic change.
+
 For group sampling, `sample ratio` is a percentage of each group's population:
 `2` applied to a group of 1,000 yields 20 candidates. It is not a percentage of
 the final total limit. The `Others` branch is the `CASE ... ELSE` target for

@@ -28,6 +28,7 @@ from app.modules.sc.app.services.prediction_export_service import (
 from app.modules.sc.domain.prediction_export import (
     ScKlarfVersion,
     ScPredictionExportFormat,
+    ScPredictionExportResultSource,
 )
 from app.shared.api.schemas import (
     Dataset,
@@ -261,6 +262,85 @@ async def test_parquet_export_contains_current_prediction_and_annotation(
     assert rows["sample-1"]["final_class"] == "40"
     assert rows["sample-2"]["final_class"] == "60"
     assert rows["sample-3"]["final_class"] == "70"
+
+
+@pytest.mark.asyncio
+async def test_annotation_result_export_omits_unclassified_rows() -> None:
+    service, artifacts = _service()
+
+    result = await service.export(
+        dataset_id="dataset-1",
+        org_id="org-1",
+        created_by="user-1",
+        export_format=ScPredictionExportFormat.PARQUET,
+        result_source=ScPredictionExportResultSource.ANNOTATION,
+        sampling_program=None,
+        sampling_seed=None,
+    )
+
+    table = pq.read_table(io.BytesIO(next(iter(artifacts.objects.values()))))
+    rows = table.to_pylist()
+    assert result.row_count == 1
+    assert [row["sample_id"] for row in rows] == ["sample-2"]
+    assert rows[0]["final_class"] == "60"
+
+
+@pytest.mark.asyncio
+async def test_prediction_result_export_uses_predictions_and_omits_only_missing_results() -> None:
+    service, artifacts = _service()
+
+    result = await service.export(
+        dataset_id="dataset-1",
+        org_id="org-1",
+        created_by="user-1",
+        export_format=ScPredictionExportFormat.PARQUET,
+        result_source=ScPredictionExportResultSource.PREDICTION,
+        sampling_program=None,
+        sampling_seed=None,
+    )
+
+    table = pq.read_table(io.BytesIO(next(iter(artifacts.objects.values()))))
+    rows = {row["sample_id"]: row for row in table.to_pylist()}
+    assert result.row_count == 3
+    assert {sample_id: row["final_class"] for sample_id, row in rows.items()} == {
+        "sample-1": "40",
+        "sample-2": "50",
+        "sample-3": "70",
+    }
+
+
+@pytest.mark.asyncio
+async def test_export_applies_review_sampling_extra_filter_before_rules() -> None:
+    service, artifacts = _service()
+
+    result = await service.export(
+        dataset_id="dataset-1",
+        org_id="org-1",
+        created_by="user-1",
+        export_format=ScPredictionExportFormat.PARQUET,
+        result_source=ScPredictionExportResultSource.FINAL_CLASS,
+        sampling_program=ReviewSamplingProgram(rules=(RandomCountRule(count=10),)),
+        sampling_seed=42,
+        sampling_extra_filter={
+            "combinator": "and",
+            "items": [
+                {
+                    "kind": "condition",
+                    "field": "images",
+                    "condition": {
+                        "filterType": "number",
+                        "type": "inRange",
+                        "filter": 1,
+                        "filterTo": 10,
+                    },
+                }
+            ],
+        },
+    )
+
+    table = pq.read_table(io.BytesIO(next(iter(artifacts.objects.values()))))
+    assert result.row_count == 2
+    assert {row["sample_id"] for row in table.to_pylist()} == {"sample-1", "sample-3"}
 
 
 @pytest.mark.asyncio

@@ -6,9 +6,20 @@
       <p>Build a downstream artifact from the Dataset's current classification result.</p>
     </header>
 
-    <div class="formula">
-      <strong>Final Class</strong>
-      <span>Uses the annotation when classified; otherwise uses the latest prediction.</span>
+    <div class="result-source">
+      <div>
+        <strong>Exported class</strong>
+        <span>Choose Annotation, Prediction, or Final Class.</span>
+      </div>
+      <div class="source-options">
+        <button>Annotation</button><button>Prediction</button
+        ><button class="selected">Final Class</button>
+      </div>
+    </div>
+
+    <div class="distribution">
+      <strong>Final Class distribution</strong>
+      <span>60 · 4,850 · 48.5%</span><span>61 · 3,100 · 31%</span><span>0 · 2,050 · 20.5%</span>
     </div>
 
     <div class="formats">
@@ -25,13 +36,13 @@
     <div class="image-export">
       <div>
         <strong>Include defect images</strong>
-        <span>One defective patch per row retained after Annotation Sampling</span>
+        <span>One defective patch per row retained after Review Sampling</span>
       </div>
       <button>Off</button>
     </div>
 
     <div class="sampling">
-      <div><strong>Annotation Sampling</strong><span>Optional · uses the same 17 rules</span></div>
+      <div><strong>Review Sampling</strong><span>Optional · ordered 17-rule pipeline</span></div>
       <button>Configure</button>
     </div>
 
@@ -67,7 +78,8 @@ small {
   font-weight: 700;
   letter-spacing: 0.12em;
 }
-.formula,
+.result-source,
+.distribution,
 .klarf-version,
 .image-export,
 .sampling,
@@ -88,8 +100,15 @@ small {
   background: #fff8e6;
   border-color: #f0d29a;
 }
-.formula span {
+.result-source span,
+.distribution span {
   color: #394a9b;
+}
+.source-options,
+.distribution {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 .formats {
   display: grid;

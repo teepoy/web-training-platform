@@ -175,7 +175,7 @@ class StartupChecksConfig(ConfigSection):
 
 
 class AuthConfig(ConfigSection):
-    enabled: bool = True
+    enabled: Literal[True] = True
     jwt_secret_key: str = "replace-me-in-production"
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
@@ -351,10 +351,9 @@ def _validate_runtime_config(cfg: AppConfig | DictConfig, profile: str) -> None:
     _require(str(cfg.label_studio.external_url), "label_studio.external_url")
     _require(str(cfg.label_studio.api_key), "label_studio.api_key")
     _require(str(cfg.label_studio.database_url), "label_studio.database_url")
-    if cfg.auth.enabled:
-        _require(str(cfg.auth.jwt_secret_key), "auth.jwt_secret_key")
-        if cfg.auth.jwt_secret_key in _INSECURE_SECRET_VALUES:
-            raise RuntimeError("auth.jwt_secret_key must not use a placeholder value")
+    _require(str(cfg.auth.jwt_secret_key), "auth.jwt_secret_key")
+    if cfg.auth.jwt_secret_key in _INSECURE_SECRET_VALUES:
+        raise RuntimeError("auth.jwt_secret_key must not use a placeholder value")
     if cfg.oauth.enabled:
         _require(str(cfg.oauth.state_secret), "oauth.state_secret")
         if cfg.oauth.state_secret in _INSECURE_SECRET_VALUES:

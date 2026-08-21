@@ -33,7 +33,6 @@ label_studio:
   database_url: ""
 
 auth:
-  enabled: true
   jwt_secret_key: ""
 
 oauth:

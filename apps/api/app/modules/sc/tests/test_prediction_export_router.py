@@ -10,6 +10,7 @@ from app.modules.sc.domain.prediction_export import (
     ScKlarfVersion,
     ScPredictionExportFormat,
     ScPredictionExportResult,
+    ScPredictionExportResultSource,
 )
 from app.modules.sc.port.http import prediction_export_router
 from app.modules.sc.port.http.deps import get_sc_prediction_export_service
@@ -74,8 +75,27 @@ def test_collection_prediction_export_passes_selected_member_records() -> None:
                 json={
                     "format": "klarf",
                     "klarf_version": "1.8",
+                    "result_source": "annotation",
                     "include_images": True,
-                    "sampling": None,
+                    "sampling": {
+                        "seed": 42,
+                        "program": {"rules": [{"type": "per_wafer_limit", "limit": 100}]},
+                        "extra_filter": {
+                            "combinator": "and",
+                            "items": [
+                                {
+                                    "kind": "condition",
+                                    "field": "images",
+                                    "condition": {
+                                        "filterType": "number",
+                                        "type": "inRange",
+                                        "filter": 1,
+                                        "filterTo": 10,
+                                    },
+                                }
+                            ],
+                        },
+                    },
                     "member_ids": ["member-1", "member-2"],
                 },
             )
@@ -88,6 +108,25 @@ def test_collection_prediction_export_passes_selected_member_records() -> None:
     assert "collection_predictions_klarf.zip" in response.text
     assert service.collection_kwargs["klarf_version"] is ScKlarfVersion.V1_8
     assert service.collection_kwargs["include_images"] is True
+    assert (
+        service.collection_kwargs["result_source"]
+        is ScPredictionExportResultSource.ANNOTATION
+    )
+    assert service.collection_kwargs["sampling_extra_filter"] == {
+        "combinator": "and",
+        "items": [
+            {
+                "kind": "condition",
+                "field": "images",
+                "condition": {
+                    "filterType": "number",
+                    "type": "inRange",
+                    "filter": 1.0,
+                    "filterTo": 10.0,
+                },
+            }
+        ],
+    }
 
 
 def test_parquet_export_rejects_klarf_version() -> None:

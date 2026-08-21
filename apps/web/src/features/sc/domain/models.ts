@@ -35,6 +35,8 @@ export interface ScImportProgressEvent {
 export interface ScDatasetInfo {
   id: string;
   name: string;
+  dataset_type?: string;
+  storage_mode?: string;
   label_space: string[];
   task_spec: Record<string, unknown>;
   dataset_meta?: Record<string, unknown>;

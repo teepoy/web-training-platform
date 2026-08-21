@@ -117,58 +117,92 @@ def compile_duckdb_review_sampling(
         RequireImageRule,
         SizeRangeRule,
     )
-    predicates: list[str] = []
-    for rule in program.rules:
-        if isinstance(rule, filter_types):
-            predicate, values = _filter_predicate(rule)
-            predicates.append(predicate)
-            parameters.extend(values)
-    where = f" WHERE {' AND '.join(predicates)}" if predicates else ""
-    ctes.append(f'"__review_eligible" AS (SELECT * FROM "__review_source"{where})')
-
     cap_types = (
         PerDieLimitRule,
         PerClusterLimitRule,
         PerRepeaterLimitRule,
         PerWaferLimitRule,
     )
-    selector_rules = [
-        rule
-        for rule in program.rules
-        if not isinstance(rule, filter_types) and not isinstance(rule, cap_types)
-    ]
-    selector_stages: list[str] = []
-    selector_index = 0
-    for rule in selector_rules:
+    current = '"__review_source"'
+    for index, rule in enumerate(program.rules):
+        stage = f'"__review_step_{index}"'
+        if isinstance(rule, filter_types):
+            predicate, values = _filter_predicate(rule)
+            ctes.append(f"{stage} AS (SELECT * FROM {current} WHERE {predicate})")
+            parameters.extend(values)
+            current = stage
+            continue
+
         if isinstance(rule, FinalClassDistributionRule):
-            for target, quota in zip(
-                rule.targets,
-                _distribution_quotas(rule),
-                strict=True,
+            target_stages: list[str] = []
+            for target_index, (target, quota) in enumerate(
+                zip(
+                    rule.targets,
+                    _distribution_quotas(rule),
+                    strict=True,
+                )
             ):
-                ranked = f'"__review_selector_ranked_{selector_index}"'
-                stage = f'"__review_selector_{selector_index}"'
+                ranked = f'"__review_step_{index}_target_{target_index}_ranked"'
+                target_stage = f'"__review_step_{index}_target_{target_index}"'
                 ctes.append(
                     f"{ranked} AS (SELECT *, ROW_NUMBER() OVER ("
                     f"ORDER BY HASH({identity}, ?, ?), {identity}) AS "
-                    f'"__review_rank" FROM "__review_eligible" '
+                    f'"__review_rank" FROM {current} '
                     f'WHERE "final_class" IS NOT DISTINCT FROM ?)'
                 )
                 parameters.extend(
                     [seed, f"FinalClassDistributionRule:{target.value!r}", target.value]
                 )
                 ctes.append(
-                    f'{stage} AS (SELECT * EXCLUDE ("__review_rank") FROM {ranked} '
+                    f'{target_stage} AS (SELECT * EXCLUDE ("__review_rank") FROM {ranked} '
                     f'WHERE "__review_rank" <= ?)'
                 )
                 parameters.append(quota)
-                selector_stages.append(stage)
-                selector_index += 1
+                target_stages.append(target_stage)
+            ctes.append(
+                f"{stage} AS ("
+                + " UNION ALL ".join(
+                    f"SELECT * FROM {target}" for target in target_stages
+                )
+                + ")"
+            )
+            current = stage
+            continue
+
+        if isinstance(rule, cap_types):
+            if isinstance(rule, PerDieLimitRule):
+                group_fields = ("inspection_time", "wafer_key", "index_x", "index_y")
+                preserve = None
+            elif isinstance(rule, PerClusterLimitRule):
+                group_fields = ("cluster_id",)
+                preserve = '"cluster_id" IS NULL OR "cluster_id" <= 0'
+            elif isinstance(rule, PerRepeaterLimitRule):
+                group_fields = ("repeater_id",)
+                preserve = '"repeater_id" IS NULL OR "repeater_id" <= 0'
+            else:
+                group_fields = ("inspection_time", "wafer_key")
+                preserve = None
+            partition = ", ".join(_quote_identifier(field) for field in group_fields)
+            ranked = f'"__review_step_{index}_ranked"'
+            ctes.append(
+                f"{ranked} AS (SELECT *, ROW_NUMBER() OVER (PARTITION BY {partition} "
+                f"ORDER BY HASH({identity}, ?, ?), {identity}) AS "
+                f'"__review_cap_rank" FROM {current})'
+            )
+            parameters.extend([seed, type(rule).__name__])
+            condition = '"__review_cap_rank" <= ?'
+            if preserve is not None:
+                condition = f"({preserve}) OR {condition}"
+            ctes.append(
+                f'{stage} AS (SELECT * EXCLUDE ("__review_cap_rank") FROM {ranked} '
+                f"WHERE {condition})"
+            )
+            parameters.append(rule.limit)
+            current = stage
             continue
 
         predicate, predicate_parameters = _selector_predicate(rule)
-        ranked = f'"__review_selector_ranked_{selector_index}"'
-        stage = f'"__review_selector_{selector_index}"'
+        ranked = f'"__review_step_{index}_ranked"'
         is_ratio = isinstance(
             rule,
             ClusterPercentageRule
@@ -180,8 +214,7 @@ def compile_duckdb_review_sampling(
         ctes.append(
             f"{ranked} AS (SELECT *, ROW_NUMBER() OVER ("
             f"ORDER BY HASH({identity}, ?, ?), {identity}) AS "
-            f'"__review_rank"{population} FROM "__review_eligible" '
-            f"WHERE {predicate})"
+            f'"__review_rank"{population} FROM {current} WHERE {predicate})'
         )
         parameters.extend([seed, type(rule).__name__, *predicate_parameters])
         if is_ratio:
@@ -196,65 +229,6 @@ def compile_duckdb_review_sampling(
             f"{stage} AS (SELECT * EXCLUDE ({excluded}) FROM {ranked} "
             f'WHERE "__review_rank" <= {quota})'
         )
-        selector_stages.append(stage)
-        selector_index += 1
-
-    if selector_stages:
-        union = " UNION ALL ".join(
-            f'SELECT {identity} AS "__review_identity" FROM {stage}'
-            for stage in selector_stages
-        )
-        ctes.append(f'"__review_selected_ids" AS ({union})')
-        ctes.append(
-            f'"__review_selected" AS (SELECT eligible.* '
-            f'FROM "__review_eligible" AS eligible INNER JOIN ('
-            f'SELECT DISTINCT "__review_identity" FROM "__review_selected_ids"'
-            f') AS chosen ON eligible.{identity} = chosen."__review_identity")'
-        )
-    else:
-        ctes.append('"__review_selected" AS (SELECT * FROM "__review_eligible")')
-
-    current = '"__review_selected"'
-    cap_rank = {
-        PerDieLimitRule: 0,
-        PerClusterLimitRule: 1,
-        PerRepeaterLimitRule: 2,
-        PerWaferLimitRule: 3,
-    }
-    cap_rules = sorted(
-        (rule for rule in program.rules if isinstance(rule, cap_types)),
-        key=lambda rule: cap_rank[type(rule)],
-    )
-    for index, rule in enumerate(cap_rules):
-        if isinstance(rule, PerDieLimitRule):
-            group_fields = ("inspection_time", "wafer_key", "index_x", "index_y")
-            preserve = None
-        elif isinstance(rule, PerClusterLimitRule):
-            group_fields = ("cluster_id",)
-            preserve = '"cluster_id" IS NULL OR "cluster_id" <= 0'
-        elif isinstance(rule, PerRepeaterLimitRule):
-            group_fields = ("repeater_id",)
-            preserve = '"repeater_id" IS NULL OR "repeater_id" <= 0'
-        else:
-            group_fields = ("inspection_time", "wafer_key")
-            preserve = None
-        partition = ", ".join(_quote_identifier(field) for field in group_fields)
-        ranked = f'"__review_cap_ranked_{index}"'
-        stage = f'"__review_cap_{index}"'
-        ctes.append(
-            f"{ranked} AS (SELECT *, ROW_NUMBER() OVER (PARTITION BY {partition} "
-            f"ORDER BY HASH({identity}, ?, ?), {identity}) AS "
-            f'"__review_cap_rank" FROM {current})'
-        )
-        parameters.extend([seed, type(rule).__name__])
-        condition = '"__review_cap_rank" <= ?'
-        if preserve is not None:
-            condition = f"({preserve}) OR {condition}"
-        ctes.append(
-            f'{stage} AS (SELECT * EXCLUDE ("__review_cap_rank") FROM {ranked} '
-            f"WHERE {condition})"
-        )
-        parameters.append(rule.limit)
         current = stage
 
     sql = (

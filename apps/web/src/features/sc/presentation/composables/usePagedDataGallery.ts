@@ -11,6 +11,42 @@ interface GalleryWindow<T> {
   total: number;
 }
 
+const SELECT_ALL_PAGE_ROWS = 2_000;
+
+export async function loadAllGalleryItems<T>(
+  source: ScWorkbenchDataSource,
+  query: Omit<ScGalleryDataQuery, "offset" | "limit">,
+  decode: (ipc: Uint8Array, offset: number) => T[],
+  pageRows = SELECT_ALL_PAGE_ROWS,
+): Promise<T[]> {
+  if (!Number.isSafeInteger(pageRows) || pageRows <= 0) {
+    throw new Error("Gallery selection page size must be a positive integer");
+  }
+  const items: T[] = [];
+  let offset = 0;
+  let total: number | null = null;
+  while (total === null || offset < total) {
+    const page = await source.loadGallery({ ...query, offset, limit: pageRows });
+    total = page.total;
+    if (!page.ipc) {
+      if (total === 0) return [];
+      throw new Error("Gallery selection returned no rows before reaching the reported total");
+    }
+    items.push(...decode(page.ipc, offset));
+    if (page.nextOffset === null) {
+      if (items.length < total) {
+        throw new Error("Gallery selection ended before reaching the reported total");
+      }
+      break;
+    }
+    if (page.nextOffset <= offset) {
+      throw new Error("Gallery selection cursor did not advance");
+    }
+    offset = page.nextOffset;
+  }
+  return items;
+}
+
 export function usePagedDataGallery<T>(
   dataSource: ComputedRef<ScWorkbenchDataSource | null>,
   query: ComputedRef<Omit<ScGalleryDataQuery, "offset" | "limit">>,

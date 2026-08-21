@@ -1,6 +1,7 @@
 import { test, expect } from "../../fixtures";
 import { tableFromArrays, tableToIPC } from "apache-arrow";
 import {
+  mockListTrainers,
   mockScDataset,
   mockScDefectIds,
   mockScPlotPoints,
@@ -9,6 +10,10 @@ import {
 } from "../../mocks/handlers";
 
 const datasetId = "sc-classify-1";
+
+test.beforeEach(async ({ authedPage }) => {
+  await mockListTrainers(authedPage);
+});
 
 test("SC classify page shows error state for missing dataset @mock", async ({ authedPage }) => {
   await authedPage.route(`**/api/v1/datasets/${datasetId}`, async (route) => {
@@ -92,4 +97,33 @@ test("Global Filter persists with statistics from the dataset detail page @mock"
   await expect(authedPage).toHaveURL(`/datasets/${cachedDatasetId}/sc/classify`);
   await expect(authedPage.getByTestId("sc-global-filter-trigger")).toHaveText("Global Filter (1)");
   expect(teleportWarnings).toEqual([]);
+});
+
+test("SC classify opens the current-results export flow from the header @mock", async ({
+  authedPage,
+}) => {
+  const exportDatasetId = "sc-classify-export";
+  await mockScDataset(authedPage, exportDatasetId);
+  await mockScPlotPoints(authedPage, exportDatasetId, 20);
+  await mockScDefectIds(authedPage, exportDatasetId, 20);
+  await mockScViewSamplesPaged(authedPage, exportDatasetId, "patch_image_v1", 20, 20);
+  await mockScSamplesWithLabels(authedPage, exportDatasetId, 20, 20);
+
+  await authedPage.goto(`/datasets/${exportDatasetId}/sc/classify`);
+  const selectAllGallery = authedPage.getByRole("button", { name: "Select all (1,000)" });
+  await expect(selectAllGallery).toBeVisible();
+  await selectAllGallery.click();
+  await expect(authedPage.getByRole("button", { name: "Clear selection (1,000)" })).toBeVisible();
+
+  const exportButton = authedPage.getByTestId("sc-classify-export");
+  await expect(exportButton).toBeVisible();
+  await exportButton.click();
+  await expect(exportButton).toHaveAttribute("aria-expanded", "true");
+
+  const exportDialog = authedPage.getByRole("dialog", { name: "Export current results" });
+  await expect(exportDialog).toBeVisible();
+  await exportDialog.getByRole("button", { name: "Export current results" }).click();
+  await expect(exportDialog.getByText("Parquet", { exact: true })).toBeVisible();
+  await expect(exportDialog.getByText("KLARF", { exact: true })).toBeVisible();
+  await expect(exportDialog.getByText("ZIP package", { exact: true })).toBeVisible();
 });

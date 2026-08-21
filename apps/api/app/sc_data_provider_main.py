@@ -19,7 +19,6 @@ from app.core.logger import init_logging
 from app.modules.dataset_collections.port.local import (
     DatasetCollectionRevisionReaderPort,
 )
-from app.modules.auth.app.services.dev_auth_context import load_dev_auth_context
 from app.modules.sc.data_provider.cache import ScDataObjectCache
 from app.modules.sc.data_provider.engine import DuckDbQueryExecutor
 from app.modules.sc.data_provider.materializer import ScDataMaterializer
@@ -149,7 +148,6 @@ async def lifespan(data_app: FastAPI):
     _validate_data_provider_config(provider_config)
     context = build_sc_data_provider_app_context(config)
     data_app.state.app_context = context
-    data_app.state.dev_auth_context = None
     redis = cast(
         ScDataProviderRedis,
         redis_client.Redis(
@@ -192,13 +190,8 @@ async def lifespan(data_app: FastAPI):
     try:
         async with context.shared.db_engine.connect() as connection:
             await connection.execute(text("SELECT 1"))
-        if not bool(getattr(config.auth, "enabled", True)):
-            data_app.state.dev_auth_context = await load_dev_auth_context(
-                context.shared.session_factory
-            )
         yield
     finally:
-        data_app.state.dev_auth_context = None
         cleanup_stop.set()
         await cleanup_task
         await executor.close()
