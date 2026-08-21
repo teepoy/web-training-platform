@@ -32,14 +32,14 @@ func TestManagerPublishesOneArtifactForConcurrentCacheMisses(t *testing.T) {
 		return os.WriteFile(destination, []byte("archive"), 0o600)
 	}
 
-	paths := make([]string, 2)
+	leases := make([]artifactcache.Lease, 2)
 	errorsByCall := make([]error, 2)
 	var wait sync.WaitGroup
-	for index := range paths {
+	for index := range leases {
 		wait.Add(1)
 		go func(index int) {
 			defer wait.Done()
-			paths[index], errorsByCall[index] = manager.GetOrDownload(context.Background(), ref, download)
+			leases[index], errorsByCall[index] = manager.Acquire(context.Background(), ref, download)
 		}(index)
 	}
 	<-started
@@ -52,6 +52,7 @@ func TestManagerPublishesOneArtifactForConcurrentCacheMisses(t *testing.T) {
 	if calls.Load() != 1 {
 		t.Fatalf("download calls = %d, want 1", calls.Load())
 	}
+	paths := []string{leases[0].Path(), leases[1].Path()}
 	if paths[0] != paths[1] {
 		t.Fatalf("paths differ: %#v", paths)
 	}
@@ -62,12 +63,17 @@ func TestManagerPublishesOneArtifactForConcurrentCacheMisses(t *testing.T) {
 	if string(data) != "archive" {
 		t.Fatalf("artifact = %q", data)
 	}
+	for _, lease := range leases {
+		if err := lease.Release(); err != nil {
+			t.Fatal(err)
+		}
+	}
 }
 
 func TestManagerDoesNotPublishFailedDownloadAndSeparatesSourceRevisions(t *testing.T) {
 	manager := newManager(t)
 	base := artifactcache.Ref{EntryID: "legacy", SourceIdentity: "patches/1.zip", Revision: "etag-1", Kind: artifactcache.KindFile}
-	_, err := manager.GetOrDownload(context.Background(), base, func(context.Context, string) error {
+	_, err := manager.Acquire(context.Background(), base, func(context.Context, string) error {
 		return errors.New("download failed")
 	})
 	if err == nil {
@@ -81,25 +87,33 @@ func TestManagerDoesNotPublishFailedDownloadAndSeparatesSourceRevisions(t *testi
 		t.Fatalf("failed download left cache entries: %#v", entries)
 	}
 
-	pathOne, err := manager.GetOrDownload(context.Background(), base, writeArtifact("one"))
+	leaseOne, err := manager.Acquire(context.Background(), base, writeArtifact("one"))
 	if err != nil {
 		t.Fatal(err)
 	}
+	pathOne := leaseOne.Path()
 	updated := base
 	updated.Revision = "etag-2"
-	pathTwo, err := manager.GetOrDownload(context.Background(), updated, writeArtifact("two"))
+	leaseTwo, err := manager.Acquire(context.Background(), updated, writeArtifact("two"))
 	if err != nil {
 		t.Fatal(err)
 	}
+	pathTwo := leaseTwo.Path()
 	if pathOne == pathTwo {
 		t.Fatal("different source revisions reused one cache path")
+	}
+	if err := leaseOne.Release(); err != nil {
+		t.Fatal(err)
+	}
+	if err := leaseTwo.Release(); err != nil {
+		t.Fatal(err)
 	}
 }
 
 func TestManagerPublishesDirectoryArtifactWithoutFollowingSymlinks(t *testing.T) {
 	manager := newManager(t)
 	ref := artifactcache.Ref{EntryID: "folder-entry", SourceIdentity: "inspection/folder", Revision: "generation-7", Kind: artifactcache.KindDirectory}
-	path, err := manager.GetOrDownload(context.Background(), ref, func(_ context.Context, destination string) error {
+	lease, err := manager.Acquire(context.Background(), ref, func(_ context.Context, destination string) error {
 		if err := os.MkdirAll(filepath.Join(destination, "nested"), 0o750); err != nil {
 			return err
 		}
@@ -108,6 +122,7 @@ func TestManagerPublishesDirectoryArtifactWithoutFollowingSymlinks(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
+	path := lease.Path()
 	data, err := os.ReadFile(filepath.Join(path, "nested", "image.png"))
 	if err != nil {
 		t.Fatal(err)
@@ -115,10 +130,13 @@ func TestManagerPublishesDirectoryArtifactWithoutFollowingSymlinks(t *testing.T)
 	if string(data) != "image" {
 		t.Fatalf("directory artifact data = %q", data)
 	}
+	if err := lease.Release(); err != nil {
+		t.Fatal(err)
+	}
 
 	updated := ref
 	updated.Revision = "generation-8"
-	_, err = manager.GetOrDownload(context.Background(), updated, func(_ context.Context, destination string) error {
+	_, err = manager.Acquire(context.Background(), updated, func(_ context.Context, destination string) error {
 		if err := os.MkdirAll(destination, 0o750); err != nil {
 			return err
 		}
@@ -129,11 +147,55 @@ func TestManagerPublishesDirectoryArtifactWithoutFollowingSymlinks(t *testing.T)
 	}
 }
 
+func TestDirectoryLeaseDefersJanitorEvictionUntilRelease(t *testing.T) {
+	manager := newManager(t)
+	ref := artifactcache.Ref{EntryID: "folder-entry", SourceIdentity: "inspection/folder", Revision: "generation-7", Kind: artifactcache.KindDirectory}
+	lease, err := manager.Acquire(context.Background(), ref, func(_ context.Context, destination string) error {
+		if err := os.MkdirAll(destination, 0o750); err != nil {
+			return err
+		}
+		return os.WriteFile(filepath.Join(destination, "image.png"), []byte("image"), 0o600)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	removed, err := manager.Cleanup(time.Now().Add(2 * time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if removed != 0 {
+		t.Fatalf("removed = %d, want 0 while directory lease is active", removed)
+	}
+	if _, err := os.Stat(filepath.Join(lease.Path(), "image.png")); err != nil {
+		t.Fatalf("leased directory was removed: %v", err)
+	}
+
+	path := lease.Path()
+	if err := lease.Release(); err != nil {
+		t.Fatal(err)
+	}
+	removed, err = manager.Cleanup(time.Now().Add(2 * time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if removed != 1 {
+		t.Fatalf("removed = %d, want 1 after directory lease release", removed)
+	}
+	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("released directory still exists: %v", err)
+	}
+}
+
 func TestCleanupDefersEvictionWhileArtifactTargetIsLocked(t *testing.T) {
 	manager := newManager(t)
 	ref := artifactcache.Ref{EntryID: "legacy", SourceIdentity: "patches/locked.zip", Revision: "etag-1", Kind: artifactcache.KindFile}
-	path, err := manager.GetOrDownload(context.Background(), ref, writeArtifact("locked"))
+	lease, err := manager.Acquire(context.Background(), ref, writeArtifact("locked"))
 	if err != nil {
+		t.Fatal(err)
+	}
+	path := lease.Path()
+	if err := lease.Release(); err != nil {
 		t.Fatal(err)
 	}
 	old := time.Now().Add(-2 * time.Hour)

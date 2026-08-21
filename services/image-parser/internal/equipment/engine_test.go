@@ -38,9 +38,14 @@ func (entryContext) Close() error { return nil }
 
 type testCache struct{}
 
-func (testCache) GetOrDownload(context.Context, artifactcache.Ref, artifactcache.DownloadFunc) (string, error) {
-	return "", nil
+func (testCache) Acquire(context.Context, artifactcache.Ref, artifactcache.DownloadFunc) (artifactcache.Lease, error) {
+	return testLease{}, nil
 }
+
+type testLease struct{}
+
+func (testLease) Path() string   { return "" }
+func (testLease) Release() error { return nil }
 
 func TestEngineResolvesInspectionOnceAndSelectsExactEquipmentEntry(t *testing.T) {
 	lookup := &inspectionLookup{}

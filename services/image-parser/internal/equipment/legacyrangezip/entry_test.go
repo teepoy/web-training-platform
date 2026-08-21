@@ -93,6 +93,13 @@ func TestEntryDownloadsRangeArchiveOnceAndParsesOrderedSampleRoles(t *testing.T)
 	if store.downloads != 1 {
 		t.Fatalf("cache was not reused; downloads = %d", store.downloads)
 	}
+	removed, err := cache.Cleanup(time.Now().Add(2 * time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if removed != 1 {
+		t.Fatalf("removed = %d, want 1 after ZIP parser released its artifact lease", removed)
+	}
 }
 
 func makeArchive(t *testing.T, members map[string]string) []byte {

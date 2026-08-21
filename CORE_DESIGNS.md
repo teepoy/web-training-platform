@@ -257,9 +257,13 @@ revision, kind)` 并将文件或目录流式写入 staging path；Artifact parse
 
 image-parser 的统一 Artifact Cache Manager 在下载前获取 target-keyed process singleflight 与
 跨进程 advisory lock，并在锁内 recheck；miss 写 sibling temp、校验、fsync 后 atomic rename。
-Janitor 删除 final target 前获取同一锁，不计算 staging 或持久 coordination 文件。Display、
-Prediction、Training、Export 使用同一个 Manager contract，但拥有独立目录、TTL、容量、
-并发预算和 metrics；非服务端入口不拥有 cache manager。
+Manager 必须向 parser 返回显式 Artifact lease，而不是无生命周期的裸路径；parser 从返回路径
+打开的文件、目录，以及仍持有这些 handle 的内存索引全部关闭后才可 release。活跃 reader
+持有跨进程 shared lock，Janitor 删除 final target 前 non-blocking 获取 exclusive lock，因此
+不得删除仍在解析的文件或整目录 artifact。目录按一个不可分割 artifact 递归计量并整目录
+淘汰，不计算 staging 或持久 coordination 文件。Display、Prediction、Training、Export 使用
+同一个 Manager contract，但拥有独立目录、TTL、容量、并发预算和 metrics；非服务端入口不
+拥有 cache manager。
 
 大数据集模式不追求与小数据集完全功能对齐。`file_shard_sparse` 的目标是大规模 ingest、批量预测、稀疏人工修正；不是重建完整 `SampleORM + Label Studio` 流程。
 

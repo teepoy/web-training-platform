@@ -70,7 +70,6 @@ func TestEntryCachesSQLiteArtifactAndResolvesOrderedRolesInOneContext(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = opened.Close() })
 
 	results, err := opened.Resolve(
 		context.Background(),
@@ -100,9 +99,35 @@ func TestEntryCachesSQLiteArtifactAndResolvesOrderedRolesInOneContext(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = second.Close() })
 	if source.downloads != 1 {
 		t.Fatalf("cached artifact downloaded again: %d", source.downloads)
+	}
+	removed, err := cache.Cleanup(time.Now().Add(2 * time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if removed != 0 {
+		t.Fatalf("removed = %d, want 0 while SQLite contexts hold artifact leases", removed)
+	}
+	if err := opened.Close(); err != nil {
+		t.Fatal(err)
+	}
+	removed, err = cache.Cleanup(time.Now().Add(2 * time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if removed != 0 {
+		t.Fatalf("removed = %d, want 0 while the second SQLite context remains open", removed)
+	}
+	if err := second.Close(); err != nil {
+		t.Fatal(err)
+	}
+	removed, err = cache.Cleanup(time.Now().Add(2 * time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if removed != 1 {
+		t.Fatalf("removed = %d, want 1 after SQLite contexts released their artifact leases", removed)
 	}
 }
 

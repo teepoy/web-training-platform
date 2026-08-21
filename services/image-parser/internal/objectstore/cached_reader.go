@@ -2,6 +2,7 @@ package objectstore
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 
@@ -23,12 +24,12 @@ func NewCachedReader(store *PatchStore, cache artifactcache.Cache, entryID strin
 	return &CachedReader{store: store, cache: cache, entryID: entryID}, nil
 }
 
-func (r *CachedReader) ReadObject(ctx context.Context, bucket, key string) ([]byte, error) {
+func (r *CachedReader) ReadObject(ctx context.Context, bucket, key string) (data []byte, resultErr error) {
 	revision, err := r.store.DescribePatchObject(ctx, bucket, key)
 	if err != nil {
 		return nil, err
 	}
-	path, err := r.cache.GetOrDownload(ctx, artifactcache.Ref{
+	lease, err := r.cache.Acquire(ctx, artifactcache.Ref{
 		EntryID: r.entryID, SourceIdentity: bucket + "/" + key,
 		Revision: revision.Revision, Kind: artifactcache.KindFile,
 	}, func(ctx context.Context, destination string) error {
@@ -37,7 +38,10 @@ func (r *CachedReader) ReadObject(ctx context.Context, bucket, key string) ([]by
 	if err != nil {
 		return nil, err
 	}
-	data, err := os.ReadFile(path)
+	defer func() {
+		resultErr = errors.Join(resultErr, lease.Release())
+	}()
+	data, err = os.ReadFile(lease.Path())
 	if err != nil {
 		return nil, fmt.Errorf("read cached object: %w", err)
 	}

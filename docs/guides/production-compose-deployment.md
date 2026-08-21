@@ -207,7 +207,9 @@ prediction capacity.
 Every downloadable source must expose a stable revision: S3 VersionId, then
 ETag, then LastModified plus size. A directory-like artifact requires an
 explicit generation or manifest identity. Local filesystem mtime is used only
-for cache eviction and is not treated as source identity.
+for cache eviction and is not treated as source identity. Parsers hold an
+Artifact lease for as long as they use a cached file or directory; the cache
+Janitor skips active leases and removes a directory artifact only as a whole.
 
 All service ceilings use `deploy.resources.limits.memory`, which is honored by
 current Docker Compose without requiring Swarm mode. Do not reintroduce the

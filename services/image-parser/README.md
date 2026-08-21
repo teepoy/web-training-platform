@@ -81,11 +81,15 @@ Every equipment entry separates two interfaces:
 
 The service owns one Artifact Cache Manager contract. Display, Prediction,
 Training, and Export use separate subdirectories and independent TTL, capacity,
-concurrency, and metrics. A miss acquires process singleflight and a persistent
-filesystem advisory lock before downloading, rechecks the final target, writes
-to a sibling temporary location, rejects symlinks, fsyncs, and atomically
-renames. Janitor eviction takes the same lock non-blockingly. Coordination and
-staging files are never counted or deleted as cache objects.
+concurrency, and metrics. `Acquire` returns an Artifact lease rather than an
+unowned path. Readers hold a shared filesystem lock until every file, directory,
+database, or index retaining those handles is closed; Janitor eviction requires
+the same entry's exclusive lock and therefore skips active readers. A
+miss acquires process singleflight and the exclusive lock before downloading,
+rechecks the final target, writes to a sibling temporary location, rejects
+symlinks, fsyncs, and atomically renames. A directory is measured recursively
+and evicted as one indivisible artifact. Coordination and staging files are
+never counted or deleted as cache objects.
 
 Source revision precedence is S3 VersionId, then ETag, then reliable source
 LastModified plus size. Local cache mtime is only LRU/TTL metadata. Directory

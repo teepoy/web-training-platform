@@ -133,7 +133,7 @@ func (c *entryContext) Resolve(ctx context.Context, requests []imagestream.Sampl
 
 	type archiveResult struct {
 		index  int
-		path   string
+		lease  artifactcache.Lease
 		assets []plannedRole
 		err    error
 	}
@@ -143,39 +143,51 @@ func (c *entryContext) Resolve(ctx context.Context, requests []imagestream.Sampl
 		go func(index int, assets []plannedRole) {
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
-			path, err := c.resolveArchive(ctx, c.refs[index])
-			resolvedArchives <- archiveResult{index: index, path: path, assets: assets, err: err}
+			lease, err := c.resolveArchive(ctx, c.refs[index])
+			resolvedArchives <- archiveResult{index: index, lease: lease, assets: assets, err: err}
 		}(archiveIndex, assets)
 	}
+	var firstErr error
 	for range groups {
 		archive := <-resolvedArchives
 		if archive.err != nil {
-			return nil, archive.err
+			if firstErr == nil {
+				firstErr = archive.err
+			}
+			continue
 		}
-		if err := parseArchive(archive.path, archive.assets, results); err != nil {
-			return nil, &imagestream.ContextError{Code: "parser_unavailable", Message: fmt.Sprintf("parse patch archive %d: %v", archive.index, err)}
+		if firstErr == nil {
+			if err := parseArchive(archive.lease.Path(), archive.assets, results); err != nil {
+				firstErr = &imagestream.ContextError{Code: "parser_unavailable", Message: fmt.Sprintf("parse patch archive %d: %v", archive.index, err)}
+			}
 		}
+		if err := archive.lease.Release(); err != nil && firstErr == nil {
+			firstErr = &imagestream.ContextError{Code: "entry_unavailable", Message: fmt.Sprintf("release patch archive %d: %v", archive.index, err)}
+		}
+	}
+	if firstErr != nil {
+		return nil, firstErr
 	}
 	return results, nil
 }
 
-func (c *entryContext) resolveArchive(ctx context.Context, ref *scv1.ZipRef) (string, error) {
+func (c *entryContext) resolveArchive(ctx context.Context, ref *scv1.ZipRef) (artifactcache.Lease, error) {
 	if strings.TrimSpace(ref.S3Bucket) == "" || strings.TrimSpace(ref.S3Key) == "" {
-		return "", &imagestream.ContextError{Code: "source_unavailable", Message: "patch archive has an invalid object reference"}
+		return nil, &imagestream.ContextError{Code: "source_unavailable", Message: "patch archive has an invalid object reference"}
 	}
 	revision, err := c.objects.DescribePatchObject(ctx, ref.S3Bucket, ref.S3Key)
 	if err != nil {
-		return "", &imagestream.ContextError{Code: "source_unavailable", Message: fmt.Sprintf("describe patch archive: %v", err)}
+		return nil, &imagestream.ContextError{Code: "source_unavailable", Message: fmt.Sprintf("describe patch archive: %v", err)}
 	}
-	path, err := c.cache.GetOrDownload(ctx, artifactcache.Ref{
+	lease, err := c.cache.Acquire(ctx, artifactcache.Ref{
 		EntryID: EntryID, SourceIdentity: ref.S3Bucket + "/" + ref.S3Key, Revision: revision.Revision, Kind: artifactcache.KindFile,
 	}, func(ctx context.Context, destination string) error {
 		return c.objects.DownloadPatchObject(ctx, ref.S3Bucket, ref.S3Key, destination)
 	})
 	if err != nil {
-		return "", &imagestream.ContextError{Code: "source_unavailable", Message: fmt.Sprintf("cache patch archive: %v", err)}
+		return nil, &imagestream.ContextError{Code: "source_unavailable", Message: fmt.Sprintf("cache patch archive: %v", err)}
 	}
-	return path, nil
+	return lease, nil
 }
 
 func (*entryContext) Close() error { return nil }

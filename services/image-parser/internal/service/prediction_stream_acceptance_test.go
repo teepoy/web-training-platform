@@ -56,13 +56,17 @@ func TestPredictionImageStreamWarmCache300KToPython(t *testing.T) {
 	}
 	t.Cleanup(cache.Close)
 	for _, ref := range refs {
-		if _, err := cache.GetOrDownload(context.Background(), artifactcache.Ref{
+		lease, err := cache.Acquire(context.Background(), artifactcache.Ref{
 			EntryID: legacyrangezip.EntryID, SourceIdentity: ref.S3Bucket + "/" + ref.S3Key,
 			Revision: store.revision(ref.S3Key), Kind: artifactcache.KindFile,
 		}, func(ctx context.Context, destination string) error {
 			return store.DownloadPatchObject(ctx, ref.S3Bucket, ref.S3Key, destination)
-		}); err != nil {
+		})
+		if err != nil {
 			t.Fatalf("warm fixture %s: %v", ref.S3Key, err)
+		}
+		if err := lease.Release(); err != nil {
+			t.Fatal(err)
 		}
 	}
 

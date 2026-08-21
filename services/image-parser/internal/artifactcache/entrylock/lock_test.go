@@ -47,6 +47,46 @@ func TestAcquireWaitsForEntryLockAndHonorsContextCancellation(t *testing.T) {
 	}
 }
 
+func TestSharedLocksAllowReadersAndBlockExclusiveJanitor(t *testing.T) {
+	root := t.TempDir()
+	first, err := AcquireShared(context.Background(), root, "objects/folder")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := AcquireShared(context.Background(), root, "objects/folder")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lock, acquired, err := TryAcquire(root, "objects/folder"); err != nil {
+		t.Fatal(err)
+	} else if acquired {
+		_ = lock.Release()
+		t.Fatal("exclusive janitor lock was acquired while shared leases were active")
+	}
+	if err := first.Release(); err != nil {
+		t.Fatal(err)
+	}
+	if lock, acquired, err := TryAcquire(root, "objects/folder"); err != nil {
+		t.Fatal(err)
+	} else if acquired {
+		_ = lock.Release()
+		t.Fatal("exclusive janitor lock was acquired while one shared lease remained")
+	}
+	if err := second.Release(); err != nil {
+		t.Fatal(err)
+	}
+	lock, acquired, err := TryAcquire(root, "objects/folder")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !acquired {
+		t.Fatal("exclusive janitor lock was not acquired after shared leases were released")
+	}
+	if err := lock.Release(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestEntryLockCoordinatesAcrossProcesses(t *testing.T) {
 	root := t.TempDir()
 	command := exec.Command(os.Args[0], "-test.run=^TestEntryLockHelperProcess$")
@@ -104,11 +144,81 @@ func TestEntryLockCoordinatesAcrossProcesses(t *testing.T) {
 	}
 }
 
+func TestSharedEntryLockBlocksExclusiveEvictionAcrossProcesses(t *testing.T) {
+	root := t.TempDir()
+	command := exec.Command(os.Args[0], "-test.run=^TestEntryLockHelperProcess$")
+	command.Env = append(
+		os.Environ(),
+		"IMAGE_PARSER_ENTRY_LOCK_HELPER=1",
+		"IMAGE_PARSER_ENTRY_LOCK_MODE=shared",
+		"IMAGE_PARSER_ENTRY_LOCK_ROOT="+root,
+	)
+	stdin, err := command.StdinPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stdout, err := command.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	command.Stderr = os.Stderr
+	if err := command.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = stdin.Close()
+		if command.ProcessState == nil {
+			_ = command.Process.Kill()
+			_ = command.Wait()
+		}
+	})
+	reader := bufio.NewReader(stdout)
+	if line, err := reader.ReadString('\n'); err != nil {
+		t.Fatalf("wait for helper shared lock: %v", err)
+	} else if line != "locked\n" {
+		t.Fatalf("unexpected helper output %q", line)
+	}
+
+	readerLock, err := AcquireShared(context.Background(), root, "objects/archive.zip")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lock, acquired, err := TryAcquire(root, "objects/archive.zip"); err != nil {
+		t.Fatal(err)
+	} else if acquired {
+		_ = lock.Release()
+		t.Fatal("exclusive eviction lock was acquired while another process held a shared lease")
+	}
+	if err := readerLock.Release(); err != nil {
+		t.Fatal(err)
+	}
+	if err := stdin.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := command.Wait(); err != nil {
+		t.Fatal(err)
+	}
+	lock, acquired, err := TryAcquire(root, "objects/archive.zip")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !acquired {
+		t.Fatal("exclusive eviction lock was not acquired after cross-process readers released")
+	}
+	if err := lock.Release(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestEntryLockHelperProcess(t *testing.T) {
 	if os.Getenv("IMAGE_PARSER_ENTRY_LOCK_HELPER") != "1" {
 		return
 	}
-	lock, err := Acquire(context.Background(), os.Getenv("IMAGE_PARSER_ENTRY_LOCK_ROOT"), "objects/archive.zip")
+	acquire := Acquire
+	if os.Getenv("IMAGE_PARSER_ENTRY_LOCK_MODE") == "shared" {
+		acquire = AcquireShared
+	}
+	lock, err := acquire(context.Background(), os.Getenv("IMAGE_PARSER_ENTRY_LOCK_ROOT"), "objects/archive.zip")
 	if err != nil {
 		t.Fatal(err)
 	}

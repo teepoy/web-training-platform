@@ -5,6 +5,7 @@ package sqliteimagerows
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -74,7 +75,7 @@ func (f *Factory) Open(
 			Code: "source_unavailable", Message: "SQLite image artifact requires source identity and revision",
 		}
 	}
-	path, err := params.Cache.GetOrDownload(
+	lease, err := params.Cache.Acquire(
 		ctx,
 		artifactcache.Ref{
 			EntryID:        EntryID,
@@ -91,8 +92,9 @@ func (f *Factory) Open(
 			Code: "source_unavailable", Message: fmt.Sprintf("cache SQLite image artifact: %v", err),
 		}
 	}
-	database, err := openReadOnly(path)
+	database, err := openReadOnly(lease.Path())
 	if err != nil {
+		_ = lease.Release()
 		return nil, &imagestream.ContextError{
 			Code: "parser_unavailable", Message: fmt.Sprintf("open SQLite image artifact: %v", err),
 		}
@@ -101,6 +103,7 @@ func (f *Factory) Open(
 		equipmentID: params.Inspection.EquipmentID,
 		roles:       roles,
 		database:    database,
+		lease:       lease,
 	}, nil
 }
 
@@ -108,6 +111,7 @@ type entryContext struct {
 	equipmentID string
 	roles       []string
 	database    *sql.DB
+	lease       artifactcache.Lease
 }
 
 func (c *entryContext) EquipmentID() string { return c.equipmentID }
@@ -214,10 +218,18 @@ func (c *entryContext) readBatch(
 }
 
 func (c *entryContext) Close() error {
-	if c == nil || c.database == nil {
+	if c == nil {
 		return nil
 	}
-	return c.database.Close()
+	var databaseErr error
+	if c.database != nil {
+		databaseErr = c.database.Close()
+	}
+	var leaseErr error
+	if c.lease != nil {
+		leaseErr = c.lease.Release()
+	}
+	return errors.Join(databaseErr, leaseErr)
 }
 
 type imageKey struct {

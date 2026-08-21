@@ -30,13 +30,25 @@ type Lock struct {
 }
 
 // Acquire waits until the entry is exclusively locked or ctx is canceled.
-// Callers own the deadline; the cache does not invent an implicit timeout.
+// Download, publication, and eviction use this mode. Callers own the deadline;
+// the cache does not invent an implicit timeout.
 func Acquire(ctx context.Context, root string, relative string) (*Lock, error) {
+	return acquire(ctx, root, relative, unix.LOCK_EX)
+}
+
+// AcquireShared waits until the entry has a shared usage lock or ctx is
+// canceled. Multiple artifact readers may hold this lock concurrently while an
+// exclusive download, publication, or eviction lock remains blocked.
+func AcquireShared(ctx context.Context, root string, relative string) (*Lock, error) {
+	return acquire(ctx, root, relative, unix.LOCK_SH)
+}
+
+func acquire(ctx context.Context, root string, relative string, mode int) (*Lock, error) {
 	for {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		lock, acquired, err := TryAcquire(root, relative)
+		lock, acquired, err := tryAcquire(root, relative, mode)
 		if err != nil {
 			return nil, err
 		}
@@ -57,6 +69,10 @@ func Acquire(ctx context.Context, root string, relative string) (*Lock, error) {
 
 // TryAcquire attempts to lock the entry without waiting.
 func TryAcquire(root string, relative string) (*Lock, bool, error) {
+	return tryAcquire(root, relative, unix.LOCK_EX)
+}
+
+func tryAcquire(root string, relative string, mode int) (*Lock, bool, error) {
 	path, err := coordinationPath(root, relative)
 	if err != nil {
 		return nil, false, err
@@ -79,7 +95,7 @@ func TryAcquire(root string, relative string) (*Lock, bool, error) {
 		_ = file.Close()
 		return nil, false, fmt.Errorf("artifact cache entry lock is not a regular file")
 	}
-	if err := unix.Flock(fd, unix.LOCK_EX|unix.LOCK_NB); err != nil {
+	if err := unix.Flock(fd, mode|unix.LOCK_NB); err != nil {
 		_ = file.Close()
 		if errors.Is(err, unix.EWOULDBLOCK) || errors.Is(err, unix.EAGAIN) {
 			return nil, false, nil

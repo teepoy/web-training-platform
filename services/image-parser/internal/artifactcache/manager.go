@@ -58,8 +58,42 @@ func (r Ref) key() string {
 
 type DownloadFunc func(ctx context.Context, destination string) error
 
+// Lease pins one published artifact against Janitor eviction while a parser is
+// using its path. Callers must release the lease after closing every file or
+// directory handle derived from Path.
+type Lease interface {
+	Path() string
+	Release() error
+}
+
 type Cache interface {
-	GetOrDownload(ctx context.Context, ref Ref, download DownloadFunc) (string, error)
+	Acquire(ctx context.Context, ref Ref, download DownloadFunc) (Lease, error)
+}
+
+type artifactLease struct {
+	path       string
+	lock       *entrylock.Lock
+	release    sync.Once
+	releaseErr error
+}
+
+func (l *artifactLease) Path() string {
+	if l == nil {
+		return ""
+	}
+	return l.path
+}
+
+func (l *artifactLease) Release() error {
+	if l == nil {
+		return nil
+	}
+	l.release.Do(func() {
+		if l.lock != nil {
+			l.releaseErr = l.lock.Release()
+		}
+	})
+	return l.releaseErr
 }
 
 type Options struct {
@@ -134,37 +168,73 @@ func (m *Manager) Close() {
 	})
 }
 
-func (m *Manager) GetOrDownload(ctx context.Context, ref Ref, download DownloadFunc) (string, error) {
+func (m *Manager) Acquire(ctx context.Context, ref Ref, download DownloadFunc) (Lease, error) {
 	if err := ref.validate(); err != nil {
-		return "", err
+		return nil, err
 	}
 	if download == nil {
-		return "", fmt.Errorf("artifact downloader is required")
+		return nil, fmt.Errorf("artifact downloader is required")
 	}
 	key := ref.key()
-	result := m.requests.DoChan(key, func() (any, error) {
-		return m.getOrDownload(ctx, ref, key, download)
-	})
-	select {
-	case <-ctx.Done():
-		return "", ctx.Err()
-	case resolved := <-result:
-		if resolved.Err != nil {
-			return "", resolved.Err
+	relative := filepath.Join("objects", key)
+	target := filepath.Join(m.objects, key)
+	countHit := true
+	for {
+		lease, exists, err := m.acquireExisting(ctx, target, relative, ref.Kind)
+		if err != nil {
+			return nil, err
 		}
-		path, ok := resolved.Val.(string)
-		if !ok {
-			return "", fmt.Errorf("artifact cache returned an invalid path")
+		if exists {
+			if countHit {
+				m.hits.Add(1)
+			}
+			return lease, nil
 		}
-		return path, nil
+
+		result := m.requests.DoChan(key, func() (any, error) {
+			return nil, m.ensureArtifact(ctx, ref, key, download)
+		})
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case resolved := <-result:
+			if resolved.Err != nil {
+				return nil, resolved.Err
+			}
+		}
+		// The exclusive publication lock is released before a shared usage lock
+		// is acquired. Recheck in the loop because another process may have
+		// evicted the artifact in that gap.
+		countHit = false
 	}
 }
 
-func (m *Manager) getOrDownload(ctx context.Context, ref Ref, key string, download DownloadFunc) (path string, resultErr error) {
+func (m *Manager) acquireExisting(ctx context.Context, target, relative string, kind Kind) (*artifactLease, bool, error) {
+	lock, err := entrylock.AcquireShared(ctx, m.root, relative)
+	if err != nil {
+		return nil, false, fmt.Errorf("lease artifact cache entry: %w", err)
+	}
+	releaseOnError := func(err error) (*artifactLease, bool, error) {
+		return nil, false, errors.Join(err, lock.Release())
+	}
+	hit, err := cacheHit(target, kind)
+	if err != nil {
+		return releaseOnError(err)
+	}
+	if !hit {
+		return releaseOnError(nil)
+	}
+	if err := touch(target); err != nil {
+		return releaseOnError(err)
+	}
+	return &artifactLease{path: target, lock: lock}, true, nil
+}
+
+func (m *Manager) ensureArtifact(ctx context.Context, ref Ref, key string, download DownloadFunc) (resultErr error) {
 	relative := filepath.Join("objects", key)
 	lock, err := entrylock.Acquire(ctx, m.root, relative)
 	if err != nil {
-		return "", fmt.Errorf("lock artifact cache entry: %w", err)
+		return fmt.Errorf("lock artifact cache entry: %w", err)
 	}
 	defer func() {
 		if err := lock.Release(); err != nil {
@@ -173,38 +243,34 @@ func (m *Manager) getOrDownload(ctx context.Context, ref Ref, key string, downlo
 	}()
 	target := filepath.Join(m.objects, key)
 	if hit, err := cacheHit(target, ref.Kind); err != nil {
-		return "", err
+		return err
 	} else if hit {
-		m.hits.Add(1)
-		if err := touch(target); err != nil {
-			return "", err
-		}
-		return target, nil
+		return nil
 	}
 	m.misses.Add(1)
 	stagingRoot, err := os.MkdirTemp(m.objects, ".stage-"+key[:12]+"-")
 	if err != nil {
-		return "", fmt.Errorf("create artifact staging directory: %w", err)
+		return fmt.Errorf("create artifact staging directory: %w", err)
 	}
 	defer os.RemoveAll(stagingRoot)
 	staged := filepath.Join(stagingRoot, "artifact")
 	if err := download(ctx, staged); err != nil {
-		return "", fmt.Errorf("download artifact: %w", err)
+		return fmt.Errorf("download artifact: %w", err)
 	}
 	if err := validateArtifact(staged, ref.Kind); err != nil {
-		return "", err
+		return err
 	}
 	if err := syncArtifact(staged); err != nil {
-		return "", err
+		return err
 	}
 	if err := os.Rename(staged, target); err != nil {
-		return "", fmt.Errorf("publish artifact: %w", err)
+		return fmt.Errorf("publish artifact: %w", err)
 	}
 	m.downloads.Add(1)
 	if err := syncDirectory(m.objects); err != nil {
-		return "", err
+		return err
 	}
-	return target, nil
+	return nil
 }
 
 func cacheHit(path string, kind Kind) (bool, error) {
