@@ -47,6 +47,8 @@ const props = withDefaults(
     show: boolean;
     loading: boolean;
     availableCount: number;
+    activeCohortCount?: number;
+    cohortStale?: boolean;
     mapSelectionCount: number;
     tableSelectionAvailable: boolean;
     extraFilter: ScGlobalFilter;
@@ -70,6 +72,8 @@ const props = withDefaults(
     extraFilterNumericRangeLoading: () => ({}),
     extraFilterNumericRangeErrors: () => ({}),
     confirmDisabled: false,
+    activeCohortCount: 0,
+    cohortStale: false,
     title: "Annotation Sampling",
     distributionLabel: "Final Class",
     showCandidateScope: true,
@@ -174,6 +178,21 @@ const editorContext = computed<ScSamplingRuleEditorContext>(() => ({
 }));
 const configurationError = computed(() => scSamplingProgramError(draft.value));
 const hasAfterSamplingTab = computed(() => Boolean(slots["after-sampling"]));
+const openedConfiguration = ref("");
+
+function configurationFingerprint(): string {
+  return JSON.stringify({
+    program: draft.value,
+    scope: props.scope,
+    extraFilter: props.extraFilter,
+  });
+}
+
+const cohortIsStale = computed(
+  () =>
+    props.activeCohortCount > 0 &&
+    (props.cohortStale || openedConfiguration.value !== configurationFingerprint()),
+);
 
 function isPercentageRule(
   rule: ScSamplingRule,
@@ -339,6 +358,7 @@ watch(
   (show) => {
     if (!show) return;
     draft.value = cloneScSamplingProgram(props.program);
+    openedConfiguration.value = configurationFingerprint();
     activeTab.value = "rules";
   },
   { immediate: true },
@@ -497,6 +517,17 @@ watch(draft, (program) => emit("update:program", cloneScSamplingProgram(program)
       </NTabPane>
     </NTabs>
 
+    <NAlert
+      v-if="cohortIsStale"
+      type="warning"
+      :show-icon="false"
+      class="cohort-stale-alert"
+      data-testid="sampling-cohort-stale"
+    >
+      The current {{ activeCohortCount.toLocaleString() }}-defect cohort uses previous settings.
+      Re-apply sampling to refresh it.
+    </NAlert>
+
     <NAlert v-if="configurationError" type="error" :show-icon="false" class="form-error">
       {{ configurationError }}
     </NAlert>
@@ -514,7 +545,7 @@ watch(draft, (program) => emit("update:program", cloneScSamplingProgram(program)
             :disabled="availableCount === 0 || !!configurationError || confirmDisabled"
             @click="handleConfirm"
           >
-            Apply sampling
+            {{ cohortIsStale ? "Re-apply sampling" : "Apply sampling" }}
           </NButton>
         </div>
       </div>
@@ -694,6 +725,7 @@ watch(draft, (program) => emit("update:program", cloneScSamplingProgram(program)
   margin-top: 16px;
 }
 
+.cohort-stale-alert,
 .form-error {
   margin-top: 12px;
 }

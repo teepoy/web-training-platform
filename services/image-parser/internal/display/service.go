@@ -3,6 +3,7 @@ package display
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -14,6 +15,7 @@ type Service struct {
 	upstream      UpstreamSource
 	reviewObjects ReviewObjectStore
 	streams       imagestream.Engine
+	useCase       imagestream.UseCase
 	nextID        atomic.Uint64
 }
 
@@ -28,7 +30,9 @@ func (r *Service) GetImageBytes(ctx context.Context, keys []ImageKey) []ImageByt
 		case ImageKindReview:
 			data, err := r.getReviewImageBytes(ctx, key.InspectionTime, key.WaferKey, key.DefectID, key.ReviewImageID)
 			results[index].Data = data
-			results[index].ContentType = "image/jpeg"
+			if err == nil {
+				results[index].ContentType = http.DetectContentType(data)
+			}
 			results[index].Err = err
 		default:
 			results[index].Err = fmt.Errorf("unsupported image kind %q", key.Kind)
@@ -72,8 +76,8 @@ func (r *Service) resolvePatchImageBytes(ctx context.Context, keys []ImageKey) [
 		groups[group] = append(groups[group], index)
 	}
 	for group, indexes := range groups {
-		contextID := fmt.Sprintf("display-%d", r.nextID.Add(1))
-		opened, err := r.streams.Open(ctx, imagestream.UseCaseDisplay, imagestream.OpenRequest{
+		contextID := fmt.Sprintf("%s-%d", r.useCase, r.nextID.Add(1))
+		opened, err := r.streams.Open(ctx, r.useCase, imagestream.OpenRequest{
 			ContextID: contextID, InspectionTime: group.inspectionTime, WaferKey: int32(group.waferKey), Roles: []string{group.role},
 		})
 		if err != nil {
@@ -86,7 +90,18 @@ func (r *Service) resolvePatchImageBytes(ctx context.Context, keys []ImageKey) [
 		for requestIndex, index := range indexes {
 			requests[requestIndex] = imagestream.SampleRequest{Sequence: uint64(requestIndex + 1), SampleID: keys[index].DefectID, DefectID: keys[index].DefectID}
 		}
-		resolved, resolveErr := opened.Resolve(ctx, requests)
+		resolved := make([]imagestream.SampleResult, 0, len(requests))
+		maxBatchItems := int(r.streams.Limits(r.useCase).MaxBatchItems)
+		var resolveErr error
+		for start := 0; start < len(requests); start += maxBatchItems {
+			end := min(start+maxBatchItems, len(requests))
+			batch, err := opened.Resolve(ctx, requests[start:end])
+			if err != nil {
+				resolveErr = err
+				break
+			}
+			resolved = append(resolved, batch...)
+		}
 		closeErr := opened.Close()
 		if resolveErr != nil || closeErr != nil {
 			if resolveErr == nil {

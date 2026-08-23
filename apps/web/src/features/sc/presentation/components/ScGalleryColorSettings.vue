@@ -13,6 +13,9 @@ const props = defineProps<{
   lut: GrayLUT;
   zMin: number;
   zMax: number;
+  bitDepth: 8 | 12 | 16;
+  patches?: Array<{ label: string; bit_depth: 8 | 12 | 16; z_min: number; z_max: number }>;
+  compact?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -22,14 +25,15 @@ const emit = defineEmits<{
   "update:zMax": [value: number];
 }>();
 
-const colorBarStyle = computed(() => ({ background: colorBarBackground(props.lut) }));
 const draftWindow = ref<[number, number]>([props.zMin, props.zMax]);
+const colorBarStyle = computed(() => ({
+  background: colorBarBackground(props.lut, draftWindow.value[0], draftWindow.value[1]),
+}));
 const draftToneMapping = computed(() => ({
   zMin: draftWindow.value[0],
   zMax: draftWindow.value[1],
 }));
-const gray8Window = computed(() => nativeGrayWindow(draftToneMapping.value, 8));
-const gray16Window = computed(() => nativeGrayWindow(draftToneMapping.value, 16));
+const nativeWindow = computed(() => nativeGrayWindow(draftToneMapping.value, props.bitDepth));
 
 watch(
   () => [props.zMin, props.zMax] as const,
@@ -53,11 +57,10 @@ function commitWindow(): void {
 </script>
 
 <template>
-  <div class="gallery-color-settings">
+  <div class="gallery-color-settings" :class="{ 'gallery-color-settings--compact': compact }">
     <div class="gallery-color-row">
       <div>
         <n-text class="gallery-color-label">Apply grayscale LUT</n-text>
-        <n-text depth="3" class="gallery-color-help">Patch images only</n-text>
       </div>
       <n-switch
         :value="enabled"
@@ -80,7 +83,7 @@ function commitWindow(): void {
     </div>
 
     <div class="gallery-color-bar" :class="{ 'gallery-color-bar--disabled': !enabled }">
-      <n-text class="gallery-color-label">Window (normalized zlims)</n-text>
+      <n-text class="gallery-color-label">{{ bitDepth }}-bit window</n-text>
       <div class="gallery-color-slider" :style="colorBarStyle" data-testid="gallery-color-bar">
         <n-slider
           :value="draftWindow"
@@ -104,11 +107,18 @@ function commitWindow(): void {
 
     <div class="gallery-color-native-values">
       <n-text depth="3">
-        Gray8 {{ gray8Window.min.toLocaleString() }}–{{ gray8Window.max.toLocaleString() }}
+        {{ nativeWindow.min.toLocaleString() }}–{{ nativeWindow.max.toLocaleString() }}
       </n-text>
-      <n-text depth="3">
-        Gray16 {{ gray16Window.min.toLocaleString() }}–{{ gray16Window.max.toLocaleString() }}
-      </n-text>
+    </div>
+    <div v-if="patches?.length" class="gallery-color-profiles">
+      <div v-for="patch in patches" :key="patch.label" class="gallery-color-profile">
+        <n-text>{{ patch.label }}</n-text>
+        <n-text depth="3">
+          {{ patch.bit_depth }}-bit · {{ patch.z_min.toLocaleString() }}–{{
+            patch.z_max.toLocaleString()
+          }}
+        </n-text>
+      </div>
     </div>
   </div>
 </template>
@@ -118,6 +128,10 @@ function commitWindow(): void {
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+.gallery-color-settings--compact {
+  gap: 12px;
 }
 
 .gallery-color-row {
@@ -143,6 +157,22 @@ function commitWindow(): void {
 .gallery-color-native-values,
 .gallery-color-scale {
   font-size: 11px;
+}
+
+.gallery-color-profiles {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(128, 128, 128, 0.24);
+}
+
+.gallery-color-profile {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
 
 .gallery-color-bar {

@@ -95,7 +95,9 @@ import {
   // sc
   mockScInspections,
   mockScInspectionSamples,
+  mockScInspectionImageProfile,
   mockScDataset,
+  mockScDataProvider,
   mockScViewSamples,
 } from "../mocks/handlers";
 import type { ScInspectionOverrides, ScDatasetOverrides } from "../mocks/handlers";
@@ -280,6 +282,9 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
   authedPage: async ({ page }, use, testInfo) => {
     if (isMockMode(testInfo)) {
       await mockCoreApi(page);
+      await mockListTrainers(page);
+      await mockScDataProvider(page, "*");
+      await mockScInspectionImageProfile(page);
       // Use addInitScript so the token is set before any app code runs on navigation.
       // Direct page.evaluate fails because about:blank has no localStorage access.
       await page.addInitScript(() => {

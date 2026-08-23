@@ -13,6 +13,27 @@ const datasetId = "sc-classify-1";
 
 test.beforeEach(async ({ authedPage }) => {
   await mockListTrainers(authedPage);
+  await authedPage.route("**/api/v1/sc/inspections/*/*/image-profile", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        inspection_time: "2026-08-01T04:00:00+08:00",
+        wafer_key: 1,
+        reference_count: 2,
+        difference_count: 2,
+        mask_count: 1,
+        patches: [
+          { image_type: "Defective", image_id: null, bit_depth: 12, z_min: 100, z_max: 3500 },
+          { image_type: "Reference", image_id: 0, bit_depth: 12, z_min: 200, z_max: 3000 },
+          { image_type: "Reference", image_id: 1, bit_depth: 12, z_min: 300, z_max: 3200 },
+          { image_type: "Difference", image_id: 0, bit_depth: 12, z_min: 10, z_max: 1000 },
+          { image_type: "Difference", image_id: 1, bit_depth: 12, z_min: 20, z_max: 2000 },
+          { image_type: "Mask", image_id: 0, bit_depth: 8, z_min: 0, z_max: 1 },
+        ],
+      }),
+    });
+  });
 });
 
 test("SC classify page shows error state for missing dataset @mock", async ({ authedPage }) => {
@@ -128,7 +149,7 @@ test("SC classify opens the current-results export flow from the header @mock", 
   await expect(exportDialog.getByText("ZIP package", { exact: true })).toBeVisible();
 });
 
-test("Gallery settings exposes Gray8 and Gray16 LUT window controls @mock", async ({
+test("Gallery and Colors tabs expose all patch instances and native 12-bit windows @mock", async ({
   authedPage,
 }) => {
   const colorDatasetId = "sc-classify-gallery-color";
@@ -139,15 +160,18 @@ test("Gallery settings exposes Gray8 and Gray16 LUT window controls @mock", asyn
   await mockScSamplesWithLabels(authedPage, colorDatasetId, 20, 20);
 
   await authedPage.goto(`/datasets/${colorDatasetId}/sc/classify`);
-  await authedPage.getByRole("button", { name: "Settings", exact: true }).click();
-
-  const settings = authedPage.getByRole("dialog", { name: "Gallery Settings" });
+  const settings = authedPage.getByTestId("gallery-color-dock");
   await expect(settings).toBeVisible();
-  await settings.getByText("Color", { exact: true }).click();
+  await expect(settings.getByText("Reference 1", { exact: true })).toBeVisible();
+  await expect(settings.getByText("Reference 2", { exact: true })).toBeVisible();
+  await expect(settings.getByText("Difference 2", { exact: true })).toBeVisible();
+  await settings.getByText("Colors", { exact: true }).click();
+  await expect(settings.getByText("D / R", { exact: true })).toBeVisible();
+  await expect(settings.getByText("Difference", { exact: true })).toBeVisible();
   await settings.getByTestId("gallery-gray-mapping-toggle").click();
 
   await expect(settings.getByTestId("gallery-gray-lut")).toBeEnabled();
   await expect(settings.getByRole("slider")).toHaveCount(2);
-  await expect(settings).toContainText("Gray8 0–255");
-  await expect(settings).toContainText("Gray16 0–65,535");
+  await expect(settings).toContainText("12-bit window");
+  await expect(settings).toContainText("100–3,500");
 });

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { NButton, NSpace, NText } from "naive-ui";
+import { NButton, NIcon, NSpace, NText, NTooltip } from "naive-ui";
+import { CloseCircleOutline } from "@vicons/ionicons5";
 
 defineProps<{
   selectedCount: number;
@@ -25,9 +26,23 @@ defineEmits<{
     </NText>
     <NSpace align="center" :size="8">
       <slot />
-      <NButton size="small" quaternary :disabled="loading" @click="$emit('clear')">
+      <NTooltip trigger="hover">
+        <template #trigger>
+          <NButton
+            size="small"
+            quaternary
+            circle
+            aria-label="Clear selection"
+            :disabled="loading"
+            @click="$emit('clear')"
+          >
+            <template #icon>
+              <NIcon><CloseCircleOutline /></NIcon>
+            </template>
+          </NButton>
+        </template>
         Clear selection
-      </NButton>
+      </NTooltip>
     </NSpace>
   </div>
 </template>

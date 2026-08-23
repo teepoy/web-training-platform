@@ -86,9 +86,13 @@ func wire() *serverApp {
 		streamCaches[useCase] = manager
 		metrics.RegisterArtifactCache(string(useCase), manager)
 	}
+	legacyFactory, err := equipmentlegacy.NewFactory(upstream, patchStore, 128)
+	if err != nil {
+		log.Fatalf("failed to init legacy range-ZIP image entry: %v", err)
+	}
 	registry, err := equipment.NewRegistry([]equipment.Registration{{
 		EquipmentIDs: equipmentlegacy.DefaultEquipmentIDs,
-		Factory:      equipmentlegacy.NewFactory(upstream, patchStore),
+		Factory:      legacyFactory,
 	}})
 	if err != nil {
 		log.Fatalf("failed to init equipment image registry: %v", err)
@@ -136,8 +140,29 @@ func wire() *serverApp {
 		}
 		log.Fatalf("failed to init display image reader: %v", err)
 	}
+	cachedExportReviewStore, err := objectstore.NewCachedReader(reviewStore, streamCaches[imagestream.UseCaseExport], "sc.review-object.v1")
+	if err != nil {
+		log.Fatalf("failed to init export review object reader: %v", err)
+	}
+	exportReader, err := display.NewForUseCase(upstream, cachedExportReviewStore, governedEngine, imagestream.UseCaseExport)
+	if err != nil {
+		log.Fatalf("failed to init export image reader: %v", err)
+	}
+	downloadRoot := filepath.Join(*cacheDir, "gallery-downloads")
+	if err := os.MkdirAll(downloadRoot, 0o700); err != nil {
+		log.Fatalf("failed to init gallery download root: %v", err)
+	}
+	downloadTempDir, err := os.MkdirTemp(downloadRoot, "instance-")
+	if err != nil {
+		log.Fatalf("failed to init gallery download temp directory: %v", err)
+	}
+	downloads, err := handler.NewGalleryDownloadService(exportReader, upstream, downloadTempDir)
+	if err != nil {
+		_ = os.RemoveAll(downloadTempDir)
+		log.Fatalf("failed to init gallery downloads: %v", err)
+	}
 
-	var httpHandler HTTPHandler = handler.NewSCRoutes(displayReader)
+	var httpHandler HTTPHandler = handler.NewSCRoutesWithGalleryDownloadsAndProfiles(displayReader, downloads, streamEngine)
 	var grpcHandler imageparserv1.ImageParserServer = service.NewScImageService(governedEngine)
 
 	grpcLis, grpcAddress, removeSocket, err := listenGRPC()
@@ -184,6 +209,7 @@ func wire() *serverApp {
 			for _, manager := range streamCaches {
 				manager.Close()
 			}
+			_ = os.RemoveAll(downloadTempDir)
 		},
 	}
 }

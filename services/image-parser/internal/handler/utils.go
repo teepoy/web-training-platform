@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -8,18 +9,33 @@ import (
 
 func normalizeImageType(imageType string) string {
 	lower := strings.ToLower(strings.TrimSpace(imageType))
-	switch lower {
+	base, imageID, hasImageID := strings.Cut(lower, ":")
+	var normalized string
+	switch base {
 	case "patch_template", "patchtemplate", "patch_reference", "patchreference", "template", "reference":
-		return "Reference"
+		normalized = "Reference"
 	case "patch_defective", "patchdefective", "defective":
-		return "Defective"
+		normalized = "Defective"
 	case "patch_difference", "patchdifference", "difference":
-		return "Difference"
+		normalized = "Difference"
+	case "patch_mask", "patchmask", "mask":
+		normalized = "Mask"
 	case "review", "review_high_mag":
 		return "review"
 	default:
 		return strings.TrimSpace(imageType)
 	}
+	if !hasImageID {
+		return normalized
+	}
+	if normalized == "Defective" {
+		return strings.TrimSpace(imageType)
+	}
+	parsed, err := strconv.Atoi(strings.TrimSpace(imageID))
+	if err != nil || parsed < 0 {
+		return strings.TrimSpace(imageType)
+	}
+	return fmt.Sprintf("%s:%d", normalized, parsed)
 }
 
 func normalizeInspectionTime(raw string) string {

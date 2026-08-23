@@ -4,21 +4,40 @@ import { mountWithProviders } from "@/testing";
 import ScGalleryColorSettings from "./ScGalleryColorSettings.vue";
 
 describe("ScGalleryColorSettings", () => {
-  it("renders a color bar and native Gray8/Gray16 windows", async () => {
+  it("renders a color bar and the active native bit-depth window", async () => {
     const { wrapper } = await mountWithProviders(ScGalleryColorSettings, {
       props: {
         enabled: true,
         lut: "viridis",
         zMin: 0.125,
         zMax: 0.875,
+        bitDepth: 12,
       },
     });
 
     expect(wrapper.get('[data-testid="gallery-color-bar"]').attributes("style")).toContain(
       "linear-gradient",
     );
-    expect(wrapper.text()).toContain("Gray8 32–223");
-    expect(wrapper.text()).toContain("Gray16 8,192–57,343");
+    expect(wrapper.text()).toContain("12-bit window");
+    expect(wrapper.text()).toContain("512–3,583");
+  });
+
+  it.each([
+    { bitDepth: 8 as const, nativeWindow: "32–223" },
+    { bitDepth: 16 as const, nativeWindow: "8,192–57,343" },
+  ])("renders the $bitDepth-bit Colorbar domain", async ({ bitDepth, nativeWindow }) => {
+    const { wrapper } = await mountWithProviders(ScGalleryColorSettings, {
+      props: {
+        enabled: true,
+        lut: "viridis",
+        zMin: 0.125,
+        zMax: 0.875,
+        bitDepth,
+      },
+    });
+
+    expect(wrapper.text()).toContain(`${bitDepth}-bit window`);
+    expect(wrapper.text()).toContain(nativeWindow);
   });
 
   it("emits direct control changes and constrains the normalized window", async () => {
@@ -28,6 +47,7 @@ describe("ScGalleryColorSettings", () => {
         lut: "gray",
         zMin: 0.2,
         zMax: 0.8,
+        bitDepth: 12,
       },
     });
 

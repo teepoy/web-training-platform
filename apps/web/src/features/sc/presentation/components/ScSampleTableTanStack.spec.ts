@@ -116,7 +116,7 @@ describe("ScSampleTableTanStack", () => {
     );
   });
 
-  it("gives the active clear-selection action primary visual priority", async () => {
+  it("uses the shared primary quaternary icon style for clear selection", async () => {
     const loadRows = vi.fn<ScSampleTableDataSource["loadRows"]>(async () => ({
       items: [sampleRow("11", 1)],
       total: 1,
@@ -136,8 +136,8 @@ describe("ScSampleTableTanStack", () => {
 
     const clearSelection = wrapper.get('[data-testid="clear-sample-selection"]');
     expect(clearSelection.classes()).toContain("n-button--primary-type");
-    expect(clearSelection.classes()).toContain("n-button--secondary");
-    expect(clearSelection.classes()).not.toContain("n-button--quaternary");
+    expect(clearSelection.attributes("aria-label")).toBe("Clear selection (1)");
+    expect(clearSelection.find("svg").exists()).toBe(true);
   });
 
   it("keeps the pinned selection and Defect ID cells in the same row", async () => {

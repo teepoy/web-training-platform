@@ -42,6 +42,19 @@ export interface ScDatasetInfo {
   dataset_meta?: Record<string, unknown>;
 }
 
+/** Construct the image-parser profile endpoint for an inspection. */
+export function scInspectionImageProfileUrl(
+  inspectionTime: string | bigint,
+  waferKey: number,
+): string {
+  return `/api/v1/sc/inspections/${encodeURIComponent(String(inspectionTime))}/${waferKey}/image-profile`;
+}
+
+/** Return the image-parser endpoint used to download selected gallery images. */
+export function scGalleryImageDownloadsUrl(): string {
+  return "/api/v1/sc/gallery-downloads";
+}
+
 /** Construct a patch image proxy URL from inference fields (raw, no auth params). */
 export function patchImageUrl(
   inspectionTime: string | bigint,
@@ -79,6 +92,8 @@ export interface ScBlinkImageUrls {
   review: string[];
 }
 
+const SC_REVIEW_RENDER_VERSION = "3";
+
 /** Return an auth-wrapped patch image URL for the given role. */
 export function scPatchUrl(
   inspectionTime: string | bigint,
@@ -96,7 +111,12 @@ export function scReviewUrl(
   defectId: string | number,
   imageId: number,
 ): string {
-  return withAuthQueryParams(reviewImageUrl(inspectionTime, waferKey, defectId, imageId));
+  const url = new URL(
+    reviewImageUrl(inspectionTime, waferKey, defectId, imageId),
+    window.location.origin,
+  );
+  url.searchParams.set("render_version", SC_REVIEW_RENDER_VERSION);
+  return withAuthQueryParams(`${url.pathname}${url.search}`);
 }
 
 /**

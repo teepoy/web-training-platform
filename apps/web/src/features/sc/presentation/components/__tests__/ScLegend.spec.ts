@@ -118,7 +118,7 @@ describe("ScLegend", () => {
     expect(wrapper.emitted("select-class")?.[0]).toEqual(["Scratch"]);
   });
 
-  it("renders the synthetic unlabeled group with a readable label", async () => {
+  it("hides the synthetic unlabeled group from Annotation", async () => {
     const { wrapper } = await mountWithProviders(ScLegend, {
       props: {
         legendSource: "annotation",
@@ -132,7 +132,7 @@ describe("ScLegend", () => {
       },
     });
 
-    expect(wrapper.text()).toContain("Unlabeled");
+    expect(wrapper.text()).not.toContain("Unlabeled");
     expect(wrapper.text()).not.toContain("__unlabeled__");
   });
 

@@ -16,6 +16,7 @@ benchmarks.
 | Models                  | Two metadata-only JSON model display fixtures plus metrics artifacts                                                                                                 |
 | Membership automation   | One manual-only SC rule with a typed `defects >= 1` condition, a 10-record run cap, and a 2,500-row per-Dataset import cap                                           |
 | Legacy execution data   | Two paused schedules and four disabled sensor subscriptions retained for backend compatibility tests; they are not ordinary-user navigation                          |
+| Gallery profile VQA     | Three 64-defect inspections: Gray8 1R/1D/1M, Gray16 1R/1D/1M, and Gray16 2R/2D/1M; each has eight square Review images                                               |
 
 The model fixtures have `seed_fixture: true` and `runnable: false` metadata and
 are named as display fixtures. The seeded jobs have no external execution IDs.
@@ -33,6 +34,11 @@ activity names are reused;
 owned event rows are replaced instead of duplicated. Existing classification
 samples are only topped up to the requested count and are never deleted.
 
+The gallery fixtures share that timestamp and use stable wafer keys and names:
+`81 / GRAY8-1R1D`, `82 / GRAY16-1R1D`, and `83 / GRAY16-2R2D`. Re-running the
+seed replaces only those three inspection identities and their patch archives.
+The baseline 12-bit inspection at wafer key `1` remains available.
+
 If a fixed showcase name already belongs to an incompatible dataset type,
 storage mode, collection view, or unrelated collection members, the seed stops
 with an explicit error instead of changing that data.
@@ -44,6 +50,8 @@ Override Make variables when a different local scale is useful:
 ```bash
 make seed-dev \
   SC_WAFER_MOCK_DEFECTS=5000 \
+  SC_GALLERY_PROFILE_DEFECTS=128 \
+  SC_GALLERY_PROFILE_IMAGED=16 \
   DEV_SEED_CLASSIFICATION_SAMPLES=300 \
   DEV_SEED_REVIEW_SAMPLES=150 \
   DEV_SEED_SC_ANNOTATIONS=180

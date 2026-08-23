@@ -4,6 +4,7 @@ package display
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	scv1 "image-parser/gen/go/sc/v1"
@@ -51,6 +52,10 @@ type ReviewObjectStore interface {
 }
 
 func New(upstream UpstreamSource, reviewObjects ReviewObjectStore, streams imagestream.Engine) (*Service, error) {
+	return NewForUseCase(upstream, reviewObjects, streams, imagestream.UseCaseDisplay)
+}
+
+func NewForUseCase(upstream UpstreamSource, reviewObjects ReviewObjectStore, streams imagestream.Engine, useCase imagestream.UseCase) (*Service, error) {
 	if upstream == nil {
 		return nil, fmt.Errorf("display upstream source is required")
 	}
@@ -60,21 +65,40 @@ func New(upstream UpstreamSource, reviewObjects ReviewObjectStore, streams image
 	if streams == nil {
 		return nil, fmt.Errorf("display image stream engine is required")
 	}
-	return &Service{upstream: upstream, reviewObjects: reviewObjects, streams: streams}, nil
+	limits := streams.Limits(useCase)
+	if limits.MaxBatchItems == 0 {
+		return nil, fmt.Errorf("%s image stream batch limit must be positive", useCase)
+	}
+	return &Service{upstream: upstream, reviewObjects: reviewObjects, streams: streams, useCase: useCase}, nil
 }
 
 func NormalizeImageType(imageType string) string {
 	lower := strings.ToLower(strings.TrimSpace(imageType))
-	switch lower {
+	base, imageID, hasImageID := strings.Cut(lower, ":")
+	var normalized string
+	switch base {
 	case "patch_template", "patchtemplate", "patch_reference", "patchreference", "template", "reference":
-		return "Reference"
+		normalized = "Reference"
 	case "patch_defective", "patchdefective", "defective":
-		return "Defective"
+		normalized = "Defective"
 	case "patch_difference", "patchdifference", "difference":
-		return "Difference"
+		normalized = "Difference"
+	case "patch_mask", "patchmask", "mask":
+		normalized = "Mask"
 	case "review", "review_high_mag":
 		return "review"
 	default:
 		return strings.TrimSpace(imageType)
 	}
+	if !hasImageID {
+		return normalized
+	}
+	if normalized == "Defective" {
+		return strings.TrimSpace(imageType)
+	}
+	parsed, err := strconv.Atoi(strings.TrimSpace(imageID))
+	if err != nil || parsed < 0 {
+		return strings.TrimSpace(imageType)
+	}
+	return fmt.Sprintf("%s:%d", normalized, parsed)
 }

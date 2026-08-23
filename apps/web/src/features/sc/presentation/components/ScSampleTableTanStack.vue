@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { computed, markRaw, onBeforeUnmount, ref, watch } from "vue";
 import type { CSSProperties } from "vue";
-import { NButton, NIcon, NPopover, NText } from "naive-ui";
+import { NButton, NIcon, NPopover, NText, NTooltip } from "naive-ui";
 import { getCoreRowModel, useVueTable, type ColumnDef } from "@tanstack/vue-table";
 import { useVirtualizer } from "@tanstack/vue-virtual";
 import {
   ArrowDownOutline,
   ArrowUpOutline,
+  CloseCircleOutline,
+  DownloadOutline,
   FunnelOutline,
   SwapVerticalOutline,
 } from "@vicons/ionicons5";
@@ -739,26 +741,43 @@ defineExpose({
     <div class="sst-tanstack-toolbar">
       <NText depth="2" class="sst-tanstack-toolbar-label"> Sample Data ({{ serverTotal }}) </NText>
       <div class="sst-tanstack-toolbar-actions">
-        <NButton
-          v-if="enableSelection && selectedCount > 0"
-          size="tiny"
-          type="primary"
-          secondary
-          data-testid="clear-sample-selection"
-          @click="clearSelection"
-        >
-          Clear Selection ({{ selectedCount }})
-        </NButton>
-        <NButton
-          size="tiny"
-          secondary
-          :loading="isExportingCsv"
-          :disabled="serverTotal === 0 || activeColumnDefinitions.length === 0"
-          data-testid="export-sample-data-csv"
-          @click="exportCsv"
-        >
-          Export CSV
-        </NButton>
+        <NTooltip v-if="enableSelection && selectedCount > 0" trigger="hover">
+          <template #trigger>
+            <NButton
+              size="tiny"
+              quaternary
+              circle
+              type="primary"
+              :aria-label="`Clear selection (${selectedCount})`"
+              data-testid="clear-sample-selection"
+              @click="clearSelection"
+            >
+              <template #icon
+                ><NIcon><CloseCircleOutline /></NIcon
+              ></template>
+            </NButton>
+          </template>
+          Clear selection ({{ selectedCount }})
+        </NTooltip>
+        <NTooltip trigger="hover">
+          <template #trigger>
+            <NButton
+              size="tiny"
+              quaternary
+              circle
+              aria-label="Export sample data as CSV"
+              :loading="isExportingCsv"
+              :disabled="serverTotal === 0 || activeColumnDefinitions.length === 0"
+              data-testid="export-sample-data-csv"
+              @click="exportCsv"
+            >
+              <template #icon
+                ><NIcon><DownloadOutline /></NIcon
+              ></template>
+            </NButton>
+          </template>
+          Export sample data as CSV
+        </NTooltip>
         <NButton
           v-if="Object.keys(tableFilter).length > 0"
           size="tiny"

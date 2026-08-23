@@ -20,7 +20,8 @@ func (l *inspectionLookup) Resolve(_ context.Context, inspectionTime string, waf
 }
 
 type entryFactory struct {
-	opened equipment.OpenParams
+	opened   equipment.OpenParams
+	profiled equipment.ProfileParams
 }
 
 func (f *entryFactory) Open(_ context.Context, params equipment.OpenParams) (imagestream.Context, error) {
@@ -28,11 +29,41 @@ func (f *entryFactory) Open(_ context.Context, params equipment.OpenParams) (ima
 	return entryContext{}, nil
 }
 
+func (f *entryFactory) Profile(_ context.Context, params equipment.ProfileParams) (equipment.InspectionImageProfile, error) {
+	f.profiled = params
+	return equipment.InspectionImageProfile{Patches: []equipment.PatchImageProfile{{ImageType: "Reference", BitDepth: 12, ZMin: 17, ZMax: 3001}}}, nil
+}
+
 type entryContext struct{}
 
 func (entryContext) EquipmentID() string { return "EQP01" }
 func (entryContext) Resolve(context.Context, []imagestream.SampleRequest) ([]imagestream.SampleResult, error) {
 	return nil, nil
+}
+
+func TestEngineProfilesInspectionThroughExactEquipmentEntry(t *testing.T) {
+	lookup := &inspectionLookup{}
+	factory := &entryFactory{}
+	registry, err := equipment.NewRegistry([]equipment.Registration{{EquipmentIDs: []string{"EQP01"}, Factory: factory}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine, err := equipment.NewEngine(lookup, registry, map[imagestream.UseCase]artifactcache.Cache{
+		imagestream.UseCaseDisplay: testCache{},
+	}, equipment.LimitsByUseCase{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	profile, err := engine.Profile(context.Background(), "2026-08-21T00:00:00Z", 7)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lookup.calls != 1 || factory.profiled.Inspection.EquipmentID != "EQP01" {
+		t.Fatalf("wrong profile dispatch: calls=%d params=%#v", lookup.calls, factory.profiled)
+	}
+	if profile.InspectionTime != "2026-08-21T00:00:00Z" || profile.WaferKey != 7 || len(profile.Patches) != 1 {
+		t.Fatalf("profile = %#v", profile)
+	}
 }
 func (entryContext) Close() error { return nil }
 

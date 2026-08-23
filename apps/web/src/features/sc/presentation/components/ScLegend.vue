@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onUpdated } from "vue";
+import { computed } from "vue";
 import { NButton, NIcon, NTag, NTooltip } from "naive-ui";
 import { EyeOffOutline, EyeOutline } from "@vicons/ionicons5";
 import {
@@ -79,6 +79,7 @@ const legendData = computed(() => {
   };
   if (compactGroups && Object.keys(compactGroups).length > 0) {
     return Object.entries(compactGroups)
+      .filter(([rawKey]) => source !== "annotation" || rawKey !== UNLABELED_KEY)
       .map(([rawKey, group]) => {
         const key = isNumericSource ? Number(rawKey) : rawKey;
         const colorKey = rawKey;
@@ -150,8 +151,6 @@ const handleVisibleToggle = (rawKey: string) => {
   else next.add(rawKey);
   emit("update:hiddenKeys", Array.from(next));
 };
-
-onUpdated(() => console.debug("[render] ScLegend"));
 </script>
 
 <template>

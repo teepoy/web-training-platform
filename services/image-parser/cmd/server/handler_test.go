@@ -1,15 +1,44 @@
 package main
 
 import (
+	"context"
+	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"os"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"image-parser/internal/display"
+	"image-parser/internal/equipment"
 	"image-parser/internal/handler"
 )
+
+type galleryHTTPHandlerStub struct {
+	result  handler.GalleryDownloadResult
+	request handler.GalleryDownloadRequest
+	profile equipment.InspectionImageProfile
+}
+
+func (*galleryHTTPHandlerStub) GetSCImage(context.Context, handler.SCImageRequest) (handler.ImageResponse, error) {
+	return handler.ImageResponse{}, nil
+}
+
+func (*galleryHTTPHandlerStub) GetSCSprite(context.Context, handler.SCSpriteRequest) (handler.ImageResponse, error) {
+	return handler.ImageResponse{}, nil
+}
+
+func (s *galleryHTTPHandlerStub) GetSCInspectionImageProfile(context.Context, string, int32) (equipment.InspectionImageProfile, error) {
+	return s.profile, nil
+}
+
+func (s *galleryHTTPHandlerStub) CreateSCGalleryDownload(_ context.Context, request handler.GalleryDownloadRequest) (handler.GalleryDownloadResult, error) {
+	s.request = request
+	return s.result, nil
+}
 
 func TestApplyEnvironmentParsesCacheConfiguration(t *testing.T) {
 	t.Setenv("CACHE_DIR", "/cache")
@@ -109,7 +138,7 @@ func TestSpriteImagesFromQueryRequiresReviewImageID(t *testing.T) {
 	}
 }
 
-func TestGrayMappingFromQueryRequiresCompleteValidWindow(t *testing.T) {
+func TestGrayMappingsFromQueryRequiresCompleteValidWindow(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	tests := []struct {
 		name    string
@@ -132,22 +161,120 @@ func TestGrayMappingFromQueryRequiresCompleteValidWindow(t *testing.T) {
 			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 			ctx.Request = httptest.NewRequest("GET", "/"+tt.query, nil)
 
-			mapping, err := grayMappingFromQuery(ctx)
+			mappings, err := grayMappingsFromQuery(ctx)
 			if tt.wantErr {
 				if err == nil {
-					t.Fatalf("grayMappingFromQuery() = %#v, nil; want error", mapping)
+					t.Fatalf("grayMappingsFromQuery() = %#v, nil; want error", mappings)
 				}
 				return
 			}
 			if err != nil {
 				t.Fatal(err)
 			}
-			if tt.query == "" && mapping != nil {
-				t.Fatalf("disabled mapping = %#v, want nil", mapping)
+			if tt.query == "" && (mappings.DefectiveReference != nil || mappings.Difference != nil) {
+				t.Fatalf("disabled mappings = %#v, want empty", mappings)
 			}
-			if tt.query != "" && (mapping == nil || mapping.LUT != handler.GrayLUTViridis || mapping.ZMin != 0.125 || mapping.ZMax != 0.875) {
-				t.Fatalf("mapping = %#v, want viridis [0.125, 0.875]", mapping)
+			if tt.query != "" && (mappings.DefectiveReference == nil || mappings.Difference == nil || mappings.DefectiveReference.LUT != handler.GrayLUTViridis || mappings.DefectiveReference.ZMin != 0.125 || mappings.DefectiveReference.ZMax != 0.875) {
+				t.Fatalf("mappings = %#v, want legacy viridis [0.125, 0.875] for both groups", mappings)
 			}
 		})
+	}
+}
+
+func TestGrayMappingsFromQuerySeparatesDefectiveReferenceAndDifference(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest("GET", "/?defective_reference_gray_lut=viridis&defective_reference_z_min=0.1&defective_reference_z_max=0.8&difference_gray_lut=inferno&difference_z_min=0.2&difference_z_max=0.9", nil)
+
+	mappings, err := grayMappingsFromQuery(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mappings.DefectiveReference == nil || mappings.DefectiveReference.LUT != handler.GrayLUTViridis {
+		t.Fatalf("defective/reference mapping = %#v", mappings.DefectiveReference)
+	}
+	if mappings.Difference == nil || mappings.Difference.LUT != handler.GrayLUTInferno {
+		t.Fatalf("difference mapping = %#v", mappings.Difference)
+	}
+}
+
+func TestGrayMappingsFromQueryReadsNativeBitDepth(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest("GET", "/?defective_reference_gray_lut=gray&defective_reference_z_min=0.1&defective_reference_z_max=0.9&defective_reference_bit_depth=12", nil)
+
+	mappings, err := grayMappingsFromQuery(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mappings.DefectiveReference == nil || mappings.DefectiveReference.BitDepth != 12 {
+		t.Fatalf("mapping = %#v", mappings.DefectiveReference)
+	}
+}
+
+func TestGalleryDownloadRouteStreamsCompletedAttachment(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	path := t.TempDir() + "/download.zip"
+	if err := os.WriteFile(path, []byte("zip-bytes"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stub := &galleryHTTPHandlerStub{result: handler.GalleryDownloadResult{Path: path, Filename: "gallery-images.zip"}}
+	router := gin.New()
+	RegisterHandler(router.Group("/"), stub)
+	payload := `{"items":[{"inspection_time":"2026-08-21T00:00:00Z","wafer_key":1,"defect_id":"42","patch_image_types":["Defective"],"review_image_ids":[]}],"apply_color_mapping":true,"gray_mappings":{"defective_reference":{"enabled":true,"lut":"viridis","zMin":0.1,"zMax":0.9}}}`
+	form := url.Values{"payload": []string{payload}}
+	request := httptest.NewRequest(http.MethodPost, "/sc/gallery-downloads", strings.NewReader(form.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	recorder := httptest.NewRecorder()
+
+	router.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK || recorder.Body.String() != "zip-bytes" {
+		t.Fatalf("response = %d %q", recorder.Code, recorder.Body.String())
+	}
+	if disposition := recorder.Header().Get("Content-Disposition"); !strings.Contains(disposition, "gallery-images.zip") {
+		t.Fatalf("content disposition = %q", disposition)
+	}
+	if !stub.request.ApplyColorMapping || stub.request.GrayMappings.DefectiveReference == nil || stub.request.GrayMappings.DefectiveReference.LUT != handler.GrayLUTViridis {
+		t.Fatalf("request = %#v", stub.request)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("temporary archive still exists: %v", err)
+	}
+}
+
+func TestInspectionImageProfileRouteReturnsMultiplePatchInstances(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	zero, one := 0, 1
+	stub := &galleryHTTPHandlerStub{profile: equipment.InspectionImageProfile{
+		InspectionTime: "2026-08-23T00:00:00Z", WaferKey: 9,
+		Patches: []equipment.PatchImageProfile{
+			{ImageType: "Reference", ImageID: &zero, BitDepth: 12, ZMin: 200, ZMax: 3000},
+			{ImageType: "Reference", ImageID: &one, BitDepth: 12, ZMin: 300, ZMax: 3200},
+			{ImageType: "Difference", ImageID: &zero, BitDepth: 12, ZMin: 10, ZMax: 1000},
+			{ImageType: "Difference", ImageID: &one, BitDepth: 12, ZMin: 20, ZMax: 2000},
+			{ImageType: "Mask", ImageID: &zero, BitDepth: 8, ZMin: 0, ZMax: 1},
+		},
+	}}
+	router := gin.New()
+	RegisterHandler(router.Group("/"), stub)
+	request := httptest.NewRequest(http.MethodGet, "/sc/inspections/2026-08-23T00:00:00Z/9/image-profile", nil)
+	recorder := httptest.NewRecorder()
+
+	router.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("response = %d %s", recorder.Code, recorder.Body.String())
+	}
+	if got := recorder.Header().Get("Cache-Control"); got != "no-store" {
+		t.Fatalf("Cache-Control = %q, want no-store", got)
+	}
+	for _, expected := range []string{
+		`"reference_count":2`, `"difference_count":2`, `"mask_count":1`,
+		`"image_type":"Reference"`, `"image_id":1`, `"bit_depth":12`, `"z_max":3200`,
+	} {
+		if !strings.Contains(recorder.Body.String(), expected) {
+			t.Fatalf("response missing %s: %s", expected, recorder.Body.String())
+		}
 	}
 }

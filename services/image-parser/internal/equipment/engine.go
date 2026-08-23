@@ -36,6 +36,36 @@ type Factory interface {
 	Open(ctx context.Context, params OpenParams) (imagestream.Context, error)
 }
 
+type PatchImageProfile struct {
+	ImageType string
+	ImageID   *int
+	BitDepth  int
+	ZMin      uint16
+	ZMax      uint16
+}
+
+type InspectionImageProfile struct {
+	InspectionTime string
+	WaferKey       int32
+	Patches        []PatchImageProfile
+}
+
+type ProfileParams struct {
+	Inspection Inspection
+	Cache      artifactcache.Cache
+}
+
+// ProfileFactory is an optional equipment-entry capability. Implementations
+// inspect the artifacts selected for one Inspection and return the patch
+// instances and their native grayscale domains.
+type ProfileFactory interface {
+	Profile(ctx context.Context, params ProfileParams) (InspectionImageProfile, error)
+}
+
+type ImageProfiler interface {
+	Profile(ctx context.Context, inspectionTime string, waferKey int32) (InspectionImageProfile, error)
+}
+
 type Registration struct {
 	EquipmentIDs []string
 	Factory      Factory
@@ -163,4 +193,35 @@ func (e *Engine) Open(ctx context.Context, useCase imagestream.UseCase, request 
 	return opened, nil
 }
 
+func (e *Engine) Profile(ctx context.Context, inspectionTime string, waferKey int32) (InspectionImageProfile, error) {
+	cache := e.caches[imagestream.UseCaseDisplay]
+	if cache == nil {
+		return InspectionImageProfile{}, &imagestream.ContextError{Code: "cache_unavailable", Message: "display image artifact cache is not configured"}
+	}
+	inspection, err := e.lookup.Resolve(ctx, inspectionTime, waferKey)
+	if err != nil {
+		return InspectionImageProfile{}, &imagestream.ContextError{Code: "inspection_unavailable", Message: fmt.Sprintf("resolve inspection: %v", err)}
+	}
+	inspection.EquipmentID = strings.TrimSpace(inspection.EquipmentID)
+	if inspection.EquipmentID == "" {
+		return InspectionImageProfile{}, &imagestream.ContextError{Code: "unknown_equipment", Message: "inspection has no equipment ID"}
+	}
+	factory, err := e.registry.resolve(inspection.EquipmentID)
+	if err != nil {
+		return InspectionImageProfile{}, err
+	}
+	profiler, ok := factory.(ProfileFactory)
+	if !ok {
+		return InspectionImageProfile{}, &imagestream.ContextError{Code: "profile_unavailable", Message: fmt.Sprintf("equipment %q does not expose an image profile", inspection.EquipmentID)}
+	}
+	profile, err := profiler.Profile(ctx, ProfileParams{Inspection: inspection, Cache: cache})
+	if err != nil {
+		return InspectionImageProfile{}, err
+	}
+	profile.InspectionTime = inspection.InspectionTime
+	profile.WaferKey = inspection.WaferKey
+	return profile, nil
+}
+
 var _ imagestream.Engine = (*Engine)(nil)
+var _ ImageProfiler = (*Engine)(nil)

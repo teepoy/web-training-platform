@@ -392,6 +392,32 @@ test("Review Sampling manages rules and sends the backend sampling program from 
     },
   });
 
+  await page.openReviewSampling();
+  await page.reviewSamplingDialog
+    .getByTestId("sampling-rule-per_die_limit")
+    .getByRole("button", { name: "Remove" })
+    .click();
+  await expect(page.reviewSamplingDialog.getByTestId("sampling-cohort-stale")).toContainText(
+    "250-defect cohort",
+  );
+  await expect(page.annotationSamplingButton).toHaveText("Annotation Sampling (250 · outdated)");
+  await page.reviewSamplingDialog.getByRole("button", { name: "Re-apply sampling" }).click();
+  await expect(page.annotationSamplingButton).toHaveText("Annotation Sampling (250)");
+  await expect
+    .poll(
+      () =>
+        dataRequests.filter(
+          (body) => body.description === "sc-workbench.selection.sampling-program",
+        ).length,
+    )
+    .toBe(2);
+  expect(
+    dataRequests
+      .filter((body) => body.description === "sc-workbench.selection.sampling-program")
+      .at(-1)
+      ?.sampling?.program.rules.map((rule) => rule.type),
+  ).not.toContain("per_die_limit");
+
   await page.clearRandomFilterButton.click();
   await expect(page.annotationSamplingButton).toHaveText("Annotation Sampling");
   await expect(page.clearRandomFilterButton).toHaveCount(0);

@@ -12,10 +12,13 @@ import {
   NSelect,
   NInput,
   NModal,
-  NImage,
+  NCheckbox,
   NTabs,
   NTabPane,
+  NIcon,
+  NTooltip,
 } from "naive-ui";
+import { CheckboxOutline, CloseCircleOutline, DownloadOutline } from "@vicons/ionicons5";
 import { withAuthQueryParams } from "@/shared/api/client";
 import { useBlinkController } from "@/shared/composables/useBlinkController";
 import {
@@ -32,12 +35,23 @@ import {
 import { cssBackgroundImageUrl } from "@/features/sc/presentation/components/scSpriteStyle";
 import ScGalleryColorSettings from "@/features/sc/presentation/components/ScGalleryColorSettings.vue";
 import {
+  submitScGalleryImageDownload,
+  type ScGalleryDownloadPayload,
+} from "@/features/sc/presentation/components/scGalleryImageDownload";
+import {
   appendGrayMappingQuery,
   DEFAULT_SC_GALLERY_TONE_MAPPING,
   isGrayLUT,
   isValidGrayWindow,
   type GrayLUT,
 } from "@/features/sc/presentation/components/scGalleryToneMapping";
+import {
+  groupProfile,
+  loadScInspectionImageProfile,
+  patchDescriptors,
+  type ScPatchImageDescriptor,
+  type ScPatchImageType,
+} from "@/features/sc/presentation/components/scInspectionImageProfile";
 import type {
   ScGalleryDataQuery,
   ScWorkbenchDataSource,
@@ -115,7 +129,6 @@ const selectingAll = ref(false);
 const selectAllError = ref<string | null>(null);
 
 watch(mode, (value) => emit("modeChange", value), { immediate: true });
-const settingsOpen = ref(false);
 const MAX_SAMPLES_PER_ROW = 30;
 const clampSamplesPerRow = (value: number): number =>
   Math.min(MAX_SAMPLES_PER_ROW, Math.max(1, value));
@@ -127,44 +140,84 @@ const IMAGE_SIZE_SELECT_OPTIONS = IMAGE_SIZE_OPTIONS.map((size) => ({
   value: size,
 }));
 type ImageSizeOption = (typeof IMAGE_SIZE_OPTIONS)[number];
-type PatchImageType = "Defective" | "Reference" | "Difference";
-const PATCH_IMAGE_LABELS: Record<PatchImageType, string> = {
-  Defective: "Defective",
-  Reference: "Reference",
-  Difference: "Difference",
-};
-const PATCH_IMAGE_SPRITE_TOKENS: Record<PatchImageType, string> = {
-  Defective: "patchDefective",
-  Reference: "patchReference",
-  Difference: "patchDifference",
-};
-const DEFAULT_PATCH_IMAGE_TYPES: PatchImageType[] = ["Defective", "Reference", "Difference"];
-const SC_SPRITE_RENDER_VERSION = "5";
-const patchImageTypeByInput: Record<string, PatchImageType> = {
-  defective: "Defective",
-  reference: "Reference",
-  template: "Reference",
-  difference: "Difference",
-};
+type PatchImageType = string;
+const DEFAULT_PATCH_IMAGES: ScPatchImageDescriptor[] = [
+  {
+    key: "Defective",
+    label: "Defective",
+    spriteToken: "patchDefective",
+    image_type: "Defective",
+    image_id: null,
+    bit_depth: 16,
+    z_min: 0,
+    z_max: 65535,
+  },
+  {
+    key: "Reference",
+    label: "Reference",
+    spriteToken: "patchReference",
+    image_type: "Reference",
+    image_id: null,
+    bit_depth: 16,
+    z_min: 0,
+    z_max: 65535,
+  },
+  {
+    key: "Difference",
+    label: "Difference",
+    spriteToken: "patchDifference",
+    image_type: "Difference",
+    image_id: null,
+    bit_depth: 16,
+    z_min: 0,
+    z_max: 65535,
+  },
+];
+const SC_SPRITE_RENDER_VERSION = "6";
 const normalizeImageSize = (value: number | undefined): ImageSizeOption =>
   IMAGE_SIZE_OPTIONS.includes(value as ImageSizeOption) ? (value as ImageSizeOption) : 64;
 const patchImageSize = ref<ImageSizeOption>(normalizeImageSize(props.patchCellSize));
 const reviewImageSize = ref<ImageSizeOption>(normalizeImageSize(props.reviewCellSize));
-const patchImagesInput = ref(DEFAULT_PATCH_IMAGE_TYPES.join(","));
-const patchDefectiveEnabled = ref(true);
-const patchReferenceEnabled = ref(true);
-const patchDifferenceEnabled = ref(true);
-const grayMappingEnabled = ref(DEFAULT_SC_GALLERY_TONE_MAPPING.enabled);
-const grayMappingLUT = ref<GrayLUT>(DEFAULT_SC_GALLERY_TONE_MAPPING.lut);
-const grayMappingZMin = ref(DEFAULT_SC_GALLERY_TONE_MAPPING.zMin);
-const grayMappingZMax = ref(DEFAULT_SC_GALLERY_TONE_MAPPING.zMax);
+const patchImagesInput = ref(DEFAULT_PATCH_IMAGES.map((patch) => patch.key).join(","));
+const inspectionImagePatches = ref<ScPatchImageDescriptor[]>(DEFAULT_PATCH_IMAGES);
+const imageProfileLoading = ref(false);
+const imageProfileError = ref<string | null>(null);
+const defectiveReferenceMappingEnabled = ref(DEFAULT_SC_GALLERY_TONE_MAPPING.enabled);
+const defectiveReferenceMappingLUT = ref<GrayLUT>(DEFAULT_SC_GALLERY_TONE_MAPPING.lut);
+const defectiveReferenceMappingZMin = ref(DEFAULT_SC_GALLERY_TONE_MAPPING.zMin);
+const defectiveReferenceMappingZMax = ref(DEFAULT_SC_GALLERY_TONE_MAPPING.zMax);
+const defectiveReferenceMappingBitDepth = ref<8 | 12 | 16>(
+  DEFAULT_SC_GALLERY_TONE_MAPPING.bitDepth,
+);
+const differenceMappingEnabled = ref(DEFAULT_SC_GALLERY_TONE_MAPPING.enabled);
+const differenceMappingLUT = ref<GrayLUT>(DEFAULT_SC_GALLERY_TONE_MAPPING.lut);
+const differenceMappingZMin = ref(DEFAULT_SC_GALLERY_TONE_MAPPING.zMin);
+const differenceMappingZMax = ref(DEFAULT_SC_GALLERY_TONE_MAPPING.zMax);
+const differenceMappingBitDepth = ref<8 | 12 | 16>(DEFAULT_SC_GALLERY_TONE_MAPPING.bitDepth);
+const colorDockCollapsed = ref(false);
+const settingsPanel = ref<"gallery" | "colors">("gallery");
+const colorSettingsGroup = ref<"defective-reference" | "difference">("defective-reference");
+const defectiveReferenceProfile = computed(() =>
+  groupProfile(inspectionImagePatches.value, "defective_reference"),
+);
+const differenceProfile = computed(() => groupProfile(inspectionImagePatches.value, "difference"));
 
-function rebuildPatchImagesInput() {
-  const parts: string[] = [];
-  if (patchDefectiveEnabled.value) parts.push("Defective");
-  if (patchReferenceEnabled.value) parts.push("Reference");
-  if (patchDifferenceEnabled.value) parts.push("Difference");
-  patchImagesInput.value = parts.join(",");
+function patchBaseType(key: string): ScPatchImageType {
+  return key.split(":", 1)[0] as ScPatchImageType;
+}
+
+function isPatchEnabled(key: string): boolean {
+  return selectedPatchImageTypes.value.includes(key);
+}
+
+function setPatchEnabled(key: string, enabled: boolean): void {
+  const selected = new Set(selectedPatchImageTypes.value);
+  if (enabled) selected.add(key);
+  else selected.delete(key);
+  patchImagesInput.value = inspectionImagePatches.value
+    .filter((patch) => selected.has(patch.key))
+    .map((patch) => patch.key)
+    .join(",");
 }
 
 const reviewImagesInput = ref("");
@@ -397,27 +450,25 @@ const {
 });
 
 const selectedPatchImageTypes = computed<PatchImageType[]>(() => {
-  const seen = new Set<PatchImageType>();
-  const parsed = patchImagesInput.value
+  const available = new Map(
+    inspectionImagePatches.value.map((patch) => [patch.key.toLowerCase(), patch.key]),
+  );
+  const seen = new Set<string>();
+  return patchImagesInput.value
     .split(",")
-    .map((part) => patchImageTypeByInput[part.trim().toLowerCase()])
-    .filter((type): type is PatchImageType => !!type)
-    .filter((type) => {
-      if (seen.has(type)) return false;
-      seen.add(type);
+    .map((part) => available.get(part.trim().toLowerCase()))
+    .filter((key): key is string => !!key)
+    .filter((key) => {
+      if (seen.has(key)) return false;
+      seen.add(key);
       return true;
     });
-  return parsed;
 });
 
-function syncPatchSwitchesFromInput() {
-  const types = selectedPatchImageTypes.value;
-  patchDefectiveEnabled.value = types.includes("Defective");
-  patchReferenceEnabled.value = types.includes("Reference");
-  patchDifferenceEnabled.value = types.includes("Difference");
-}
-
-syncPatchSwitchesFromInput();
+const selectedPatchDescriptors = computed(() => {
+  const selected = new Set(selectedPatchImageTypes.value);
+  return inspectionImagePatches.value.filter((patch) => selected.has(patch.key));
+});
 
 const discoveredReviewImageIds = ref<Set<number>>(new Set());
 let reviewImageIdsScopeKey = "";
@@ -469,22 +520,27 @@ const selectedReviewImageIds = computed<number[]>(() => {
   return parsed;
 });
 
-const patchImageTypesForSprite = computed<PatchImageType[]>(() => {
-  const requested = [...selectedPatchImageTypes.value];
+const patchImageTypesForSprite = computed<ScPatchImageDescriptor[]>(() => {
+  const requested = [...selectedPatchDescriptors.value];
   if (blinkEnabled.value) {
-    for (const required of ["Reference", "Defective"] as PatchImageType[]) {
-      if (!requested.includes(required)) requested.unshift(required);
+    for (const required of ["Reference", "Defective"] as ScPatchImageType[]) {
+      const descriptor = inspectionImagePatches.value.find(
+        (patch) => patch.image_type === required,
+      );
+      if (descriptor && !requested.some((patch) => patch.key === descriptor.key)) {
+        requested.unshift(descriptor);
+      }
     }
   }
   return requested;
 });
 
 const basePatchColumns = computed(() =>
-  selectedPatchImageTypes.value
-    .map((type) => ({
-      label: PATCH_IMAGE_LABELS[type],
-      spriteIndex: patchImageTypesForSprite.value.indexOf(type),
-      type,
+  selectedPatchDescriptors.value
+    .map((patch) => ({
+      label: patch.label,
+      spriteIndex: patchImageTypesForSprite.value.findIndex((item) => item.key === patch.key),
+      type: patch.key,
     }))
     .filter((column) => column.spriteIndex >= 0),
 );
@@ -495,7 +551,7 @@ function reviewColumnsForSample(sample: BlinkSample): number[] {
 }
 
 function spriteImageTypesForSample(sample: BlinkSample): string[] {
-  const imageTypes = patchImageTypesForSprite.value.map((type) => PATCH_IMAGE_SPRITE_TOKENS[type]);
+  const imageTypes = patchImageTypesForSprite.value.map((patch) => patch.spriteToken);
   if (mode.value === "review") {
     for (const imageId of reviewColumnsForSample(sample)) {
       imageTypes.push(`review${imageId}`);
@@ -563,6 +619,80 @@ const selectedCount = computed(() =>
     ? props.selectedDefectIds.size
     : new Set(props.selectedDefectIds).size,
 );
+
+const downloadOpen = ref(false);
+const preparingDownload = ref(false);
+const downloadError = ref<string | null>(null);
+const applyDownloadColorMapping = ref(false);
+
+function openDownload(): void {
+  if (selectedCount.value === 0) return;
+  downloadError.value = null;
+  downloadOpen.value = true;
+}
+
+function selectedRowKeys(): Set<string> {
+  return props.selectedDefectIds instanceof Set
+    ? new Set(props.selectedDefectIds)
+    : new Set(props.selectedDefectIds);
+}
+
+async function prepareGalleryDownload(): Promise<void> {
+  const source = props.dataSource;
+  if (!source || preparingDownload.value) return;
+  const startScope = source.scopeKey;
+  const startMode = mode.value;
+  const query = JSON.parse(
+    JSON.stringify({ ...(props.galleryQuery ?? {}), mode: startMode }),
+  ) as Omit<ScGalleryDataQuery, "offset" | "limit">;
+  preparingDownload.value = true;
+  downloadError.value = null;
+  try {
+    const allSamples = await loadAllGalleryItems(source, query, (ipc, offset) =>
+      samplesFromArrow(ipc, offset, startMode === "review"),
+    );
+    if (props.dataSource?.scopeKey !== startScope || mode.value !== startMode) {
+      throw new Error("Gallery changed while preparing the download; try again");
+    }
+    const selected = selectedRowKeys();
+    const samples = allSamples.filter((sample) => selected.has(sample.rowKey));
+    if (samples.length === 0) {
+      throw new Error("No gallery images match the selected download scope");
+    }
+    const payload: ScGalleryDownloadPayload = {
+      items: samples.map((sample) => ({
+        inspection_time: sample.inspectionTime ?? props.inspectionTime,
+        wafer_key: sample.waferKey ?? props.waferKey,
+        defect_id: String(sample.defectId),
+        patch_image_types: [...selectedPatchImageTypes.value],
+        review_image_ids: startMode === "review" ? reviewColumnsForSample(sample) : [],
+      })),
+      apply_color_mapping: applyDownloadColorMapping.value,
+      gray_mappings: {
+        defective_reference: {
+          enabled: defectiveReferenceMappingEnabled.value,
+          lut: defectiveReferenceMappingLUT.value,
+          zMin: defectiveReferenceMappingZMin.value,
+          zMax: defectiveReferenceMappingZMax.value,
+          bitDepth: defectiveReferenceMappingBitDepth.value,
+        },
+        difference: {
+          enabled: differenceMappingEnabled.value,
+          lut: differenceMappingLUT.value,
+          zMin: differenceMappingZMin.value,
+          zMax: differenceMappingZMax.value,
+          bitDepth: differenceMappingBitDepth.value,
+        },
+      },
+    };
+    submitScGalleryImageDownload(payload);
+    downloadOpen.value = false;
+  } catch (error) {
+    downloadError.value = error instanceof Error ? error.message : String(error);
+  } finally {
+    preparingDownload.value = false;
+  }
+}
 
 async function selectAllGallerySamples(): Promise<void> {
   const source = props.dataSource;
@@ -660,19 +790,18 @@ async function handleSampleClick(sample: BlinkSample, event: MouseEvent): Promis
   });
 }
 
-const previewImageSrc = ref<string | null>(null);
-const hiddenImageRef = ref<InstanceType<typeof NImage> | null>(null);
+const reviewPreviewOpen = ref(false);
+const reviewPreview = ref<{ src: string; defectId: number; imageId: number } | null>(null);
 
 function handleReviewPreview(sample: BlinkSample, imageId: number) {
   const inspectionTime = sample.inspectionTime ?? props.inspectionTime;
   const waferKey = sample.waferKey ?? props.waferKey;
-  previewImageSrc.value = scReviewUrl(inspectionTime, waferKey, sample.defectId, imageId);
-  void nextTick(() => {
-    const el = hiddenImageRef.value?.$el;
-    if (el instanceof HTMLElement) {
-      el.click();
-    }
-  });
+  reviewPreview.value = {
+    src: scReviewUrl(inspectionTime, waferKey, sample.defectId, imageId),
+    defectId: sample.defectId,
+    imageId,
+  };
+  reviewPreviewOpen.value = true;
 }
 
 function getSpriteUrl(sample: BlinkSample): string {
@@ -681,12 +810,28 @@ function getSpriteUrl(sample: BlinkSample): string {
   const params = new URLSearchParams();
   params.set("cell_size", String(cs));
   params.set("render_version", SC_SPRITE_RENDER_VERSION);
-  appendGrayMappingQuery(params, {
-    enabled: grayMappingEnabled.value,
-    lut: grayMappingLUT.value,
-    zMin: grayMappingZMin.value,
-    zMax: grayMappingZMax.value,
-  });
+  appendGrayMappingQuery(
+    params,
+    {
+      enabled: defectiveReferenceMappingEnabled.value,
+      lut: defectiveReferenceMappingLUT.value,
+      zMin: defectiveReferenceMappingZMin.value,
+      zMax: defectiveReferenceMappingZMax.value,
+      bitDepth: defectiveReferenceMappingBitDepth.value,
+    },
+    "defective_reference",
+  );
+  appendGrayMappingQuery(
+    params,
+    {
+      enabled: differenceMappingEnabled.value,
+      lut: differenceMappingLUT.value,
+      zMin: differenceMappingZMin.value,
+      zMax: differenceMappingZMax.value,
+      bitDepth: differenceMappingBitDepth.value,
+    },
+    "difference",
+  );
   for (const type of spriteImageTypesForSample(sample)) {
     params.append("image_types", type);
   }
@@ -723,12 +868,16 @@ function getSpriteStyle(sample: BlinkSample, colIndex: number) {
 }
 
 function blinkBaseSpriteIndex(): number {
-  const referenceIndex = patchImageTypesForSprite.value.indexOf("Reference");
+  const referenceIndex = patchImageTypesForSprite.value.findIndex(
+    (patch) => patch.image_type === "Reference",
+  );
   return referenceIndex >= 0 ? referenceIndex : 0;
 }
 
 function blinkOverlaySpriteIndex(): number {
-  const defectiveIndex = patchImageTypesForSprite.value.indexOf("Defective");
+  const defectiveIndex = patchImageTypesForSprite.value.findIndex(
+    (patch) => patch.image_type === "Defective",
+  );
   return defectiveIndex >= 0 ? defectiveIndex : 0;
 }
 
@@ -951,6 +1100,40 @@ interface PersistedSettings {
   grayMappingLUT?: string;
   grayMappingZMin?: number;
   grayMappingZMax?: number;
+  defectiveReferenceMappingEnabled?: boolean;
+  defectiveReferenceMappingLUT?: string;
+  defectiveReferenceMappingZMin?: number;
+  defectiveReferenceMappingZMax?: number;
+  differenceMappingEnabled?: boolean;
+  differenceMappingLUT?: string;
+  differenceMappingZMin?: number;
+  differenceMappingZMax?: number;
+  colorDockCollapsed?: boolean;
+}
+
+function loadPersistedMapping(
+  enabled: boolean | undefined,
+  lut: unknown,
+  zMin: number | undefined,
+  zMax: number | undefined,
+  enabledRef: typeof defectiveReferenceMappingEnabled,
+  lutRef: typeof defectiveReferenceMappingLUT,
+  zMinRef: typeof defectiveReferenceMappingZMin,
+  zMaxRef: typeof defectiveReferenceMappingZMax,
+): void {
+  if (typeof enabled === "boolean") enabledRef.value = enabled;
+  if (isGrayLUT(lut)) lutRef.value = lut;
+  const window = {
+    enabled: true,
+    lut: lutRef.value,
+    zMin: zMin ?? zMinRef.value,
+    zMax: zMax ?? zMaxRef.value,
+    bitDepth: DEFAULT_SC_GALLERY_TONE_MAPPING.bitDepth,
+  };
+  if (isValidGrayWindow(window)) {
+    zMinRef.value = window.zMin;
+    zMaxRef.value = window.zMax;
+  }
 }
 
 function loadSettings() {
@@ -972,22 +1155,100 @@ function loadSettings() {
     if (typeof saved.reviewImageSize === "number")
       reviewImageSize.value = normalizeImageSize(saved.reviewImageSize);
     if (typeof saved.patchImagesInput === "string") patchImagesInput.value = saved.patchImagesInput;
-    if (typeof saved.grayMappingEnabled === "boolean")
-      grayMappingEnabled.value = saved.grayMappingEnabled;
-    if (isGrayLUT(saved.grayMappingLUT)) grayMappingLUT.value = saved.grayMappingLUT;
-    const savedWindow = {
-      enabled: true,
-      lut: grayMappingLUT.value,
-      zMin: saved.grayMappingZMin ?? grayMappingZMin.value,
-      zMax: saved.grayMappingZMax ?? grayMappingZMax.value,
-    };
-    if (isValidGrayWindow(savedWindow)) {
-      grayMappingZMin.value = savedWindow.zMin;
-      grayMappingZMax.value = savedWindow.zMax;
-    }
-    syncPatchSwitchesFromInput();
+    loadPersistedMapping(
+      saved.defectiveReferenceMappingEnabled ?? saved.grayMappingEnabled,
+      saved.defectiveReferenceMappingLUT ?? saved.grayMappingLUT,
+      saved.defectiveReferenceMappingZMin ?? saved.grayMappingZMin,
+      saved.defectiveReferenceMappingZMax ?? saved.grayMappingZMax,
+      defectiveReferenceMappingEnabled,
+      defectiveReferenceMappingLUT,
+      defectiveReferenceMappingZMin,
+      defectiveReferenceMappingZMax,
+    );
+    loadPersistedMapping(
+      saved.differenceMappingEnabled ?? saved.grayMappingEnabled,
+      saved.differenceMappingLUT ?? saved.grayMappingLUT,
+      saved.differenceMappingZMin ?? saved.grayMappingZMin,
+      saved.differenceMappingZMax ?? saved.grayMappingZMax,
+      differenceMappingEnabled,
+      differenceMappingLUT,
+      differenceMappingZMin,
+      differenceMappingZMax,
+    );
+    if (typeof saved.colorDockCollapsed === "boolean")
+      colorDockCollapsed.value = saved.colorDockCollapsed;
   } catch {
     /* ignore */
+  }
+}
+
+let imageProfileController: AbortController | null = null;
+
+async function loadImageProfile(): Promise<void> {
+  imageProfileController?.abort();
+  const controller = new AbortController();
+  imageProfileController = controller;
+  imageProfileLoading.value = true;
+  imageProfileError.value = null;
+  const previousSelection = patchImagesInput.value
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  try {
+    const profile = await loadScInspectionImageProfile(
+      props.inspectionTime,
+      props.waferKey,
+      controller.signal,
+    );
+    if (controller.signal.aborted) return;
+    const descriptors = patchDescriptors(profile);
+    if (descriptors.length === 0) throw new Error("Inspection image profile contains no patches");
+    inspectionImagePatches.value = descriptors;
+    const selected = new Set<string>();
+    for (const previous of previousSelection) {
+      const exact = descriptors.find((patch) => patch.key.toLowerCase() === previous.toLowerCase());
+      if (exact) {
+        selected.add(exact.key);
+        continue;
+      }
+      const base = patchBaseType(previous);
+      for (const patch of descriptors) {
+        if (patch.image_type === base && patch.image_type !== "Mask") selected.add(patch.key);
+      }
+    }
+    patchImagesInput.value = descriptors
+      .filter((patch) => selected.has(patch.key))
+      .map((patch) => patch.key)
+      .join(",");
+
+    const defectiveReference = groupProfile(descriptors, "defective_reference");
+    if (defectiveReference) {
+      defectiveReferenceMappingBitDepth.value = defectiveReference.bitDepth;
+      if (
+        defectiveReferenceMappingZMin.value === DEFAULT_SC_GALLERY_TONE_MAPPING.zMin &&
+        defectiveReferenceMappingZMax.value === DEFAULT_SC_GALLERY_TONE_MAPPING.zMax
+      ) {
+        defectiveReferenceMappingZMin.value = defectiveReference.zMin;
+        defectiveReferenceMappingZMax.value = defectiveReference.zMax;
+      }
+    }
+    const difference = groupProfile(descriptors, "difference");
+    if (difference) {
+      differenceMappingBitDepth.value = difference.bitDepth;
+      if (
+        differenceMappingZMin.value === DEFAULT_SC_GALLERY_TONE_MAPPING.zMin &&
+        differenceMappingZMax.value === DEFAULT_SC_GALLERY_TONE_MAPPING.zMax
+      ) {
+        differenceMappingZMin.value = difference.zMin;
+        differenceMappingZMax.value = difference.zMax;
+      }
+    }
+  } catch (error) {
+    if (controller.signal.aborted) return;
+    imageProfileError.value =
+      error instanceof Error ? error.message : "Inspection image profile could not be loaded";
+  } finally {
+    if (imageProfileController === controller) imageProfileLoading.value = false;
   }
 }
 
@@ -1000,10 +1261,15 @@ function saveSettings() {
     patchImageSize: patchImageSize.value,
     reviewImageSize: reviewImageSize.value,
     patchImagesInput: patchImagesInput.value,
-    grayMappingEnabled: grayMappingEnabled.value,
-    grayMappingLUT: grayMappingLUT.value,
-    grayMappingZMin: grayMappingZMin.value,
-    grayMappingZMax: grayMappingZMax.value,
+    defectiveReferenceMappingEnabled: defectiveReferenceMappingEnabled.value,
+    defectiveReferenceMappingLUT: defectiveReferenceMappingLUT.value,
+    defectiveReferenceMappingZMin: defectiveReferenceMappingZMin.value,
+    defectiveReferenceMappingZMax: defectiveReferenceMappingZMax.value,
+    differenceMappingEnabled: differenceMappingEnabled.value,
+    differenceMappingLUT: differenceMappingLUT.value,
+    differenceMappingZMin: differenceMappingZMin.value,
+    differenceMappingZMax: differenceMappingZMax.value,
+    colorDockCollapsed: colorDockCollapsed.value,
   };
   try {
     localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(data));
@@ -1014,19 +1280,39 @@ function saveSettings() {
 
 onMounted(() => {
   loadSettings();
+  void loadImageProfile();
   window.addEventListener("resize", syncScrollMetrics);
   void nextTick(syncScrollMetrics);
 });
 
 onBeforeUnmount(() => {
+  imageProfileController?.abort();
   resizeObserver?.disconnect();
   document.removeEventListener("mousemove", handleScrollbarDrag);
   window.removeEventListener("resize", syncScrollMetrics);
 });
 
-watch(settingsOpen, (open) => {
-  if (!open) saveSettings();
-});
+watch(
+  [
+    blinkEnabled,
+    showDefectIdLabel,
+    patchPerRow,
+    reviewPerRow,
+    patchImageSize,
+    reviewImageSize,
+    patchImagesInput,
+    colorDockCollapsed,
+    defectiveReferenceMappingEnabled,
+    defectiveReferenceMappingLUT,
+    defectiveReferenceMappingZMin,
+    defectiveReferenceMappingZMax,
+    differenceMappingEnabled,
+    differenceMappingLUT,
+    differenceMappingZMin,
+    differenceMappingZMax,
+  ],
+  saveSettings,
+);
 
 defineExpose({ scrollRef });
 </script>
@@ -1052,31 +1338,64 @@ defineExpose({ scrollRef });
         </n-radio-group>
 
         <n-text v-if="currentLoading" depth="3" class="sbt-review-status"> Loading... </n-text>
-        <n-button size="tiny" quaternary @click="settingsOpen = true"> Settings </n-button>
+        <n-tooltip v-if="selectedCount > 0" trigger="hover">
+          <template #trigger>
+            <n-button
+              size="tiny"
+              quaternary
+              circle
+              data-testid="gallery-download-button"
+              aria-label="Download selected images"
+              @click="openDownload"
+            >
+              <template #icon>
+                <n-icon><DownloadOutline /></n-icon>
+              </template>
+            </n-button>
+          </template>
+          Download selected images
+        </n-tooltip>
       </div>
       <div class="sbt-toolbar-right">
         <n-text v-if="selectAllError" type="error" class="sbt-selection-error" aria-live="polite">
           {{ selectAllError }}
         </n-text>
-        <n-button
-          v-if="selectedCount > 0"
-          size="tiny"
-          secondary
-          type="primary"
-          :disabled="selectingAll"
-          @click="clearGallerySelection"
-        >
+        <n-tooltip v-if="selectedCount > 0" trigger="hover">
+          <template #trigger>
+            <n-button
+              size="tiny"
+              quaternary
+              circle
+              type="primary"
+              :aria-label="`Clear selection (${selectedCount.toLocaleString()})`"
+              :disabled="selectingAll"
+              @click="clearGallerySelection"
+            >
+              <template #icon>
+                <n-icon><CloseCircleOutline /></n-icon>
+              </template>
+            </n-button>
+          </template>
           Clear selection ({{ selectedCount.toLocaleString() }})
-        </n-button>
-        <n-button
-          v-if="totalSamples > 0 && selectedCount < totalSamples"
-          size="tiny"
-          :loading="selectingAll"
-          :disabled="currentLoading"
-          @click="selectAllGallerySamples"
-        >
+        </n-tooltip>
+        <n-tooltip v-if="totalSamples > 0 && selectedCount < totalSamples" trigger="hover">
+          <template #trigger>
+            <n-button
+              size="tiny"
+              quaternary
+              circle
+              :loading="selectingAll"
+              :aria-label="`Select all (${totalSamples.toLocaleString()})`"
+              :disabled="currentLoading"
+              @click="selectAllGallerySamples"
+            >
+              <template #icon>
+                <n-icon><CheckboxOutline /></n-icon>
+              </template>
+            </n-button>
+          </template>
           Select all ({{ totalSamples.toLocaleString() }})
-        </n-button>
+        </n-tooltip>
         <n-text class="sbt-row-count" depth="3">
           {{ totalSamples.toLocaleString() }} samples
         </n-text>
@@ -1084,314 +1403,359 @@ defineExpose({ scrollRef });
     </div>
 
     <n-modal
-      v-model:show="settingsOpen"
+      v-model:show="reviewPreviewOpen"
       preset="card"
-      title="Gallery Settings"
-      role="dialog"
-      aria-label="Gallery Settings"
-      data-testid="gallery-settings-modal"
-      class="sbt-settings-modal"
-      :style="{ width: '440px' }"
+      :title="
+        reviewPreview
+          ? `Defect ${reviewPreview.defectId} · Review ${reviewPreview.imageId}`
+          : 'Review image'
+      "
+      class="sbt-review-preview-modal"
+      :style="{ width: 'min(92vw, calc(88vh + 48px))' }"
+      aria-label="Review image preview"
     >
-      <n-tabs type="line" animated>
-        <n-tab-pane name="layout" tab="Layout">
-          <div class="sbt-settings">
-            <div class="sbt-setting-row">
-              <n-text class="sbt-control-label">Per Row</n-text>
-              <div class="sbt-per-row">
-                <n-button
-                  size="tiny"
-                  quaternary
-                  class="sbt-per-row-button"
-                  aria-label="Decrease samples per row"
-                  :disabled="samplesPerRow <= 1"
-                  @click="adjustSamplesPerRow(-1)"
-                >
-                  &minus;
-                </n-button>
-                <n-text class="sbt-per-row-value" aria-live="polite">
-                  {{ samplesPerRow }}
-                </n-text>
-                <n-button
-                  size="tiny"
-                  quaternary
-                  class="sbt-per-row-button"
-                  aria-label="Increase samples per row"
-                  :disabled="samplesPerRow >= MAX_SAMPLES_PER_ROW"
-                  @click="adjustSamplesPerRow(1)"
-                >
-                  +
-                </n-button>
-              </div>
-            </div>
-
-            <div class="sbt-setting-row">
-              <n-text class="sbt-control-label">Size</n-text>
-              <n-select
-                v-model:value="imageSize"
-                size="small"
-                class="sbt-size-select"
-                :options="IMAGE_SIZE_SELECT_OPTIONS"
-                :consistent-menu-width="false"
-              />
-            </div>
-
-            <div class="sbt-setting-block">
-              <n-text class="sbt-control-label">Patch Image</n-text>
-              <div class="sbt-setting-row">
-                <n-text class="sbt-control-label">Blink</n-text>
-                <n-switch :value="blinkEnabled" size="small" @update:value="toggleBlink" />
-              </div>
-              <div class="sbt-setting-row">
-                <n-text class="sbt-control-label">ID Label</n-text>
-                <n-switch v-model:value="showDefectIdLabel" size="small" />
-              </div>
-              <div class="sbt-setting-row">
-                <n-text class="sbt-control-label">Defective</n-text>
-                <n-switch
-                  :value="patchDefectiveEnabled"
-                  size="small"
-                  @update:value="
-                    patchDefectiveEnabled = $event;
-                    rebuildPatchImagesInput();
-                  "
-                />
-              </div>
-              <div class="sbt-setting-row">
-                <n-text class="sbt-control-label">Reference</n-text>
-                <n-switch
-                  :value="patchReferenceEnabled"
-                  size="small"
-                  @update:value="
-                    patchReferenceEnabled = $event;
-                    rebuildPatchImagesInput();
-                  "
-                />
-              </div>
-              <div class="sbt-setting-row">
-                <n-text class="sbt-control-label">Difference</n-text>
-                <n-switch
-                  :value="patchDifferenceEnabled"
-                  size="small"
-                  @update:value="
-                    patchDifferenceEnabled = $event;
-                    rebuildPatchImagesInput();
-                  "
-                />
-              </div>
-            </div>
-
-            <div class="sbt-setting-block">
-              <n-text class="sbt-control-label">Review Images</n-text>
-              <n-input
-                v-model:value="reviewImagesInput"
-                size="small"
-                placeholder="Inferred from review images"
-                @update:value="reviewImagesInputEdited = true"
-              />
-            </div>
-          </div>
-        </n-tab-pane>
-        <n-tab-pane name="color" tab="Color">
-          <sc-gallery-color-settings
-            v-model:enabled="grayMappingEnabled"
-            v-model:lut="grayMappingLUT"
-            v-model:z-min="grayMappingZMin"
-            v-model:z-max="grayMappingZMax"
-          />
-        </n-tab-pane>
-      </n-tabs>
+      <div class="sbt-review-preview-stage" data-testid="review-image-preview-stage">
+        <img
+          v-if="reviewPreview"
+          :src="reviewPreview.src"
+          :alt="`Review image ${reviewPreview.imageId} for defect ${reviewPreview.defectId}`"
+          class="sbt-review-preview-original"
+        />
+      </div>
     </n-modal>
 
-    <NImage
-      ref="hiddenImageRef"
-      :src="previewImageSrc || ''"
-      :style="{ position: 'fixed', top: '-9999px', left: '-9999px', width: '1px', height: '1px' }"
-    />
+    <n-modal
+      v-model:show="downloadOpen"
+      preset="card"
+      title="Download selected images"
+      class="sbt-download-modal"
+      :style="{ width: '440px' }"
+      aria-label="Download selected images"
+    >
+      <div class="sbt-download-options">
+        <n-text>Selected samples: {{ selectedCount.toLocaleString() }}</n-text>
+        <n-checkbox v-model:checked="applyDownloadColorMapping">
+          Apply current color mapping
+        </n-checkbox>
+        <n-text depth="3" class="sbt-download-note">
+          Original bytes and dimensions are preserved unless color mapping is applied.
+        </n-text>
+        <n-text v-if="downloadError" type="error" aria-live="polite">{{ downloadError }}</n-text>
+        <div class="sbt-download-actions">
+          <n-button @click="downloadOpen = false">Cancel</n-button>
+          <n-button type="primary" :loading="preparingDownload" @click="prepareGalleryDownload">
+            Download ZIP
+          </n-button>
+        </div>
+      </div>
+    </n-modal>
 
-    <!-- Empty state -->
-    <div v-if="totalSamples === 0" class="sbt-empty">
-      <n-text depth="3">
-        {{ mode === "review" ? "No samples with review images" : "No rows to display" }}
-      </n-text>
-    </div>
-
-    <!-- Scroll body -->
-    <div v-else class="sbt-scroll-shell" data-testid="blink-table-scrollbar">
-      <div ref="scrollRef" class="sbt-scroll" @scroll="handleScroll" @mousedown="onMouseDown">
-        <div
-          class="sbt-vrow"
-          :style="{ height: virtualizer.getTotalSize() + 'px', position: 'relative' }"
-        >
-          <div class="sbt-rubber-band" :style="rubberBandStyle"></div>
+    <!-- Gallery body -->
+    <div class="sbt-gallery-body">
+      <div v-if="totalSamples === 0" class="sbt-empty">
+        <n-text depth="3">
+          {{ mode === "review" ? "No samples with review images" : "No rows to display" }}
+        </n-text>
+      </div>
+      <div v-else class="sbt-scroll-shell" data-testid="blink-table-scrollbar">
+        <div ref="scrollRef" class="sbt-scroll" @scroll="handleScroll" @mousedown="onMouseDown">
           <div
-            v-for="virtualRow in virtualItems"
-            :key="virtualRow.index"
-            class="sbt-row-wrapper"
-            :class="{ 'sbt-vrow--odd': virtualRow.index % 2 === 1 }"
-            :style="{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              width: '100%',
-              height: virtualRowHeightStr,
-              transform: `translateY(${virtualRow.start}px)`,
-            }"
+            class="sbt-vrow"
+            :style="{ height: virtualizer.getTotalSize() + 'px', position: 'relative' }"
           >
-            <div class="sbt-row" :style="{ minWidth: rowMinWidthStr }">
-              <div
-                v-for="sample in samplesForVirtualRow(virtualRow.index)"
-                :key="sample.rowKey"
-                class="sbt-sample-block"
-                :class="{ 'sbt-sample-block--selected': isSelected(sample.rowKey) }"
-                :data-defect-id="sample.defectId"
-                :style="{ width: sampleBlockWidthStr(sample) }"
-                @click.stop="handleSampleClick(sample, $event)"
-              >
-                <!-- Mini Header -->
-                <div class="sbt-sample-mini-header">
-                  <div v-if="blinkEnabled" class="sbt-sample-header-label">Blink</div>
-                  <div
-                    v-for="col in basePatchColumns"
-                    :key="'base_header_' + col.spriteIndex"
-                    class="sbt-sample-header-label"
-                  >
-                    {{ col.label }}
-                  </div>
-                  <template v-if="mode === 'review'">
+            <div class="sbt-rubber-band" :style="rubberBandStyle"></div>
+            <div
+              v-for="virtualRow in virtualItems"
+              :key="virtualRow.index"
+              class="sbt-row-wrapper"
+              :class="{ 'sbt-vrow--odd': virtualRow.index % 2 === 1 }"
+              :style="{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: virtualRowHeightStr,
+                transform: `translateY(${virtualRow.start}px)`,
+              }"
+            >
+              <div class="sbt-row" :style="{ minWidth: rowMinWidthStr }">
+                <div
+                  v-for="sample in samplesForVirtualRow(virtualRow.index)"
+                  :key="sample.rowKey"
+                  class="sbt-sample-block"
+                  :class="{ 'sbt-sample-block--selected': isSelected(sample.rowKey) }"
+                  :data-defect-id="sample.defectId"
+                  :style="{ width: sampleBlockWidthStr(sample) }"
+                  @click.stop="handleSampleClick(sample, $event)"
+                >
+                  <!-- Mini Header -->
+                  <div class="sbt-sample-mini-header">
+                    <div v-if="blinkEnabled" class="sbt-sample-header-label">Blink</div>
                     <div
-                      v-for="imageId in reviewColumnsForSample(sample)"
-                      :key="'rev_header_' + imageId"
+                      v-for="col in basePatchColumns"
+                      :key="'base_header_' + col.spriteIndex"
                       class="sbt-sample-header-label"
                     >
-                      Rev {{ imageId }}
+                      {{ col.label }}
                     </div>
-                  </template>
-                </div>
-
-                <!-- Images Row -->
-                <div class="sbt-sample-images-row" :style="{ height: imageCellHeightPxStr }">
-                  <!-- Blink Cell -->
-                  <div v-if="blinkEnabled" class="sbt-img-cell">
-                    <template v-if="shouldRenderSprite(sample)">
-                      <!-- Base reference layer -->
+                    <template v-if="mode === 'review'">
                       <div
-                        class="sbt-sprite-layer"
-                        :style="getSpriteStyle(sample, blinkBaseSpriteIndex())"
-                      ></div>
-                      <!-- Defective overlay layer -->
-                      <div
-                        class="sbt-sprite-layer sbt-overlay"
-                        :class="{ 'is-active': blinkPhase === 'B' }"
-                        :style="getSpriteStyle(sample, blinkOverlaySpriteIndex())"
-                      ></div>
+                        v-for="imageId in reviewColumnsForSample(sample)"
+                        :key="'rev_header_' + imageId"
+                        class="sbt-sample-header-label"
+                      >
+                        Rev {{ imageId }}
+                      </div>
                     </template>
-                    <div v-else class="sbt-img-placeholder"></div>
-                    <div v-if="showDefectIdLabel" class="sbt-defect-id">{{ sample.defectId }}</div>
                   </div>
 
-                  <!-- Base patch cells -->
-                  <div
-                    v-for="(col, colIdx) in basePatchColumns"
-                    :key="'base_' + col.spriteIndex"
-                    class="sbt-img-cell"
-                  >
-                    <div
-                      v-if="shouldRenderSprite(sample)"
-                      class="sbt-sprite-layer"
-                      :style="getSpriteStyle(sample, col.spriteIndex)"
-                    ></div>
-                    <div v-else class="sbt-img-placeholder"></div>
-                    <div
-                      v-if="showDefectIdLabel && !blinkEnabled && colIdx === 0"
-                      class="sbt-defect-id"
-                    >
-                      {{ sample.defectId }}
+                  <!-- Images Row -->
+                  <div class="sbt-sample-images-row" :style="{ height: imageCellHeightPxStr }">
+                    <!-- Blink Cell -->
+                    <div v-if="blinkEnabled" class="sbt-img-cell">
+                      <template v-if="shouldRenderSprite(sample)">
+                        <!-- Base reference layer -->
+                        <div
+                          class="sbt-sprite-layer"
+                          :style="getSpriteStyle(sample, blinkBaseSpriteIndex())"
+                        ></div>
+                        <!-- Defective overlay layer -->
+                        <div
+                          class="sbt-sprite-layer sbt-overlay"
+                          :class="{ 'is-active': blinkPhase === 'B' }"
+                          :style="getSpriteStyle(sample, blinkOverlaySpriteIndex())"
+                        ></div>
+                      </template>
+                      <div v-if="showDefectIdLabel" class="sbt-defect-id">
+                        {{ sample.defectId }}
+                      </div>
                     </div>
-                  </div>
 
-                  <!-- Review Cells -->
-                  <template v-if="mode === 'review'">
+                    <!-- Base patch cells -->
                     <div
-                      v-for="imageId in reviewColumnsForSample(sample)"
-                      :key="'rev_' + imageId"
-                      class="sbt-img-cell sbt-img-cell--preview"
-                      @click.stop="handleReviewPreview(sample, imageId)"
+                      v-for="(col, colIdx) in basePatchColumns"
+                      :key="'base_' + col.spriteIndex"
+                      class="sbt-img-cell"
                     >
                       <div
                         v-if="shouldRenderSprite(sample)"
                         class="sbt-sprite-layer"
-                        :style="getSpriteStyle(sample, reviewSpriteIndex(sample, imageId))"
+                        :style="getSpriteStyle(sample, col.spriteIndex)"
                       ></div>
                       <div v-else class="sbt-img-placeholder"></div>
+                      <div
+                        v-if="showDefectIdLabel && !blinkEnabled && colIdx === 0"
+                        class="sbt-defect-id"
+                      >
+                        {{ sample.defectId }}
+                      </div>
                     </div>
-                  </template>
-                </div>
 
-                <!-- Prediction / Annotation / Draft Badges -->
-                <div v-if="showPredictionBadges" class="sbt-prediction-row">
-                  <n-tag
-                    v-if="annotationDrafts[sample.rowKey]"
-                    type="warning"
-                    size="small"
-                    class="sbt-prediction-badge"
-                    title="Draft (unsubmitted)"
-                  >
-                    D: {{ annotationDrafts[sample.rowKey] }}
-                  </n-tag>
-                  <n-tag
-                    v-if="sample.annotationLabel"
-                    type="success"
-                    size="small"
-                    class="sbt-prediction-badge"
-                    title="Annotation (saved)"
-                  >
-                    A: {{ sample.annotationLabel }}
-                  </n-tag>
-                  <n-tag
-                    v-if="sample.predictionLabel"
-                    type="info"
-                    size="small"
-                    class="sbt-prediction-badge"
-                    title="Latest prediction"
-                  >
-                    P: {{ sample.predictionLabel
-                    }}{{
-                      sample.predictionConfidence != null
-                        ? ` (${(sample.predictionConfidence * 100).toFixed(0)}%)`
-                        : ""
-                    }}
-                  </n-tag>
-                  <div v-else></div>
+                    <!-- Review Cells -->
+                    <template v-if="mode === 'review'">
+                      <button
+                        v-for="imageId in reviewColumnsForSample(sample)"
+                        :key="'rev_' + imageId"
+                        type="button"
+                        class="sbt-img-cell sbt-img-cell--preview"
+                        :aria-label="`Open review image ${imageId} for defect ${sample.defectId}`"
+                        @click.stop="handleReviewPreview(sample, imageId)"
+                      >
+                        <div
+                          v-if="shouldRenderSprite(sample)"
+                          class="sbt-sprite-layer"
+                          :style="getSpriteStyle(sample, reviewSpriteIndex(sample, imageId))"
+                        ></div>
+                        <div v-else class="sbt-img-placeholder"></div>
+                      </button>
+                    </template>
+                  </div>
+
+                  <!-- Prediction / Annotation / Draft Badges -->
+                  <div v-if="showPredictionBadges" class="sbt-prediction-row">
+                    <n-tag
+                      v-if="annotationDrafts[sample.rowKey]"
+                      type="warning"
+                      size="small"
+                      class="sbt-prediction-badge"
+                      title="Draft (unsubmitted)"
+                    >
+                      D: {{ annotationDrafts[sample.rowKey] }}
+                    </n-tag>
+                    <n-tag
+                      v-if="sample.annotationLabel"
+                      type="success"
+                      size="small"
+                      class="sbt-prediction-badge"
+                      title="Annotation (saved)"
+                    >
+                      A: {{ sample.annotationLabel }}
+                    </n-tag>
+                    <n-tag
+                      v-if="sample.predictionLabel"
+                      type="info"
+                      size="small"
+                      class="sbt-prediction-badge"
+                      title="Latest prediction"
+                    >
+                      P: {{ sample.predictionLabel
+                      }}{{
+                        sample.predictionConfidence != null
+                          ? ` (${(sample.predictionConfidence * 100).toFixed(0)}%)`
+                          : ""
+                      }}
+                    </n-tag>
+                    <div v-else></div>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <div
-        v-if="showYScrollbar"
-        class="sbt-scrollbar-rail sbt-scrollbar-rail--y"
-        @mousedown.prevent="jumpScrollbar('y', $event)"
-      >
         <div
-          class="sbt-scrollbar-thumb"
-          :style="yThumbStyle"
-          @mousedown.stop.prevent="beginScrollbarDrag('y', $event)"
-        ></div>
-      </div>
-      <div
-        v-if="showXScrollbar"
-        class="sbt-scrollbar-rail sbt-scrollbar-rail--x"
-        @mousedown.prevent="jumpScrollbar('x', $event)"
-      >
+          v-if="showYScrollbar"
+          class="sbt-scrollbar-rail sbt-scrollbar-rail--y"
+          @mousedown.prevent="jumpScrollbar('y', $event)"
+        >
+          <div
+            class="sbt-scrollbar-thumb"
+            :style="yThumbStyle"
+            @mousedown.stop.prevent="beginScrollbarDrag('y', $event)"
+          ></div>
+        </div>
         <div
-          class="sbt-scrollbar-thumb"
-          :style="xThumbStyle"
-          @mousedown.stop.prevent="beginScrollbarDrag('x', $event)"
-        ></div>
+          v-if="showXScrollbar"
+          class="sbt-scrollbar-rail sbt-scrollbar-rail--x"
+          @mousedown.prevent="jumpScrollbar('x', $event)"
+        >
+          <div
+            class="sbt-scrollbar-thumb"
+            :style="xThumbStyle"
+            @mousedown.stop.prevent="beginScrollbarDrag('x', $event)"
+          ></div>
+        </div>
       </div>
+      <aside
+        class="sbt-color-dock"
+        :class="{ 'sbt-color-dock--collapsed': colorDockCollapsed }"
+        data-testid="gallery-color-dock"
+      >
+        <n-button
+          quaternary
+          size="tiny"
+          class="sbt-color-dock-toggle"
+          :aria-label="colorDockCollapsed ? 'Expand gallery settings' : 'Collapse gallery settings'"
+          @click="colorDockCollapsed = !colorDockCollapsed"
+        >
+          {{ colorDockCollapsed ? "Gallery" : "›" }}
+        </n-button>
+        <div v-if="!colorDockCollapsed" class="sbt-color-dock-content">
+          <n-text class="sbt-color-dock-title">Display</n-text>
+          <n-tabs v-model:value="settingsPanel" type="line" size="small">
+            <n-tab-pane name="gallery" tab="Gallery">
+              <div class="sbt-settings sbt-settings--dock">
+                <n-text v-if="imageProfileLoading" depth="3">Loading image profile…</n-text>
+                <n-text v-if="imageProfileError" type="error">{{ imageProfileError }}</n-text>
+                <div class="sbt-setting-row">
+                  <n-text class="sbt-control-label">Per Row</n-text>
+                  <div class="sbt-per-row">
+                    <n-button
+                      size="tiny"
+                      quaternary
+                      class="sbt-per-row-button"
+                      aria-label="Decrease samples per row"
+                      :disabled="samplesPerRow <= 1"
+                      @click="adjustSamplesPerRow(-1)"
+                    >
+                      &minus;
+                    </n-button>
+                    <n-text class="sbt-per-row-value">{{ samplesPerRow }}</n-text>
+                    <n-button
+                      size="tiny"
+                      quaternary
+                      class="sbt-per-row-button"
+                      aria-label="Increase samples per row"
+                      :disabled="samplesPerRow >= MAX_SAMPLES_PER_ROW"
+                      @click="adjustSamplesPerRow(1)"
+                    >
+                      +
+                    </n-button>
+                  </div>
+                </div>
+                <div class="sbt-setting-row">
+                  <n-text class="sbt-control-label">Size</n-text>
+                  <n-select
+                    v-model:value="imageSize"
+                    size="small"
+                    class="sbt-size-select"
+                    :options="IMAGE_SIZE_SELECT_OPTIONS"
+                    :consistent-menu-width="false"
+                  />
+                </div>
+                <div class="sbt-setting-row">
+                  <n-text class="sbt-control-label">Blink</n-text>
+                  <n-switch :value="blinkEnabled" size="small" @update:value="toggleBlink" />
+                </div>
+                <div class="sbt-setting-row">
+                  <n-text class="sbt-control-label">ID Label</n-text>
+                  <n-switch v-model:value="showDefectIdLabel" size="small" />
+                </div>
+                <div
+                  v-for="patch in inspectionImagePatches"
+                  :key="patch.key"
+                  class="sbt-setting-row"
+                >
+                  <div class="sbt-patch-setting-label">
+                    <n-text class="sbt-control-label">{{ patch.label }}</n-text>
+                    <n-text depth="3">{{ patch.bit_depth }}-bit</n-text>
+                  </div>
+                  <n-switch
+                    :value="isPatchEnabled(patch.key)"
+                    size="small"
+                    @update:value="setPatchEnabled(patch.key, $event)"
+                  />
+                </div>
+                <div v-if="mode === 'review'" class="sbt-setting-block">
+                  <n-text class="sbt-control-label">Review Images</n-text>
+                  <n-input
+                    v-model:value="reviewImagesInput"
+                    size="small"
+                    placeholder="Inferred from review images"
+                    @update:value="reviewImagesInputEdited = true"
+                  />
+                </div>
+              </div>
+            </n-tab-pane>
+            <n-tab-pane name="colors" tab="Colors">
+              <n-tabs v-model:value="colorSettingsGroup" type="segment" size="small">
+                <n-tab-pane name="defective-reference" tab="D / R">
+                  <sc-gallery-color-settings
+                    compact
+                    v-model:enabled="defectiveReferenceMappingEnabled"
+                    v-model:lut="defectiveReferenceMappingLUT"
+                    v-model:z-min="defectiveReferenceMappingZMin"
+                    v-model:z-max="defectiveReferenceMappingZMax"
+                    :bit-depth="defectiveReferenceMappingBitDepth"
+                    :patches="defectiveReferenceProfile?.patches"
+                  />
+                </n-tab-pane>
+                <n-tab-pane name="difference" tab="Difference">
+                  <sc-gallery-color-settings
+                    compact
+                    v-model:enabled="differenceMappingEnabled"
+                    v-model:lut="differenceMappingLUT"
+                    v-model:z-min="differenceMappingZMin"
+                    v-model:z-max="differenceMappingZMax"
+                    :bit-depth="differenceMappingBitDepth"
+                    :patches="differenceProfile?.patches"
+                  />
+                </n-tab-pane>
+              </n-tabs>
+            </n-tab-pane>
+          </n-tabs>
+        </div>
+      </aside>
     </div>
   </div>
 </template>
@@ -1517,13 +1881,100 @@ defineExpose({ scrollRef });
   gap: 8px;
 }
 
+.sbt-download-options {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.sbt-download-note {
+  font-size: 12px;
+}
+
+.sbt-download-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.sbt-review-preview-stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: min(100%, 80vh);
+  aspect-ratio: 1 / 1;
+  margin: 0 auto;
+  overflow: hidden;
+  background: #0b0b0f;
+}
+
+.sbt-review-preview-original {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
 /* Scroll body */
+.sbt-gallery-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
 .sbt-scroll-shell {
   flex: 1;
   min-height: 0;
   position: relative;
   user-select: none;
   overflow: hidden;
+}
+
+.sbt-color-dock {
+  position: relative;
+  width: 248px;
+  flex: 0 0 248px;
+  min-height: 0;
+  padding: 10px;
+  overflow: auto;
+  border-left: 1px solid var(--cv-border, rgba(255, 255, 255, 0.12));
+  background: var(--cv-card-bg, #1e1e2e);
+  box-sizing: border-box;
+}
+
+.sbt-color-dock--collapsed {
+  width: 34px;
+  flex-basis: 34px;
+  padding: 4px;
+}
+
+.sbt-color-dock-toggle {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 2;
+}
+
+.sbt-color-dock--collapsed .sbt-color-dock-toggle {
+  position: static;
+  width: 26px;
+  height: auto;
+  padding: 6px 2px;
+  writing-mode: vertical-rl;
+}
+
+.sbt-color-dock-content {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 3px;
+}
+
+.sbt-color-dock-title {
+  padding-right: 28px;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .sbt-scroll {
@@ -1653,7 +2104,14 @@ defineExpose({ scrollRef });
 }
 
 .sbt-img-cell--preview {
+  padding: 0;
+  border: 0;
   cursor: zoom-in;
+}
+
+.sbt-img-cell--preview:focus-visible {
+  outline: 2px solid var(--cv-primary, #4098fc);
+  outline-offset: 2px;
 }
 
 .sbt-review-image {
@@ -1689,6 +2147,7 @@ defineExpose({ scrollRef });
 /* Empty state */
 .sbt-empty {
   display: flex;
+  flex: 1;
   align-items: center;
   justify-content: center;
   height: 100%;

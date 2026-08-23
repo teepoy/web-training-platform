@@ -5,10 +5,13 @@ import (
 	"fmt"
 
 	"image-parser/internal/display"
+	"image-parser/internal/equipment"
 )
 
 type scRoutes struct {
-	images display.Reader
+	images    display.Reader
+	downloads *GalleryDownloadService
+	profiles  equipment.ImageProfiler
 }
 
 type SCImageRequest struct {
@@ -19,11 +22,11 @@ type SCImageRequest struct {
 }
 
 type SCSpriteRequest struct {
-	Inspection  display.InspectionKey
-	DefectID    string
-	CellSize    int
-	Images      []SCSpriteImage
-	GrayMapping *GrayMapping
+	Inspection   display.InspectionKey
+	DefectID     string
+	CellSize     int
+	Images       []SCSpriteImage
+	GrayMappings PatchGrayMappings
 }
 
 type SCSpriteImage struct {
@@ -41,6 +44,36 @@ func NewSCRoutes(images display.Reader) *scRoutes {
 	return &scRoutes{images: images}
 }
 
+func NewSCRoutesWithGalleryDownloads(images display.Reader, downloads *GalleryDownloadService) *scRoutes {
+	return &scRoutes{images: images, downloads: downloads}
+}
+
+func NewSCRoutesWithGalleryDownloadsAndProfiles(
+	images display.Reader,
+	downloads *GalleryDownloadService,
+	profiles equipment.ImageProfiler,
+) *scRoutes {
+	return &scRoutes{images: images, downloads: downloads, profiles: profiles}
+}
+
+func (s *scRoutes) GetSCInspectionImageProfile(
+	ctx context.Context,
+	inspectionTime string,
+	waferKey int32,
+) (equipment.InspectionImageProfile, error) {
+	if s.profiles == nil {
+		return equipment.InspectionImageProfile{}, fmt.Errorf("inspection image profiles are not configured")
+	}
+	return s.profiles.Profile(ctx, inspectionTime, waferKey)
+}
+
+func (s *scRoutes) CreateSCGalleryDownload(ctx context.Context, req GalleryDownloadRequest) (GalleryDownloadResult, error) {
+	if s.downloads == nil {
+		return GalleryDownloadResult{}, fmt.Errorf("gallery image downloads are not configured")
+	}
+	return s.downloads.Create(ctx, req)
+}
+
 func (s *scRoutes) GetSCImage(ctx context.Context, req SCImageRequest) (ImageResponse, error) {
 	imageType := normalizeImageType(req.ImageType)
 	key := display.ImageKey{
@@ -49,18 +82,16 @@ func (s *scRoutes) GetSCImage(ctx context.Context, req SCImageRequest) (ImageRes
 		DefectID:      req.DefectID,
 		ImageType:     imageType,
 	}
-	contentType := "image/png"
 	if imageType == "review" {
 		key.Kind = display.ImageKindReview
 		key.ReviewImageID = req.ReviewImageID
-		contentType = "image/jpeg"
 	}
 
 	result := firstImageResult(s.images.GetImageBytes(ctx, []display.ImageKey{key}))
 	if result.Err != nil {
 		return ImageResponse{}, result.Err
 	}
-	return ImageResponse{Data: result.Data, ContentType: contentType}, nil
+	return ImageResponse{Data: result.Data, ContentType: result.ContentType}, nil
 }
 
 func (s *scRoutes) GetSCSprite(ctx context.Context, req SCSpriteRequest) (ImageResponse, error) {
@@ -68,7 +99,7 @@ func (s *scRoutes) GetSCSprite(ctx context.Context, req SCSpriteRequest) (ImageR
 	for _, image := range req.Images {
 		switch image.Kind {
 		case display.ImageKindPatch:
-			resized, err := patchSpriteCell(ctx, s.images, req.Inspection, req.DefectID, image.ImageType, req.CellSize, req.GrayMapping)
+			resized, err := patchSpriteCell(ctx, s.images, req.Inspection, req.DefectID, image.ImageType, req.CellSize, req.GrayMappings.ForImageType(image.ImageType))
 			if err != nil {
 				return ImageResponse{}, err
 			}

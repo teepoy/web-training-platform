@@ -23,13 +23,7 @@ PATCH_SIZE = 32
 DEFECTS_PER_ZIP = 500
 
 PATCH_BUCKET = "sc-patch-images"
-REVIEW_BUCKET = "sc-review-images"
-PATCH_IMAGE_TYPES = (
-    ("PatchReference", 72),
-    ("PatchDefective", 128),
-    ("PatchDifference", 196),
-)
-
+REVIEW_BUCKET = "wafer-review-images"
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 INSPECTION_DB_URL = f"sqlite:///{os.path.join(DATA_DIR, 'wafer_inspection.db')}"
 ZIPS_DB_URL = f"sqlite:///{os.path.join(DATA_DIR, 'inspection_zips.db')}"
@@ -164,9 +158,7 @@ def _png_chunk(tag: bytes, data: bytes) -> bytes:
     )
 
 
-def _generate_patch_png(
-    defect_id: int, image_bias: int, side: int = PATCH_SIZE
-) -> bytes:
+def _generate_rgb_png(defect_id: int, image_bias: int, side: int = PATCH_SIZE) -> bytes:
     """Generate a tiny deterministic RGB PNG without external dependencies."""
     value = (defect_id * 17 + image_bias) % 180 + 40
     accent = (defect_id * 31 + image_bias) % side
@@ -185,6 +177,43 @@ def _generate_patch_png(
     return png
 
 
+def _generate_native_gray_png(
+    defect_id: int,
+    image_bias: int,
+    bit_depth: int,
+    side: int = PATCH_SIZE,
+) -> bytes:
+    """Generate deterministic Gray8 or 12/16-bit-in-Gray16 PNG source data."""
+    if bit_depth not in (8, 12, 16):
+        raise ValueError("seed patch bit depth must be 8, 12, or 16")
+    maximum = (1 << bit_depth) - 1
+    rows = bytearray()
+    for y in range(side):
+        rows.append(0)
+        for x in range(side):
+            index = y * side + x
+            if index == 0:
+                value = 0
+            elif index == 1:
+                value = maximum
+            else:
+                value = (defect_id * 37 + image_bias * 13 + x * 29 + y * 17) % (
+                    maximum + 1
+                )
+            if bit_depth == 8:
+                rows.append(value)
+            else:
+                rows.extend(struct.pack(">H", value))
+    png_bit_depth = 8 if bit_depth == 8 else 16
+    png = b"\x89PNG\r\n\x1a\n"
+    png += _png_chunk(
+        b"IHDR", struct.pack(">IIBBBBB", side, side, png_bit_depth, 0, 0, 0, 0)
+    )
+    png += _png_chunk(b"IDAT", zlib.compress(bytes(rows), 6))
+    png += _png_chunk(b"IEND", b"")
+    return png
+
+
 def _time_str(dt: datetime) -> str:
     return dt.strftime("%Y%m%d_%H%M%S")
 
@@ -196,17 +225,38 @@ def create_patch_zips(
     s3: object,
     bucket: str = PATCH_BUCKET,
     defects_per_zip: int = DEFECTS_PER_ZIP,
+    patch_bit_depth: int = 12,
+    reference_count: int = 2,
+    difference_count: int = 2,
+    include_mask: bool = True,
 ) -> list[dict[str, str]]:
+    if patch_bit_depth not in (8, 12, 16):
+        raise ValueError("patch bit depth must be 8, 12, or 16")
+    if reference_count <= 0 or difference_count <= 0:
+        raise ValueError("reference and difference counts must be greater than zero")
     ts = _time_str(inspection_time)
     refs: list[dict[str, str]] = []
+    image_types = [
+        ("PatchDefective", 128, patch_bit_depth),
+        *[
+            (f"PatchReference{image_id}", 72 + image_id * 32, patch_bit_depth)
+            for image_id in range(reference_count)
+        ],
+        *[
+            (f"PatchDifference{image_id}", 196 + image_id * 28, patch_bit_depth)
+            for image_id in range(difference_count)
+        ],
+    ]
+    if include_mask:
+        image_types.append(("PatchMask0", 1, 8))
 
     for start in range(1, total_defects + 1, defects_per_zip):
         end = min(start + defects_per_zip - 1, total_defects)
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
             for did in range(start, end + 1):
-                for suffix, bias in PATCH_IMAGE_TYPES:
-                    png = _generate_patch_png(did, bias)
+                for suffix, bias, bit_depth in image_types:
+                    png = _generate_native_gray_png(did, bias, bit_depth)
                     zf.writestr(f"{did:06d}_{suffix}.png", png)
 
         key = f"{ts}/{wafer_key}/{start:06d}-{end:06d}.zip"
@@ -217,6 +267,28 @@ def create_patch_zips(
         print(f"  uploaded zip {start:06d}-{end:06d}.zip ({start}–{end})")
 
     return refs
+
+
+def create_review_images(
+    wafer_key: int,
+    inspection_time: datetime,
+    imaged_defects: int,
+    images_per_defect: int,
+    s3: object,
+    bucket: str = REVIEW_BUCKET,
+) -> int:
+    """Upload the square Review PNGs referenced by the upstream seed rows."""
+    if imaged_defects < 0 or images_per_defect < 0:
+        raise ValueError("review image counts cannot be negative")
+    ts = _time_str(inspection_time)
+    uploaded = 0
+    for defect_id in range(1, imaged_defects + 1):
+        for image_id in range(1, images_per_defect + 1):
+            key = f"{ts}/{wafer_key}/{defect_id:07d}_{image_id}.png"
+            body = _generate_rgb_png(defect_id, image_id * 41, side=256)
+            s3.put_object(Bucket=bucket, Key=key, Body=body, ContentType="image/png")
+            uploaded += 1
+    return uploaded
 
 
 def ensure_buckets(s3: object, buckets: tuple[str, ...]) -> None:
@@ -336,6 +408,22 @@ def main() -> None:
         default=int(os.environ.get("SC_WAFER_MOCK_DEFECTS", "300000")),
     )
     parser.add_argument("--defects-per-zip", type=int, default=DEFECTS_PER_ZIP)
+    parser.add_argument(
+        "--patch-bit-depth",
+        type=int,
+        choices=(8, 12, 16),
+        default=12,
+        help="Native grayscale depth for Defective, Reference, and Difference patches",
+    )
+    parser.add_argument("--reference-count", type=int, default=2)
+    parser.add_argument("--difference-count", type=int, default=2)
+    parser.add_argument(
+        "--exclude-mask",
+        action="store_true",
+        help="Do not include PatchMask0 in generated archives",
+    )
+    parser.add_argument("--imaged-defects", type=int, default=100)
+    parser.add_argument("--review-images-per-defect", type=int, default=5)
     parser.add_argument("--wafer-key", type=int, default=1)
     parser.add_argument(
         "--inspection-time",
@@ -388,8 +476,21 @@ def main() -> None:
         s3,
         bucket=args.bucket,
         defects_per_zip=args.defects_per_zip,
+        patch_bit_depth=args.patch_bit_depth,
+        reference_count=args.reference_count,
+        difference_count=args.difference_count,
+        include_mask=not args.exclude_mask,
     )
     print(f"Uploaded {len(refs)} zips to s3://{args.bucket}/")
+
+    uploaded_reviews = create_review_images(
+        inspection.wafer_key,
+        inspection.inspection_time,
+        min(inspection.total_defects, args.imaged_defects),
+        args.review_images_per_defect,
+        s3,
+    )
+    print(f"Uploaded {uploaded_reviews} square Review images to s3://{REVIEW_BUCKET}/")
 
     insert_zips(
         inspection.inspection_time,

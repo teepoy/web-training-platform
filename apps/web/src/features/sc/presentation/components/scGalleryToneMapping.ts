@@ -13,13 +13,17 @@ export interface ScGalleryToneMapping {
   lut: GrayLUT;
   zMin: number;
   zMax: number;
+  bitDepth: 8 | 12 | 16;
 }
+
+export type ScGalleryToneMappingGroup = "defective_reference" | "difference";
 
 export const DEFAULT_SC_GALLERY_TONE_MAPPING: ScGalleryToneMapping = {
   enabled: false,
   lut: "gray",
   zMin: 0,
   zMax: 1,
+  bitDepth: 16,
 };
 
 export const GRAY_LUT_STOPS: Record<GrayLUT, readonly string[]> = {
@@ -40,32 +44,47 @@ export function isValidGrayWindow(settings: ScGalleryToneMapping): boolean {
     Number.isFinite(settings.zMax) &&
     settings.zMin >= 0 &&
     settings.zMax <= 1 &&
-    settings.zMin < settings.zMax
+    settings.zMin < settings.zMax &&
+    [8, 12, 16].includes(settings.bitDepth)
   );
 }
 
 export function appendGrayMappingQuery(
   params: URLSearchParams,
   settings: ScGalleryToneMapping,
+  group?: ScGalleryToneMappingGroup,
 ): void {
   if (!settings.enabled) return;
   if (!isValidGrayWindow(settings)) {
     throw new RangeError("Gray mapping zlims must satisfy 0 <= zMin < zMax <= 1");
   }
-  params.set("gray_lut", settings.lut);
-  params.set("z_min", String(settings.zMin));
-  params.set("z_max", String(settings.zMax));
+  const prefix = group ? `${group}_` : "";
+  params.set(`${prefix}gray_lut`, settings.lut);
+  params.set(`${prefix}z_min`, String(settings.zMin));
+  params.set(`${prefix}z_max`, String(settings.zMax));
+  params.set(`${prefix}bit_depth`, String(settings.bitDepth));
 }
 
-export function colorBarBackground(lut: GrayLUT): string {
-  return `linear-gradient(90deg, ${GRAY_LUT_STOPS[lut].join(", ")})`;
+export function colorBarBackground(lut: GrayLUT, zMin = 0, zMax = 1): string {
+  if (!Number.isFinite(zMin) || !Number.isFinite(zMax) || zMin < 0 || zMax > 1 || zMin >= zMax) {
+    throw new RangeError("Color bar window must satisfy 0 <= zMin < zMax <= 1");
+  }
+  const start = zMin * 100;
+  const end = zMax * 100;
+  const span = end - start;
+  const stops = GRAY_LUT_STOPS[lut].map((color, index, colors) => {
+    const position = start + (span * index) / Math.max(1, colors.length - 1);
+    return `${color} ${position.toFixed(3)}%`;
+  });
+  const outside = "var(--gallery-colorbar-outside, #242430)";
+  return `linear-gradient(90deg, ${outside} 0%, ${outside} ${start.toFixed(3)}%, ${stops.join(", ")}, ${outside} ${end.toFixed(3)}%, ${outside} 100%)`;
 }
 
 export function nativeGrayWindow(
   settings: Pick<ScGalleryToneMapping, "zMin" | "zMax">,
-  bitDepth: 8 | 16,
+  bitDepth: 8 | 12 | 16,
 ): { min: number; max: number } {
-  const maximum = bitDepth === 8 ? 255 : 65535;
+  const maximum = 2 ** bitDepth - 1;
   return {
     min: Math.round(settings.zMin * maximum),
     max: Math.round(settings.zMax * maximum),

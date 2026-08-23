@@ -231,21 +231,34 @@ SC Import as Dataset 当前使用 API service 内的 direct sparse import 路径
 平台 sample storage identity 与 module domain identity 必须解耦。`Sample.id` 是平台存储身份；SC `defect_id`、`sample_id`、`inspection_time`、`wafer_key` 等是 domain/upstream identity，不应默认写入全局主键。
 
 通用 Dataset-owned 嵌入图片仍通过平台后端的认证 route 表达；SC 图片是独立的
-display/runtime data-plane。Web gateway 将 `/api/v1/sc/images/...` 与
-`/api/v1/sc/sprites/...` 直接转发到 image-parser，FastAPI 不注册 SC bytes proxy，也不提供
+display/runtime data-plane。Web gateway 将 `/api/v1/sc/images/...`、
+`/api/v1/sc/sprites/...`、`/api/v1/sc/inspections/.../image-profile` 与
+`/api/v1/sc/gallery-downloads` 直接转发到 image-parser，FastAPI 不注册 SC bytes proxy，也不提供
 Python fallback。image-parser HTTP route 必须验证与 API 相同密钥签发的 HS256 token；前端
 `<img>` / blink table / preview grid 不能携带自定义 header，因此使用共享 helper 把短期 token
 放入 query。浏览器、Dataset、Import profile 与 runtime request 都不能选择 parser、source
 root、下载方式或 format ID。
 
-Gallery 的 Colormapping 是 display-only sprite 能力，不改变 `/sc/images` 原始图片、Artifact
-Cache、Prediction、Training 或 Export。Gallery Settings 可为 Patch cell 显式提交完整的
-`gray_lut + z_min + z_max` 参数组；zlims 使用归一化 `[0, 1]`，因此同一设置同时适用于原生
-Gray8 与 Gray16；RGB/RGBA 容器只有在不透明且每个像素的 RGB channel 精确相等时才视为对应
+Gallery 的 Colormapping 默认是 display-only sprite 能力，不改变 `/sc/images` 原始图片、Artifact
+Cache、Prediction、Training 或 prediction export。Gallery 右侧 `Gallery` / `Colors` 两个同级 Tab 为
+`Defective + Reference/Template` 与 `Difference` 两组 Patch cell 分别提交完整的
+`gray_lut + z_min + z_max + bit_depth` 参数组；zlims 使用该 Patch 原生 8/12/16-bit domain 上的
+归一化 `[0, 1]`。`image-profile` 按 Inspection 返回所有 Patch instance，因此多 Reference / Difference
+必须作为独立 Gallery 条目出现，Settings 同时显示每个 instance 的 bit depth 与 observed min/max，
+并用其初始化 window；RGB/RGBA 容器只有在不透明且每个像素的 RGB channel 精确相等时才视为对应
 位深的灰度内容。image-parser 必须先在原始灰度位深上 windowing，再 resize 并查询固定
 256-entry LUT；当前支持 grayscale、inverted grayscale、Viridis、Inferno 与 Turbo。真正的
 非灰度 Patch 不得隐式转灰度，Review cell 保留原始颜色。参数缺失、未知 LUT 与非法 window
 必须返回明确的 client error，不能 clamp 或 fallback。
+
+Gallery image download 只接受用户当前显式选择的 sample/image columns，不提供隐式 all-filtered
+下载。浏览器使用原生 POST/download 流，不能把可能超过 100 MB 的 ZIP 聚合到 JavaScript Blob。
+image-parser 使用独立 Export cache/traffic lane 分批读取图片，先完成一个 service-owned 临时 ZIP，
+再以 attachment 流式返回并删除临时文件；未勾选 colormap 时必须原样保存压缩图片 bytes、尺寸与
+PNG/JPEG 后缀，勾选时只对两组 Patch 应用各自当前 mapping、保持像素尺寸并编码为 PNG，Review
+始终保持原图。ZIP entry 使用
+`{inspection_time}-{wafer_id}/{defect_id}-{image_type}.{png|jpg}`（Review 在 image type 中带稳定
+image ID），不得经过 FastAPI 或 Display traffic lane。
 
 SC 图片来源由 `(inspection_time, wafer_key)` 标识。image-parser 打开 context 时只查询一次
 Inspection 并取得精确 `eqp_id`，再从代码拥有的 exact registry 选择 Equipment image entry。
@@ -255,7 +268,13 @@ EntryFactory 组合设备固定的 Artifact downloader 与 Artifact parser；多
 `PatchReference` / `PatchDefective` / `PatchDifference` 成员命名。仓库另提供固定
 `images(sample_id, role, image_bytes, content_type)` schema 的 SQLite Equipment Entry 示例，
 使用 `modernc.org/sqlite v1.55.0` 只读解析缓存文件；它仍须由具体 provider 与明确 `eqp_id`
-注册后才启用。仓库不提供 Parquet Equipment Entry。其他设备布局应新增并显式注册 Equipment
+注册后才启用。另一个 `sc.sqlite-inspection-images.v1` 示例固定读取
+`inspection_images(id, defect_id, image_type, image_id, image_value)`：`T/R/D/M` 表达
+Defective/Reference/Difference/Mask，`image_id` 区分多个 instance，`image_value` 是 `2E9C +`
+Snappy block；解压后只能是 `Gray8[32×32]` 或 BE 12-bit-in-`uint16[32×32]`（值大于 4095
+明确失败）。Profile metadata 使用
+`source_identity + revision` keyed 的 bounded in-memory LRU；每个 immutable SQLite artifact 的
+connection pool 上限固定为 1。仓库不提供 Parquet Equipment Entry。其他设备布局应新增并显式注册 Equipment
 Entry，而不是恢复通用 format switch。
 
 Artifact downloader 把 upstream source 描述为稳定 `ArtifactRef(entry_id, source_identity,

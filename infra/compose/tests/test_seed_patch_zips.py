@@ -1,18 +1,33 @@
 from __future__ import annotations
 
 from datetime import datetime
+import io
 import sqlite3
+import struct
+import zipfile
 
 import pytest
 from diskcache import Cache
 
 from infra.compose.seed_patch_zips import (
     clear_upstream_metadata_cache,
+    create_patch_zips,
+    create_review_images,
     load_inspection_seed,
 )
 
 
 INSPECTION_TIME = "2026-08-01 04:00:00.000000"
+
+
+class _ObjectStore:
+    def __init__(self) -> None:
+        self.objects: dict[tuple[str, str], tuple[bytes, str]] = {}
+
+    def put_object(
+        self, *, Bucket: str, Key: str, Body: bytes, ContentType: str
+    ) -> None:
+        self.objects[(Bucket, Key)] = (Body, ContentType)
 
 
 def _seed_inspection_db(
@@ -126,3 +141,80 @@ def test_clear_upstream_metadata_cache_removes_stale_queries(tmp_path) -> None:
         assert len(cache) == 0
     finally:
         cache.close()
+
+
+@pytest.mark.parametrize(
+    ("patch_bit_depth", "png_bit_depth", "reference_count", "difference_count"),
+    [
+        (8, 8, 1, 1),
+        (12, 16, 2, 2),
+        (16, 16, 1, 1),
+        (16, 16, 2, 2),
+    ],
+)
+def test_patch_seed_uses_native_grayscale_depth_and_multiple_instances(
+    patch_bit_depth: int,
+    png_bit_depth: int,
+    reference_count: int,
+    difference_count: int,
+) -> None:
+    store = _ObjectStore()
+
+    create_patch_zips(
+        wafer_key=1,
+        inspection_time=datetime(2026, 8, 1, 4, 0),
+        total_defects=1,
+        s3=store,
+        patch_bit_depth=patch_bit_depth,
+        reference_count=reference_count,
+        difference_count=difference_count,
+    )
+
+    archive_bytes, content_type = next(iter(store.objects.values()))
+    assert content_type == "application/zip"
+    with zipfile.ZipFile(io.BytesIO(archive_bytes)) as archive:
+        expected_names = {
+            "000001_PatchDefective.png",
+            "000001_PatchMask0.png",
+            *{
+                f"000001_PatchReference{image_id}.png"
+                for image_id in range(reference_count)
+            },
+            *{
+                f"000001_PatchDifference{image_id}.png"
+                for image_id in range(difference_count)
+            },
+        }
+        assert set(archive.namelist()) == expected_names
+        for name in archive.namelist():
+            png = archive.read(name)
+            width, height, bit_depth, color_type = struct.unpack(">IIBB", png[16:26])
+            assert (width, height) == (32, 32)
+            if "Mask" in name:
+                assert (bit_depth, color_type) == (8, 0)
+            else:
+                assert (bit_depth, color_type) == (png_bit_depth, 0)
+
+
+def test_review_seed_uploads_square_pngs_at_upstream_filespec_keys() -> None:
+    store = _ObjectStore()
+
+    uploaded = create_review_images(
+        wafer_key=1,
+        inspection_time=datetime(2026, 8, 1, 4, 0),
+        imaged_defects=2,
+        images_per_defect=2,
+        s3=store,
+    )
+
+    assert uploaded == 4
+    assert set(store.objects) == {
+        ("wafer-review-images", "20260801_040000/1/0000001_1.png"),
+        ("wafer-review-images", "20260801_040000/1/0000001_2.png"),
+        ("wafer-review-images", "20260801_040000/1/0000002_1.png"),
+        ("wafer-review-images", "20260801_040000/1/0000002_2.png"),
+    }
+    for png, content_type in store.objects.values():
+        assert content_type == "image/png"
+        width, height, bit_depth, color_type = struct.unpack(">IIBB", png[16:26])
+        assert (width, height, bit_depth, color_type) == (256, 256, 8, 2)

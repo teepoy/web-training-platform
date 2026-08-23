@@ -55,6 +55,7 @@ export type { CoreApiOverrides } from "./core";
 export {
   mockScInspections,
   mockScInspectionSamples,
+  mockScInspectionImageProfile,
   mockScDataset,
   mockScDataProvider,
   mockScViewSamples,

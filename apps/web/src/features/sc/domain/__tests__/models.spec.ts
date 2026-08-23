@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import {
   patchImageUrl,
   reviewImageUrl,
+  scGalleryImageDownloadsUrl,
+  scInspectionImageProfileUrl,
   scPatchUrl,
   scReviewUrl,
   buildScBlinkImageUrls,
@@ -28,9 +30,7 @@ function expectAuthToken(url: string): void {
 describe("patchImageUrl", () => {
   it("encodes inspection time and defect id", () => {
     const url = patchImageUrl("2025-06-01T00:00:00Z", 1, "D-42", "template");
-    expect(url).toBe(
-      "/api/v1/sc/images/2025-06-01T00%3A00%3A00Z/1/D-42/template",
-    );
+    expect(url).toBe("/api/v1/sc/images/2025-06-01T00%3A00%3A00Z/1/D-42/template");
   });
 
   it("handles bigint inspectionTime", () => {
@@ -65,6 +65,18 @@ describe("reviewImageUrl", () => {
 
 // ── Canonical authenticated helpers ─────────────────────────────────────
 
+describe("image-parser gateway URLs", () => {
+  it("encodes the inspection image profile identity", () => {
+    expect(scInspectionImageProfileUrl("2026-08-01T04:00:00+08:00", 7)).toBe(
+      "/api/v1/sc/inspections/2026-08-01T04%3A00%3A00%2B08%3A00/7/image-profile",
+    );
+  });
+
+  it("returns the selected gallery image download endpoint", () => {
+    expect(scGalleryImageDownloadsUrl()).toBe("/api/v1/sc/gallery-downloads");
+  });
+});
+
 describe("scPatchUrl", () => {
   it("wraps patchImageUrl with auth query params", () => {
     const url = scPatchUrl("t", 1, "d", "template");
@@ -77,16 +89,14 @@ describe("scReviewUrl", () => {
   it("wraps reviewImageUrl with auth query params", () => {
     const url = scReviewUrl("t", 1, "d", 7);
     expect(url).toContain("/api/v1/sc/images/t/1/d/review?review_image_id=7");
+    expect(url).toContain("render_version=3");
     expectAuthToken(url);
   });
 });
 
 describe("buildScBlinkImageUrls", () => {
   it("returns all four image types with auth", () => {
-    const urls = buildScBlinkImageUrls("t", 1, "d", [
-      { imageId: 1 },
-      { imageId: 2 },
-    ]);
+    const urls = buildScBlinkImageUrls("t", 1, "d", [{ imageId: 1 }, { imageId: 2 }]);
 
     expect(urls.template).toBeTruthy();
     expect(urls.defective).toBeTruthy();

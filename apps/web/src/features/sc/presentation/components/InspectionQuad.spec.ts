@@ -130,6 +130,36 @@ const requiredProps = {
 };
 
 describe("InspectionQuad state ownership", () => {
+  it("resizes the Annotation column from its visible separator", async () => {
+    const { wrapper } = await mountWithProviders(InspectionQuad, {
+      props: { ...requiredProps, variant: "reclassify" },
+    });
+    const quad = wrapper.get(".iq-quad");
+    vi.spyOn(quad.element, "getBoundingClientRect").mockReturnValue({
+      left: 0,
+      right: 1000,
+      top: 0,
+      bottom: 800,
+      width: 1000,
+      height: 800,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+    const annotationSeparator = wrapper.findAll(".iq-splitter--column").at(-1);
+    if (!annotationSeparator) throw new Error("Annotation separator was not rendered");
+    Object.assign(annotationSeparator.element, {
+      setPointerCapture: vi.fn(),
+      releasePointerCapture: vi.fn(),
+    });
+
+    await annotationSeparator.trigger("pointerdown", { pointerId: 1, clientX: 800 });
+    await annotationSeparator.trigger("pointermove", { pointerId: 1, clientX: 700 });
+    await annotationSeparator.trigger("pointerup", { pointerId: 1, clientX: 700 });
+
+    expect(quad.attributes("style")).toContain("30fr");
+  });
+
   it("removes the toolbar grid row when the global filter trigger is teleported", async () => {
     const target = document.createElement("div");
     target.id = "global-filter-target";

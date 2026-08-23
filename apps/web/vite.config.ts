@@ -79,6 +79,16 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path: string) => path.replace(/^\/api\/v1/, ""),
       },
+      [`^${API_V1_PROXY_PREFIX}/sc/inspections/[^/]+/[^/]+/image-profile$`]: {
+        target: process.env.VITE_IMAGE_PARSER_TARGET || "http://localhost:8090",
+        changeOrigin: true,
+        rewrite: (path: string) => path.replace(/^\/api\/v1/, ""),
+      },
+      [`${API_V1_PROXY_PREFIX}/sc/gallery-downloads`]: {
+        target: process.env.VITE_IMAGE_PARSER_TARGET || "http://localhost:8090",
+        changeOrigin: true,
+        rewrite: (path: string) => path.replace(/^\/api\/v1/, ""),
+      },
       [`${API_V1_PROXY_PREFIX}/sc/data/`]: {
         target: process.env.VITE_SC_DATA_PROVIDER_TARGET || "http://localhost:8001",
         changeOrigin: true,

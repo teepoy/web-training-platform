@@ -50,6 +50,8 @@ DEV_API_HOST_ENV := \
 # Controls the repeatable SC inspection and showcase datasets created by seed targets.
 SC_WAFER_MOCK_DEFECTS            ?= 2500
 SC_WAFER_MOCK_INSPECTION_TIME    ?= 2026-08-01T04:00:00
+SC_GALLERY_PROFILE_DEFECTS       ?= 64
+SC_GALLERY_PROFILE_IMAGED        ?= 8
 DEV_SEED_CLASSIFICATION_SAMPLES  ?= 180
 DEV_SEED_REVIEW_SAMPLES          ?= 96
 DEV_SEED_SC_ANNOTATIONS          ?= 96
@@ -117,6 +119,8 @@ help: ## Show this help message
 	@printf '\n  Development seed data\n'
 	@printf '    \033[36m%-43s\033[0m %s\n' "SC_WAFER_MOCK_DEFECTS" "Number of defects in the repeatable mock SC inspection (default: 2500)"
 	@printf '    \033[36m%-43s\033[0m %s\n' "SC_WAFER_MOCK_INSPECTION_TIME" "Stable inspection timestamp used to make seed runs reusable"
+	@printf '    \033[36m%-43s\033[0m %s\n' "SC_GALLERY_PROFILE_DEFECTS" "Defects per 8/16-bit gallery profile inspection (default: 64)"
+	@printf '    \033[36m%-43s\033[0m %s\n' "SC_GALLERY_PROFILE_IMAGED" "Defects with Review images in each gallery profile inspection (default: 8)"
 	@printf '    \033[36m%-43s\033[0m %s\n' "DEV_SEED_CLASSIFICATION_SAMPLES" "Classification showcase sample count (default: 180)"
 	@printf '    \033[36m%-43s\033[0m %s\n' "DEV_SEED_REVIEW_SAMPLES" "Review showcase sample count (default: 96)"
 	@printf '    \033[36m%-43s\033[0m %s\n' "DEV_SEED_SC_ANNOTATIONS" "SC annotation count created by seed-dev (default: 96)"

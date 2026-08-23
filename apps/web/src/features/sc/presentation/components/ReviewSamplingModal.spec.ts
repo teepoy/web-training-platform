@@ -15,6 +15,44 @@ const modalStub = {
 };
 
 describe("ReviewSamplingModal", () => {
+  it("marks an existing cohort stale when its sampling pipeline changes", async () => {
+    const { wrapper } = await mountWithProviders(NMessageProvider, {
+      slots: {
+        default: () =>
+          h(ReviewSamplingModal, {
+            show: true,
+            loading: false,
+            availableCount: 2_500,
+            activeCohortCount: 105,
+            mapSelectionCount: 0,
+            tableSelectionAvailable: false,
+            extraFilter: { combinator: "and", items: [] },
+            program: createDefaultScAnnotationSamplingProgram(),
+            scope: "all",
+            loadGroups: async () => [],
+          }),
+      },
+      global: { stubs: { NModal: modalStub } },
+    });
+
+    expect(document.body.querySelector('[data-testid="sampling-cohort-stale"]')).toBeNull();
+    const removeButtons = Array.from(document.body.querySelectorAll("button")).filter(
+      (button) => button.textContent?.trim() === "Remove",
+    );
+    removeButtons[0]?.click();
+    await nextTick();
+
+    expect(
+      document.body.querySelector('[data-testid="sampling-cohort-stale"]')?.textContent,
+    ).toContain("105");
+    expect(
+      Array.from(document.body.querySelectorAll("button")).some(
+        (button) => button.textContent?.trim() === "Re-apply sampling",
+      ),
+    ).toBe(true);
+    wrapper.unmount();
+  });
+
   it("shows all 17 business rules and adds one typed rule to the active pipeline", async () => {
     const { wrapper } = await mountWithProviders(NMessageProvider, {
       slots: {

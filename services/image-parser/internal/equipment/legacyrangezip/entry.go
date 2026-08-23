@@ -4,11 +4,17 @@ package legacyrangezip
 
 import (
 	"archive/zip"
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"fmt"
+	"image"
+	_ "image/jpeg"
+	_ "image/png"
 	"io"
 	"mime"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -16,6 +22,9 @@ import (
 	"image-parser/internal/artifactcache"
 	"image-parser/internal/equipment"
 	"image-parser/internal/imagestream"
+	"image-parser/internal/memorylru"
+
+	"golang.org/x/sync/singleflight"
 )
 
 const (
@@ -41,12 +50,21 @@ type ObjectStore interface {
 }
 
 type Factory struct {
-	catalog Catalog
-	objects ObjectStore
+	catalog  Catalog
+	objects  ObjectStore
+	profiles *memorylru.Cache[string, equipment.InspectionImageProfile]
+	loads    singleflight.Group
 }
 
-func NewFactory(catalog Catalog, objects ObjectStore) *Factory {
-	return &Factory{catalog: catalog, objects: objects}
+func NewFactory(catalog Catalog, objects ObjectStore, profileCacheEntries int) (*Factory, error) {
+	if catalog == nil || objects == nil {
+		return nil, fmt.Errorf("legacy range-ZIP entry dependencies are required")
+	}
+	profiles, err := memorylru.New[string, equipment.InspectionImageProfile](profileCacheEntries)
+	if err != nil {
+		return nil, fmt.Errorf("create legacy range-ZIP image profile cache: %w", err)
+	}
+	return &Factory{catalog: catalog, objects: objects, profiles: profiles}, nil
 }
 
 func (f *Factory) Open(ctx context.Context, params equipment.OpenParams) (imagestream.Context, error) {
@@ -78,6 +96,110 @@ func (f *Factory) Open(ctx context.Context, params equipment.OpenParams) (images
 		cache:       params.Cache,
 		objects:     f.objects,
 	}, nil
+}
+
+func (f *Factory) Profile(ctx context.Context, params equipment.ProfileParams) (equipment.InspectionImageProfile, error) {
+	if params.Cache == nil {
+		return equipment.InspectionImageProfile{}, &imagestream.ContextError{Code: "cache_unavailable", Message: "legacy range-ZIP artifact cache is required"}
+	}
+	refs, err := f.catalog.GetInspectionPatchZips(
+		ctx,
+		params.Inspection.InspectionTime,
+		params.Inspection.LotID,
+		params.Inspection.WaferID,
+		params.Inspection.Device,
+		params.Inspection.LayerID,
+	)
+	if err != nil {
+		return equipment.InspectionImageProfile{}, &imagestream.ContextError{Code: "source_unavailable", Message: fmt.Sprintf("resolve inspection patch archives: %v", err)}
+	}
+	if refs == nil || len(refs.Zips) == 0 {
+		return equipment.InspectionImageProfile{}, &imagestream.ContextError{Code: "source_unavailable", Message: "inspection has no patch archives"}
+	}
+	described := make([]describedArchive, len(refs.Zips))
+	hash := sha256.New()
+	for index, ref := range refs.Zips {
+		if ref == nil || strings.TrimSpace(ref.S3Bucket) == "" || strings.TrimSpace(ref.S3Key) == "" {
+			return equipment.InspectionImageProfile{}, &imagestream.ContextError{Code: "source_unavailable", Message: fmt.Sprintf("patch archive %d has an invalid object reference", index)}
+		}
+		revision, err := f.objects.DescribePatchObject(ctx, ref.S3Bucket, ref.S3Key)
+		if err != nil {
+			return equipment.InspectionImageProfile{}, &imagestream.ContextError{Code: "source_unavailable", Message: fmt.Sprintf("describe patch archive %d: %v", index, err)}
+		}
+		described[index] = describedArchive{ref: ref, revision: revision}
+		_, _ = fmt.Fprintf(hash, "%s\x00%s\x00%s\x00", ref.S3Bucket, ref.S3Key, revision.Revision)
+	}
+	cacheKey := fmt.Sprintf("%x", hash.Sum(nil))
+	if cached, ok := f.profiles.Get(cacheKey); ok {
+		return cloneProfile(cached), nil
+	}
+	loaded, err, _ := f.loads.Do(cacheKey, func() (any, error) {
+		if cached, ok := f.profiles.Get(cacheKey); ok {
+			return cached, nil
+		}
+		profile, err := f.scanProfile(ctx, params.Cache, described)
+		if err != nil {
+			return equipment.InspectionImageProfile{}, err
+		}
+		f.profiles.Add(cacheKey, cloneProfile(profile))
+		return profile, nil
+	})
+	if err != nil {
+		return equipment.InspectionImageProfile{}, err
+	}
+	return cloneProfile(loaded.(equipment.InspectionImageProfile)), nil
+}
+
+type describedArchive struct {
+	ref      *scv1.ZipRef
+	revision ObjectRevision
+}
+
+func (f *Factory) scanProfile(ctx context.Context, cache artifactcache.Cache, archives []describedArchive) (equipment.InspectionImageProfile, error) {
+	aggregates := make(map[profileKey]profileAggregate)
+	for index, archive := range archives {
+		lease, err := cache.Acquire(ctx, artifactcache.Ref{
+			EntryID: EntryID, SourceIdentity: archive.ref.S3Bucket + "/" + archive.ref.S3Key,
+			Revision: archive.revision.Revision, Kind: artifactcache.KindFile,
+		}, func(ctx context.Context, destination string) error {
+			return f.objects.DownloadPatchObject(ctx, archive.ref.S3Bucket, archive.ref.S3Key, destination)
+		})
+		if err != nil {
+			return equipment.InspectionImageProfile{}, &imagestream.ContextError{Code: "source_unavailable", Message: fmt.Sprintf("cache patch archive %d: %v", index, err)}
+		}
+		scanErr := scanArchiveProfile(lease.Path(), aggregates)
+		releaseErr := lease.Release()
+		if scanErr != nil {
+			return equipment.InspectionImageProfile{}, &imagestream.ContextError{Code: "parser_unavailable", Message: fmt.Sprintf("profile patch archive %d: %v", index, scanErr)}
+		}
+		if releaseErr != nil {
+			return equipment.InspectionImageProfile{}, &imagestream.ContextError{Code: "entry_unavailable", Message: fmt.Sprintf("release patch archive %d: %v", index, releaseErr)}
+		}
+	}
+	items := make([]profileAggregate, 0, len(aggregates))
+	for _, item := range aggregates {
+		items = append(items, item)
+	}
+	sort.Slice(items, func(left, right int) bool {
+		leftRank := profileImageTypeRank(items[left].imageType)
+		rightRank := profileImageTypeRank(items[right].imageType)
+		if leftRank != rightRank {
+			return leftRank < rightRank
+		}
+		return items[left].imageID < items[right].imageID
+	})
+	profile := equipment.InspectionImageProfile{Patches: make([]equipment.PatchImageProfile, len(items))}
+	for index, item := range items {
+		var imageID *int
+		if item.imageID >= 0 {
+			value := item.imageID
+			imageID = &value
+		}
+		profile.Patches[index] = equipment.PatchImageProfile{
+			ImageType: item.imageType, ImageID: imageID, BitDepth: item.bitDepth, ZMin: item.zMin, ZMax: item.zMax,
+		}
+	}
+	return profile, nil
 }
 
 type entryContext struct {
@@ -201,14 +323,37 @@ func normalizeRoles(rawRoles []string) ([]roleSpec, error) {
 	roles := make([]roleSpec, len(rawRoles))
 	seen := make(map[string]struct{}, len(rawRoles))
 	for index, raw := range rawRoles {
+		base, imageIDRaw, hasImageID := strings.Cut(strings.ToLower(strings.TrimSpace(raw)), ":")
+		imageID := 0
+		if hasImageID {
+			parsed, err := strconv.Atoi(strings.TrimSpace(imageIDRaw))
+			if err != nil || parsed < 0 {
+				return nil, fmt.Errorf("invalid patch image role %q", raw)
+			}
+			imageID = parsed
+		}
 		var role roleSpec
-		switch strings.ToLower(strings.TrimSpace(raw)) {
-		case "patch_template", "template", "reference":
+		switch base {
+		case "patch_template", "patchtemplate", "patch_reference", "patchreference", "template", "reference":
 			role = roleSpec{canonical: "patch_template", member: "PatchReference"}
-		case "patch_defective", "defective":
+			if hasImageID {
+				role = roleSpec{canonical: fmt.Sprintf("patch_reference:%d", imageID), member: fmt.Sprintf("PatchReference%d", imageID)}
+			}
+		case "patch_defective", "patchdefective", "defective":
+			if hasImageID {
+				return nil, fmt.Errorf("Defective patch image role does not accept image_id")
+			}
 			role = roleSpec{canonical: "patch_defective", member: "PatchDefective"}
-		case "patch_difference", "difference":
+		case "patch_difference", "patchdifference", "difference":
 			role = roleSpec{canonical: "patch_difference", member: "PatchDifference"}
+			if hasImageID {
+				role = roleSpec{canonical: fmt.Sprintf("patch_difference:%d", imageID), member: fmt.Sprintf("PatchDifference%d", imageID)}
+			}
+		case "patch_mask", "patchmask", "mask":
+			role = roleSpec{canonical: "patch_mask", member: "PatchMask"}
+			if hasImageID {
+				role = roleSpec{canonical: fmt.Sprintf("patch_mask:%d", imageID), member: fmt.Sprintf("PatchMask%d", imageID)}
+			}
 		default:
 			return nil, fmt.Errorf("unsupported patch image role %q", raw)
 		}
@@ -219,6 +364,162 @@ func normalizeRoles(rawRoles []string) ([]roleSpec, error) {
 		roles[index] = role
 	}
 	return roles, nil
+}
+
+type profileKey struct {
+	imageType string
+	imageID   int
+}
+
+type profileAggregate struct {
+	imageType string
+	imageID   int
+	bitDepth  int
+	zMin      uint16
+	zMax      uint16
+}
+
+func scanArchiveProfile(path string, aggregates map[profileKey]profileAggregate) error {
+	archive, err := zip.OpenReader(path)
+	if err != nil {
+		return err
+	}
+	defer archive.Close()
+	for _, file := range archive.File {
+		imageType, imageID, ok, err := parsePatchProfileMember(filepath.Base(file.Name))
+		if err != nil {
+			return err
+		}
+		if !ok {
+			continue
+		}
+		data, err := readZipMember(file)
+		if err != nil {
+			return err
+		}
+		bitDepth, zMin, zMax, err := grayProfile(data)
+		if err != nil {
+			return fmt.Errorf("%s: %w", file.Name, err)
+		}
+		key := profileKey{imageType: imageType, imageID: imageID}
+		current, exists := aggregates[key]
+		if !exists {
+			aggregates[key] = profileAggregate{imageType: imageType, imageID: imageID, bitDepth: bitDepth, zMin: zMin, zMax: zMax}
+			continue
+		}
+		current.bitDepth = max(current.bitDepth, bitDepth)
+		current.zMin = min(current.zMin, zMin)
+		current.zMax = max(current.zMax, zMax)
+		aggregates[key] = current
+	}
+	return nil
+}
+
+func parsePatchProfileMember(name string) (string, int, bool, error) {
+	stem := strings.TrimSuffix(name, filepath.Ext(name))
+	separator := strings.IndexByte(stem, '_')
+	if separator < 0 || separator == len(stem)-1 {
+		return "", 0, false, nil
+	}
+	suffix := stem[separator+1:]
+	for _, candidate := range []struct {
+		prefix    string
+		imageType string
+	}{
+		{prefix: "PatchDefective", imageType: "Defective"},
+		{prefix: "PatchReference", imageType: "Reference"},
+		{prefix: "PatchDifference", imageType: "Difference"},
+		{prefix: "PatchMask", imageType: "Mask"},
+	} {
+		if !strings.HasPrefix(suffix, candidate.prefix) {
+			continue
+		}
+		remainder := strings.TrimPrefix(suffix, candidate.prefix)
+		if remainder == "" {
+			return candidate.imageType, -1, true, nil
+		}
+		imageID, err := strconv.Atoi(remainder)
+		if err != nil || imageID < 0 {
+			return "", 0, false, fmt.Errorf("invalid image instance in ZIP member %q", name)
+		}
+		if candidate.imageType == "Defective" {
+			return "", 0, false, fmt.Errorf("Defective ZIP member %q must not have image_id", name)
+		}
+		return candidate.imageType, imageID, true, nil
+	}
+	return "", 0, false, nil
+}
+
+func grayProfile(data []byte) (int, uint16, uint16, error) {
+	decoded, _, err := image.Decode(bytes.NewReader(data))
+	if err != nil {
+		return 0, 0, 0, fmt.Errorf("decode grayscale image: %w", err)
+	}
+	zMin := uint16(65535)
+	var zMax uint16
+	bitDepth := 0
+	switch typed := decoded.(type) {
+	case *image.Gray:
+		bitDepth = 8
+		for _, value := range typed.Pix {
+			zMin = min(zMin, uint16(value))
+			zMax = max(zMax, uint16(value))
+		}
+	case *image.Gray16:
+		for y := typed.Bounds().Min.Y; y < typed.Bounds().Max.Y; y++ {
+			for x := typed.Bounds().Min.X; x < typed.Bounds().Max.X; x++ {
+				value := typed.Gray16At(x, y).Y
+				zMin = min(zMin, value)
+				zMax = max(zMax, value)
+			}
+		}
+		bitDepth = 16
+		if zMax <= 4095 {
+			bitDepth = 12
+		}
+	default:
+		bounds := decoded.Bounds()
+		for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+			for x := bounds.Min.X; x < bounds.Max.X; x++ {
+				red, green, blue, alpha := decoded.At(x, y).RGBA()
+				if red != green || green != blue || alpha != 65535 {
+					return 0, 0, 0, fmt.Errorf("only grayscale patch images can be profiled")
+				}
+				zMin = min(zMin, uint16(red))
+				zMax = max(zMax, uint16(red))
+			}
+		}
+		bitDepth = 16
+	}
+	return bitDepth, zMin, zMax, nil
+}
+
+func profileImageTypeRank(imageType string) int {
+	switch imageType {
+	case "Defective":
+		return 0
+	case "Reference":
+		return 1
+	case "Difference":
+		return 2
+	case "Mask":
+		return 3
+	default:
+		return 4
+	}
+}
+
+func cloneProfile(profile equipment.InspectionImageProfile) equipment.InspectionImageProfile {
+	cloned := profile
+	cloned.Patches = make([]equipment.PatchImageProfile, len(profile.Patches))
+	for index, patch := range profile.Patches {
+		cloned.Patches[index] = patch
+		if patch.ImageID != nil {
+			value := *patch.ImageID
+			cloned.Patches[index].ImageID = &value
+		}
+	}
+	return cloned
 }
 
 func parseArchive(path string, assets []plannedRole, results []imagestream.SampleResult) error {
@@ -293,3 +594,4 @@ func parseDefectID(raw string) (int, error) {
 }
 
 var _ equipment.Factory = (*Factory)(nil)
+var _ equipment.ProfileFactory = (*Factory)(nil)

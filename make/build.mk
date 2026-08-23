@@ -82,8 +82,32 @@ seed: ## Run unified seed CLI (usage: make seed ARGS="mock-multi-image --max-sam
 	uv run scripts/seed.py --api-url $(API_URL) --compose-file $(COMPOSE) $(ARGS)
 
 .PHONY: seed-dev
-seed-dev: seed-wafer-mock seed-wafer-patch-zips ## Seed moderate, repeatable Library/model/automation showcase data
+seed-dev: seed-wafer-gallery-fixtures ## Seed moderate, repeatable Library/model/automation showcase data
 	$(DEV_API_HOST_ENV) $(MAKE) seed ARGS="dev-showcase --no-promote --org-slug dev-no-auth --org-name 'Dev No Auth' --classification-samples $(DEV_SEED_CLASSIFICATION_SAMPLES) --review-samples $(DEV_SEED_REVIEW_SAMPLES) --sc-samples $(SC_WAFER_MOCK_DEFECTS) --sc-annotations $(DEV_SEED_SC_ANNOTATIONS) --sc-inspection-time $(SC_WAFER_MOCK_INSPECTION_TIME)"
+
+.PHONY: seed-wafer-gallery-fixtures
+seed-wafer-gallery-fixtures: ## Seed baseline plus 8/16-bit SC gallery inspection fixtures
+	@$(MAKE) seed-wafer-mock
+	@$(MAKE) seed-wafer-gallery-mock-inspections
+	@$(MAKE) seed-wafer-patch-zips
+	@$(MAKE) seed-wafer-gallery-patch-zips
+	@$(MAKE) refresh-seed-sc-services
+
+.PHONY: refresh-seed-sc-services
+refresh-seed-sc-services: refresh-seed-sc-upstream ## Refresh SC services after replacing development fixtures
+	@if docker compose -f $(COMPOSE_DEV) ps --services --status running 2>/dev/null | grep -qx image-parser; then \
+		printf 'Restarting image-parser after patch fixture replacement...\n'; \
+		docker compose -f $(COMPOSE_DEV) restart image-parser >/dev/null; \
+		docker compose -f $(COMPOSE_DEV) up -d --wait image-parser >/dev/null; \
+	fi
+
+.PHONY: refresh-seed-sc-upstream
+refresh-seed-sc-upstream: ## Refresh a running SC upstream after replacing its SQLite seed
+	@if docker compose -f $(COMPOSE_DEV) ps --services --status running 2>/dev/null | grep -qx sc-upstream; then \
+		printf 'Restarting sc-upstream after SQLite seed replacement...\n'; \
+		docker compose -f $(COMPOSE_DEV) restart sc-upstream >/dev/null; \
+		docker compose -f $(COMPOSE_DEV) up -d --wait sc-upstream >/dev/null; \
+	fi
 
 .PHONY: seed-wafer-mock
 seed-wafer-mock: ## Seed mock wafer inspection SQLite database
@@ -91,6 +115,14 @@ seed-wafer-mock: ## Seed mock wafer inspection SQLite database
 		--db-url "sqlite:///$(CURDIR)/$(DATA_DIR)/wafer_inspection.db" \
 		--defects "$(SC_WAFER_MOCK_DEFECTS)" --imaged 100 --images-per 5 \
 		--inspection-time "$(SC_WAFER_MOCK_INSPECTION_TIME)" --reuse-matching
+
+.PHONY: seed-wafer-gallery-mock-inspections
+seed-wafer-gallery-mock-inspections: ## Seed three small gallery profile inspections into upstream SQLite
+	cd services/sc-upstream && uv run python -m sc_upstream.seed gallery-profiles \
+		--db-url "sqlite:///$(CURDIR)/$(DATA_DIR)/wafer_inspection.db" \
+		--defects "$(SC_GALLERY_PROFILE_DEFECTS)" \
+		--imaged "$(SC_GALLERY_PROFILE_IMAGED)" --images-per 1 \
+		--inspection-time "$(SC_WAFER_MOCK_INSPECTION_TIME)"
 
 .PHONY: seed-wafer-patch-zips
 seed-wafer-patch-zips: ## Seed mock SC patch zips into MinIO and inspection_zips.db
@@ -101,6 +133,36 @@ seed-wafer-patch-zips: ## Seed mock SC patch zips into MinIO and inspection_zips
 		--zips-db-url "sqlite:///$(CURDIR)/$(DATA_DIR)/inspection_zips.db" \
 		--upstream-cache-dir "$(CURDIR)/$(DATA_DIR)/cache" \
 		--total-defects "$(SC_WAFER_MOCK_DEFECTS)"
+
+.PHONY: seed-wafer-gallery-patch-zips
+seed-wafer-gallery-patch-zips: ## Seed 8/16-bit one/two-instance gallery patch archives
+	uv run python infra/compose/seed_patch_zips.py \
+		--s3-endpoint "$(SC_PATCH_ZIP_S3_ENDPOINT)" --bucket "$(SC_PATCH_ZIP_BUCKET)" \
+		--inspection-db-url "sqlite:///$(CURDIR)/$(DATA_DIR)/wafer_inspection.db" \
+		--zips-db-url "sqlite:///$(CURDIR)/$(DATA_DIR)/inspection_zips.db" \
+		--upstream-cache-dir "$(CURDIR)/$(DATA_DIR)/cache" \
+		--total-defects "$(SC_GALLERY_PROFILE_DEFECTS)" \
+		--imaged-defects "$(SC_GALLERY_PROFILE_IMAGED)" --review-images-per-defect 1 \
+		--inspection-time "$(SC_WAFER_MOCK_INSPECTION_TIME)" \
+		--wafer-key 81 --patch-bit-depth 8 --reference-count 1 --difference-count 1
+	uv run python infra/compose/seed_patch_zips.py \
+		--s3-endpoint "$(SC_PATCH_ZIP_S3_ENDPOINT)" --bucket "$(SC_PATCH_ZIP_BUCKET)" \
+		--inspection-db-url "sqlite:///$(CURDIR)/$(DATA_DIR)/wafer_inspection.db" \
+		--zips-db-url "sqlite:///$(CURDIR)/$(DATA_DIR)/inspection_zips.db" \
+		--upstream-cache-dir "$(CURDIR)/$(DATA_DIR)/cache" \
+		--total-defects "$(SC_GALLERY_PROFILE_DEFECTS)" \
+		--imaged-defects "$(SC_GALLERY_PROFILE_IMAGED)" --review-images-per-defect 1 \
+		--inspection-time "$(SC_WAFER_MOCK_INSPECTION_TIME)" \
+		--wafer-key 82 --patch-bit-depth 16 --reference-count 1 --difference-count 1
+	uv run python infra/compose/seed_patch_zips.py \
+		--s3-endpoint "$(SC_PATCH_ZIP_S3_ENDPOINT)" --bucket "$(SC_PATCH_ZIP_BUCKET)" \
+		--inspection-db-url "sqlite:///$(CURDIR)/$(DATA_DIR)/wafer_inspection.db" \
+		--zips-db-url "sqlite:///$(CURDIR)/$(DATA_DIR)/inspection_zips.db" \
+		--upstream-cache-dir "$(CURDIR)/$(DATA_DIR)/cache" \
+		--total-defects "$(SC_GALLERY_PROFILE_DEFECTS)" \
+		--imaged-defects "$(SC_GALLERY_PROFILE_IMAGED)" --review-images-per-defect 1 \
+		--inspection-time "$(SC_WAFER_MOCK_INSPECTION_TIME)" \
+		--wafer-key 83 --patch-bit-depth 16 --reference-count 2 --difference-count 2
 
 .PHONY: seed-wafer-mock-1m
 seed-wafer-mock-1m: ## Seed mock wafer inspection SQLite database (1M defects)

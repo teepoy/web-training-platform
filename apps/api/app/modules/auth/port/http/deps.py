@@ -258,17 +258,11 @@ async def get_current_org(
 
 async def require_admin(
     request: Request,
-    current_user: User | None = None,
-    org: Organization | None = None,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
 ) -> None:
-    if current_user is None:
-        current_user = await get_current_user(request)
-
     if current_user.is_superadmin:
         return
-
-    if org is None:
-        org = await get_current_org(request, current_user)
 
     session_factory = _get_session_factory(request)
     async with session_factory() as session:

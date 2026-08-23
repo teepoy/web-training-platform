@@ -31,8 +31,6 @@ import type {
   BackfillPreviewRequest,
   BackfillPreviewResponse,
   BackfillRangeRequest,
-  BodyCreateImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPost,
-  BodyCreateSourceConnectorApiV1SourceConnectorsPost,
   BodyImportParquetApiV1PluginsImportParquetImportPost,
   BodyUploadModelApiV1ModelsUploadPost,
   BodyUploadSampleImageApiV1DatasetsDatasetIdSamplesSampleIdUploadPost,
@@ -51,12 +49,14 @@ import type {
   CreateDatasetCollectionRequest,
   CreateDatasetCollectionRevisionRequest,
   CreateDatasetRequest,
+  CreateImportProfileRequest,
   CreateMembershipRuleRequest,
   CreateMembershipRuleVersionRequest,
   CreateOrgRequest,
   CreateReviewActionRequest,
   CreateSampleRequest,
   CreateScheduleRequest,
+  CreateSourceConnectorRequest,
   CreateSubscriptionRequest,
   CreateTokenRequest,
   CreateTrainingJobRequest,
@@ -12370,7 +12370,7 @@ export const getCreateSourceConnectorApiV1SourceConnectorsPostUrl = () => {
   return `/api/v1/source-connectors`
 }
 
-export const createSourceConnectorApiV1SourceConnectorsPost = async (bodyCreateSourceConnectorApiV1SourceConnectorsPost: BodyCreateSourceConnectorApiV1SourceConnectorsPost, options?: RequestInit): Promise<SourceConnectorResponse> => {
+export const createSourceConnectorApiV1SourceConnectorsPost = async (createSourceConnectorRequest: CreateSourceConnectorRequest, options?: RequestInit): Promise<SourceConnectorResponse> => {
 
   return orvalFetcher<SourceConnectorResponse>(getCreateSourceConnectorApiV1SourceConnectorsPostUrl(),
   {
@@ -12378,7 +12378,7 @@ export const createSourceConnectorApiV1SourceConnectorsPost = async (bodyCreateS
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
-      bodyCreateSourceConnectorApiV1SourceConnectorsPost,)
+      createSourceConnectorRequest,)
   }
 );}
 
@@ -12386,8 +12386,8 @@ export const createSourceConnectorApiV1SourceConnectorsPost = async (bodyCreateS
 
 
 export const getCreateSourceConnectorApiV1SourceConnectorsPostMutationOptions = <TError = ErrorType<HTTPValidationError>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createSourceConnectorApiV1SourceConnectorsPost>>, TError,{data: BodyType<BodyCreateSourceConnectorApiV1SourceConnectorsPost>}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
-): UseMutationOptions<Awaited<ReturnType<typeof createSourceConnectorApiV1SourceConnectorsPost>>, TError,{data: BodyType<BodyCreateSourceConnectorApiV1SourceConnectorsPost>}, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createSourceConnectorApiV1SourceConnectorsPost>>, TError,{data: BodyType<CreateSourceConnectorRequest>}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+): UseMutationOptions<Awaited<ReturnType<typeof createSourceConnectorApiV1SourceConnectorsPost>>, TError,{data: BodyType<CreateSourceConnectorRequest>}, TContext> => {
 
 const mutationKey = ['createSourceConnectorApiV1SourceConnectorsPost'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -12399,7 +12399,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createSourceConnectorApiV1SourceConnectorsPost>>, {data: BodyType<BodyCreateSourceConnectorApiV1SourceConnectorsPost>}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createSourceConnectorApiV1SourceConnectorsPost>>, {data: BodyType<CreateSourceConnectorRequest>}> = (props) => {
           const {data} = props ?? {};
 
           return  createSourceConnectorApiV1SourceConnectorsPost(data,requestOptions)
@@ -12411,18 +12411,18 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type CreateSourceConnectorApiV1SourceConnectorsPostMutationResult = NonNullable<Awaited<ReturnType<typeof createSourceConnectorApiV1SourceConnectorsPost>>>
-    export type CreateSourceConnectorApiV1SourceConnectorsPostMutationBody = BodyType<BodyCreateSourceConnectorApiV1SourceConnectorsPost>
+    export type CreateSourceConnectorApiV1SourceConnectorsPostMutationBody = BodyType<CreateSourceConnectorRequest>
     export type CreateSourceConnectorApiV1SourceConnectorsPostMutationError = ErrorType<HTTPValidationError>
 
     /**
  * @summary Create Source Connector
  */
 export const useCreateSourceConnectorApiV1SourceConnectorsPost = <TError = ErrorType<HTTPValidationError>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createSourceConnectorApiV1SourceConnectorsPost>>, TError,{data: BodyType<BodyCreateSourceConnectorApiV1SourceConnectorsPost>}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createSourceConnectorApiV1SourceConnectorsPost>>, TError,{data: BodyType<CreateSourceConnectorRequest>}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
 ): UseMutationReturnType<
         Awaited<ReturnType<typeof createSourceConnectorApiV1SourceConnectorsPost>>,
         TError,
-        {data: BodyType<BodyCreateSourceConnectorApiV1SourceConnectorsPost>},
+        {data: BodyType<CreateSourceConnectorRequest>},
         TContext
       > => {
 
@@ -12441,7 +12441,7 @@ export const getCreateImportProfileApiV1SourceConnectorsConnectorIdImportProfile
 }
 
 export const createImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPost = async (connectorId: string,
-    bodyCreateImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPost: BodyCreateImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPost, options?: RequestInit): Promise<ImportProfileVersionResponse> => {
+    createImportProfileRequest: CreateImportProfileRequest, options?: RequestInit): Promise<ImportProfileVersionResponse> => {
 
   return orvalFetcher<ImportProfileVersionResponse>(getCreateImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPostUrl(connectorId),
   {
@@ -12449,7 +12449,7 @@ export const createImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPo
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
-      bodyCreateImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPost,)
+      createImportProfileRequest,)
   }
 );}
 
@@ -12457,8 +12457,8 @@ export const createImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPo
 
 
 export const getCreateImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPostMutationOptions = <TError = ErrorType<HTTPValidationError>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPost>>, TError,{connectorId: string;data: BodyType<BodyCreateImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPost>}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
-): UseMutationOptions<Awaited<ReturnType<typeof createImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPost>>, TError,{connectorId: string;data: BodyType<BodyCreateImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPost>}, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPost>>, TError,{connectorId: string;data: BodyType<CreateImportProfileRequest>}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+): UseMutationOptions<Awaited<ReturnType<typeof createImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPost>>, TError,{connectorId: string;data: BodyType<CreateImportProfileRequest>}, TContext> => {
 
 const mutationKey = ['createImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPost'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -12470,7 +12470,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPost>>, {connectorId: string;data: BodyType<BodyCreateImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPost>}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPost>>, {connectorId: string;data: BodyType<CreateImportProfileRequest>}> = (props) => {
           const {connectorId,data} = props ?? {};
 
           return  createImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPost(connectorId,data,requestOptions)
@@ -12482,18 +12482,18 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type CreateImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPostMutationResult = NonNullable<Awaited<ReturnType<typeof createImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPost>>>
-    export type CreateImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPostMutationBody = BodyType<BodyCreateImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPost>
+    export type CreateImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPostMutationBody = BodyType<CreateImportProfileRequest>
     export type CreateImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPostMutationError = ErrorType<HTTPValidationError>
 
     /**
  * @summary Create Import Profile
  */
 export const useCreateImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPost = <TError = ErrorType<HTTPValidationError>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPost>>, TError,{connectorId: string;data: BodyType<BodyCreateImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPost>}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPost>>, TError,{connectorId: string;data: BodyType<CreateImportProfileRequest>}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
 ): UseMutationReturnType<
         Awaited<ReturnType<typeof createImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPost>>,
         TError,
-        {connectorId: string;data: BodyType<BodyCreateImportProfileApiV1SourceConnectorsConnectorIdImportProfilesPost>},
+        {connectorId: string;data: BodyType<CreateImportProfileRequest>},
         TContext
       > => {
 

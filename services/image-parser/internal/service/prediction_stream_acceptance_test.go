@@ -73,7 +73,7 @@ func TestPredictionImageStreamWarmCache300KToPython(t *testing.T) {
 	lookup := acceptanceLookup{}
 	catalog := acceptanceCatalog{refs: refs}
 	registry, err := equipment.NewRegistry([]equipment.Registration{{
-		EquipmentIDs: []string{"EQP01"}, Factory: legacyrangezip.NewFactory(catalog, store),
+		EquipmentIDs: []string{"EQP01"}, Factory: mustLegacyFactory(t, catalog, store),
 	}})
 	if err != nil {
 		t.Fatal(err)
@@ -119,6 +119,15 @@ func TestPredictionImageStreamWarmCache300KToPython(t *testing.T) {
 		t.Fatalf("decode benchmark output %q: %v", output, err)
 	}
 	t.Logf("warm-cache prediction image stream: %s", output)
+}
+
+func mustLegacyFactory(t *testing.T, catalog legacyrangezip.Catalog, store legacyrangezip.ObjectStore) *legacyrangezip.Factory {
+	t.Helper()
+	factory, err := legacyrangezip.NewFactory(catalog, store, 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return factory
 }
 
 type acceptanceLookup struct{}

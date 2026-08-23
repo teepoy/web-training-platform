@@ -7,17 +7,29 @@ images do not embed a second parser binary.
 
 ## Public surfaces
 
-- Authenticated HTTP `/sc/images/...` and `/sc/sprites/...` serve browser
-  display. The web gateway forwards `/api/v1/sc/images/...` and
-  `/api/v1/sc/sprites/...` directly here. A browser may provide the API access
+- Authenticated HTTP `/sc/images/...`, `/sc/sprites/...`, and
+  `/sc/inspections/{inspection_time}/{wafer_key}/image-profile` serve browser
+  display. The web gateway forwards their `/api/v1/sc/...` aliases directly
+  here. A browser may provide the API access
   token through the `token` query parameter; normal clients use a Bearer header.
-  Sprite requests may opt into display-only grayscale mapping with the complete
-  query tuple `gray_lut`, `z_min`, and `z_max`. The renderer accepts 8-bit and
-  16-bit grayscale content, including opaque RGB containers whose channels are
-  exactly equal, applies normalized `[0, 1]` z-limits before resize, and
+  Sprite requests may opt into display-only grayscale mapping with independent
+  complete query tuples prefixed `defective_reference_` and `difference_`.
+  Defective and Reference/Template share the first mapping. The renderer accepts 8-bit,
+  12-bit, and 16-bit grayscale content, including opaque RGB containers whose channels are
+  exactly equal, applies bit-depth-relative normalized `[0, 1]` z-limits before resize, and
   resolves a fixed 256-entry grayscale, inverted, Viridis, Inferno, or Turbo
   LUT. Mapping applies only to Patch cells; Review cells remain in their source
   colors. Raw `/sc/images/...` responses are never transformed.
+  The image-profile response lists every Patch instance (including multiple
+  Reference, Difference, and Mask IDs) and its native bit depth and observed
+  inspection-wide min/max. Artifact revisions key a bounded metadata LRU, so
+  repeated Settings reads do not rescan cached artifacts.
+- Authenticated POST `/sc/gallery-downloads` accepts only the caller's explicit
+  Gallery selection. It prepares a temporary ZIP on the Export cache/traffic
+  lane and streams the completed file as an attachment. Original PNG/JPEG
+  bytes and dimensions are preserved by default; an explicit option applies
+  the current grouped Patch mappings without resizing and writes mapped PNGs.
+  Review images are never mapped.
 - gRPC `StreamPredictionImages`, `StreamTrainingImages`, and
   `StreamExportImages` are separate bidirectional streams with independent
   traffic metrics and resource lanes. They share request/result messages but
@@ -77,6 +89,28 @@ download, then register the factory for explicit equipment IDs. The entry opens
 the cached database read-only, batches sample/role lookup, preserves request
 order, and reports missing rows as item errors. No Parquet equipment entry is
 provided.
+
+`sc.sqlite-inspection-images.v1` is the fixed Snappy inspection example. Its
+checked-in fixture is
+`internal/equipment/sqliteinspectionimages/testdata/multi-reference-difference-12bit.sqlite`
+and uses:
+
+```sql
+CREATE TABLE inspection_images (
+  id INTEGER PRIMARY KEY,
+  defect_id INTEGER NOT NULL,
+  image_type TEXT NOT NULL,
+  image_id INTEGER,
+  image_value BLOB NOT NULL
+);
+```
+
+`T/R/D/M` map to Defective/Reference/Difference/Mask. `image_id` distinguishes
+multiple instances. `image_value` is a `2E9C` prefix followed by one raw Snappy
+block; the decoded payload is either `Gray8[32x32]` or big-endian 12-bit values
+stored as `uint16[32x32]` (values above 4095 fail explicitly). The entry emits PNG bytes, keeps one read-only SQLite
+connection per immutable artifact, and caches inspection profiles in a bounded
+revision-keyed in-memory LRU.
 
 ## Artifact cache
 

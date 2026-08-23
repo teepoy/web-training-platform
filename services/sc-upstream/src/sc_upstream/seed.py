@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
 import math
 import os
 import random
 from datetime import datetime, timedelta
 
-from sqlalchemy import create_engine, func, inspect
+from sqlalchemy import create_engine, func, inspect, or_
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
@@ -231,6 +232,28 @@ DEFAULT_PATCH_BUCKET = "wafer-patches"
 DEFAULT_REVIEW_BUCKET = "wafer-review-images"
 
 
+@dataclass(frozen=True)
+class GalleryProfileFixture:
+    wafer_key: int
+    wafer_id: str
+    layer_id: str
+
+
+GALLERY_PROFILE_FIXTURES: tuple[GalleryProfileFixture, ...] = (
+    GalleryProfileFixture(wafer_key=81, wafer_id="GRAY8-1R1D", layer_id="LAYER-GRAY8"),
+    GalleryProfileFixture(
+        wafer_key=82,
+        wafer_id="GRAY16-1R1D",
+        layer_id="LAYER-GRAY16-1X",
+    ),
+    GalleryProfileFixture(
+        wafer_key=83,
+        wafer_id="GRAY16-2R2D",
+        layer_id="LAYER-GRAY16-2X",
+    ),
+)
+
+
 def seed_single_summary_mass(
     session: Session,
     total_defects: int = 300_000,
@@ -238,15 +261,19 @@ def seed_single_summary_mass(
     images_per_defect: int = 5,
     commit_batch: int = 10_000,
     inspection_time: datetime | None = None,
+    *,
+    wafer_key: int = 1,
+    lot_id: str = "A123456",
+    wafer_id: str = "24",
+    layer_id: str = "LAYER-M1",
+    equip_id: str = "EQ-TOOL-A1",
+    device: str = "DEVICE-DEMO-A",
 ) -> None:
     die_size_x = 8_000_000
     die_size_y = 5_000_000
     origin_x = 145_000_000
     origin_y = 145_000_000
 
-    wafer_key = 1
-    lot_id = "A123456"
-    wafer_id = "24"
     if inspection_time is None:
         now = datetime.now().astimezone()
         inspection_time = now.replace(hour=4, minute=0, second=0, microsecond=0)
@@ -260,21 +287,24 @@ def seed_single_summary_mass(
         inspection_time=inspection_time,
         lot_id=lot_id,
         wafer_id=wafer_id,
-        layer_id="LAYER-M1",
+        layer_id=layer_id,
         recipe_key=1,
-        equip_id="EQ-TOOL-A1",
+        equip_id=equip_id,
         num_defects=total_defects,
         num_images=total_images,
         origin_x=origin_x,
         origin_y=origin_y,
         die_size_x=die_size_x,
         die_size_y=die_size_y,
-        device="DEVICE-DEMO-A",
+        device=device,
     )
     session.add(summary)
     session.flush()
 
-    print(f"Seeding {total_defects:,} defects (batch size {commit_batch:,})...")
+    print(
+        f"Seeding wafer_key={wafer_key} with {total_defects:,} defects "
+        f"(batch size {commit_batch:,})..."
+    )
     for start in range(1, total_defects + 1, commit_batch):
         end = min(start + commit_batch, total_defects + 1)
         for defect_id in range(start, end):
@@ -295,7 +325,7 @@ def seed_single_summary_mass(
             if defect_id <= imaged_count:
                 for img_id in range(1, images_per_defect + 1):
                     ts = inspection_time.strftime("%Y%m%d_%H%M%S")
-                    filespec = f"s3://{DEFAULT_REVIEW_BUCKET}/{ts}/{wafer_key}/{defect_id:07d}_{img_id}.jpg"
+                    filespec = f"s3://{DEFAULT_REVIEW_BUCKET}/{ts}/{wafer_key}/{defect_id:07d}_{img_id}.png"
                     session.add(
                         _make_image(
                             wafer_key, inspection_time, defect_id, img_id, filespec
@@ -306,9 +336,57 @@ def seed_single_summary_mass(
         print(f"  committed defects {start:,}–{end - 1:,}")
 
     print(
-        f"Seed complete: 1 summary, {total_defects:,} defects, "
+        f"Seed complete: wafer_key={wafer_key}, 1 summary, {total_defects:,} defects, "
         f"{total_images:,} images (on {imaged_count} defects)"
     )
+
+
+def seed_gallery_profile_inspections(
+    session: Session,
+    *,
+    inspection_time: datetime,
+    total_defects: int = 64,
+    imaged_defects: int = 8,
+    images_per_defect: int = 1,
+) -> None:
+    """Replace the three small gallery profile fixtures without touching other wafers."""
+    if total_defects <= 0:
+        raise ValueError("gallery profile defect count must be greater than zero")
+    if imaged_defects < 0 or images_per_defect < 0:
+        raise ValueError("gallery profile image counts cannot be negative")
+
+    for fixture in GALLERY_PROFILE_FIXTURES:
+        identity_filters = (
+            InspectImageORM.wafer_key == fixture.wafer_key,
+            InspectImageORM.inspection_time == inspection_time,
+        )
+        session.query(InspectImageORM).filter(*identity_filters).delete(
+            synchronize_session=False
+        )
+        session.query(InspectDefectORM).filter(
+            InspectDefectORM.wafer_key == fixture.wafer_key,
+            InspectDefectORM.inspection_time == inspection_time,
+        ).delete(synchronize_session=False)
+        session.query(InspWaferSummaryORM).filter(
+            InspWaferSummaryORM.wafer_key == fixture.wafer_key,
+            InspWaferSummaryORM.inspection_time == inspection_time,
+        ).delete(synchronize_session=False)
+        session.commit()
+
+        seed_single_summary_mass(
+            session,
+            total_defects=total_defects,
+            imaged_defects=imaged_defects,
+            images_per_defect=images_per_defect,
+            commit_batch=total_defects,
+            inspection_time=inspection_time,
+            wafer_key=fixture.wafer_key,
+            lot_id="GALLERY-VQA",
+            wafer_id=fixture.wafer_id,
+            layer_id=fixture.layer_id,
+            equip_id="EQ-TOOL-A1",
+            device="DEVICE-GALLERY-VQA",
+        )
 
 
 def mass_fixture_matches(
@@ -331,17 +409,53 @@ def mass_fixture_matches(
         return False
 
     with Session(engine) as session:
-        summaries = session.query(InspWaferSummaryORM).all()
+        summary_query = session.query(InspWaferSummaryORM).filter(
+            InspWaferSummaryORM.wafer_key == 1
+        )
+        if inspection_time is not None:
+            summary_query = summary_query.filter(
+                InspWaferSummaryORM.inspection_time == inspection_time
+            )
+        summaries = summary_query.all()
         if len(summaries) != 1:
             return False
         summary = summaries[0]
-        defect_stats = session.query(
-            func.count(InspectDefectORM.defect_id),
-            func.count(func.distinct(InspectDefectORM.defect_id)),
-            func.min(InspectDefectORM.defect_id),
-            func.max(InspectDefectORM.defect_id),
-        ).one()
-        image_count = int(session.query(func.count(InspectImageORM.image_id)).scalar())
+        identity_filters = (
+            InspectDefectORM.wafer_key == summary.wafer_key,
+            InspectDefectORM.inspection_time == summary.inspection_time,
+        )
+        defect_stats = (
+            session.query(
+                func.count(InspectDefectORM.defect_id),
+                func.count(func.distinct(InspectDefectORM.defect_id)),
+                func.min(InspectDefectORM.defect_id),
+                func.max(InspectDefectORM.defect_id),
+            )
+            .filter(*identity_filters)
+            .one()
+        )
+        image_identity_filters = (
+            InspectImageORM.wafer_key == summary.wafer_key,
+            InspectImageORM.inspection_time == summary.inspection_time,
+        )
+        image_count = int(
+            session.query(func.count(InspectImageORM.image_id))
+            .filter(*image_identity_filters)
+            .scalar()
+        )
+        invalid_image_locator_count = int(
+            session.query(func.count(InspectImageORM.image_id))
+            .filter(
+                *image_identity_filters,
+                or_(
+                    InspectImageORM.image_filespec.is_(None),
+                    ~InspectImageORM.image_filespec.like(
+                        f"s3://{DEFAULT_REVIEW_BUCKET}/%.png"
+                    ),
+                ),
+            )
+            .scalar()
+        )
 
     expected_images = min(total_defects, imaged_defects) * images_per_defect
     return (
@@ -355,6 +469,7 @@ def mass_fixture_matches(
         and tuple(int(value or 0) for value in defect_stats)
         == (total_defects, total_defects, 1, total_defects)
         and image_count == expected_images
+        and invalid_image_locator_count == 0
     )
 
 
@@ -369,6 +484,25 @@ def main(argv: list[str] | None = None) -> None:
         "--db-url",
         default=os.environ.get("UPSTREAM_DB_URL", DEFAULT_UPSTREAM_DB_URL),
         help=f"Upstream DB URL (default: {DEFAULT_UPSTREAM_DB_URL})",
+    )
+
+    gallery = sub.add_parser(
+        "gallery-profiles",
+        help="Three small inspections covering 8/16-bit gallery profile shapes",
+    )
+    gallery.add_argument(
+        "--db-url",
+        default=os.environ.get("UPSTREAM_DB_URL", DEFAULT_UPSTREAM_DB_URL),
+        help=f"Upstream DB URL (default: {DEFAULT_UPSTREAM_DB_URL})",
+    )
+    gallery.add_argument("--defects", type=int, default=64)
+    gallery.add_argument("--imaged", type=int, default=8)
+    gallery.add_argument("--images-per", type=int, default=1)
+    gallery.add_argument(
+        "--inspection-time",
+        type=datetime.fromisoformat,
+        required=True,
+        help="Fixed ISO inspection time shared by wafer keys 81, 82, and 83",
     )
     mass.add_argument("--defects", type=int, default=300_000, help="Defect count")
     mass.add_argument("--imaged", type=int, default=100, help="Defects with images")
@@ -431,7 +565,9 @@ def main(argv: list[str] | None = None) -> None:
             return
         print("Existing mass fixture is missing or differs; replacing it.")
 
-    if args.reset or (args.command == "mass" and args.reuse_matching):
+    if getattr(args, "reset", False) or (
+        args.command == "mass" and args.reuse_matching
+    ):
         Base.metadata.drop_all(engine)
         BaseZips.metadata.drop_all(engine)
 
@@ -450,6 +586,14 @@ def main(argv: list[str] | None = None) -> None:
                 images_per_defect=args.images_per,
                 commit_batch=args.batch,
                 inspection_time=args.inspection_time,
+            )
+        elif args.command == "gallery-profiles":
+            seed_gallery_profile_inspections(
+                session,
+                inspection_time=args.inspection_time,
+                total_defects=args.defects,
+                imaged_defects=args.imaged,
+                images_per_defect=args.images_per,
             )
 
     print("Done.")

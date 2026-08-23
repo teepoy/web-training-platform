@@ -86,10 +86,12 @@ const mapPanel = ref<InstanceType<typeof ScMapPanelBinned> | null>(null);
 const leftPanelEl = ref<HTMLElement | null>(null);
 const rightPanelEl = ref<HTMLElement | null>(null);
 const columnPct = ref(DEFAULT_COLUMN_PCT);
+const annotationPct = ref(RECLASSIFY_ANNOTATION_PCT);
 const mapPct = ref(DEFAULT_MAP_PCT);
 const barPct = ref(DEFAULT_BAR_PCT);
 const HIGHLIGHT_MAX_DEFECTS = 9999;
 const isColumnResizing = ref(false);
+const isAnnotationResizing = ref(false);
 const isRowResizing = ref(false);
 const isBarResizing = ref(false);
 const globalDistinctValues = ref<Record<string, Array<string | number>>>({});
@@ -507,7 +509,7 @@ const barChartOption = computed<EChartsOption>(() => ({
 }));
 const quadStyle = computed(() => ({
   gridTemplateColumns: isReclassify.value
-    ? `${columnPct.value}fr 12px ${100 - RECLASSIFY_ANNOTATION_PCT - columnPct.value}fr 12px ${RECLASSIFY_ANNOTATION_PCT}fr`
+    ? `${columnPct.value}fr 12px ${100 - annotationPct.value - columnPct.value}fr 12px ${annotationPct.value}fr`
     : `${columnPct.value}fr 12px ${100 - columnPct.value}fr`,
 }));
 const leftPanelStyle = computed(() => ({
@@ -628,8 +630,28 @@ function onColumnResizeMove(e: PointerEvent): void {
   columnPct.value = clamp(
     ((e.clientX - rect.left) / rect.width) * 100,
     20,
-    isReclassify.value ? 65 : 80,
+    isReclassify.value ? 100 - annotationPct.value - 20 : 80,
   );
+}
+function onAnnotationResizeStart(e: PointerEvent): void {
+  e.preventDefault();
+  if (e.currentTarget instanceof Element) e.currentTarget.setPointerCapture(e.pointerId);
+  isAnnotationResizing.value = true;
+}
+function onAnnotationResizeMove(e: PointerEvent): void {
+  if (!isAnnotationResizing.value || !quadEl.value) return;
+  const rect = quadEl.value.getBoundingClientRect();
+  if (rect.width <= 0) return;
+  annotationPct.value = clamp(
+    ((rect.right - e.clientX) / rect.width) * 100,
+    12,
+    100 - columnPct.value - 20,
+  );
+}
+function onAnnotationResizeEnd(e: PointerEvent): void {
+  if (!isAnnotationResizing.value) return;
+  isAnnotationResizing.value = false;
+  if (e.currentTarget instanceof Element) e.currentTarget.releasePointerCapture(e.pointerId);
 }
 function onColumnResizeEnd(e: PointerEvent): void {
   if (!isColumnResizing.value) return;
@@ -907,7 +929,7 @@ function useMapSelectionQueue() {
     ref="quadEl"
     class="iq-quad"
     :class="{
-      'iq-quad--column-resizing': isColumnResizing,
+      'iq-quad--column-resizing': isColumnResizing || isAnnotationResizing,
       'iq-quad--row-resizing': isRowResizing,
       'iq-quad--bar-resizing': isBarResizing,
       'iq-quad--reclassify': isReclassify,
@@ -1095,7 +1117,15 @@ function useMapSelectionQueue() {
       </div>
     </div>
     <template v-if="isReclassify"
-      ><div class="iq-splitter iq-splitter--column" role="separator" aria-orientation="vertical" />
+      ><div
+        class="iq-splitter iq-splitter--column iq-splitter--annotation"
+        role="separator"
+        aria-label="Resize Annotation panel"
+        aria-orientation="vertical"
+        @pointerdown="onAnnotationResizeStart"
+        @pointermove="onAnnotationResizeMove"
+        @pointerup="onAnnotationResizeEnd"
+        @pointercancel="onAnnotationResizeEnd" />
       <div class="iq-panel-annotation"><slot name="annotation" /></div
     ></template>
   </div>

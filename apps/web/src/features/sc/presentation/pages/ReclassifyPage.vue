@@ -162,6 +162,21 @@ const samplingOptions = computed(() => ({
   extraFilterEnabled: page.samplingProgram.value.extraFilterEnabled,
   extraFilter: samplingExtraFilter.value,
 }));
+const currentSamplingConfigurationKey = computed(() =>
+  JSON.stringify({
+    program: page.samplingProgram.value,
+    options: samplingOptions.value,
+  }),
+);
+const appliedSamplingConfigurationKey = ref<string | null>(
+  page.galleryRandomSamplingDefectIds.value.size > 0 ? currentSamplingConfigurationKey.value : null,
+);
+const samplingCohortStale = computed(
+  () =>
+    page.galleryRandomSamplingDefectIds.value.size > 0 &&
+    appliedSamplingConfigurationKey.value !== null &&
+    appliedSamplingConfigurationKey.value !== currentSamplingConfigurationKey.value,
+);
 const samplingFilterDistinctValues = computed(
   () => inspectionQuad.value?.filterDistinctValues ?? {},
 );
@@ -334,6 +349,7 @@ async function handleSamplingScopeChange(): Promise<void> {
 async function applyRandomSampling(): Promise<void> {
   isPreparingSampling.value = true;
   try {
+    const configurationKey = currentSamplingConfigurationKey.value;
     const ids = await inspectionQuad.value?.querySamplingDefectIds(
       page.samplingProgram.value,
       SC_SAMPLING_RANDOM_SEED,
@@ -341,11 +357,17 @@ async function applyRandomSampling(): Promise<void> {
     );
     if (!ids) throw new Error("Data is still loading. Try again in a moment.");
     page.applySampling(ids.map(String));
+    if (ids.length > 0) appliedSamplingConfigurationKey.value = configurationKey;
   } catch (error) {
     message.error(toUserMessage(error, "Failed to sample defects"));
   } finally {
     isPreparingSampling.value = false;
   }
+}
+
+function clearSamplingCohort(): void {
+  page.clearGalleryRandomSamplingDefectIds();
+  appliedSamplingConfigurationKey.value = null;
 }
 
 // ── Keyboard shortcuts: user-configured single keys apply annotation codes ─
@@ -472,13 +494,19 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
                 <NButton
                   data-testid="sc-random-filter-trigger"
                   size="small"
-                  :type="page.galleryRandomSamplingDefectIds.value.size ? 'primary' : 'default'"
+                  :type="
+                    samplingCohortStale
+                      ? 'warning'
+                      : page.galleryRandomSamplingDefectIds.value.size
+                        ? 'primary'
+                        : 'default'
+                  "
                   :loading="isPreparingSampling"
                   @click="openSamplingModal"
                 >
                   Annotation Sampling{{
                     page.galleryRandomSamplingDefectIds.value.size
-                      ? ` (${page.galleryRandomSamplingDefectIds.value.size})`
+                      ? ` (${page.galleryRandomSamplingDefectIds.value.size}${samplingCohortStale ? " · outdated" : ""})`
                       : ""
                   }}
                 </NButton>
@@ -487,7 +515,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
                   data-testid="sc-random-filter-clear"
                   size="small"
                   quaternary
-                  @click="page.clearGalleryRandomSamplingDefectIds"
+                  @click="clearSamplingCohort"
                 >
                   Clear
                 </NButton>
@@ -556,7 +584,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
             :annotation-drafts="page.annotationDraft.value"
             v-model:global-filter="page.globalFilter.value"
             :global-filter-trigger-target="globalFilterTriggerTarget ?? undefined"
-            @clear-gallery-random-sampling="page.clearGalleryRandomSamplingDefectIds"
+            @clear-gallery-random-sampling="clearSamplingCohort"
             @selection-change="page.applySelectionAction"
           >
             <template #annotation>
@@ -585,6 +613,8 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
       v-model:scope="page.samplingScope.value"
       :loading="isPreparingSampling"
       :available-count="samplingAvailableCount"
+      :active-cohort-count="page.galleryRandomSamplingDefectIds.value.size"
+      :cohort-stale="samplingCohortStale"
       :map-selection-count="samplingMapSelectionCount"
       :table-selection-available="samplingTableSelectionAvailable"
       :extra-filter="samplingExtraFilter"

@@ -168,9 +168,7 @@ test("SC Export tab offers Parquet, KLARF, and ZIP result exports @mock", async 
 
   await expect(exportTab.getByText("Export current results", { exact: true })).toBeVisible();
   await expect(
-    exportTab.getByText(
-      "Uses the annotation when it is classified; otherwise it uses the latest prediction.",
-    ),
+    exportTab.getByText("Choose the class result, optional Review Sampling, and file format."),
   ).toBeVisible();
   await expect(exportTab.getByRole("radio", { name: /^Parquet\b/ })).toBeVisible();
   const klarfOption = exportTab.getByRole("radio", { name: /^KLARF\b/ });
@@ -181,9 +179,9 @@ test("SC Export tab offers Parquet, KLARF, and ZIP result exports @mock", async 
   await expect(exportTab.getByLabel("KLARF version 1.2")).toBeVisible();
   await expect(exportTab.getByLabel("KLARF version 1.8")).toBeVisible();
   await expect(exportTab.getByLabel("Include defect images")).toBeVisible();
-  await expect(exportTab.getByText("Annotation Sampling", { exact: true })).toBeVisible();
-  await expect(exportTab.getByText(/Defect images are optional/)).toBeVisible();
-  await expect(exportTab.getByText("Large exports may take several minutes")).toBeVisible();
+  await expect(exportTab.getByText("Review Sampling", { exact: true })).toBeVisible();
+  await expect(exportTab.getByText(/One defective patch per retained row/)).toBeVisible();
+  await expect(exportTab.getByText(/Large exports can exceed 100 MB/)).toBeVisible();
 });
 
 test("SC-only export stays hidden for a generic sparse Dataset @mock", async ({

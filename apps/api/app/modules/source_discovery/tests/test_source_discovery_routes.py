@@ -7,6 +7,12 @@ from app.main import app
 from app.modules.auth.port.http.deps import require_admin
 
 
+def test_admin_guard_does_not_embed_auth_context_in_connector_body() -> None:
+    operation = app.openapi()["paths"]["/api/v1/source-connectors"]["post"]
+    schema_ref = operation["requestBody"]["content"]["application/json"]["schema"]
+    assert schema_ref == {"$ref": "#/components/schemas/CreateSourceConnectorRequest"}
+
+
 def test_source_provider_descriptor_is_exposed_as_typed_capabilities() -> None:
     with TestClient(app) as client:
         response = client.get("/api/v1/source-connectors/providers")

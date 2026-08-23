@@ -24,9 +24,28 @@ const (
 var ErrUnsupportedGrayImage = errors.New("gray mapping supports only 8-bit or 16-bit grayscale images")
 
 type GrayMapping struct {
-	LUT  GrayLUT
-	ZMin float64
-	ZMax float64
+	LUT      GrayLUT
+	ZMin     float64
+	ZMax     float64
+	BitDepth int
+}
+
+// PatchGrayMappings keeps the two user-facing SC tone-mapping groups explicit.
+// Defective and Reference/Template share one mapping; Difference is independent.
+type PatchGrayMappings struct {
+	DefectiveReference *GrayMapping
+	Difference         *GrayMapping
+}
+
+func (m PatchGrayMappings) ForImageType(imageType string) *GrayMapping {
+	displayImageType := strings.ToLower(strings.TrimSpace(imageType))
+	if strings.HasPrefix(displayImageType, "mask") || strings.HasPrefix(displayImageType, "patch_mask") || strings.HasPrefix(displayImageType, "patchmask") {
+		return nil
+	}
+	if strings.HasPrefix(displayImageType, "difference") || strings.HasPrefix(displayImageType, "patch_difference") || strings.HasPrefix(displayImageType, "patchdifference") {
+		return m.Difference
+	}
+	return m.DefectiveReference
 }
 
 func ParseGrayLUT(raw string) (GrayLUT, error) {
@@ -47,6 +66,9 @@ func (m GrayMapping) Validate() error {
 	}
 	if m.ZMin >= m.ZMax {
 		return fmt.Errorf("z_min must be less than z_max")
+	}
+	if m.BitDepth != 0 && m.BitDepth != 8 && m.BitDepth != 12 && m.BitDepth != 16 {
+		return fmt.Errorf("bit_depth must be 8, 12, or 16")
 	}
 	return nil
 }
@@ -92,6 +114,18 @@ var grayLUTs = map[GrayLUT][256]color.NRGBA{
 }
 
 func resizeSquarePNGWithGrayMapping(raw []byte, size int, mapping GrayMapping) ([]byte, error) {
+	return renderPNGWithGrayMapping(raw, size, size, mapping)
+}
+
+func originalSizePNGWithGrayMapping(raw []byte, mapping GrayMapping) ([]byte, error) {
+	source, _, err := image.Decode(bytes.NewReader(raw))
+	if err != nil {
+		return nil, err
+	}
+	return renderDecodedPNGWithGrayMapping(source, source.Bounds().Dx(), source.Bounds().Dy(), mapping)
+}
+
+func renderPNGWithGrayMapping(raw []byte, width, height int, mapping GrayMapping) ([]byte, error) {
 	if err := mapping.Validate(); err != nil {
 		return nil, err
 	}
@@ -99,19 +133,29 @@ func resizeSquarePNGWithGrayMapping(raw []byte, size int, mapping GrayMapping) (
 	if err != nil {
 		return nil, err
 	}
-	sample, err := gray16Sampler(source)
+	return renderDecodedPNGWithGrayMapping(source, width, height, mapping)
+}
+
+func renderDecodedPNGWithGrayMapping(source image.Image, width, height int, mapping GrayMapping) ([]byte, error) {
+	if err := mapping.Validate(); err != nil {
+		return nil, err
+	}
+	if width <= 0 || height <= 0 {
+		return nil, fmt.Errorf("mapped image dimensions must be positive")
+	}
+	sample, detectedBitDepth, err := graySampler(source)
 	if err != nil {
 		return nil, err
 	}
 
 	lut := grayLUTs[mapping.LUT]
-	target := image.NewNRGBA(image.Rect(0, 0, size, size))
+	target := image.NewNRGBA(image.Rect(0, 0, width, height))
 	sourceBounds := source.Bounds()
-	for targetY := range size {
-		sourceY := (float64(targetY)+0.5)*float64(sourceBounds.Dy())/float64(size) - 0.5
+	for targetY := range height {
+		sourceY := (float64(targetY)+0.5)*float64(sourceBounds.Dy())/float64(height) - 0.5
 		y0, y1, yWeight := interpolationPoints(sourceY, sourceBounds.Dy())
-		for targetX := range size {
-			sourceX := (float64(targetX)+0.5)*float64(sourceBounds.Dx())/float64(size) - 0.5
+		for targetX := range width {
+			sourceX := (float64(targetX)+0.5)*float64(sourceBounds.Dx())/float64(width) - 0.5
 			x0, x1, xWeight := interpolationPoints(sourceX, sourceBounds.Dx())
 			value := bilinearGray16(
 				sample(sourceBounds.Min.X+x0, sourceBounds.Min.Y+y0),
@@ -121,7 +165,7 @@ func resizeSquarePNGWithGrayMapping(raw []byte, size int, mapping GrayMapping) (
 				xWeight,
 				yWeight,
 			)
-			target.SetNRGBA(targetX, targetY, lut[grayLUTIndex(value, mapping)])
+			target.SetNRGBA(targetX, targetY, lut[grayLUTIndex(value, mapping, detectedBitDepth)])
 		}
 	}
 
@@ -132,30 +176,30 @@ func resizeSquarePNGWithGrayMapping(raw []byte, size int, mapping GrayMapping) (
 	return output.Bytes(), nil
 }
 
-func gray16Sampler(source image.Image) (func(int, int) uint16, error) {
+func graySampler(source image.Image) (func(int, int) uint16, int, error) {
 	switch typed := source.(type) {
 	case *image.Gray:
 		return func(x, y int) uint16 {
-			return uint16(typed.GrayAt(x, y).Y) * 257
-		}, nil
+			return uint16(typed.GrayAt(x, y).Y)
+		}, 8, nil
 	case *image.Gray16:
 		return func(x, y int) uint16 {
 			return typed.Gray16At(x, y).Y
-		}, nil
+		}, 16, nil
 	default:
 		bounds := source.Bounds()
 		for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
 			for x := bounds.Min.X; x < bounds.Max.X; x++ {
 				red, green, blue, alpha := source.At(x, y).RGBA()
 				if red != green || green != blue || alpha != 65535 {
-					return nil, ErrUnsupportedGrayImage
+					return nil, 0, ErrUnsupportedGrayImage
 				}
 			}
 		}
 		return func(x, y int) uint16 {
 			red, _, _, _ := source.At(x, y).RGBA()
 			return uint16(red)
-		}, nil
+		}, 16, nil
 	}
 }
 
@@ -165,8 +209,13 @@ func bilinearGray16(upperLeft, upperRight, lowerLeft, lowerRight uint16, xWeight
 	return uint16(upper*(1-yWeight) + lower*yWeight + 0.5)
 }
 
-func grayLUTIndex(value uint16, mapping GrayMapping) int {
-	normalized := float64(value) / 65535
+func grayLUTIndex(value uint16, mapping GrayMapping, detectedBitDepth int) int {
+	bitDepth := mapping.BitDepth
+	if bitDepth == 0 {
+		bitDepth = detectedBitDepth
+	}
+	maximum := float64((uint64(1) << uint(bitDepth)) - 1)
+	normalized := float64(value) / maximum
 	windowed := (normalized - mapping.ZMin) / (mapping.ZMax - mapping.ZMin)
 	if windowed <= 0 {
 		return 0

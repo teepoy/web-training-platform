@@ -5910,7 +5910,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/Body_create_source_connector_api_v1_source_connectors_post"
+              $ref: "#/components/schemas/CreateSourceConnectorRequest"
         required: true
       responses:
         "200":
@@ -5943,7 +5943,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/Body_create_import_profile_api_v1_source_connectors__connector_id__import_profiles_post"
+              $ref: "#/components/schemas/CreateImportProfileRequest"
       responses:
         "200":
           description: Successful Response
@@ -6712,38 +6712,6 @@ components:
         - end_utc
         - timezone
       title: BackfillRangeRequest
-    Body_create_import_profile_api_v1_source_connectors__connector_id__import_profiles_post:
-      properties:
-        payload:
-          $ref: "#/components/schemas/CreateImportProfileRequest"
-        current_user:
-          anyOf:
-            - $ref: "#/components/schemas/User"
-            - type: "null"
-        org:
-          anyOf:
-            - $ref: "#/components/schemas/Organization"
-            - type: "null"
-      type: object
-      required:
-        - payload
-      title: Body_create_import_profile_api_v1_source_connectors__connector_id__import_profiles_post
-    Body_create_source_connector_api_v1_source_connectors_post:
-      properties:
-        payload:
-          $ref: "#/components/schemas/CreateSourceConnectorRequest"
-        current_user:
-          anyOf:
-            - $ref: "#/components/schemas/User"
-            - type: "null"
-        org:
-          anyOf:
-            - $ref: "#/components/schemas/Organization"
-            - type: "null"
-      type: object
-      required:
-        - payload
-      title: Body_create_source_connector_api_v1_source_connectors_post
     Body_import_parquet_api_v1_plugins_import_parquet_import_post:
       properties:
         file:
@@ -8906,26 +8874,6 @@ components:
         - slug
         - created_at
       title: OrgResponse
-    Organization:
-      properties:
-        id:
-          type: string
-          title: Id
-        name:
-          type: string
-          title: Name
-        slug:
-          type: string
-          title: Slug
-        created_at:
-          type: string
-          format: date-time
-          title: Created At
-      type: object
-      required:
-        - name
-        - slug
-      title: Organization
     PaginatedResponse_AnnotationVersionResponse_:
       properties:
         items:
@@ -12471,44 +12419,6 @@ components:
         - id
         - name
       title: UploadTemplateProfileResponse
-    User:
-      properties:
-        id:
-          type: string
-          title: Id
-        email:
-          type: string
-          title: Email
-        name:
-          type: string
-          title: Name
-        is_superadmin:
-          type: boolean
-          title: Is Superadmin
-          default: false
-        is_active:
-          type: boolean
-          title: Is Active
-          default: true
-        created_at:
-          type: string
-          format: date-time
-          title: Created At
-        oauth_provider:
-          anyOf:
-            - type: string
-            - type: "null"
-          title: Oauth Provider
-        oauth_provider_id:
-          anyOf:
-            - type: string
-            - type: "null"
-          title: Oauth Provider Id
-      type: object
-      required:
-        - email
-        - name
-      title: User
     UserResponse:
       properties:
         id:

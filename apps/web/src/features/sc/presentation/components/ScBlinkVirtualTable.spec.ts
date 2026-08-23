@@ -1,30 +1,53 @@
-import { NButton, NModal } from "naive-ui";
-import { describe, expect, it } from "vitest";
+import { flushPromises } from "@vue/test-utils";
+import { describe, expect, it, vi } from "vitest";
 import { mountWithProviders } from "@/testing";
 import ScBlinkVirtualTable from "./ScBlinkVirtualTable.vue";
 
+vi.mock("./scInspectionImageProfile", async () => {
+  const actual = await vi.importActual<typeof import("./scInspectionImageProfile")>(
+    "./scInspectionImageProfile",
+  );
+  return {
+    ...actual,
+    loadScInspectionImageProfile: vi.fn().mockResolvedValue({
+      inspection_time: "2026-08-21T00:00:00Z",
+      wafer_key: 1,
+      reference_count: 2,
+      difference_count: 2,
+      mask_count: 1,
+      patches: [
+        { image_type: "Defective", image_id: null, bit_depth: 12, z_min: 100, z_max: 3500 },
+        { image_type: "Reference", image_id: 0, bit_depth: 12, z_min: 200, z_max: 3000 },
+        { image_type: "Reference", image_id: 1, bit_depth: 12, z_min: 300, z_max: 3200 },
+        { image_type: "Difference", image_id: 0, bit_depth: 12, z_min: 10, z_max: 1000 },
+        { image_type: "Difference", image_id: 1, bit_depth: 12, z_min: 20, z_max: 2000 },
+        { image_type: "Mask", image_id: 0, bit_depth: 8, z_min: 0, z_max: 1 },
+      ],
+    }),
+  };
+});
+
 describe("ScBlinkVirtualTable gallery settings", () => {
-  it("separates layout and gray color mapping into tabs", async () => {
+  it("keeps Gallery and Colors as separate tabs and adapts to all patch instances", async () => {
     const { wrapper } = await mountWithProviders(ScBlinkVirtualTable, {
       props: {
         inspectionTime: "2026-08-21T00:00:00Z",
         waferKey: 1,
       },
     });
-    const settingsButton = wrapper
-      .findAllComponents(NButton)
-      .find((candidate) => candidate.text() === "Settings");
-    if (!settingsButton) throw new Error("Gallery Settings button was not rendered");
-
-    await settingsButton.trigger("click");
-
-    expect(wrapper.findComponent(NModal).props("title")).toBe("Gallery Settings");
-    const layoutTab = document.querySelector<HTMLElement>('[data-name="layout"]');
-    const colorTab = document.querySelector<HTMLElement>('[data-name="color"]');
-    expect(layoutTab?.textContent).toContain("Layout");
-    expect(colorTab?.textContent).toContain("Color");
+    expect(wrapper.find('[data-testid="gallery-color-dock"]').exists()).toBe(true);
+    await flushPromises();
+    const layoutTab = document.querySelector<HTMLElement>('[data-name="gallery"]');
+    const colorTab = document.querySelector<HTMLElement>('[data-name="colors"]');
+    expect(layoutTab?.textContent).toContain("Gallery");
+    expect(colorTab?.textContent).toContain("Colors");
+    expect(document.body.textContent).toContain("Reference 1");
+    expect(document.body.textContent).toContain("Reference 2");
+    expect(document.body.textContent).toContain("Difference 2");
     colorTab?.click();
     await wrapper.vm.$nextTick();
+    expect(document.body.textContent).toContain("D / R");
+    expect(document.body.textContent).toContain("Difference");
     expect(document.querySelector('[data-testid="gallery-gray-mapping-toggle"]')).not.toBeNull();
   });
 });

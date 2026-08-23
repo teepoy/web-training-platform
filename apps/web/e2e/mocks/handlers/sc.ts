@@ -70,6 +70,31 @@ export async function mockScInspectionSamples(page: Page): Promise<void> {
   });
 }
 
+export async function mockScInspectionImageProfile(page: Page): Promise<void> {
+  await page.route("**/api/v1/sc/inspections/*/*/image-profile", async (route) => {
+    const url = new URL(route.request().url());
+    const segments = url.pathname.split("/");
+    const inspectionTime = decodeURIComponent(segments.at(-3) ?? "2026-01-01T00:00:00Z");
+    const waferKey = Number(segments.at(-2) ?? 1);
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        inspection_time: inspectionTime,
+        wafer_key: waferKey,
+        reference_count: 1,
+        difference_count: 1,
+        mask_count: 0,
+        patches: [
+          { image_type: "Defective", image_id: null, bit_depth: 8, z_min: 0, z_max: 255 },
+          { image_type: "Reference", image_id: 0, bit_depth: 8, z_min: 0, z_max: 255 },
+          { image_type: "Difference", image_id: 0, bit_depth: 8, z_min: 0, z_max: 255 },
+        ],
+      }),
+    });
+  });
+}
+
 export interface ScDatasetOverrides {
   name?: string;
   label_space?: string[];

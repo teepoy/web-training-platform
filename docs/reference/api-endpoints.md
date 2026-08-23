@@ -39,6 +39,8 @@ This is a high-level endpoint index for the current API surface. It is not a sch
 - `POST /api/v1/sc/datasets/{dataset_id}/box-filter`
 - `GET /api/v1/sc/images/{inspection_time}/{wafer_key}/{defect_id}/{image_type}` — Web-gateway alias forwarded directly to image-parser `/sc/images/...`; FastAPI does not register this route or provide a bytes fallback. Supported frontend aliases include `template`, `defective`, `difference`, and review variants.
 - `GET /api/v1/sc/sprites/{mode}/{inspection_time}/{wafer_key}/{defect_id}` — Web-gateway alias forwarded directly to image-parser `/sc/sprites/...` for the current per-defect sprite contract.
+- `GET /api/v1/sc/inspections/{inspection_time}/{wafer_key}/image-profile` — Web-gateway alias forwarded directly to image-parser. Returns all Patch instances plus native 8/12/16-bit observed ranges for Gallery/Colors Settings; FastAPI has no proxy route.
+- `POST /api/v1/sc/gallery-downloads` — Web-gateway alias forwarded directly to image-parser. It accepts an explicit Gallery selection as a bounded form payload, prepares the ZIP on the Export lane, and streams the completed attachment without a FastAPI or browser-Blob proxy.
 - `/api/v1/sc/sprite-atlases/...` is not a current API contract. If an atlas contract is introduced, atlas generation and HTTP serving belong to image-parser and the web gateway must forward it directly; do not add a Python image-bytes proxy or fallback.
 - Imported SC dataset views emit the same scalar-identity image-parser URLs as preview. The web client appends browser authentication before rendering. FastAPI does not expose a Dataset-owned SC image-bytes route.
 - `POST /api/v1/sc/import`

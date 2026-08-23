@@ -9,6 +9,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.103.3
 	github.com/gin-gonic/gin v1.12.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
+	github.com/golang/snappy v1.0.0
 	golang.org/x/sync v0.21.0
 	golang.org/x/sys v0.47.0
 	google.golang.org/grpc v1.81.1
