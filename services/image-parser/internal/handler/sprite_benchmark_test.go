@@ -56,7 +56,7 @@ func BenchmarkResizeSquarePNGGray16Viridis128To64(b *testing.B) {
 		b.Fatal(err)
 	}
 	raw := encoded.Bytes()
-	mapping := GrayMapping{LUT: GrayLUTViridis, ZMin: 0.05, ZMax: 0.95}
+	mapping := GrayMapping{Mode: GrayMappingModeGlobal, LUT: GrayLUTViridis, ZMin: 0.05, ZMax: 0.95}
 	b.SetBytes(int64(len(raw)))
 	b.ReportAllocs()
 	b.ResetTimer()

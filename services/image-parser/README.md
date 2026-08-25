@@ -14,12 +14,19 @@ images do not embed a second parser binary.
   token through the `token` query parameter; normal clients use a Bearer header.
   Sprite requests may opt into display-only grayscale mapping with independent
   complete query tuples prefixed `defective_reference_` and `difference_`.
-  Defective and Reference/Template share the first mapping. The renderer accepts 8-bit,
+  Each tuple selects `gray_mode=global|adaptive`. Global mode applies its
+  normalized z-window across the Inspection profile. Adaptive mode performs a
+  per-defect min-max normalization: Defective and all Reference instances share
+  one observed range, while each Difference instance uses its own range.
+  Constant images map to the LUT minimum. The renderer accepts 8-bit,
   12-bit, and 16-bit grayscale content, including opaque RGB containers whose channels are
   exactly equal, applies bit-depth-relative normalized `[0, 1]` z-limits before resize, and
   resolves a fixed 256-entry grayscale, inverted, Viridis, Inferno, or Turbo
   LUT. Mapping applies only to Patch cells; Review cells remain in their source
-  colors. Raw `/sc/images/...` responses are never transformed.
+  colors. Patch sprite enlargement uses nearest-neighbor pixel replication so
+  integer scale factors produce solid source-pixel blocks without interpolation;
+  Review sprite resizing retains smooth interpolation. Raw `/sc/images/...`
+  responses are never transformed.
   The image-profile response lists every Patch instance (including multiple
   Reference, Difference, and Mask IDs) and its native bit depth and observed
   inspection-wide min/max. Artifact revisions key a bounded metadata LRU, so

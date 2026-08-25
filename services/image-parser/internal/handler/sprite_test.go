@@ -154,7 +154,7 @@ func TestResizeSquarePNGWithGrayMappingSupportsGray8AndGray16(t *testing.T) {
 			mapped, err := resizeSquarePNGWithGrayMapping(
 				encodeTestPNG(t, tt.img),
 				3,
-				GrayMapping{LUT: GrayLUTGrayscale, ZMin: 0.25, ZMax: 0.75},
+				GrayMapping{Mode: GrayMappingModeGlobal, LUT: GrayLUTGrayscale, ZMin: 0.25, ZMax: 0.75},
 			)
 			if err != nil {
 				t.Fatal(err)
@@ -183,7 +183,7 @@ func TestResizeSquarePNGWithGrayMappingAppliesColorLUT(t *testing.T) {
 	mapped, err := resizeSquarePNGWithGrayMapping(
 		encodeTestPNG(t, img),
 		1,
-		GrayMapping{LUT: GrayLUTViridis, ZMin: 0, ZMax: 1},
+		GrayMapping{Mode: GrayMappingModeGlobal, LUT: GrayLUTViridis, ZMin: 0, ZMax: 1},
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -198,11 +198,86 @@ func TestResizeSquarePNGWithGrayMappingAppliesColorLUT(t *testing.T) {
 	}
 }
 
+func TestAdaptiveGrayMappingMapsConstantImageToLUTMinimum(t *testing.T) {
+	img := image.NewGray16(image.Rect(0, 0, 2, 1))
+	img.SetGray16(0, 0, color.Gray16{Y: 1024})
+	img.SetGray16(1, 0, color.Gray16{Y: 1024})
+
+	mapped, err := resizeSquarePNGWithGrayMapping(
+		encodeTestPNG(t, img),
+		2,
+		GrayMapping{Mode: GrayMappingModeAdaptive, LUT: GrayLUTViridis, BitDepth: 12},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, _, err := image.Decode(bytes.NewReader(mapped))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := color.NRGBA{R: 68, G: 1, B: 84, A: 255}
+	if got := color.NRGBAModel.Convert(decoded.At(1, 0)).(color.NRGBA); got != want {
+		t.Fatalf("constant adaptive color = %#v, want LUT minimum %#v", got, want)
+	}
+}
+
+func TestAdaptiveGrayMappingSupportsGray8AndGray16(t *testing.T) {
+	tests := []struct {
+		name     string
+		image    image.Image
+		bitDepth int
+	}{
+		{
+			name: "gray8",
+			image: func() image.Image {
+				value := image.NewGray(image.Rect(0, 0, 2, 1))
+				value.SetGray(0, 0, color.Gray{Y: 10})
+				value.SetGray(1, 0, color.Gray{Y: 110})
+				return value
+			}(),
+			bitDepth: 8,
+		},
+		{
+			name: "gray16",
+			image: func() image.Image {
+				value := image.NewGray16(image.Rect(0, 0, 2, 1))
+				value.SetGray16(0, 0, color.Gray16{Y: 1000})
+				value.SetGray16(1, 0, color.Gray16{Y: 3000})
+				return value
+			}(),
+			bitDepth: 16,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			mapped, err := resizeSquarePNGWithGrayMapping(
+				encodeTestPNG(t, test.image),
+				2,
+				GrayMapping{Mode: GrayMappingModeAdaptive, LUT: GrayLUTGrayscale, BitDepth: test.bitDepth},
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			decoded, _, err := image.Decode(bytes.NewReader(mapped))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := color.GrayModel.Convert(decoded.At(0, 0)).(color.Gray).Y; got != 0 {
+				t.Fatalf("adaptive minimum = %d, want 0", got)
+			}
+			if got := color.GrayModel.Convert(decoded.At(1, 0)).(color.Gray).Y; got != 255 {
+				t.Fatalf("adaptive maximum = %d, want 255", got)
+			}
+		})
+	}
+}
+
 func TestResizeSquarePNGWithGrayMappingAcceptsEqualChannelRGBEncoding(t *testing.T) {
 	mapped, err := resizeSquarePNGWithGrayMapping(
 		generateTestPNG(color.RGBA{R: 128, G: 128, B: 128, A: 255}, 2, 2),
 		2,
-		GrayMapping{LUT: GrayLUTViridis, ZMin: 0, ZMax: 1},
+		GrayMapping{Mode: GrayMappingModeGlobal, LUT: GrayLUTViridis, ZMin: 0, ZMax: 1},
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -221,7 +296,7 @@ func TestResizeSquarePNGWithGrayMappingRejectsColorImages(t *testing.T) {
 	_, err := resizeSquarePNGWithGrayMapping(
 		generateTestPNG(color.RGBA{R: 10, G: 20, B: 30, A: 255}, 2, 2),
 		2,
-		GrayMapping{LUT: GrayLUTGrayscale, ZMin: 0, ZMax: 1},
+		GrayMapping{Mode: GrayMappingModeGlobal, LUT: GrayLUTGrayscale, ZMin: 0, ZMax: 1},
 	)
 	if !errors.Is(err, ErrUnsupportedGrayImage) {
 		t.Fatalf("error = %v, want ErrUnsupportedGrayImage", err)

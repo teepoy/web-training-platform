@@ -1,7 +1,12 @@
+import { tableFromArrays, tableToIPC } from "apache-arrow";
 import { flushPromises } from "@vue/test-utils";
 import { describe, expect, it, vi } from "vitest";
+import type { ScWorkbenchDataSource } from "@/features/sc/domain/workbenchDataSource";
 import { mountWithProviders } from "@/testing";
+import { mockTanstackVirtual } from "@/testing/mocks/tanstack-virtual";
 import ScBlinkVirtualTable from "./ScBlinkVirtualTable.vue";
+
+mockTanstackVirtual();
 
 vi.mock("./scInspectionImageProfile", async () => {
   const actual = await vi.importActual<typeof import("./scInspectionImageProfile")>(
@@ -49,5 +54,38 @@ describe("ScBlinkVirtualTable gallery settings", () => {
     expect(document.body.textContent).toContain("D / R");
     expect(document.body.textContent).toContain("Difference");
     expect(document.querySelector('[data-testid="gallery-gray-mapping-toggle"]')).not.toBeNull();
+  });
+
+  it("returns the viewport to the first row when filters change", async () => {
+    const ipc = tableToIPC(tableFromArrays({ row_key: ["1"], defect_id: [1] }));
+    const source: ScWorkbenchDataSource = {
+      scopeKey: "dataset:filtered",
+      loadColumns: vi.fn(async () => []),
+      loadMap: vi.fn(async () => new Uint8Array()),
+      loadRows: vi.fn(async () => ({ items: [], total: 0, nextAnchor: null })),
+      loadGallery: vi.fn(async () => ({ ipc, total: 100, nextOffset: 1 })),
+      loadAggregates: vi.fn(async () => ({})),
+      loadNumericRange: vi.fn(async () => null),
+      loadDistinctValues: vi.fn(async () => []),
+      resolveSelection: vi.fn(async () => []),
+      subscribeInvalidations: vi.fn(() => () => undefined),
+      close: vi.fn(),
+    };
+    const { wrapper } = await mountWithProviders(ScBlinkVirtualTable, {
+      props: {
+        inspectionTime: "2026-08-21T00:00:00Z",
+        waferKey: 1,
+        dataSource: source,
+        galleryQuery: { filters: [] },
+      },
+    });
+    await vi.waitFor(() => expect(source.loadGallery).toHaveBeenCalled());
+    const scroll = wrapper.get(".sbt-scroll").element as HTMLElement;
+    scroll.scrollTop = 640;
+
+    await wrapper.setProps({ galleryQuery: { filters: [["class_number", "=", 1]] } });
+    await flushPromises();
+
+    expect(scroll.scrollTop).toBe(0);
   });
 });

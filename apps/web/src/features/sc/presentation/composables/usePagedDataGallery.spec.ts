@@ -113,6 +113,53 @@ describe("usePagedDataGallery", () => {
     expect(source.loadGallery).toHaveBeenCalledTimes(1);
     scope.stop();
   });
+
+  it("restarts at offset zero when a new query is smaller than the old viewport", async () => {
+    vi.useFakeTimers();
+    const source = createDataSource();
+    source.loadGallery = vi.fn(async ({ offset, filters }) => {
+      const filtered = (filters?.length ?? 0) > 0;
+      return {
+        ipc: offset < (filtered ? 20 : 100) ? new Uint8Array([1]) : null,
+        total: filtered ? 20 : 100,
+        nextOffset: null,
+      };
+    });
+    const requestedRange = ref({ start: 80, end: 100 });
+    const query = ref({ mode: "patch" as const, filters: [] as [string, string, unknown][] });
+    const scope = effectScope();
+    const gallery = scope.run(() =>
+      usePagedDataGallery(
+        computed(() => source),
+        computed(() => query.value),
+        requestedRange,
+        computed(() => true),
+        () => ["row"],
+      ),
+    );
+
+    await vi.advanceTimersByTimeAsync(SC_SCROLL_QUERY_DEBOUNCE_MS);
+    await vi.waitFor(() => expect(source.loadGallery).toHaveBeenCalledTimes(1));
+    expect(source.loadGallery).toHaveBeenLastCalledWith({
+      mode: "patch",
+      filters: [],
+      offset: 80,
+      limit: 20,
+    });
+
+    query.value = { mode: "patch", filters: [["class_number", "=", 1]] };
+    await vi.advanceTimersByTimeAsync(SC_SCROLL_QUERY_DEBOUNCE_MS);
+    await vi.waitFor(() => expect(source.loadGallery).toHaveBeenCalledTimes(2));
+
+    expect(source.loadGallery).toHaveBeenLastCalledWith({
+      mode: "patch",
+      filters: [["class_number", "=", 1]],
+      offset: 0,
+      limit: 20,
+    });
+    expect(gallery?.window.value).toMatchObject({ offset: 0, total: 20 });
+    scope.stop();
+  });
 });
 
 describe("loadAllGalleryItems", () => {

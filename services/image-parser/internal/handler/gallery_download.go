@@ -38,9 +38,11 @@ type GalleryDownloadResult struct {
 }
 
 type galleryArchiveEntry struct {
-	key     display.ImageKey
-	name    string
-	mapping *GrayMapping
+	key           display.ImageKey
+	name          string
+	mapping       *GrayMapping
+	batchGroup    string
+	adaptiveGroup string
 }
 
 type GalleryDownloadService struct {
@@ -83,8 +85,11 @@ func (s *GalleryDownloadService) Create(ctx context.Context, request GalleryDown
 	}()
 
 	archive := zip.NewWriter(file)
-	for start := 0; start < len(entries); start += galleryDownloadImageBatch {
+	for start := 0; start < len(entries); {
 		end := min(start+galleryDownloadImageBatch, len(entries))
+		for end < len(entries) && entries[end-1].batchGroup != "" && entries[end-1].batchGroup == entries[end].batchGroup {
+			end++
+		}
 		keys := make([]display.ImageKey, end-start)
 		for index := start; index < end; index++ {
 			keys[index-start] = entries[index].key
@@ -92,6 +97,31 @@ func (s *GalleryDownloadService) Create(ctx context.Context, request GalleryDown
 		images := s.images.GetImageBytes(ctx, keys)
 		if len(images) != len(keys) {
 			return GalleryDownloadResult{}, fmt.Errorf("image reader returned %d results for %d gallery images", len(images), len(keys))
+		}
+		adaptiveImages := make(map[string][][]byte)
+		for index, imageBytes := range images {
+			entry := entries[start+index]
+			if imageBytes.Err == nil && entry.mapping != nil && entry.mapping.Mode == GrayMappingModeAdaptive {
+				adaptiveImages[entry.adaptiveGroup] = append(adaptiveImages[entry.adaptiveGroup], imageBytes.Data)
+			}
+		}
+		adaptiveWindows := make(map[string]grayWindow, len(adaptiveImages))
+		for group, rawImages := range adaptiveImages {
+			var mapping *GrayMapping
+			for index := start; index < end; index++ {
+				if entries[index].adaptiveGroup == group {
+					mapping = entries[index].mapping
+					break
+				}
+			}
+			if mapping == nil {
+				return GalleryDownloadResult{}, fmt.Errorf("adaptive gallery mapping %q has no settings", group)
+			}
+			window, err := adaptiveGrayWindowForImages(rawImages, *mapping)
+			if err != nil {
+				return GalleryDownloadResult{}, fmt.Errorf("resolve adaptive gallery range %q: %w", group, err)
+			}
+			adaptiveWindows[group] = window
 		}
 		for index, imageBytes := range images {
 			entry := entries[start+index]
@@ -101,7 +131,12 @@ func (s *GalleryDownloadService) Create(ctx context.Context, request GalleryDown
 			data := imageBytes.Data
 			contentType := canonicalImageContentType(imageBytes.ContentType)
 			if entry.mapping != nil {
-				data, err = originalSizePNGWithGrayMapping(data, *entry.mapping)
+				var window *grayWindow
+				if entry.mapping.Mode == GrayMappingModeAdaptive {
+					resolved := adaptiveWindows[entry.adaptiveGroup]
+					window = &resolved
+				}
+				data, err = originalSizePNGWithGrayMappingWindow(data, *entry.mapping, window)
 				if err != nil {
 					return GalleryDownloadResult{}, fmt.Errorf("map %s: %w", entry.name, err)
 				}
@@ -120,6 +155,7 @@ func (s *GalleryDownloadService) Create(ctx context.Context, request GalleryDown
 				return GalleryDownloadResult{}, fmt.Errorf("write ZIP entry: %w", err)
 			}
 		}
+		start = end
 	}
 	if err := archive.Close(); err != nil {
 		return GalleryDownloadResult{}, fmt.Errorf("finalize gallery ZIP: %w", err)
@@ -159,6 +195,7 @@ func (s *GalleryDownloadService) planEntries(ctx context.Context, request Galler
 			roots[identity] = root
 		}
 		base := root + "/" + safeArchiveComponent(item.DefectID) + "-"
+		batchGroup := fmt.Sprintf("%s/%s", root, safeArchiveComponent(item.DefectID))
 		for _, rawRole := range item.PatchImageTypes {
 			role := display.NormalizeImageType(rawRole)
 			baseRole, _, _ := strings.Cut(role, ":")
@@ -172,6 +209,13 @@ func (s *GalleryDownloadService) planEntries(ctx context.Context, request Galler
 			entry := galleryArchiveEntry{
 				key:  display.ImageKey{Kind: display.ImageKindPatch, InspectionKey: display.InspectionKey{InspectionTime: item.InspectionTime, WaferKey: item.WaferKey}, DefectID: item.DefectID, ImageType: role},
 				name: base + strings.ToLower(strings.ReplaceAll(role, ":", "-")), mapping: mapping,
+			}
+			if mapping != nil && mapping.Mode == GrayMappingModeAdaptive {
+				entry.adaptiveGroup = entry.name
+				if baseRole == "Defective" || baseRole == "Reference" {
+					entry.adaptiveGroup = batchGroup + "/defective-reference"
+					entry.batchGroup = entry.adaptiveGroup
+				}
 			}
 			if err := claimGalleryArchiveName(seenNames, entry.name); err != nil {
 				return nil, err

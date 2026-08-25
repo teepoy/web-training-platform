@@ -26,6 +26,16 @@ type galleryImageReaderStub struct {
 	review []byte
 }
 
+type galleryImageByRoleReaderStub map[string][]byte
+
+func (s galleryImageByRoleReaderStub) GetImageBytes(_ context.Context, keys []display.ImageKey) []display.ImageBytes {
+	results := make([]display.ImageBytes, len(keys))
+	for index, key := range keys {
+		results[index] = display.ImageBytes{Key: key, Data: s[key.ImageType], ContentType: "image/png"}
+	}
+	return results
+}
+
 func (s galleryImageReaderStub) GetImageBytes(_ context.Context, keys []display.ImageKey) []display.ImageBytes {
 	results := make([]display.ImageBytes, len(keys))
 	for index, key := range keys {
@@ -91,8 +101,8 @@ func TestGalleryDownloadAppliesGroupedMappingWithoutResizing(t *testing.T) {
 		Items:             []GalleryDownloadItem{{InspectionTime: "2026-08-21T00:00:00Z", WaferKey: 1, DefectID: "42", PatchImageTypes: []string{"Defective", "Difference"}}},
 		ApplyColorMapping: true,
 		GrayMappings: PatchGrayMappings{
-			DefectiveReference: &GrayMapping{LUT: GrayLUTViridis, ZMin: 0, ZMax: 1},
-			Difference:         &GrayMapping{LUT: GrayLUTInferno, ZMin: 0, ZMax: 1},
+			DefectiveReference: &GrayMapping{Mode: GrayMappingModeGlobal, LUT: GrayLUTViridis, ZMin: 0, ZMax: 1},
+			Difference:         &GrayMapping{Mode: GrayMappingModeGlobal, LUT: GrayLUTInferno, ZMin: 0, ZMax: 1},
 		},
 	})
 	if err != nil {
@@ -107,6 +117,49 @@ func TestGalleryDownloadAppliesGroupedMappingWithoutResizing(t *testing.T) {
 	}
 	if defective.At(1, 1) == difference.At(1, 1) {
 		t.Fatal("defective/reference and difference mappings produced the same mapped color")
+	}
+}
+
+func TestGalleryDownloadAdaptiveMappingSharesDefectiveReferenceRange(t *testing.T) {
+	gray16 := func(left, right uint16) []byte {
+		patch := image.NewGray16(image.Rect(0, 0, 2, 1))
+		patch.SetGray16(0, 0, color.Gray16{Y: left})
+		patch.SetGray16(1, 0, color.Gray16{Y: right})
+		return encodeTestPNG(t, patch)
+	}
+	service, err := NewGalleryDownloadService(
+		galleryImageByRoleReaderStub{
+			"Defective": gray16(100, 200),
+			"Reference": gray16(300, 400),
+		},
+		galleryMetadataStub{waferID: "W01"},
+		t.TempDir(),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := service.Create(context.Background(), GalleryDownloadRequest{
+		Items: []GalleryDownloadItem{{
+			InspectionTime: "2026-08-24T00:00:00Z", WaferKey: 1, DefectID: "42",
+			PatchImageTypes: []string{"Defective", "Reference"},
+		}},
+		ApplyColorMapping: true,
+		GrayMappings: PatchGrayMappings{DefectiveReference: &GrayMapping{
+			Mode: GrayMappingModeAdaptive, LUT: GrayLUTGrayscale, BitDepth: 12,
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(result.Path)
+	entries := readGalleryZIP(t, result.Path)
+	defective := decodeImage(t, entries["2026-08-24T00:00:00Z-W01/42-defective.png"])
+	reference := decodeImage(t, entries["2026-08-24T00:00:00Z-W01/42-reference.png"])
+	if got := color.GrayModel.Convert(defective.At(1, 0)).(color.Gray).Y; got < 84 || got > 86 {
+		t.Fatalf("defective max = %d, want shared normalization near 85", got)
+	}
+	if got := color.GrayModel.Convert(reference.At(0, 0)).(color.Gray).Y; got < 169 || got > 171 {
+		t.Fatalf("reference min = %d, want shared normalization near 170", got)
 	}
 }
 

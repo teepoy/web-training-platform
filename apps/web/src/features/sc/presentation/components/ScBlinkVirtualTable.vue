@@ -43,6 +43,7 @@ import {
   DEFAULT_SC_GALLERY_TONE_MAPPING,
   isGrayLUT,
   isValidGrayWindow,
+  type GrayMappingMode,
   type GrayLUT,
 } from "@/features/sc/presentation/components/scGalleryToneMapping";
 import {
@@ -173,7 +174,7 @@ const DEFAULT_PATCH_IMAGES: ScPatchImageDescriptor[] = [
     z_max: 65535,
   },
 ];
-const SC_SPRITE_RENDER_VERSION = "6";
+const SC_SPRITE_RENDER_VERSION = "7";
 const normalizeImageSize = (value: number | undefined): ImageSizeOption =>
   IMAGE_SIZE_OPTIONS.includes(value as ImageSizeOption) ? (value as ImageSizeOption) : 64;
 const patchImageSize = ref<ImageSizeOption>(normalizeImageSize(props.patchCellSize));
@@ -183,6 +184,7 @@ const inspectionImagePatches = ref<ScPatchImageDescriptor[]>(DEFAULT_PATCH_IMAGE
 const imageProfileLoading = ref(false);
 const imageProfileError = ref<string | null>(null);
 const defectiveReferenceMappingEnabled = ref(DEFAULT_SC_GALLERY_TONE_MAPPING.enabled);
+const defectiveReferenceMappingMode = ref<GrayMappingMode>(DEFAULT_SC_GALLERY_TONE_MAPPING.mode);
 const defectiveReferenceMappingLUT = ref<GrayLUT>(DEFAULT_SC_GALLERY_TONE_MAPPING.lut);
 const defectiveReferenceMappingZMin = ref(DEFAULT_SC_GALLERY_TONE_MAPPING.zMin);
 const defectiveReferenceMappingZMax = ref(DEFAULT_SC_GALLERY_TONE_MAPPING.zMax);
@@ -190,6 +192,7 @@ const defectiveReferenceMappingBitDepth = ref<8 | 12 | 16>(
   DEFAULT_SC_GALLERY_TONE_MAPPING.bitDepth,
 );
 const differenceMappingEnabled = ref(DEFAULT_SC_GALLERY_TONE_MAPPING.enabled);
+const differenceMappingMode = ref<GrayMappingMode>(DEFAULT_SC_GALLERY_TONE_MAPPING.mode);
 const differenceMappingLUT = ref<GrayLUT>(DEFAULT_SC_GALLERY_TONE_MAPPING.lut);
 const differenceMappingZMin = ref(DEFAULT_SC_GALLERY_TONE_MAPPING.zMin);
 const differenceMappingZMax = ref(DEFAULT_SC_GALLERY_TONE_MAPPING.zMax);
@@ -408,6 +411,18 @@ const {
 });
 
 const virtualItems = computed(() => virtualizer.value.getVirtualItems());
+
+watch(
+  [() => props.dataSource?.scopeKey, () => props.galleryQuery],
+  () => {
+    patchRequestedRange.value = { start: 0, end: INITIAL_GALLERY_WINDOW_ROWS };
+    reviewRequestedRange.value = { start: 0, end: INITIAL_GALLERY_WINDOW_ROWS };
+    if (scrollRef.value) scrollRef.value.scrollTop = 0;
+    virtualizer.value.scrollToIndex(0, { align: "start" });
+    void nextTick(syncScrollMetrics);
+  },
+  { deep: true, flush: "post" },
+);
 
 watch(
   () => {
@@ -671,6 +686,7 @@ async function prepareGalleryDownload(): Promise<void> {
       gray_mappings: {
         defective_reference: {
           enabled: defectiveReferenceMappingEnabled.value,
+          mode: defectiveReferenceMappingMode.value,
           lut: defectiveReferenceMappingLUT.value,
           zMin: defectiveReferenceMappingZMin.value,
           zMax: defectiveReferenceMappingZMax.value,
@@ -678,6 +694,7 @@ async function prepareGalleryDownload(): Promise<void> {
         },
         difference: {
           enabled: differenceMappingEnabled.value,
+          mode: differenceMappingMode.value,
           lut: differenceMappingLUT.value,
           zMin: differenceMappingZMin.value,
           zMax: differenceMappingZMax.value,
@@ -814,6 +831,7 @@ function getSpriteUrl(sample: BlinkSample): string {
     params,
     {
       enabled: defectiveReferenceMappingEnabled.value,
+      mode: defectiveReferenceMappingMode.value,
       lut: defectiveReferenceMappingLUT.value,
       zMin: defectiveReferenceMappingZMin.value,
       zMax: defectiveReferenceMappingZMax.value,
@@ -825,6 +843,7 @@ function getSpriteUrl(sample: BlinkSample): string {
     params,
     {
       enabled: differenceMappingEnabled.value,
+      mode: differenceMappingMode.value,
       lut: differenceMappingLUT.value,
       zMin: differenceMappingZMin.value,
       zMax: differenceMappingZMax.value,
@@ -1101,10 +1120,12 @@ interface PersistedSettings {
   grayMappingZMin?: number;
   grayMappingZMax?: number;
   defectiveReferenceMappingEnabled?: boolean;
+  defectiveReferenceMappingMode?: GrayMappingMode;
   defectiveReferenceMappingLUT?: string;
   defectiveReferenceMappingZMin?: number;
   defectiveReferenceMappingZMax?: number;
   differenceMappingEnabled?: boolean;
+  differenceMappingMode?: GrayMappingMode;
   differenceMappingLUT?: string;
   differenceMappingZMin?: number;
   differenceMappingZMax?: number;
@@ -1125,6 +1146,7 @@ function loadPersistedMapping(
   if (isGrayLUT(lut)) lutRef.value = lut;
   const window = {
     enabled: true,
+    mode: "global" as const,
     lut: lutRef.value,
     zMin: zMin ?? zMinRef.value,
     zMax: zMax ?? zMaxRef.value,
@@ -1165,6 +1187,12 @@ function loadSettings() {
       defectiveReferenceMappingZMin,
       defectiveReferenceMappingZMax,
     );
+    if (
+      saved.defectiveReferenceMappingMode === "global" ||
+      saved.defectiveReferenceMappingMode === "adaptive"
+    ) {
+      defectiveReferenceMappingMode.value = saved.defectiveReferenceMappingMode;
+    }
     loadPersistedMapping(
       saved.differenceMappingEnabled ?? saved.grayMappingEnabled,
       saved.differenceMappingLUT ?? saved.grayMappingLUT,
@@ -1175,6 +1203,9 @@ function loadSettings() {
       differenceMappingZMin,
       differenceMappingZMax,
     );
+    if (saved.differenceMappingMode === "global" || saved.differenceMappingMode === "adaptive") {
+      differenceMappingMode.value = saved.differenceMappingMode;
+    }
     if (typeof saved.colorDockCollapsed === "boolean")
       colorDockCollapsed.value = saved.colorDockCollapsed;
   } catch {
@@ -1262,10 +1293,12 @@ function saveSettings() {
     reviewImageSize: reviewImageSize.value,
     patchImagesInput: patchImagesInput.value,
     defectiveReferenceMappingEnabled: defectiveReferenceMappingEnabled.value,
+    defectiveReferenceMappingMode: defectiveReferenceMappingMode.value,
     defectiveReferenceMappingLUT: defectiveReferenceMappingLUT.value,
     defectiveReferenceMappingZMin: defectiveReferenceMappingZMin.value,
     defectiveReferenceMappingZMax: defectiveReferenceMappingZMax.value,
     differenceMappingEnabled: differenceMappingEnabled.value,
+    differenceMappingMode: differenceMappingMode.value,
     differenceMappingLUT: differenceMappingLUT.value,
     differenceMappingZMin: differenceMappingZMin.value,
     differenceMappingZMax: differenceMappingZMax.value,
@@ -1303,10 +1336,12 @@ watch(
     patchImagesInput,
     colorDockCollapsed,
     defectiveReferenceMappingEnabled,
+    defectiveReferenceMappingMode,
     defectiveReferenceMappingLUT,
     defectiveReferenceMappingZMin,
     defectiveReferenceMappingZMax,
     differenceMappingEnabled,
+    differenceMappingMode,
     differenceMappingLUT,
     differenceMappingZMin,
     differenceMappingZMax,
@@ -1732,7 +1767,9 @@ defineExpose({ scrollRef });
                 <n-tab-pane name="defective-reference" tab="D / R">
                   <sc-gallery-color-settings
                     compact
+                    adaptive-scope="defective-reference"
                     v-model:enabled="defectiveReferenceMappingEnabled"
+                    v-model:mode="defectiveReferenceMappingMode"
                     v-model:lut="defectiveReferenceMappingLUT"
                     v-model:z-min="defectiveReferenceMappingZMin"
                     v-model:z-max="defectiveReferenceMappingZMax"
@@ -1743,7 +1780,9 @@ defineExpose({ scrollRef });
                 <n-tab-pane name="difference" tab="Difference">
                   <sc-gallery-color-settings
                     compact
+                    adaptive-scope="image"
                     v-model:enabled="differenceMappingEnabled"
+                    v-model:mode="differenceMappingMode"
                     v-model:lut="differenceMappingLUT"
                     v-model:z-min="differenceMappingZMin"
                     v-model:z-max="differenceMappingZMax"

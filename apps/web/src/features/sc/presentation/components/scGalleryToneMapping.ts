@@ -7,9 +7,16 @@ export const GRAY_LUT_OPTIONS = [
 ] as const;
 
 export type GrayLUT = (typeof GRAY_LUT_OPTIONS)[number]["value"];
+export type GrayMappingMode = "global" | "adaptive";
+
+export const GRAY_MAPPING_MODE_OPTIONS = [
+  { label: "Global", value: "global" },
+  { label: "Adaptive", value: "adaptive" },
+] as const;
 
 export interface ScGalleryToneMapping {
   enabled: boolean;
+  mode: GrayMappingMode;
   lut: GrayLUT;
   zMin: number;
   zMax: number;
@@ -20,6 +27,7 @@ export type ScGalleryToneMappingGroup = "defective_reference" | "difference";
 
 export const DEFAULT_SC_GALLERY_TONE_MAPPING: ScGalleryToneMapping = {
   enabled: false,
+  mode: "global",
   lut: "gray",
   zMin: 0,
   zMax: 1,
@@ -59,6 +67,7 @@ export function appendGrayMappingQuery(
     throw new RangeError("Gray mapping zlims must satisfy 0 <= zMin < zMax <= 1");
   }
   const prefix = group ? `${group}_` : "";
+  params.set(`${prefix}gray_mode`, settings.mode);
   params.set(`${prefix}gray_lut`, settings.lut);
   params.set(`${prefix}z_min`, String(settings.zMin));
   params.set(`${prefix}z_max`, String(settings.zMax));
@@ -76,8 +85,10 @@ export function colorBarBackground(lut: GrayLUT, zMin = 0, zMax = 1): string {
     const position = start + (span * index) / Math.max(1, colors.length - 1);
     return `${color} ${position.toFixed(3)}%`;
   });
-  const outside = "var(--gallery-colorbar-outside, #242430)";
-  return `linear-gradient(90deg, ${outside} 0%, ${outside} ${start.toFixed(3)}%, ${stops.join(", ")}, ${outside} ${end.toFixed(3)}%, ${outside} 100%)`;
+  const colors = GRAY_LUT_STOPS[lut];
+  const minimum = colors[0];
+  const maximum = colors.at(-1);
+  return `linear-gradient(90deg, ${minimum} 0%, ${minimum} ${start.toFixed(3)}%, ${stops.join(", ")}, ${maximum} ${end.toFixed(3)}%, ${maximum} 100%)`;
 }
 
 export function nativeGrayWindow(

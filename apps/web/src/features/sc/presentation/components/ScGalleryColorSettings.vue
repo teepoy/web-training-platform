@@ -1,15 +1,19 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import { NSelect, NSlider, NSwitch, NText } from "naive-ui";
+import { NRadioButton, NRadioGroup, NSelect, NSlider, NSwitch, NText } from "naive-ui";
 import {
   colorBarBackground,
+  GRAY_MAPPING_MODE_OPTIONS,
   GRAY_LUT_OPTIONS,
   nativeGrayWindow,
+  type GrayMappingMode,
   type GrayLUT,
 } from "./scGalleryToneMapping";
 
 const props = defineProps<{
   enabled: boolean;
+  mode: GrayMappingMode;
+  adaptiveScope: "defective-reference" | "image";
   lut: GrayLUT;
   zMin: number;
   zMax: number;
@@ -20,6 +24,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   "update:enabled": [value: boolean];
+  "update:mode": [value: GrayMappingMode];
   "update:lut": [value: GrayLUT];
   "update:zMin": [value: number];
   "update:zMax": [value: number];
@@ -34,6 +39,11 @@ const draftToneMapping = computed(() => ({
   zMax: draftWindow.value[1],
 }));
 const nativeWindow = computed(() => nativeGrayWindow(draftToneMapping.value, props.bitDepth));
+const adaptiveHelp = computed(() =>
+  props.adaptiveScope === "defective-reference"
+    ? "Per defect; Defective and Reference share one range."
+    : "Each Difference image uses its own range.",
+);
 
 watch(
   () => [props.zMin, props.zMax] as const,
@@ -71,6 +81,23 @@ function commitWindow(): void {
     </div>
 
     <div class="gallery-color-field">
+      <n-text class="gallery-color-label">Range</n-text>
+      <n-radio-group
+        :value="mode"
+        size="small"
+        data-testid="gallery-gray-mapping-mode"
+        @update:value="emit('update:mode', $event as GrayMappingMode)"
+      >
+        <n-radio-button
+          v-for="option in GRAY_MAPPING_MODE_OPTIONS"
+          :key="option.value"
+          :value="option.value"
+          :label="option.label"
+        />
+      </n-radio-group>
+    </div>
+
+    <div class="gallery-color-field">
       <n-text class="gallery-color-label">Color map</n-text>
       <n-select
         :value="lut"
@@ -82,7 +109,10 @@ function commitWindow(): void {
       />
     </div>
 
-    <div class="gallery-color-bar" :class="{ 'gallery-color-bar--disabled': !enabled }">
+    <div
+      class="gallery-color-bar"
+      :class="{ 'gallery-color-bar--disabled': !enabled || mode === 'adaptive' }"
+    >
       <n-text class="gallery-color-label">{{ bitDepth }}-bit window</n-text>
       <div class="gallery-color-slider" :style="colorBarStyle" data-testid="gallery-color-bar">
         <n-slider
@@ -91,7 +121,7 @@ function commitWindow(): void {
           :min="0"
           :max="1"
           :step="0.001"
-          :disabled="!enabled"
+          :disabled="!enabled || mode === 'adaptive'"
           :format-tooltip="(value: number) => value.toFixed(3)"
           aria-label="Normalized grayscale window"
           @update:value="updateWindow"
@@ -104,6 +134,10 @@ function commitWindow(): void {
         <n-text depth="3">{{ draftWindow[1].toFixed(3) }}</n-text>
       </div>
     </div>
+
+    <n-text v-if="enabled && mode === 'adaptive'" depth="3" class="gallery-color-help">
+      {{ adaptiveHelp }}
+    </n-text>
 
     <div class="gallery-color-native-values">
       <n-text depth="3">

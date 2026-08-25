@@ -62,6 +62,7 @@ export function usePagedDataGallery<T>(
   let unsubscribe: (() => void) | null = null;
   let loadTimer: ReturnType<typeof setTimeout> | null = null;
   let loadedQueryKey = "";
+  let loadedQueryIdentity = "";
 
   async function load(): Promise<void> {
     const source = dataSource.value;
@@ -73,12 +74,18 @@ export function usePagedDataGallery<T>(
     if (!source) {
       window.value = { items: [], offset: 0, total: 0 };
       loadedQueryKey = "";
+      loadedQueryIdentity = "";
       isPending.value = false;
       return;
     }
-    const start = Math.max(0, requestedRange.value.start);
-    const end = Math.max(start + 1, requestedRange.value.end);
-    const queryKey = `${source.scopeKey}:${revision.value}:${JSON.stringify(query.value)}`;
+    const requestedStart = Math.max(0, requestedRange.value.start);
+    const requestedEnd = Math.max(requestedStart + 1, requestedRange.value.end);
+    const requestedSize = requestedEnd - requestedStart;
+    const queryIdentity = `${source.scopeKey}:${JSON.stringify(query.value)}`;
+    const queryKey = `${queryIdentity}:${revision.value}`;
+    const queryChanged = loadedQueryIdentity !== "" && queryIdentity !== loadedQueryIdentity;
+    const start = queryChanged ? 0 : requestedStart;
+    const end = start + requestedSize;
     const loadedEnd = window.value.offset + window.value.items.length;
     if (
       queryKey === loadedQueryKey &&
@@ -103,6 +110,7 @@ export function usePagedDataGallery<T>(
         total: page.total,
       };
       loadedQueryKey = queryKey;
+      loadedQueryIdentity = queryIdentity;
     } catch (cause) {
       if (sequence !== requestSequence) return;
       error.value = cause instanceof Error ? cause.message : String(cause);

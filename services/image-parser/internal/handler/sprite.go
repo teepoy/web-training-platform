@@ -10,6 +10,14 @@ import (
 )
 
 func resizeSquarePNG(raw []byte, size int) ([]byte, error) {
+	return resizeSquarePNGWith(raw, size, resizeBilinear)
+}
+
+func resizeSquarePNGPixelFill(raw []byte, size int) ([]byte, error) {
+	return resizeSquarePNGWith(raw, size, resizeNearest)
+}
+
+func resizeSquarePNGWith(raw []byte, size int, resize func(*image.NRGBA, image.Image)) ([]byte, error) {
 	source, _, err := image.Decode(bytes.NewReader(raw))
 	if err != nil {
 		return nil, err
@@ -23,12 +31,27 @@ func resizeSquarePNG(raw []byte, size int) ([]byte, error) {
 	}
 
 	target := image.NewNRGBA(image.Rect(0, 0, size, size))
-	resizeBilinear(target, source)
+	resize(target, source)
 	var output bytes.Buffer
 	if err := png.Encode(&output, target); err != nil {
 		return nil, err
 	}
 	return output.Bytes(), nil
+}
+
+func resizeNearest(target *image.NRGBA, source image.Image) {
+	sourceBounds := source.Bounds()
+	sourceWidth := sourceBounds.Dx()
+	sourceHeight := sourceBounds.Dy()
+	targetWidth := target.Bounds().Dx()
+	targetHeight := target.Bounds().Dy()
+	for targetY := range targetHeight {
+		sourceY := sourceBounds.Min.Y + targetY*sourceHeight/targetHeight
+		for targetX := range targetWidth {
+			sourceX := sourceBounds.Min.X + targetX*sourceWidth/targetWidth
+			target.SetNRGBA(targetX, targetY, color.NRGBAModel.Convert(source.At(sourceX, sourceY)).(color.NRGBA))
+		}
+	}
 }
 
 func resizeBilinear(target *image.NRGBA, source image.Image) {

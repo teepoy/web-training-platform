@@ -242,14 +242,23 @@ root、下载方式或 format ID。
 Gallery 的 Colormapping 默认是 display-only sprite 能力，不改变 `/sc/images` 原始图片、Artifact
 Cache、Prediction、Training 或 prediction export。Gallery 右侧 `Gallery` / `Colors` 两个同级 Tab 为
 `Defective + Reference/Template` 与 `Difference` 两组 Patch cell 分别提交完整的
-`gray_lut + z_min + z_max + bit_depth` 参数组；zlims 使用该 Patch 原生 8/12/16-bit domain 上的
-归一化 `[0, 1]`。`image-profile` 按 Inspection 返回所有 Patch instance，因此多 Reference / Difference
+`gray_mode + gray_lut + z_min + z_max + bit_depth` 参数组。`global` mode 使用该 Patch 原生
+8/12/16-bit domain 上归一化 `[0, 1]` 的共享 zlims；`adaptive` mode 与 OpenCV min-max normalize
+语义一致，为每个 defect 动态映射到完整 uint8 LUT range，同一 defect 的 Defective 与所有
+Reference instance 必须合并计算一次 min/max，每个 Difference instance 独立计算，常量图片映射到
+LUT 最小值。`image-profile` 按 Inspection 返回所有 Patch instance，因此多 Reference / Difference
 必须作为独立 Gallery 条目出现，Settings 同时显示每个 instance 的 bit depth 与 observed min/max，
 并用其初始化 window；RGB/RGBA 容器只有在不透明且每个像素的 RGB channel 精确相等时才视为对应
 位深的灰度内容。image-parser 必须先在原始灰度位深上 windowing，再 resize 并查询固定
 256-entry LUT；当前支持 grayscale、inverted grayscale、Viridis、Inferno 与 Turbo。真正的
 非灰度 Patch 不得隐式转灰度，Review cell 保留原始颜色。参数缺失、未知 LUT 与非法 window
-必须返回明确的 client error，不能 clamp 或 fallback。
+必须返回明确的 client error，不能 clamp 或 fallback。Colorbar 在 global window 两端显示实际
+clipping 结果：低端延伸 LUT 最小色，高端延伸 LUT 最大色，不能用黑色或面板背景代替。
+Patch sprite 放大必须使用 nearest-neighbor 像素填充，整数倍缩放后每个 source pixel 形成完整色块，
+不得进行插值；Review sprite 继续使用平滑插值。
+
+Gallery 的 filter、table selection 或 map selection 查询语义变化时，分页窗口和虚拟滚动位置必须
+一起回到 offset 0；不得用旧 viewport offset 查询较小的新结果并把越界空页解释为 Gallery 为空。
 
 Gallery image download 只接受用户当前显式选择的 sample/image columns，不提供隐式 all-filtered
 下载。浏览器使用原生 POST/download 流，不能把可能超过 100 MB 的 ZIP 聚合到 JavaScript Blob。

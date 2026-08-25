@@ -146,14 +146,16 @@ func TestGrayMappingsFromQueryRequiresCompleteValidWindow(t *testing.T) {
 		wantErr bool
 	}{
 		{name: "disabled", query: ""},
-		{name: "complete", query: "?gray_lut=viridis&z_min=0.125&z_max=0.875"},
-		{name: "unknown LUT", query: "?gray_lut=rainbow&z_min=0&z_max=1", wantErr: true},
-		{name: "missing z min", query: "?gray_lut=gray&z_max=1", wantErr: true},
-		{name: "reversed window", query: "?gray_lut=gray&z_min=0.8&z_max=0.2", wantErr: true},
-		{name: "outside normalized range", query: "?gray_lut=gray&z_min=-0.1&z_max=1", wantErr: true},
-		{name: "not a number", query: "?gray_lut=gray&z_min=NaN&z_max=1", wantErr: true},
-		{name: "infinite", query: "?gray_lut=gray&z_min=0&z_max=Inf", wantErr: true},
-		{name: "window without LUT", query: "?z_min=0&z_max=1", wantErr: true},
+		{name: "complete", query: "?gray_mode=global&gray_lut=viridis&z_min=0.125&z_max=0.875"},
+		{name: "adaptive", query: "?gray_mode=adaptive&gray_lut=viridis&z_min=0&z_max=1"},
+		{name: "unknown mode", query: "?gray_mode=local&gray_lut=gray&z_min=0&z_max=1", wantErr: true},
+		{name: "unknown LUT", query: "?gray_mode=global&gray_lut=rainbow&z_min=0&z_max=1", wantErr: true},
+		{name: "missing z min", query: "?gray_mode=global&gray_lut=gray&z_max=1", wantErr: true},
+		{name: "reversed window", query: "?gray_mode=global&gray_lut=gray&z_min=0.8&z_max=0.2", wantErr: true},
+		{name: "outside normalized range", query: "?gray_mode=global&gray_lut=gray&z_min=-0.1&z_max=1", wantErr: true},
+		{name: "not a number", query: "?gray_mode=global&gray_lut=gray&z_min=NaN&z_max=1", wantErr: true},
+		{name: "infinite", query: "?gray_mode=global&gray_lut=gray&z_min=0&z_max=Inf", wantErr: true},
+		{name: "window without LUT", query: "?gray_mode=global&z_min=0&z_max=1", wantErr: true},
 	}
 
 	for _, tt := range tests {
@@ -174,8 +176,11 @@ func TestGrayMappingsFromQueryRequiresCompleteValidWindow(t *testing.T) {
 			if tt.query == "" && (mappings.DefectiveReference != nil || mappings.Difference != nil) {
 				t.Fatalf("disabled mappings = %#v, want empty", mappings)
 			}
-			if tt.query != "" && (mappings.DefectiveReference == nil || mappings.Difference == nil || mappings.DefectiveReference.LUT != handler.GrayLUTViridis || mappings.DefectiveReference.ZMin != 0.125 || mappings.DefectiveReference.ZMax != 0.875) {
-				t.Fatalf("mappings = %#v, want legacy viridis [0.125, 0.875] for both groups", mappings)
+			if tt.name == "complete" && (mappings.DefectiveReference == nil || mappings.Difference == nil || mappings.DefectiveReference.Mode != handler.GrayMappingModeGlobal || mappings.DefectiveReference.LUT != handler.GrayLUTViridis || mappings.DefectiveReference.ZMin != 0.125 || mappings.DefectiveReference.ZMax != 0.875) {
+				t.Fatalf("mappings = %#v, want legacy global viridis [0.125, 0.875] for both groups", mappings)
+			}
+			if tt.name == "adaptive" && (mappings.DefectiveReference == nil || mappings.DefectiveReference.Mode != handler.GrayMappingModeAdaptive) {
+				t.Fatalf("mappings = %#v, want adaptive mode", mappings)
 			}
 		})
 	}
@@ -184,7 +189,7 @@ func TestGrayMappingsFromQueryRequiresCompleteValidWindow(t *testing.T) {
 func TestGrayMappingsFromQuerySeparatesDefectiveReferenceAndDifference(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-	ctx.Request = httptest.NewRequest("GET", "/?defective_reference_gray_lut=viridis&defective_reference_z_min=0.1&defective_reference_z_max=0.8&difference_gray_lut=inferno&difference_z_min=0.2&difference_z_max=0.9", nil)
+	ctx.Request = httptest.NewRequest("GET", "/?defective_reference_gray_mode=global&defective_reference_gray_lut=viridis&defective_reference_z_min=0.1&defective_reference_z_max=0.8&difference_gray_mode=global&difference_gray_lut=inferno&difference_z_min=0.2&difference_z_max=0.9", nil)
 
 	mappings, err := grayMappingsFromQuery(ctx)
 	if err != nil {
@@ -201,7 +206,7 @@ func TestGrayMappingsFromQuerySeparatesDefectiveReferenceAndDifference(t *testin
 func TestGrayMappingsFromQueryReadsNativeBitDepth(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-	ctx.Request = httptest.NewRequest("GET", "/?defective_reference_gray_lut=gray&defective_reference_z_min=0.1&defective_reference_z_max=0.9&defective_reference_bit_depth=12", nil)
+	ctx.Request = httptest.NewRequest("GET", "/?defective_reference_gray_mode=global&defective_reference_gray_lut=gray&defective_reference_z_min=0.1&defective_reference_z_max=0.9&defective_reference_bit_depth=12", nil)
 
 	mappings, err := grayMappingsFromQuery(ctx)
 	if err != nil {
@@ -221,7 +226,7 @@ func TestGalleryDownloadRouteStreamsCompletedAttachment(t *testing.T) {
 	stub := &galleryHTTPHandlerStub{result: handler.GalleryDownloadResult{Path: path, Filename: "gallery-images.zip"}}
 	router := gin.New()
 	RegisterHandler(router.Group("/"), stub)
-	payload := `{"items":[{"inspection_time":"2026-08-21T00:00:00Z","wafer_key":1,"defect_id":"42","patch_image_types":["Defective"],"review_image_ids":[]}],"apply_color_mapping":true,"gray_mappings":{"defective_reference":{"enabled":true,"lut":"viridis","zMin":0.1,"zMax":0.9}}}`
+	payload := `{"items":[{"inspection_time":"2026-08-21T00:00:00Z","wafer_key":1,"defect_id":"42","patch_image_types":["Defective"],"review_image_ids":[]}],"apply_color_mapping":true,"gray_mappings":{"defective_reference":{"enabled":true,"mode":"global","lut":"viridis","zMin":0.1,"zMax":0.9}}}`
 	form := url.Values{"payload": []string{payload}}
 	request := httptest.NewRequest(http.MethodPost, "/sc/gallery-downloads", strings.NewReader(form.Encode()))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")

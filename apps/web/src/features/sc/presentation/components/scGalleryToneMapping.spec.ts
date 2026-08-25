@@ -8,6 +8,7 @@ import {
 
 const VIRIDIS: ScGalleryToneMapping = {
   enabled: true,
+  mode: "global",
   lut: "viridis",
   zMin: 0.125,
   zMax: 0.875,
@@ -20,9 +21,17 @@ describe("scGalleryToneMapping", () => {
     appendGrayMappingQuery(params, VIRIDIS);
 
     expect(params.get("gray_lut")).toBe("viridis");
+    expect(params.get("gray_mode")).toBe("global");
     expect(params.get("z_min")).toBe("0.125");
     expect(params.get("z_max")).toBe("0.875");
     expect(params.get("bit_depth")).toBe("12");
+  });
+
+  it("serializes adaptive per-defect mapping independently from the global window", () => {
+    const params = new URLSearchParams();
+    appendGrayMappingQuery(params, { ...VIRIDIS, mode: "adaptive" });
+
+    expect(params.get("gray_mode")).toBe("adaptive");
   });
 
   it("leaves source rendering untouched when mapping is disabled", () => {
@@ -58,9 +67,10 @@ describe("scGalleryToneMapping", () => {
   it("moves the mapped color region with the selected window", () => {
     const background = colorBarBackground("viridis", 0.25, 0.75);
 
-    expect(background).toContain("#242430) 25.000%");
+    expect(background).toContain("#440154 0%");
     expect(background).toContain("#440154 25.000%");
     expect(background).toContain("#fde725 75.000%");
-    expect(background).toContain("#242430) 75.000%");
+    expect(background).toContain("#fde725 100%");
+    expect(background).not.toContain("#242430) 100%");
   });
 });

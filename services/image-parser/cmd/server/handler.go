@@ -27,6 +27,7 @@ const maxGalleryDownloadRequestBytes = 16 << 20
 
 type galleryGrayMappingPayload struct {
 	Enabled  bool    `json:"enabled"`
+	Mode     string  `json:"mode"`
 	LUT      string  `json:"lut"`
 	ZMin     float64 `json:"zMin"`
 	ZMax     float64 `json:"zMax"`
@@ -209,7 +210,11 @@ func galleryMappingFromPayload(payload *galleryGrayMappingPayload) (*handler.Gra
 	if err != nil {
 		return nil, err
 	}
-	mapping := &handler.GrayMapping{LUT: lut, ZMin: payload.ZMin, ZMax: payload.ZMax, BitDepth: payload.BitDepth}
+	mode, err := handler.ParseGrayMappingMode(payload.Mode)
+	if err != nil {
+		return nil, err
+	}
+	mapping := &handler.GrayMapping{Mode: mode, LUT: lut, ZMin: payload.ZMin, ZMax: payload.ZMax, BitDepth: payload.BitDepth}
 	if err := mapping.Validate(); err != nil {
 		return nil, err
 	}
@@ -239,19 +244,25 @@ func grayMappingsFromQuery(c *gin.Context) (handler.PatchGrayMappings, error) {
 }
 
 func grayMappingTupleFromQuery(c *gin.Context, prefix string) (*handler.GrayMapping, bool, error) {
+	modeName := prefix + "gray_mode"
 	lutName := prefix + "gray_lut"
 	zMinName := prefix + "z_min"
 	zMaxName := prefix + "z_max"
 	bitDepthName := prefix + "bit_depth"
+	modeRaw, hasMode := c.GetQuery(modeName)
 	lutRaw, hasLUT := c.GetQuery(lutName)
 	zMinRaw, hasZMin := c.GetQuery(zMinName)
 	zMaxRaw, hasZMax := c.GetQuery(zMaxName)
 	bitDepthRaw, hasBitDepth := c.GetQuery(bitDepthName)
-	if !hasLUT && !hasZMin && !hasZMax && !hasBitDepth {
+	if !hasMode && !hasLUT && !hasZMin && !hasZMax && !hasBitDepth {
 		return nil, false, nil
 	}
-	if !hasLUT || !hasZMin || !hasZMax {
-		return nil, true, fmt.Errorf("%s, %s, and %s must be provided together", lutName, zMinName, zMaxName)
+	if !hasMode || !hasLUT || !hasZMin || !hasZMax {
+		return nil, true, fmt.Errorf("%s, %s, %s, and %s must be provided together", modeName, lutName, zMinName, zMaxName)
+	}
+	mode, err := handler.ParseGrayMappingMode(modeRaw)
+	if err != nil {
+		return nil, true, err
 	}
 	lut, err := handler.ParseGrayLUT(lutRaw)
 	if err != nil {
@@ -272,7 +283,7 @@ func grayMappingTupleFromQuery(c *gin.Context, prefix string) (*handler.GrayMapp
 			return nil, true, fmt.Errorf("invalid %s %q", bitDepthName, bitDepthRaw)
 		}
 	}
-	mapping := &handler.GrayMapping{LUT: lut, ZMin: zMin, ZMax: zMax, BitDepth: bitDepth}
+	mapping := &handler.GrayMapping{Mode: mode, LUT: lut, ZMin: zMin, ZMax: zMax, BitDepth: bitDepth}
 	if err := mapping.Validate(); err != nil {
 		return nil, true, err
 	}
