@@ -169,27 +169,9 @@ func renderDecodedPNGWithGrayMapping(source image.Image, width, height int, mapp
 	if width <= 0 || height <= 0 {
 		return nil, fmt.Errorf("mapped image dimensions must be positive")
 	}
-	sample, detectedBitDepth, err := graySampler(source)
-	if err != nil {
-		return nil, err
-	}
-	window, err := grayMappingWindow([]image.Image{source}, mapping, override)
-	if err != nil {
-		return nil, err
-	}
-
-	lut := grayLUTs[mapping.LUT]
 	target := image.NewNRGBA(image.Rect(0, 0, width, height))
-	sourceBounds := source.Bounds()
-	sourceWidth := sourceBounds.Dx()
-	sourceHeight := sourceBounds.Dy()
-	for targetY := range height {
-		sourceY := sourceBounds.Min.Y + targetY*sourceHeight/height
-		for targetX := range width {
-			sourceX := sourceBounds.Min.X + targetX*sourceWidth/width
-			value := sample(sourceX, sourceY)
-			target.SetNRGBA(targetX, targetY, lut[grayLUTIndex(value, mapping, detectedBitDepth, window)])
-		}
+	if err := renderDecodedGrayMappingInto(target, target.Bounds(), source, mapping, override); err != nil {
+		return nil, err
 	}
 
 	var output bytes.Buffer
@@ -197,6 +179,40 @@ func renderDecodedPNGWithGrayMapping(source image.Image, width, height int, mapp
 		return nil, err
 	}
 	return output.Bytes(), nil
+}
+
+func renderDecodedGrayMappingInto(target *image.NRGBA, destination image.Rectangle, source image.Image, mapping GrayMapping, override *grayWindow) error {
+	if err := mapping.Validate(); err != nil {
+		return err
+	}
+	if destination.Empty() {
+		return fmt.Errorf("mapped image dimensions must be positive")
+	}
+	if !destination.In(target.Bounds()) {
+		return fmt.Errorf("mapped image destination exceeds target bounds")
+	}
+	sample, detectedBitDepth, err := graySampler(source)
+	if err != nil {
+		return err
+	}
+	window, err := grayMappingWindow([]image.Image{source}, mapping, override)
+	if err != nil {
+		return err
+	}
+
+	lut := grayLUTs[mapping.LUT]
+	sourceBounds := source.Bounds()
+	sourceWidth := sourceBounds.Dx()
+	sourceHeight := sourceBounds.Dy()
+	for targetY := destination.Min.Y; targetY < destination.Max.Y; targetY++ {
+		sourceY := sourceBounds.Min.Y + (targetY-destination.Min.Y)*sourceHeight/destination.Dy()
+		for targetX := destination.Min.X; targetX < destination.Max.X; targetX++ {
+			sourceX := sourceBounds.Min.X + (targetX-destination.Min.X)*sourceWidth/destination.Dx()
+			value := sample(sourceX, sourceY)
+			target.SetNRGBA(targetX, targetY, lut[grayLUTIndex(value, mapping, detectedBitDepth, window)])
+		}
+	}
+	return nil
 }
 
 func adaptiveGrayWindowForImages(rawImages [][]byte, mapping GrayMapping) (grayWindow, error) {
@@ -213,6 +229,16 @@ func adaptiveGrayWindowForImages(rawImages [][]byte, mapping GrayMapping) (grayW
 			return grayWindow{}, err
 		}
 		images = append(images, source)
+	}
+	return adaptiveGrayWindowForDecodedImages(images, mapping)
+}
+
+func adaptiveGrayWindowForDecodedImages(images []image.Image, mapping GrayMapping) (grayWindow, error) {
+	if err := mapping.Validate(); err != nil {
+		return grayWindow{}, err
+	}
+	if mapping.Mode != GrayMappingModeAdaptive {
+		return grayWindow{}, fmt.Errorf("adaptive range requires adaptive gray mapping mode")
 	}
 	return grayMappingWindow(images, mapping, nil)
 }

@@ -26,7 +26,9 @@ images do not embed a second parser binary.
   colors. Patch sprite enlargement uses nearest-neighbor pixel replication so
   integer scale factors produce solid source-pixel blocks without interpolation;
   Review sprite resizing retains smooth interpolation. Raw `/sc/images/...`
-  responses are never transformed.
+  responses are never transformed. A sprite request batch-resolves all cells,
+  decodes each compressed image once, renders directly into the final canvas,
+  and encodes only the final PNG.
   The image-profile response lists every Patch instance (including multiple
   Reference, Difference, and Mask IDs) and its native bit depth and observed
   inspection-wide min/max. Artifact revisions key a bounded metadata LRU, so
@@ -48,10 +50,13 @@ images do not embed a second parser binary.
 One stream can open several explicit `(inspection_time, wafer_key)` contexts.
 Opening resolves the Inspection and its `eqp_id` once, returns the exact
 equipment ID, and advertises the batch, response-byte, and active-context
-limits. One monotonically increasing sequence identifies one sample and all
-requested roles. The service may work concurrently but sends results in
-sequence order. Clients reopen contexts and resend from the first unacknowledged
-sequence after a transport failure.
+limits plus the bounded number of request batches that a client may prefill.
+Prediction currently advertises two in-flight batches; Training and Export
+advertise one. The receive queue is bounded by that value, while parsing and
+responses remain request- and sequence-ordered. One monotonically increasing
+sequence identifies one sample and all requested roles. Clients reopen
+contexts and resend from the first unacknowledged sequence after a transport
+failure.
 
 The gRPC stream surfaces return raw compressed image bytes and content type.
 Decode, resize, channel stacking, tensor construction, model batching, and
@@ -171,5 +176,6 @@ removes only a stale socket and refuses to replace a regular file.
 `make benchmark-image-stream-receipt` creates a deterministic 300,000-sample,
 two-image range-ZIP fixture, warms the Artifact Cache, then measures production
 ZIP parsing through the public Prediction stream to the generated Python
-client. The gate is 3,000 samples/second. Fixture generation, cold download,
-and decode/fake-predictor throughput are reported separately.
+client. The client fills the advertised request window and refills it after
+each acknowledgement. The gate is 3,000 samples/second. Fixture generation,
+cold download, and decode/fake-predictor throughput are reported separately.

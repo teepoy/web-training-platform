@@ -219,19 +219,22 @@ class ImageStreamLimits(_message.Message):
     MAX_BATCH_ITEMS_FIELD_NUMBER: _builtins.int
     MAX_RESPONSE_BYTES_FIELD_NUMBER: _builtins.int
     MAX_ACTIVE_CONTEXTS_FIELD_NUMBER: _builtins.int
+    MAX_IN_FLIGHT_BATCHES_FIELD_NUMBER: _builtins.int
     max_batch_items: _builtins.int
     max_response_bytes: _builtins.int
     max_active_contexts: _builtins.int
+    max_in_flight_batches: _builtins.int
     def __init__(
         self,
         *,
         max_batch_items: _builtins.int = ...,
         max_response_bytes: _builtins.int = ...,
         max_active_contexts: _builtins.int = ...,
+        max_in_flight_batches: _builtins.int = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["max_active_contexts", b"max_active_contexts", "max_batch_items", b"max_batch_items", "max_response_bytes", b"max_response_bytes"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["max_active_contexts", b"max_active_contexts", "max_batch_items", b"max_batch_items", "max_in_flight_batches", b"max_in_flight_batches", "max_response_bytes", b"max_response_bytes"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 

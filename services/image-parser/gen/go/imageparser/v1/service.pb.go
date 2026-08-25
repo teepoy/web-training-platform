@@ -538,12 +538,13 @@ func (*StreamImagesResponse_ContextError) isStreamImagesResponse_Payload() {}
 func (*StreamImagesResponse_ContextClosed) isStreamImagesResponse_Payload() {}
 
 type ImageStreamLimits struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	MaxBatchItems     uint32                 `protobuf:"varint,1,opt,name=max_batch_items,json=maxBatchItems,proto3" json:"max_batch_items,omitempty"`
-	MaxResponseBytes  uint64                 `protobuf:"varint,2,opt,name=max_response_bytes,json=maxResponseBytes,proto3" json:"max_response_bytes,omitempty"`
-	MaxActiveContexts uint32                 `protobuf:"varint,3,opt,name=max_active_contexts,json=maxActiveContexts,proto3" json:"max_active_contexts,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	MaxBatchItems      uint32                 `protobuf:"varint,1,opt,name=max_batch_items,json=maxBatchItems,proto3" json:"max_batch_items,omitempty"`
+	MaxResponseBytes   uint64                 `protobuf:"varint,2,opt,name=max_response_bytes,json=maxResponseBytes,proto3" json:"max_response_bytes,omitempty"`
+	MaxActiveContexts  uint32                 `protobuf:"varint,3,opt,name=max_active_contexts,json=maxActiveContexts,proto3" json:"max_active_contexts,omitempty"`
+	MaxInFlightBatches uint32                 `protobuf:"varint,4,opt,name=max_in_flight_batches,json=maxInFlightBatches,proto3" json:"max_in_flight_batches,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *ImageStreamLimits) Reset() {
@@ -593,6 +594,13 @@ func (x *ImageStreamLimits) GetMaxResponseBytes() uint64 {
 func (x *ImageStreamLimits) GetMaxActiveContexts() uint32 {
 	if x != nil {
 		return x.MaxActiveContexts
+	}
+	return 0
+}
+
+func (x *ImageStreamLimits) GetMaxInFlightBatches() uint32 {
+	if x != nil {
+		return x.MaxInFlightBatches
 	}
 	return 0
 }
@@ -1000,11 +1008,12 @@ const file_imageparser_v1_service_proto_rawDesc = "" +
 	"\fsample_batch\x18\x02 \x01(\v2(.imageparser.v1.ImageSampleBatchResponseH\x00R\vsampleBatch\x12H\n" +
 	"\rcontext_error\x18\x03 \x01(\v2!.imageparser.v1.ImageContextErrorH\x00R\fcontextError\x12K\n" +
 	"\x0econtext_closed\x18\x04 \x01(\v2\".imageparser.v1.ImageContextClosedH\x00R\rcontextClosedB\t\n" +
-	"\apayload\"\x99\x01\n" +
+	"\apayload\"\xcc\x01\n" +
 	"\x11ImageStreamLimits\x12&\n" +
 	"\x0fmax_batch_items\x18\x01 \x01(\rR\rmaxBatchItems\x12,\n" +
 	"\x12max_response_bytes\x18\x02 \x01(\x04R\x10maxResponseBytes\x12.\n" +
-	"\x13max_active_contexts\x18\x03 \x01(\rR\x11maxActiveContexts\"\x85\x01\n" +
+	"\x13max_active_contexts\x18\x03 \x01(\rR\x11maxActiveContexts\x121\n" +
+	"\x15max_in_flight_batches\x18\x04 \x01(\rR\x12maxInFlightBatches\"\x85\x01\n" +
 	"\x12ImageContextOpened\x12\x1d\n" +
 	"\n" +
 	"context_id\x18\x01 \x01(\tR\tcontextId\x12\x15\n" +

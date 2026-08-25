@@ -43,6 +43,7 @@ class _ContextState:
     roles: tuple[str, ...]
     opened: bool = False
     max_batch_items: int = 0
+    max_in_flight_batches: int = 0
 
 
 class GrpcJobImageStreamFactory:
@@ -214,8 +215,18 @@ class _GrpcJobImageStreamSession:
                 await self._ensure_context(state)
                 if state.max_batch_items <= 0:
                     raise RuntimeError("image-parser returned an invalid batch limit")
-                for offset in range(0, len(pending), state.max_batch_items):
-                    chunk = pending[offset : offset + state.max_batch_items]
+                if state.max_in_flight_batches <= 0:
+                    raise RuntimeError(
+                        "image-parser returned an invalid in-flight batch limit"
+                    )
+                chunks = [
+                    pending[offset : offset + state.max_batch_items]
+                    for offset in range(0, len(pending), state.max_batch_items)
+                ]
+                next_chunk = 0
+                in_flight: list[list[pb.ImageSampleRequest]] = []
+                while next_chunk < min(len(chunks), state.max_in_flight_batches):
+                    chunk = chunks[next_chunk]
                     await self._write(
                         pb.StreamImagesRequest(
                             sample_batch=pb.ImageSampleBatchRequest(
@@ -224,7 +235,23 @@ class _GrpcJobImageStreamSession:
                             )
                         )
                     )
+                    in_flight.append(chunk)
+                    next_chunk += 1
+                while in_flight:
+                    chunk = in_flight.pop(0)
                     await self._read_chunk(state, chunk, resolved)
+                    if next_chunk < len(chunks):
+                        following = chunks[next_chunk]
+                        await self._write(
+                            pb.StreamImagesRequest(
+                                sample_batch=pb.ImageSampleBatchRequest(
+                                    context_id=state.context_id,
+                                    samples=following,
+                                )
+                            )
+                        )
+                        in_flight.append(following)
+                        next_chunk += 1
                 return
             except grpc.aio.AioRpcError:
                 if reconnects >= self._max_reconnects:
@@ -259,6 +286,7 @@ class _GrpcJobImageStreamSession:
         if opened.context_id != state.context_id:
             raise RuntimeError("image-parser acknowledged the wrong context")
         state.max_batch_items = int(opened.limits.max_batch_items)
+        state.max_in_flight_batches = int(opened.limits.max_in_flight_batches)
         state.opened = True
 
     async def _read_chunk(
@@ -371,6 +399,7 @@ class _GrpcJobImageStreamSession:
         for state in self._contexts.values():
             state.opened = False
             state.max_batch_items = 0
+            state.max_in_flight_batches = 0
 
     def _ensure_open(self) -> None:
         if self._closed:

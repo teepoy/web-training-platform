@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator, Iterator, Sequence
+from collections.abc import AsyncGenerator, Iterator, Sequence
+from contextlib import suppress
 
 import polars as pl
 
@@ -16,7 +17,7 @@ async def stream_sc_prediction_image_pairs(
     image_stream: ScImageStreamSession,
     input_batch_rows: int,
     roles: Sequence[str] = ("patch_defective", "patch_template"),
-) -> AsyncIterator[dict[str, object]]:
+) -> AsyncGenerator[dict[str, object], None]:
     """Resolve ordered SC images through one semantic service stream."""
 
     if input_batch_rows <= 0:
@@ -34,21 +35,41 @@ async def stream_sc_prediction_image_pairs(
         maintain_order=True,
         engine="streaming",
     )
+    pending: asyncio.Task[list[dict[str, object]]] | None = None
+
+    async def resolve(batch: pl.DataFrame) -> list[dict[str, object]]:
+        requests = [dict(row) for row in batch.iter_rows(named=True)]
+        resolved = await image_stream.resolve_images(roles=roles, items=requests)
+        if len(resolved) != len(requests):
+            raise RuntimeError(
+                "image-parser returned an incomplete batch: "
+                f"expected {len(requests)}, got {len(resolved)}"
+            )
+        return resolved
+
     try:
-        while True:
-            batch = await asyncio.to_thread(_next_batch, batches)
-            if batch is None:
-                break
-            requests = [dict(row) for row in batch.iter_rows(named=True)]
-            resolved = await image_stream.resolve_images(roles=roles, items=requests)
-            if len(resolved) != len(requests):
-                raise RuntimeError(
-                    "image-parser returned an incomplete batch: "
-                    f"expected {len(requests)}, got {len(resolved)}"
-                )
+        batch = await asyncio.to_thread(_next_batch, batches)
+        if batch is not None:
+            pending = asyncio.create_task(resolve(batch))
+        while pending is not None:
+            resolved = await pending
+            next_batch = await asyncio.to_thread(_next_batch, batches)
+            pending = (
+                asyncio.create_task(resolve(next_batch))
+                if next_batch is not None
+                else None
+            )
+            if pending is not None:
+                # Give the next service request a chance to enter gRPC before
+                # downstream CPU/GPU preprocessing consumes the current batch.
+                await asyncio.sleep(0)
             for item in resolved:
                 yield _flatten_sample(item, roles)
     finally:
+        if pending is not None:
+            pending.cancel()
+            with suppress(asyncio.CancelledError):
+                await pending
         close = getattr(batches, "close", None)
         if close is not None:
             await asyncio.to_thread(close)

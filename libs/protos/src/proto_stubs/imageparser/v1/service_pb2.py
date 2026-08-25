@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1cimageparser/v1/service.proto\x12\x0eimageparser.v1\"\x0f\n\rHealthRequest\" \n\x0eHealthResponse\x12\x0e\n\x06status\x18\x01 \x01(\t\"\xd7\x01\n\x13StreamImagesRequest\x12\x38\n\x0copen_context\x18\x01 \x01(\x0b\x32 .imageparser.v1.OpenImageContextH\x00\x12?\n\x0csample_batch\x18\x02 \x01(\x0b\x32\'.imageparser.v1.ImageSampleBatchRequestH\x00\x12:\n\rclose_context\x18\x03 \x01(\x0b\x32!.imageparser.v1.CloseImageContextH\x00\x42\t\n\x07payload\"a\n\x10OpenImageContext\x12\x12\n\ncontext_id\x18\x01 \x01(\t\x12\x17\n\x0finspection_time\x18\x02 \x01(\t\x12\x11\n\twafer_key\x18\x03 \x01(\x05\x12\r\n\x05roles\x18\x04 \x03(\t\"L\n\x12ImageSampleRequest\x12\x10\n\x08sequence\x18\x01 \x01(\x04\x12\x11\n\tsample_id\x18\x02 \x01(\t\x12\x11\n\tdefect_id\x18\x03 \x01(\t\"b\n\x17ImageSampleBatchRequest\x12\x12\n\ncontext_id\x18\x01 \x01(\t\x12\x33\n\x07samples\x18\x02 \x03(\x0b\x32\".imageparser.v1.ImageSampleRequest\"\'\n\x11\x43loseImageContext\x12\x12\n\ncontext_id\x18\x01 \x01(\t\"\x9b\x02\n\x14StreamImagesResponse\x12<\n\x0e\x63ontext_opened\x18\x01 \x01(\x0b\x32\".imageparser.v1.ImageContextOpenedH\x00\x12@\n\x0csample_batch\x18\x02 \x01(\x0b\x32(.imageparser.v1.ImageSampleBatchResponseH\x00\x12:\n\rcontext_error\x18\x03 \x01(\x0b\x32!.imageparser.v1.ImageContextErrorH\x00\x12<\n\x0e\x63ontext_closed\x18\x04 \x01(\x0b\x32\".imageparser.v1.ImageContextClosedH\x00\x42\t\n\x07payload\"e\n\x11ImageStreamLimits\x12\x17\n\x0fmax_batch_items\x18\x01 \x01(\r\x12\x1a\n\x12max_response_bytes\x18\x02 \x01(\x04\x12\x1b\n\x13max_active_contexts\x18\x03 \x01(\r\"k\n\x12ImageContextOpened\x12\x12\n\ncontext_id\x18\x01 \x01(\t\x12\x0e\n\x06\x65qp_id\x18\x02 \x01(\t\x12\x31\n\x06limits\x18\x03 \x01(\x0b\x32!.imageparser.v1.ImageStreamLimits\"X\n\x0fImageRoleResult\x12\x0c\n\x04role\x18\x01 \x01(\t\x12\x12\n\nimage_data\x18\x02 \x01(\x0c\x12\x14\n\x0c\x63ontent_type\x18\x03 \x01(\t\x12\r\n\x05\x65rror\x18\x04 \x01(\t\"\x8b\x01\n\x11ImageSampleResult\x12\x10\n\x08sequence\x18\x01 \x01(\x04\x12\x11\n\tsample_id\x18\x02 \x01(\t\x12\x11\n\tdefect_id\x18\x03 \x01(\t\x12/\n\x06images\x18\x04 \x03(\x0b\x32\x1f.imageparser.v1.ImageRoleResult\x12\r\n\x05\x65rror\x18\x05 \x01(\t\"x\n\x18ImageSampleBatchResponse\x12\x12\n\ncontext_id\x18\x01 \x01(\t\x12\x32\n\x07samples\x18\x02 \x03(\x0b\x32!.imageparser.v1.ImageSampleResult\x12\x14\n\x0c\x61\x63k_sequence\x18\x03 \x01(\x04\"D\n\x11ImageContextError\x12\x12\n\ncontext_id\x18\x01 \x01(\t\x12\x0c\n\x04\x63ode\x18\x02 \x01(\t\x12\r\n\x05\x65rror\x18\x03 \x01(\t\"(\n\x12ImageContextClosed\x12\x12\n\ncontext_id\x18\x01 \x01(\t2\x8b\x03\n\x0bImageParser\x12G\n\x06Health\x12\x1d.imageparser.v1.HealthRequest\x1a\x1e.imageparser.v1.HealthResponse\x12g\n\x16StreamPredictionImages\x12#.imageparser.v1.StreamImagesRequest\x1a$.imageparser.v1.StreamImagesResponse(\x01\x30\x01\x12\x65\n\x14StreamTrainingImages\x12#.imageparser.v1.StreamImagesRequest\x1a$.imageparser.v1.StreamImagesResponse(\x01\x30\x01\x12\x63\n\x12StreamExportImages\x12#.imageparser.v1.StreamImagesRequest\x1a$.imageparser.v1.StreamImagesResponse(\x01\x30\x01\x42\x38Z6ft-platform/protos/gen/go/imageparser/v1;imageparserv1b\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1cimageparser/v1/service.proto\x12\x0eimageparser.v1\"\x0f\n\rHealthRequest\" \n\x0eHealthResponse\x12\x0e\n\x06status\x18\x01 \x01(\t\"\xd7\x01\n\x13StreamImagesRequest\x12\x38\n\x0copen_context\x18\x01 \x01(\x0b\x32 .imageparser.v1.OpenImageContextH\x00\x12?\n\x0csample_batch\x18\x02 \x01(\x0b\x32\'.imageparser.v1.ImageSampleBatchRequestH\x00\x12:\n\rclose_context\x18\x03 \x01(\x0b\x32!.imageparser.v1.CloseImageContextH\x00\x42\t\n\x07payload\"a\n\x10OpenImageContext\x12\x12\n\ncontext_id\x18\x01 \x01(\t\x12\x17\n\x0finspection_time\x18\x02 \x01(\t\x12\x11\n\twafer_key\x18\x03 \x01(\x05\x12\r\n\x05roles\x18\x04 \x03(\t\"L\n\x12ImageSampleRequest\x12\x10\n\x08sequence\x18\x01 \x01(\x04\x12\x11\n\tsample_id\x18\x02 \x01(\t\x12\x11\n\tdefect_id\x18\x03 \x01(\t\"b\n\x17ImageSampleBatchRequest\x12\x12\n\ncontext_id\x18\x01 \x01(\t\x12\x33\n\x07samples\x18\x02 \x03(\x0b\x32\".imageparser.v1.ImageSampleRequest\"\'\n\x11\x43loseImageContext\x12\x12\n\ncontext_id\x18\x01 \x01(\t\"\x9b\x02\n\x14StreamImagesResponse\x12<\n\x0e\x63ontext_opened\x18\x01 \x01(\x0b\x32\".imageparser.v1.ImageContextOpenedH\x00\x12@\n\x0csample_batch\x18\x02 \x01(\x0b\x32(.imageparser.v1.ImageSampleBatchResponseH\x00\x12:\n\rcontext_error\x18\x03 \x01(\x0b\x32!.imageparser.v1.ImageContextErrorH\x00\x12<\n\x0e\x63ontext_closed\x18\x04 \x01(\x0b\x32\".imageparser.v1.ImageContextClosedH\x00\x42\t\n\x07payload\"\x84\x01\n\x11ImageStreamLimits\x12\x17\n\x0fmax_batch_items\x18\x01 \x01(\r\x12\x1a\n\x12max_response_bytes\x18\x02 \x01(\x04\x12\x1b\n\x13max_active_contexts\x18\x03 \x01(\r\x12\x1d\n\x15max_in_flight_batches\x18\x04 \x01(\r\"k\n\x12ImageContextOpened\x12\x12\n\ncontext_id\x18\x01 \x01(\t\x12\x0e\n\x06\x65qp_id\x18\x02 \x01(\t\x12\x31\n\x06limits\x18\x03 \x01(\x0b\x32!.imageparser.v1.ImageStreamLimits\"X\n\x0fImageRoleResult\x12\x0c\n\x04role\x18\x01 \x01(\t\x12\x12\n\nimage_data\x18\x02 \x01(\x0c\x12\x14\n\x0c\x63ontent_type\x18\x03 \x01(\t\x12\r\n\x05\x65rror\x18\x04 \x01(\t\"\x8b\x01\n\x11ImageSampleResult\x12\x10\n\x08sequence\x18\x01 \x01(\x04\x12\x11\n\tsample_id\x18\x02 \x01(\t\x12\x11\n\tdefect_id\x18\x03 \x01(\t\x12/\n\x06images\x18\x04 \x03(\x0b\x32\x1f.imageparser.v1.ImageRoleResult\x12\r\n\x05\x65rror\x18\x05 \x01(\t\"x\n\x18ImageSampleBatchResponse\x12\x12\n\ncontext_id\x18\x01 \x01(\t\x12\x32\n\x07samples\x18\x02 \x03(\x0b\x32!.imageparser.v1.ImageSampleResult\x12\x14\n\x0c\x61\x63k_sequence\x18\x03 \x01(\x04\"D\n\x11ImageContextError\x12\x12\n\ncontext_id\x18\x01 \x01(\t\x12\x0c\n\x04\x63ode\x18\x02 \x01(\t\x12\r\n\x05\x65rror\x18\x03 \x01(\t\"(\n\x12ImageContextClosed\x12\x12\n\ncontext_id\x18\x01 \x01(\t2\x8b\x03\n\x0bImageParser\x12G\n\x06Health\x12\x1d.imageparser.v1.HealthRequest\x1a\x1e.imageparser.v1.HealthResponse\x12g\n\x16StreamPredictionImages\x12#.imageparser.v1.StreamImagesRequest\x1a$.imageparser.v1.StreamImagesResponse(\x01\x30\x01\x12\x65\n\x14StreamTrainingImages\x12#.imageparser.v1.StreamImagesRequest\x1a$.imageparser.v1.StreamImagesResponse(\x01\x30\x01\x12\x63\n\x12StreamExportImages\x12#.imageparser.v1.StreamImagesRequest\x1a$.imageparser.v1.StreamImagesResponse(\x01\x30\x01\x42\x38Z6ft-platform/protos/gen/go/imageparser/v1;imageparserv1b\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -48,20 +48,20 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_CLOSEIMAGECONTEXT']._serialized_end=633
   _globals['_STREAMIMAGESRESPONSE']._serialized_start=636
   _globals['_STREAMIMAGESRESPONSE']._serialized_end=919
-  _globals['_IMAGESTREAMLIMITS']._serialized_start=921
-  _globals['_IMAGESTREAMLIMITS']._serialized_end=1022
-  _globals['_IMAGECONTEXTOPENED']._serialized_start=1024
-  _globals['_IMAGECONTEXTOPENED']._serialized_end=1131
-  _globals['_IMAGEROLERESULT']._serialized_start=1133
-  _globals['_IMAGEROLERESULT']._serialized_end=1221
-  _globals['_IMAGESAMPLERESULT']._serialized_start=1224
-  _globals['_IMAGESAMPLERESULT']._serialized_end=1363
-  _globals['_IMAGESAMPLEBATCHRESPONSE']._serialized_start=1365
-  _globals['_IMAGESAMPLEBATCHRESPONSE']._serialized_end=1485
-  _globals['_IMAGECONTEXTERROR']._serialized_start=1487
-  _globals['_IMAGECONTEXTERROR']._serialized_end=1555
-  _globals['_IMAGECONTEXTCLOSED']._serialized_start=1557
-  _globals['_IMAGECONTEXTCLOSED']._serialized_end=1597
-  _globals['_IMAGEPARSER']._serialized_start=1600
-  _globals['_IMAGEPARSER']._serialized_end=1995
+  _globals['_IMAGESTREAMLIMITS']._serialized_start=922
+  _globals['_IMAGESTREAMLIMITS']._serialized_end=1054
+  _globals['_IMAGECONTEXTOPENED']._serialized_start=1056
+  _globals['_IMAGECONTEXTOPENED']._serialized_end=1163
+  _globals['_IMAGEROLERESULT']._serialized_start=1165
+  _globals['_IMAGEROLERESULT']._serialized_end=1253
+  _globals['_IMAGESAMPLERESULT']._serialized_start=1256
+  _globals['_IMAGESAMPLERESULT']._serialized_end=1395
+  _globals['_IMAGESAMPLEBATCHRESPONSE']._serialized_start=1397
+  _globals['_IMAGESAMPLEBATCHRESPONSE']._serialized_end=1517
+  _globals['_IMAGECONTEXTERROR']._serialized_start=1519
+  _globals['_IMAGECONTEXTERROR']._serialized_end=1587
+  _globals['_IMAGECONTEXTCLOSED']._serialized_start=1589
+  _globals['_IMAGECONTEXTCLOSED']._serialized_end=1629
+  _globals['_IMAGEPARSER']._serialized_start=1632
+  _globals['_IMAGEPARSER']._serialized_end=2027
 # @@protoc_insertion_point(module_scope)

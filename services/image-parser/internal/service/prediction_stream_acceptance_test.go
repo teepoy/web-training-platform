@@ -81,7 +81,7 @@ func TestPredictionImageStreamWarmCache300KToPython(t *testing.T) {
 	engine, err := equipment.NewEngine(lookup, registry, map[imagestream.UseCase]artifactcache.Cache{
 		imagestream.UseCasePrediction: cache,
 	}, equipment.LimitsByUseCase{
-		Prediction: imagestream.Limits{MaxBatchItems: 512, MaxResponseBytes: 64 << 20, MaxActiveContexts: 2},
+		Prediction: imagestream.Limits{MaxBatchItems: 512, MaxResponseBytes: 64 << 20, MaxActiveContexts: 2, MaxInFlightBatches: 2},
 	})
 	if err != nil {
 		t.Fatal(err)

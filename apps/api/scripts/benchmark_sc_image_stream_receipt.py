@@ -5,6 +5,7 @@ import argparse
 import asyncio
 import json
 import time
+from collections import deque
 
 from grpc import aio as grpc_aio
 from proto_stubs.imageparser.v1 import service_pb2 as pb
@@ -40,6 +41,11 @@ async def _run(args: argparse.Namespace) -> dict[str, int | float]:
         limit = int(opened.context_opened.limits.max_batch_items)
         if limit <= 0:
             raise RuntimeError("image-parser advertised an invalid batch limit")
+        in_flight_limit = int(opened.context_opened.limits.max_in_flight_batches)
+        if in_flight_limit <= 0:
+            raise RuntimeError(
+                "image-parser advertised an invalid in-flight batch limit"
+            )
         batch_size = min(args.batch_size, limit)
 
         received = 0
@@ -47,7 +53,14 @@ async def _run(args: argparse.Namespace) -> dict[str, int | float]:
         errors = 0
         last_sequence = 0
         started = time.perf_counter()
-        for start in range(1, args.samples + 1, batch_size):
+
+        starts = iter(range(1, args.samples + 1, batch_size))
+        in_flight: deque[int] = deque()
+
+        async def write_next() -> bool:
+            start = next(starts, None)
+            if start is None:
+                return False
             stop = min(start + batch_size, args.samples + 1)
             await call.write(
                 pb.StreamImagesRequest(
@@ -64,7 +77,15 @@ async def _run(args: argparse.Namespace) -> dict[str, int | float]:
                     )
                 )
             )
-            expected_ack = stop - 1
+            in_flight.append(stop - 1)
+            return True
+
+        for _ in range(in_flight_limit):
+            if not await write_next():
+                break
+
+        while in_flight:
+            expected_ack = in_flight[0]
             while last_sequence < expected_ack:
                 response = await call.read()
                 if response.WhichOneof("payload") == "context_error":
@@ -89,6 +110,8 @@ async def _run(args: argparse.Namespace) -> dict[str, int | float]:
                         if image.error or not image.image_data:
                             errors += 1
                 last_sequence = int(batch.ack_sequence)
+            in_flight.popleft()
+            await write_next()
         elapsed = time.perf_counter() - started
 
         await call.write(
@@ -122,6 +145,7 @@ async def _run(args: argparse.Namespace) -> dict[str, int | float]:
         "elapsed_seconds": round(elapsed, 6),
         "samples_per_second": round(throughput, 2),
         "batch_size": batch_size,
+        "max_in_flight_batches": in_flight_limit,
     }
 
 

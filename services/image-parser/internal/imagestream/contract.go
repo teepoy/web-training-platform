@@ -14,9 +14,10 @@ const (
 )
 
 type Limits struct {
-	MaxBatchItems     uint32
-	MaxResponseBytes  uint64
-	MaxActiveContexts uint32
+	MaxBatchItems      uint32
+	MaxResponseBytes   uint64
+	MaxActiveContexts  uint32
+	MaxInFlightBatches uint32
 }
 
 type OpenRequest struct {

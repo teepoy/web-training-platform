@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Sequence
 
 import polars as pl
@@ -48,6 +49,22 @@ class _ImageStream:
         ]
 
 
+class _PrefillImageStream(_ImageStream):
+    def __init__(self) -> None:
+        super().__init__()
+        self.next_batch_started = asyncio.Event()
+
+    async def resolve_images(
+        self,
+        *,
+        roles: Sequence[str],
+        items: Sequence[dict[str, object]],
+    ) -> list[dict[str, object]]:
+        if self.calls:
+            self.next_batch_started.set()
+        return await super().resolve_images(roles=roles, items=items)
+
+
 def _rows(count: int) -> pl.LazyFrame:
     return pl.DataFrame(
         {
@@ -81,6 +98,22 @@ async def test_prediction_stream_batches_rows_and_preserves_order() -> None:
         "patch_template: archive missing"
     )
     assert output[2]["patch_defective_bytes"] == b"patch_defective:sample-2"
+
+
+@pytest.mark.asyncio
+async def test_prediction_stream_prefills_next_batch_before_yielding_current() -> None:
+    stream = _PrefillImageStream()
+    output = stream_sc_prediction_image_pairs(
+        _rows(513),
+        image_stream=stream,
+        input_batch_rows=512,
+    )
+
+    first = await anext(output)
+
+    assert first["sample_id"] == "sample-0"
+    assert stream.next_batch_started.is_set()
+    await output.aclose()
 
 
 @pytest.mark.asyncio

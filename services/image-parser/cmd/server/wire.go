@@ -102,10 +102,10 @@ func wire() *serverApp {
 		caches[useCase] = manager
 	}
 	streamEngine, err := equipment.NewEngine(upstream, registry, caches, equipment.LimitsByUseCase{
-		Display:    imagestream.Limits{MaxBatchItems: 512, MaxResponseBytes: 64 << 20, MaxActiveContexts: 32},
-		Prediction: imagestream.Limits{MaxBatchItems: 512, MaxResponseBytes: 64 << 20, MaxActiveContexts: 32},
-		Training:   imagestream.Limits{MaxBatchItems: 512, MaxResponseBytes: 64 << 20, MaxActiveContexts: 32},
-		Export:     imagestream.Limits{MaxBatchItems: 512, MaxResponseBytes: 64 << 20, MaxActiveContexts: 32},
+		Display:    imagestream.Limits{MaxBatchItems: 512, MaxResponseBytes: 64 << 20, MaxActiveContexts: 32, MaxInFlightBatches: 1},
+		Prediction: imagestream.Limits{MaxBatchItems: 512, MaxResponseBytes: 64 << 20, MaxActiveContexts: 32, MaxInFlightBatches: 2},
+		Training:   imagestream.Limits{MaxBatchItems: 512, MaxResponseBytes: 64 << 20, MaxActiveContexts: 32, MaxInFlightBatches: 1},
+		Export:     imagestream.Limits{MaxBatchItems: 512, MaxResponseBytes: 64 << 20, MaxActiveContexts: 32, MaxInFlightBatches: 1},
 	})
 	if err != nil {
 		log.Fatalf("failed to init image stream engine: %v", err)

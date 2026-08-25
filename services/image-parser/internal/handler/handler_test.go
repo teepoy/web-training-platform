@@ -17,6 +17,20 @@ type mappedSpriteLoader struct {
 
 type mappedSpriteByRoleLoader map[string][]byte
 
+type recordingSpriteBatchLoader struct {
+	data  []byte
+	calls [][]display.ImageKey
+}
+
+func (l *recordingSpriteBatchLoader) GetImageBytes(_ context.Context, keys []display.ImageKey) []display.ImageBytes {
+	l.calls = append(l.calls, append([]display.ImageKey(nil), keys...))
+	results := make([]display.ImageBytes, len(keys))
+	for index, key := range keys {
+		results[index] = display.ImageBytes{Key: key, Data: l.data, ContentType: "image/png"}
+	}
+	return results
+}
+
 func (l mappedSpriteByRoleLoader) GetImageBytes(_ context.Context, keys []display.ImageKey) []display.ImageBytes {
 	results := make([]display.ImageBytes, len(keys))
 	for index, key := range keys {
@@ -103,6 +117,67 @@ func TestSCSpriteGrayMappingTransformsPatchButNotReviewCells(t *testing.T) {
 	gotReview := color.NRGBAModel.Convert(decoded.At(1, 0)).(color.NRGBA)
 	if gotReview != (color.NRGBA{R: 220, G: 30, B: 10, A: 255}) {
 		t.Fatalf("review cell was transformed: %#v", gotReview)
+	}
+}
+
+func TestSCSpriteResolvesAllCellsInOneReaderBatch(t *testing.T) {
+	patch := image.NewGray(image.Rect(0, 0, 2, 2))
+	loader := &recordingSpriteBatchLoader{data: encodeTestPNG(t, patch)}
+	routes := NewSCRoutes(loader)
+
+	_, err := routes.GetSCSprite(context.Background(), SCSpriteRequest{
+		Inspection: display.InspectionKey{InspectionTime: "2026-08-25T00:00:00Z", WaferKey: 1},
+		DefectID:   "1",
+		CellSize:   4,
+		Images: []SCSpriteImage{
+			{Kind: display.ImageKindPatch, ImageType: "Defective"},
+			{Kind: display.ImageKindPatch, ImageType: "Reference"},
+			{Kind: display.ImageKindReview, ReviewImageID: 1},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loader.calls) != 1 {
+		t.Fatalf("reader calls = %d, want one batched read", len(loader.calls))
+	}
+	if len(loader.calls[0]) != 3 {
+		t.Fatalf("batched keys = %d, want 3", len(loader.calls[0]))
+	}
+}
+
+func TestSCSpriteAvoidsPerPixelIntermediateImageAllocations(t *testing.T) {
+	patch := image.NewNRGBA(image.Rect(0, 0, 128, 128))
+	for y := range 128 {
+		for x := range 128 {
+			patch.SetNRGBA(x, y, color.NRGBA{
+				R: uint8((x*17 + y*3) % 256),
+				G: uint8((x*5 + y*11) % 256),
+				B: uint8((x*7 + y*13) % 256),
+				A: 255,
+			})
+		}
+	}
+	routes := NewSCRoutes(mappedSpriteLoader{patch: encodeTestPNG(t, patch)})
+	request := SCSpriteRequest{
+		Inspection: display.InspectionKey{InspectionTime: "2026-08-25T00:00:00Z", WaferKey: 1},
+		DefectID:   "1",
+		CellSize:   64,
+		Images: []SCSpriteImage{
+			{Kind: display.ImageKindPatch, ImageType: "Defective"},
+			{Kind: display.ImageKindPatch, ImageType: "Reference"},
+			{Kind: display.ImageKindPatch, ImageType: "Difference"},
+		},
+	}
+	var renderErr error
+	allocations := testing.AllocsPerRun(5, func() {
+		_, renderErr = routes.GetSCSprite(context.Background(), request)
+	})
+	if renderErr != nil {
+		t.Fatal(renderErr)
+	}
+	if allocations >= 1000 {
+		t.Fatalf("sprite allocations = %.0f, want fewer than 1000", allocations)
 	}
 }
 

@@ -60,6 +60,7 @@ message ImageStreamLimits {
   uint32 max_batch_items = 1;
   uint64 max_response_bytes = 2;
   uint32 max_active_contexts = 3;
+  uint32 max_in_flight_batches = 4;
 }
 
 message ImageContextOpened {

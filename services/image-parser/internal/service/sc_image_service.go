@@ -54,7 +54,7 @@ func (s *ScImageService) StreamExportImages(stream imageparserv1.ImageParser_Str
 
 func (s *ScImageService) streamImages(useCase imagestream.UseCase, stream imageBidiStream) error {
 	limits := s.streams.Limits(useCase)
-	if limits.MaxBatchItems == 0 || limits.MaxResponseBytes == 0 || limits.MaxActiveContexts == 0 {
+	if limits.MaxBatchItems == 0 || limits.MaxResponseBytes == 0 || limits.MaxActiveContexts == 0 || limits.MaxInFlightBatches == 0 {
 		return status.Error(codes.Internal, "image stream limits are invalid")
 	}
 	contexts := make(map[string]*activeImageContext)
@@ -73,7 +73,7 @@ func (s *ScImageService) streamImages(useCase imagestream.UseCase, stream imageB
 		request *imageparserv1.StreamImagesRequest
 		err     error
 	}
-	received := make(chan receivedRequest, 1)
+	received := make(chan receivedRequest, limits.MaxInFlightBatches)
 	go func() {
 		for {
 			request, err := stream.Recv()
@@ -285,6 +285,7 @@ func (s *ScImageService) openImageContext(stream imageBidiStream, useCase images
 			EqpId:     opened.EquipmentID(),
 			Limits: &imageparserv1.ImageStreamLimits{
 				MaxBatchItems: limits.MaxBatchItems, MaxResponseBytes: limits.MaxResponseBytes, MaxActiveContexts: limits.MaxActiveContexts,
+				MaxInFlightBatches: limits.MaxInFlightBatches,
 			},
 		},
 	}})

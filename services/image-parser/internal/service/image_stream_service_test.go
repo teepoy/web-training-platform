@@ -25,7 +25,7 @@ func (e streamTestEngine) Limits(imagestream.UseCase) imagestream.Limits {
 	if e.limits.MaxBatchItems != 0 {
 		return e.limits
 	}
-	return imagestream.Limits{MaxBatchItems: 512, MaxResponseBytes: 16 << 20, MaxActiveContexts: 8}
+	return imagestream.Limits{MaxBatchItems: 512, MaxResponseBytes: 16 << 20, MaxActiveContexts: 8, MaxInFlightBatches: 2}
 }
 
 func (e streamTestEngine) Open(_ context.Context, useCase imagestream.UseCase, request imagestream.OpenRequest) (imagestream.Context, error) {
@@ -68,7 +68,7 @@ func (c *streamTestContext) Resolve(_ context.Context, samples []imagestream.Sam
 
 func TestPredictionImageStreamSplitsResponsesAtAdvertisedByteLimit(t *testing.T) {
 	service := NewScImageService(streamTestEngine{
-		limits:     imagestream.Limits{MaxBatchItems: 8, MaxResponseBytes: 700, MaxActiveContexts: 1},
+		limits:     imagestream.Limits{MaxBatchItems: 8, MaxResponseBytes: 700, MaxActiveContexts: 1, MaxInFlightBatches: 2},
 		imageBytes: 400,
 	})
 	client, cleanup := startImageStreamTestServer(t, service)
@@ -181,6 +181,9 @@ func TestPredictionImageStreamOpensContextAndReturnsSamplesInSequenceOrder(t *te
 	}
 	if opened.GetContextOpened().GetLimits().GetMaxBatchItems() != 512 {
 		t.Fatalf("limits = %#v", opened.GetContextOpened().GetLimits())
+	}
+	if opened.GetContextOpened().GetLimits().GetMaxInFlightBatches() != 2 {
+		t.Fatalf("in-flight limits = %#v", opened.GetContextOpened().GetLimits())
 	}
 
 	if err := stream.Send(&imageparserv1.StreamImagesRequest{Payload: &imageparserv1.StreamImagesRequest_SampleBatch{

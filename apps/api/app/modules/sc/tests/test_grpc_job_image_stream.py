@@ -32,6 +32,7 @@ class _FakeCall:
                             max_batch_items=2,
                             max_response_bytes=64 * 1024 * 1024,
                             max_active_contexts=8,
+                            max_in_flight_batches=2,
                         ),
                     )
                 )
@@ -90,29 +91,53 @@ class _FakeCall:
         return True
 
 
+class _PrefillCall(_FakeCall):
+    def __init__(self) -> None:
+        super().__init__()
+        self.pending_batches: list[pb.StreamImagesRequest] = []
+
+    async def write(self, request: pb.StreamImagesRequest) -> None:
+        if request.WhichOneof("payload") != "sample_batch":
+            await super().write(request)
+            return
+        self.pending_batches.append(request)
+        if len(self.pending_batches) == 2:
+            for batch in self.pending_batches:
+                await super().write(batch)
+
+    async def read(self) -> object:
+        if not self.responses and len(self.pending_batches) < 2:
+            raise AssertionError(
+                "client read the first response before prefilling the advertised window"
+            )
+        return await super().read()
+
+
 class _FakeMultiCallable:
-    def __init__(self, path: str, calls: list[str]) -> None:
+    def __init__(self, path: str, calls: list[str], call: _FakeCall | None) -> None:
         self._path = path
         self._calls = calls
+        self._call = call
 
     def __call__(self) -> _FakeCall:
         self._calls.append(self._path)
-        return _FakeCall()
+        return self._call or _FakeCall()
 
 
 class _FakeChannel:
-    def __init__(self) -> None:
+    def __init__(self, call: _FakeCall | None = None) -> None:
         self.calls: list[str] = []
         self.closed = False
+        self.call = call
 
     def stream_stream(self, path: str, **_: object) -> _FakeMultiCallable:
-        return _FakeMultiCallable(path, self.calls)
+        return _FakeMultiCallable(path, self.calls, self.call)
 
     def unary_unary(self, path: str, **_: object) -> _FakeMultiCallable:
-        return _FakeMultiCallable(path, self.calls)
+        return _FakeMultiCallable(path, self.calls, self.call)
 
     def unary_stream(self, path: str, **_: object) -> _FakeMultiCallable:
-        return _FakeMultiCallable(path, self.calls)
+        return _FakeMultiCallable(path, self.calls, self.call)
 
     async def close(self) -> None:
         self.closed = True
@@ -196,3 +221,34 @@ async def test_stream_keeps_global_sequence_monotonic_across_contexts(
         )
 
     assert [result["sequence"] for result in results] == [1, 2, 3, 4]
+
+
+@pytest.mark.asyncio
+async def test_prediction_stream_prefills_advertised_in_flight_batch_window(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    call = _PrefillCall()
+    channel = _FakeChannel(call)
+    monkeypatch.setattr(
+        adapter.grpc_aio,
+        "insecure_channel",
+        lambda *_args, **_kwargs: cast(adapter.grpc_aio.Channel, channel),
+    )
+    factory = GrpcJobImageStreamFactory(
+        addr="image-parser:9092",
+        use_case=ScImageStreamUseCase.PREDICTION,
+    )
+
+    async with factory.open() as stream:
+        results = await stream.resolve_images(
+            roles=("patch_defective",),
+            items=_items(4),
+        )
+
+    assert len(call.pending_batches) == 2
+    assert [result["sample_id"] for result in results] == [
+        "sample-0",
+        "sample-1",
+        "sample-2",
+        "sample-3",
+    ]

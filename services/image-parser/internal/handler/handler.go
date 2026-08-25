@@ -1,8 +1,11 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"image"
+	"image/png"
 	"strings"
 
 	"image-parser/internal/display"
@@ -99,8 +102,11 @@ func (s *scRoutes) GetSCSprite(ctx context.Context, req SCSpriteRequest) (ImageR
 	type resolvedCell struct {
 		image  SCSpriteImage
 		result display.ImageBytes
+		source image.Image
 	}
 	cells := make([]resolvedCell, len(req.Images))
+	keys := make([]display.ImageKey, 0, len(req.Images))
+	keyIndexes := make([]int, 0, len(req.Images))
 	for index, spriteImage := range req.Images {
 		cells[index].image = spriteImage
 		var key display.ImageKey
@@ -118,19 +124,43 @@ func (s *scRoutes) GetSCSprite(ctx context.Context, req SCSpriteRequest) (ImageR
 		default:
 			continue
 		}
-		cells[index].result = firstImageResult(s.images.GetImageBytes(ctx, []display.ImageKey{key}))
+		keys = append(keys, key)
+		keyIndexes = append(keyIndexes, index)
+	}
+	resolved := s.images.GetImageBytes(ctx, keys)
+	if len(resolved) != len(keys) {
+		return ImageResponse{}, fmt.Errorf(
+			"image reader returned %d results for %d sprite cells",
+			len(resolved),
+			len(keys),
+		)
+	}
+	for resultIndex, cellIndex := range keyIndexes {
+		cells[cellIndex].result = resolved[resultIndex]
+	}
+	for index := range cells {
+		cell := &cells[index]
+		if cell.result.Err != nil || len(cell.result.Data) == 0 {
+			continue
+		}
+		decoded, _, err := image.Decode(bytes.NewReader(cell.result.Data))
+		if err != nil {
+			cell.result.Err = err
+			continue
+		}
+		cell.source = decoded
 	}
 
 	var defectiveReferenceWindow *grayWindow
 	if mapping := req.GrayMappings.DefectiveReference; mapping != nil && mapping.Mode == GrayMappingModeAdaptive {
-		rawImages := make([][]byte, 0, 2)
+		decodedImages := make([]image.Image, 0, 2)
 		for _, cell := range cells {
-			if cell.image.Kind == display.ImageKindPatch && isDefectiveReferenceImageType(cell.image.ImageType) && cell.result.Err == nil {
-				rawImages = append(rawImages, cell.result.Data)
+			if cell.image.Kind == display.ImageKindPatch && isDefectiveReferenceImageType(cell.image.ImageType) && cell.result.Err == nil && cell.source != nil {
+				decodedImages = append(decodedImages, cell.source)
 			}
 		}
-		if len(rawImages) > 0 {
-			window, err := adaptiveGrayWindowForImages(rawImages, *mapping)
+		if len(decodedImages) > 0 {
+			window, err := adaptiveGrayWindowForDecodedImages(decodedImages, *mapping)
 			if err != nil {
 				return ImageResponse{}, fmt.Errorf("resolve adaptive defective/reference range: %w", err)
 			}
@@ -138,71 +168,41 @@ func (s *scRoutes) GetSCSprite(ctx context.Context, req SCSpriteRequest) (ImageR
 		}
 	}
 
-	pngs := make([][]byte, 0, len(req.Images))
-	for _, cell := range cells {
+	canvas := image.NewNRGBA(image.Rect(0, 0, req.CellSize*len(cells), req.CellSize))
+	acquireResize()
+	defer releaseResize()
+	for index, cell := range cells {
+		destination := image.Rect(index*req.CellSize, 0, (index+1)*req.CellSize, req.CellSize)
+		if cell.result.Err != nil || cell.source == nil {
+			drawBlankCell(canvas, destination)
+			continue
+		}
 		switch cell.image.Kind {
 		case display.ImageKindPatch:
 			window := (*grayWindow)(nil)
 			if isDefectiveReferenceImageType(cell.image.ImageType) {
 				window = defectiveReferenceWindow
 			}
-			resized, err := patchSpriteCell(cell.result, req.CellSize, req.GrayMappings.ForImageType(cell.image.ImageType), window)
-			if err != nil {
-				return ImageResponse{}, err
+			mapping := req.GrayMappings.ForImageType(cell.image.ImageType)
+			if mapping == nil {
+				resizeNearestInto(canvas, destination, cell.source)
+				continue
 			}
-			pngs = append(pngs, resized)
+			if err := renderDecodedGrayMappingInto(canvas, destination, cell.source, *mapping, window); err != nil {
+				drawBlankCell(canvas, destination)
+			}
 		case display.ImageKindReview:
-			resized, err := reviewSpriteCell(cell.result, req.CellSize)
-			if err != nil {
-				return ImageResponse{}, err
-			}
-			pngs = append(pngs, resized)
+			resizeBilinearInto(canvas, destination, cell.source)
 		default:
-			resized, err := blankSquarePNG(req.CellSize)
-			if err != nil {
-				return ImageResponse{}, err
-			}
-			pngs = append(pngs, resized)
+			drawBlankCell(canvas, destination)
 		}
 	}
 
-	result, err := createSpriteFromResized(pngs, req.CellSize)
-	if err != nil {
+	var output bytes.Buffer
+	if err := png.Encode(&output, canvas); err != nil {
 		return ImageResponse{}, err
 	}
-	return ImageResponse{Data: result, ContentType: "image/png"}, nil
-}
-
-func patchSpriteCell(result display.ImageBytes, cellSize int, mapping *GrayMapping, window *grayWindow) ([]byte, error) {
-	if result.Err != nil {
-		return blankSquarePNG(cellSize)
-	}
-	acquireResize()
-	var resized []byte
-	var err error
-	if mapping == nil {
-		resized, err = resizeSquarePNGPixelFill(result.Data, cellSize)
-	} else {
-		resized, err = renderPNGWithGrayMapping(result.Data, cellSize, cellSize, *mapping, window)
-	}
-	releaseResize()
-	if err != nil {
-		return blankSquarePNG(cellSize)
-	}
-	return resized, nil
-}
-
-func reviewSpriteCell(result display.ImageBytes, cellSize int) ([]byte, error) {
-	if result.Err != nil {
-		return blankSquarePNG(cellSize)
-	}
-	acquireResize()
-	resized, err := resizeSquarePNG(result.Data, cellSize)
-	releaseResize()
-	if err != nil {
-		return blankSquarePNG(cellSize)
-	}
-	return resized, nil
+	return ImageResponse{Data: output.Bytes(), ContentType: "image/png"}, nil
 }
 
 func isDefectiveReferenceImageType(imageType string) bool {

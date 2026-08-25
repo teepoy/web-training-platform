@@ -255,7 +255,9 @@ LUT 最小值。`image-profile` 按 Inspection 返回所有 Patch instance，因
 必须返回明确的 client error，不能 clamp 或 fallback。Colorbar 在 global window 两端显示实际
 clipping 结果：低端延伸 LUT 最小色，高端延伸 LUT 最大色，不能用黑色或面板背景代替。
 Patch sprite 放大必须使用 nearest-neighbor 像素填充，整数倍缩放后每个 source pixel 形成完整色块，
-不得进行插值；Review sprite 继续使用平滑插值。
+不得进行插值；Review sprite 继续使用平滑插值。一次 Sprite 请求必须批量读取全部 cell、每张压缩图
+只 decode 一次，直接渲染到最终 canvas，并且只对最终 Sprite 做一次 PNG encode；不得为每个 cell
+创建 resize PNG 再 decode/拼接。
 
 Gallery 的 filter、table selection 或 map selection 查询语义变化时，分页窗口和虚拟滚动位置必须
 一起回到 offset 0；不得用旧 viewport offset 查询较小的新结果并把越界空页解释为 Gallery 为空。
@@ -320,7 +322,9 @@ materialized Parquet/DataLoader，但图片 bytes 通过 Training stream 获取�
 bidirectional gRPC stream；一条 stream 可显式打开多个 Inspection context，每个 sequence
 对应一个 sample 及其全部 requested roles。服务可在内部并发下载/解析，但必须在有界 reorder
 后严格按 sequence 返回，并在 open acknowledgement 中公布 batch、response bytes 与 active
-context 上限。客户端只从第一个未 ack sequence 重发；服务不持久化 session，交付语义为
+context 上限，以及客户端可提前提交的 `max_in_flight_batches`。Prediction 当前窗口为 2；
+Training 与 Export 当前为 1。窗口只允许有界 request prefill，不改变服务按 request/sequence
+顺序解析和回包。客户端只从第一个未 ack sequence 重发；服务不持久化 session，交付语义为
 stateless at-least-once。context 通过显式 close、stream cancellation 或 idle timeout 释放，
 不设置总运行时长。不得使用 gRPC gzip，也不得 fallback 到已删除的 subprocess/frame path。
 
@@ -344,7 +348,9 @@ Prediction 或占用 Display lane。包含图片的 KLARF/ZIP 导出必须返回
 SC v3 Prediction 不生成完整临时图片 Parquet，也不为进度预先 collect/count 全量数据。
 它从 Dataset 当前持久化数据以 512 行有界扫描；Collection 按成员的
 `(inspection_time, wafer_key)` context 映射，通过 Prediction image stream 批量取
-`sample × role` 图片。
+`sample × role` 图片。scanner 在消费当前解析结果前即创建下一批 image-stream request；
+gRPC adapter 同时按服务公布的窗口预填充拆分后的 wire batches，使服务解析下一批与客户端
+decode/preprocess/model 当前批重叠，不能退化为固定的 send → wait response → decode 串行循环。
 预处理固定 4 个 spawn 进程，每个 task 最多 64 条、最多预取 8 个
 task；主进程聚合为 256 条模型 batch，prediction 每 5,000 条批量写回，结束时写入实际
 processed total。因此内存上界由各批次和队列上限决定，不随 Dataset 总样本数线性增长。
@@ -356,7 +362,8 @@ Dataset 拆分写回。
 阻塞性能门槛使用 300,000 samples、每 sample 两张代表性压缩图片，测量 warm Artifact Cache
 下 production range-ZIP parser 经公共 Prediction gRPC 到 Python 顺序收包，必须至少达到
 3,000 samples/s。fixture 生成、cold source 下载和 decode/fake predictor 分开计时，不能混入
-该门槛；基准 request batch 固定使用服务公布上限（当前 512）。
+该门槛；基准 request batch 固定使用服务公布上限（当前 512），并按服务公布的
+`max_in_flight_batches` 预填充请求。
 
 完整 capability matrix 和 SC sparse 路径详见 `docs/architecture/dataset-storage-modes.md`。Smoke 验证使用 `make smoke-tests`。
 
