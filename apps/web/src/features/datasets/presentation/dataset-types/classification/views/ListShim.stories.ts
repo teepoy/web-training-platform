@@ -1,25 +1,16 @@
 import type { Meta, StoryObj } from "@storybook/vue3";
 import ClassificationDatasetsShim from "./ListShim.vue";
-import { imageClassificationSchema } from "./schema";
 
 const CLASSIFICATION_LABELS = ["cat", "dog", "bird", "car", "truck"];
 
 function makeMockClassificationDatasets(count = 8) {
-  return Array.from({ length: count }, (_, i) => {
-    const sample = imageClassificationSchema.mockSampleFactory(i, CLASSIFICATION_LABELS) as {
-      id: string;
-      image_uris: string[];
-      metadata: { index: number; label: string };
-    };
-
-    return {
-      id: sample.id,
-      name: `Classification Sample ${i + 1}`,
-      dataset_type: "image_classification" as const,
-      task_spec: { task_type: "classification" as const, label_space: CLASSIFICATION_LABELS },
-      created_at: new Date(Date.now() - i * 86400000).toISOString(),
-    };
-  });
+  return Array.from({ length: count }, (_, i) => ({
+    id: `classification-dataset-${i}`,
+    name: `Classification Sample ${i + 1}`,
+    dataset_type: "image_classification" as const,
+    task_spec: { task_type: "classification" as const, label_space: CLASSIFICATION_LABELS },
+    created_at: new Date(Date.now() - i * 86400000).toISOString(),
+  }));
 }
 
 const meta = {

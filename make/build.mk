@@ -111,14 +111,14 @@ refresh-seed-sc-upstream: ## Refresh a running SC upstream after replacing its S
 
 .PHONY: seed-wafer-mock
 seed-wafer-mock: ## Seed mock wafer inspection SQLite database
-	cd services/sc-upstream && uv run python -m sc_upstream.seed mass \
+	cd services/sc-upstream && uv run python tools/seed_fixtures.py mass \
 		--db-url "sqlite:///$(CURDIR)/$(DATA_DIR)/wafer_inspection.db" \
 		--defects "$(SC_WAFER_MOCK_DEFECTS)" --imaged 100 --images-per 5 \
 		--inspection-time "$(SC_WAFER_MOCK_INSPECTION_TIME)" --reuse-matching
 
 .PHONY: seed-wafer-gallery-mock-inspections
 seed-wafer-gallery-mock-inspections: ## Seed three small gallery profile inspections into upstream SQLite
-	cd services/sc-upstream && uv run python -m sc_upstream.seed gallery-profiles \
+	cd services/sc-upstream && uv run python tools/seed_fixtures.py gallery-profiles \
 		--db-url "sqlite:///$(CURDIR)/$(DATA_DIR)/wafer_inspection.db" \
 		--defects "$(SC_GALLERY_PROFILE_DEFECTS)" \
 		--imaged "$(SC_GALLERY_PROFILE_IMAGED)" --images-per 1 \
@@ -166,7 +166,7 @@ seed-wafer-gallery-patch-zips: ## Seed 8/16-bit one/two-instance gallery patch a
 
 .PHONY: seed-wafer-mock-1m
 seed-wafer-mock-1m: ## Seed mock wafer inspection SQLite database (1M defects)
-	cd services/sc-upstream && uv run python -m sc_upstream.seed mass \
+	cd services/sc-upstream && uv run python tools/seed_fixtures.py mass \
 		--db-url "sqlite:///$(CURDIR)/$(DATA_DIR)/wafer_inspection_1m.db" \
 		--defects 1000000 --imaged 200 --images-per 5 \
 		--batch 50000 --reset

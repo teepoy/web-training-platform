@@ -17,7 +17,7 @@ from app.modules.datasets.port.local import (
     validate_trainer_for_dataset,
 )
 from app.modules.datasets.domain.entities import DatasetRevision
-from app.modules.runtime.app.services.deployment_seed import (
+from app.modules.runtime.app.services.deployment_catalog import (
     TRAIN_AND_PREDICT_RUNTIME_DEPLOYMENT,
 )
 from app.modules.runtime.catalog import runtime_catalog

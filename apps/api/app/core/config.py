@@ -181,10 +181,6 @@ class AuthConfig(ConfigSection):
     access_token_expire_minutes: int = 60
 
 
-class ScMockConfig(ConfigSection):
-    db_url: str = ""
-
-
 class ScDataProviderConfig(ConfigSection):
     implementation: Literal["duckdb"]
     max_rss_mb: int
@@ -241,7 +237,6 @@ class ScPipelineConfig(ConfigSection):
 
 
 class ScConfig(ConfigSection):
-    mock: ScMockConfig = Field(default_factory=ScMockConfig)
     data_provider: ScDataProviderConfig
     pipeline: ScPipelineConfig
 

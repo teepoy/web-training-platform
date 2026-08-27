@@ -27,7 +27,7 @@ from app.modules.runtime.domain.events import (
 )
 from app.modules.sc.materialization.port.local import ScInspectionMaterializerPort
 from app.modules.sc.runtime import ultralytics as runtime_ultralytics
-from app.modules.sc.runtime.benchmark_kernels import (
+from .sc_runtime_kernels import (
     fake_predict_yolo_stream,
     fake_train_yolo,
 )

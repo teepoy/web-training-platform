@@ -24,8 +24,6 @@ label_studio:
   database_url: "postgresql+asyncpg://postgres:postgres@localhost:5432/labelstudio"
 
 sc:
-  mock:
-    db_url: "sqlite:////app/apps/api/wafer_inspection.db"
   data_provider:
     cache_dir: /var/cache/sc-data-provider
     container_memory_limit_mb: 6144

@@ -31,13 +31,13 @@ benchmark-image-stream-receipt: ## Gate 300k warm-cache ZIP parsing through Pyth
 
 .PHONY: benchmark-sc-runtime-data-paths
 benchmark-sc-runtime-data-paths: ## Benchmark real SC train/predict data paths with fake GPU kernels
-	cd $(API_DIR) && $(DEV_API_HOST_ENV) \
+	$(DEV_API_HOST_ENV) \
 		SC_PATCH_S3_ENDPOINT=$(MINIO_ENDPOINT_HOST) \
 		SC_PATCH_S3_ACCESS_KEY=minioadmin \
 		SC_PATCH_S3_SECRET_KEY=minioadmin \
 		SC_PATCH_S3_BUCKET=$(SC_PATCH_ZIP_BUCKET) \
 		LITELLM_LOCAL_MODEL_COST_MAP=True \
-		$(UV_RUN_INSTALLED) python scripts/benchmark_sc_runtime_data_paths.py \
+		$(UV_RUN_INSTALLED) --package finetune-api python -m scripts.benchmarks.sc_runtime_data_paths \
 			--source-dataset-name '$(SC_RUNTIME_BENCHMARK_SOURCE_DATASET_NAME)' \
 			--samples $(SC_RUNTIME_BENCHMARK_SAMPLES) $(if $(SC_RUNTIME_BENCHMARK_MIN_TRAIN_SPS),--minimum-training-samples-per-second $(SC_RUNTIME_BENCHMARK_MIN_TRAIN_SPS),) $(if $(SC_RUNTIME_BENCHMARK_MIN_PREDICT_SPS),--minimum-prediction-samples-per-second $(SC_RUNTIME_BENCHMARK_MIN_PREDICT_SPS),)
 

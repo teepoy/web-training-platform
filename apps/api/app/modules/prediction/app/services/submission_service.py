@@ -29,7 +29,7 @@ from app.modules.prediction.domain.repository import PredictionRepository
 from app.modules.prediction.app.services.submission_parameters import (
     prediction_workflow_parameters,
 )
-from app.modules.runtime.app.services.deployment_seed import (
+from app.modules.runtime.app.services.deployment_catalog import (
     PREDICTION_AUTOMATION_RUNTIME_DEPLOYMENT,
     PREDICTION_RUNTIME_DEPLOYMENT,
 )

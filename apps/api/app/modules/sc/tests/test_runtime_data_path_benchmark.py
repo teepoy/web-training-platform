@@ -6,7 +6,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
-from app.modules.sc.runtime.benchmark_kernels import (
+from benchmarks.sc_runtime_kernels import (
     fake_predict_yolo_stream,
     fake_train_yolo,
 )

@@ -1,3 +1,5 @@
+"""Fake SC kernels used only by the runtime data-path benchmark."""
+
 from __future__ import annotations
 
 import os

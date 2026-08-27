@@ -19,7 +19,7 @@ import httpx
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "apps/api"))
 
-from app.modules.sc.wafer_data_gen import build_patch_sample  # noqa: E402
+from seedmaker.wafer_data import build_patch_sample  # noqa: E402
 from smoke_common import login_seed_user, resolve_seed_org  # noqa: E402
 
 DEFAULT_API_URL = "http://localhost:8000"

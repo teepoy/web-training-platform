@@ -6,6 +6,7 @@ node_modules
 apps/web/dist
 apps/web/node_modules
 services/image-parser/tmp
+services/sc-upstream/tools
 .mypy_cache
 .pytest_cache
 *.db

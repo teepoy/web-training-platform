@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, call
 import pytest
 
 from app.core.platform_setup import prepare_prefect
-from app.modules.runtime.app.services.deployment_seed import (
+from app.modules.runtime.app.services.deployment_catalog import (
     platform_prefect_deployment_specs,
 )
 from app.shared.context import SharedInfra

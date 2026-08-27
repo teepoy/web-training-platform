@@ -7,6 +7,20 @@ from pathlib import Path
 
 
 APP_ROOT = Path(__file__).resolve().parents[1] / "app"
+DEV_ONLY_MODULE_TOKENS = frozenset(
+    {
+        "benchmark",
+        "dummy",
+        "fake",
+        "fixture",
+        "fixtures",
+        "mock",
+        "seed",
+        "seeds",
+    }
+)
+DEV_ONLY_MODULE_NAMES = frozenset({"wafer_data_gen"})
+DEV_ONLY_IMPORT_ROOTS = ("benchmarks", "seedmaker")
 
 
 def _python_files(root: Path) -> list[Path]:
@@ -15,6 +29,36 @@ def _python_files(root: Path) -> list[Path]:
 
 def _relative(path: Path) -> str:
     return path.relative_to(APP_ROOT).as_posix()
+
+
+def test_dev_only_implementations_live_outside_production_app() -> None:
+    production_files = [
+        path for path in _python_files(APP_ROOT) if "tests" not in path.relative_to(APP_ROOT).parts
+    ]
+    misplaced_modules = [
+        _relative(path)
+        for path in production_files
+        if path.stem.lower() in DEV_ONLY_MODULE_NAMES
+        or DEV_ONLY_MODULE_TOKENS.intersection(path.stem.lower().split("_"))
+    ]
+    forbidden_imports: list[str] = []
+    for path in production_files:
+        tree = ast.parse(path.read_text(), filename=str(path))
+        for node in ast.walk(tree):
+            imported_modules: list[str] = []
+            if isinstance(node, ast.Import):
+                imported_modules.extend(alias.name for alias in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.module is not None:
+                imported_modules.append(node.module)
+            if any(
+                module == root or module.startswith(f"{root}.")
+                for module in imported_modules
+                for root in DEV_ONLY_IMPORT_ROOTS
+            ):
+                forbidden_imports.append(_relative(path))
+
+    assert sorted(set(misplaced_modules)) == []
+    assert sorted(set(forbidden_imports)) == []
 
 
 def test_no_dependency_injector_imports() -> None:

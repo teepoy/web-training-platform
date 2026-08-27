@@ -16,7 +16,7 @@ from app.modules.sc.materialization.app.services.sc_inspection_materializer impo
     ScInspectionMaterializer,
 )
 from app.modules.sc.runtime.data_source import _normalize_storage_rows
-from app.modules.sc.wafer_data_gen import build_patch_sample
+from seedmaker.wafer_data import build_patch_sample
 
 
 class _ImageSource:

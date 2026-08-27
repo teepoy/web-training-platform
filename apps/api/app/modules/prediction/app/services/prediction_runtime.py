@@ -18,7 +18,7 @@ from app.modules.prediction.domain.submission import PredictionJobCommand
 from app.modules.prediction.app.services.submission_parameters import (
     prediction_workflow_parameters,
 )
-from app.modules.runtime.app.services.deployment_seed import (
+from app.modules.runtime.app.services.deployment_catalog import (
     PREDICTION_RUNTIME_DEPLOYMENT,
 )
 from app.modules.runtime.catalog import runtime_catalog

@@ -1,3 +1,5 @@
+"""Development fixture CLI for the SC upstream service."""
+
 from __future__ import annotations
 
 import argparse
@@ -11,7 +13,7 @@ from sqlalchemy import create_engine, func, inspect, or_
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
-from .models import (
+from sc_upstream.models import (
     Base,
     BaseZips,
     ClassORM,

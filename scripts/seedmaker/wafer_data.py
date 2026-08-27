@@ -1,11 +1,11 @@
-"""Shared wafer demo data generation.
+"""Development-only wafer fixture generation.
 
 Single source of truth for wafer coordinate generation, class digit
 images, and PatchSample construction.  Used by:
 
-* ``scripts/seedmaker/datasets/wafer_demo.py`` — dev/test dataset seeding
-* ``apps/api/.../sc/adapter/_wafer_mock/mock_store.py`` — mock upstream reader
-* ``scripts/smoke_wafer_e2e.py`` — smoke test labels / constants
+This module lives outside the API package so generated images and demo samples
+cannot become runtime implementations. It is used by seed, smoke, and test
+entrypoints only.
 """
 
 from __future__ import annotations

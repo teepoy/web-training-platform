@@ -5,7 +5,7 @@ from typing import Any, cast
 import pytest
 import polars as pl
 
-from app.modules.sc.wafer_data_gen import build_patch_sample
+from seedmaker.wafer_data import build_patch_sample
 from app.modules.sc.app.services.training_images import normalize_sc_training_row
 from app.modules.storage.port.local import DatasetStorageFactoryPort
 from app.modules.training.app.services.readiness import TrainingReadinessService

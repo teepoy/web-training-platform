@@ -4,7 +4,7 @@ import app.registrations  # noqa: F401  # trigger all mapper registrations
 
 from app.core.mapper_registry import mapper
 from app.modules.sc.models import PatchSample
-from app.modules.sc.wafer_data_gen import (
+from seedmaker.wafer_data import (
     LABELS as WAFER_LABELS,
     NUM_CLASSES,
     build_patch_sample,

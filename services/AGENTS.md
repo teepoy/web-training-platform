@@ -11,6 +11,11 @@ If this file conflicts with root `AGENTS.md` or `CORE_DESIGNS.md`, treat `CORE_D
 | SC upstream  | `services/sc-upstream`  | Python gRPC + Arrow Flight service exposing wafer inspection upstream data and zip metadata     |
 | Image parser | `services/image-parser` | Go HTTP + gRPC service resolving SC image references, sprites, cache, and S3-backed image reads |
 
+Development-only service fixtures belong under the service's `tools/`
+directory. Production `src/` packages must not contain or import seed, mock,
+dummy, or fake implementations. The root Docker ignore excludes these tools
+from release images.
+
 ## Boundaries
 
 - Keep these services out-of-process. Do not move FastAPI entrypoints, API route handlers, or API module business services here.

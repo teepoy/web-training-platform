@@ -22,7 +22,7 @@ from datetime import UTC, datetime
 
 from app.shared.api.schemas import ArtifactRef, TrainingEvent, TrainingJob
 from app.shared.api.schemas import JobStatus
-from app.modules.runtime.app.services.deployment_seed import TRAIN_RUNTIME_DEPLOYMENT
+from app.modules.runtime.app.services.deployment_catalog import TRAIN_RUNTIME_DEPLOYMENT
 from app.modules.training.domain.submission import TrainingRuntimeUnavailableError
 from app.shared.domain.protocols import PrefectClient
 

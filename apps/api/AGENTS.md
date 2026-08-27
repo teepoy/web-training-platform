@@ -21,6 +21,7 @@ FastAPI service with async SQLAlchemy persistence, OmegaConf profiles, Protocol-
 | Runtime registration/dispatch   | `app/modules/runtime/` + module-owned `runtime/router.py`                                            | One source for metadata, callable, and algorithm identity; Protocols derive operations, direct Prefect specs own deployment/work-pool binding           |
 | Artifact persistence            | `app/shared/infrastructure/storage/`                                                                 | Memory or MinIO backends                                                                                                                                |
 | Tests                           | `tests/`                                                                                             | Pytest integration tests                                                                                                                                |
+| Dev-only fixtures/benchmarks    | `../../scripts/seedmaker/` + `../../scripts/benchmarks/`                                             | Seed generators and fake benchmark kernels; production `app/` must not import them                                                                      |
 | Add/manage cron schedules       | `app/modules/jobs/schedules/app/services/scheduler.py`                                               | `SchedulerService` — Prefect REST client                                                                                                                |
 | Background/runtime jobs         | module submission services / runtime clients                                                         | Prefect, queues, or service APIs are implementation details behind typed ports                                                                          |
 | Agent runtime                   | `app/modules/agent/`                                                                                 | Domain-oriented agent modules                                                                                                                           |
@@ -66,6 +67,13 @@ apps/api/
 ├── alembic/                # migrations
 ├── tests/                  # pytest integration tests
 ```
+
+Repository-wide dataset seed implementations live under `scripts/seedmaker/`.
+Fake performance kernels and benchmark entrypoints live under
+`scripts/benchmarks/` so API images do not contain them.
+Dummy, fake, mock, fixture, and seed implementations must not live in or be
+imported by the production `app/` package. Tests may import these dev-only
+helpers explicitly.
 
 ## DEPENDENCY INJECTION
 

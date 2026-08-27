@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import random
 from datetime import datetime
+from pathlib import Path
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
@@ -13,7 +14,7 @@ from sc_upstream.models import (
     InspectDefectORM,
     InspectImageORM,
 )
-from sc_upstream.seed import (
+from seed_fixtures import (
     GALLERY_PROFILE_FIXTURES,
     mass_fixture_matches,
     main,
@@ -22,6 +23,13 @@ from sc_upstream.seed import (
     seed_recipes,
     seed_single_summary_mass,
 )
+
+
+def test_seed_fixture_implementation_is_outside_runtime_package() -> None:
+    service_root = Path(__file__).resolve().parents[1]
+
+    assert (service_root / "tools" / "seed_fixtures.py").is_file()
+    assert not (service_root / "src" / "sc_upstream" / "seed.py").exists()
 
 
 def test_mass_fixture_matches_reusable_seed(tmp_path) -> None:

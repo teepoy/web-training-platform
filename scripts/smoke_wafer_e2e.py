@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """End-to-end wafer inspection smoke test.
 
-Uses the seedmaker / wafer_data_gen shared data generation (``wafer_demo``
+Uses the seedmaker wafer fixture generator (``wafer_demo``
 coordinate distribution, digit images, 100 classes) for all upstream data.
 No raw wafer SQLite DB or MinIO seeding is required.
 
@@ -33,7 +33,7 @@ from pathlib import Path
 
 import httpx
 
-from app.modules.sc.wafer_data_gen import LABELS as CLASS_LABELS
+from seedmaker.wafer_data import LABELS as CLASS_LABELS
 
 API_URL = "http://localhost:8000"
 SEED_EMAIL = "seed@example.com"

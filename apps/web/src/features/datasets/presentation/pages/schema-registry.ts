@@ -19,11 +19,6 @@ export interface DatasetSchemaDescriptor {
    * (which is unsupported for some storage modes such as `file_shard_sparse`).
    */
   selfLoading?: boolean;
-  /**
-   * Generates a deterministic synthetic sample item.
-   * Same factory is reused in Storybook stories and e2e fixtures.
-   */
-  mockSampleFactory: (index: number, labelSpace?: string[]) => unknown;
 }
 
 /** Dataset types → schema descriptor (for list shims, schema info). */
@@ -84,9 +79,7 @@ export function resolveDatasetShim(
 
   if (viewTypes) {
     const vtList =
-      typeof viewTypes === "string"
-        ? viewTypes.split(",").map((s) => s.trim())
-        : viewTypes;
+      typeof viewTypes === "string" ? viewTypes.split(",").map((s) => s.trim()) : viewTypes;
     for (const vt of vtList) {
       const schema = _viewRegistry.get(vt);
       if (schema) {
@@ -111,12 +104,6 @@ export function resolveViewComponent(viewType: string): Component | undefined {
   const schema = _viewRegistry.get(viewType);
   if (!schema) return undefined;
   return schema.viewComponent ?? schema.shimComponent;
-}
-
-export function getMockSampleFactory(
-  datasetType: string,
-): ((index: number, labelSpace?: string[]) => unknown) | undefined {
-  return _datasetRegistry.get(datasetType)?.mockSampleFactory;
 }
 
 export function listRegisteredDatasetTypes(): string[] {

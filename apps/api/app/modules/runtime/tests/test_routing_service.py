@@ -4,7 +4,7 @@ from typing import Any, cast
 
 import pytest
 
-from app.modules.runtime.app.services.deployment_seed import (
+from app.modules.runtime.app.services.deployment_catalog import (
     PREDICTION_AUTOMATION_RUNTIME_DEPLOYMENT,
     PREDICTION_RUNTIME_DEPLOYMENT,
     TRAIN_AND_PREDICT_RUNTIME_DEPLOYMENT,

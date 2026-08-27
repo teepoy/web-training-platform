@@ -576,11 +576,12 @@ registerDatasetSchema({
   taskType: "segmentation",
   annotationType: "masks",
   shimComponent: defineAsyncComponent(() => import("../shims/SegmentationDatasetsShim.vue")),
-  mockSampleFactory: (index, labelSpace = ["object"]) => ({
-    // same structure as _mock_item_generator in Python
-  }),
 });
 ```
+
+Keep synthetic rows and mock factories in colocated `*.stories.ts` or test
+fixture modules. Production schema descriptors contain runtime capabilities
+only and must not import Storybook, test, seed, or dummy implementations.
 
 **g. Register in the add the import to `apps/web/src/views/datasets/registry.ts`:barrel**
 

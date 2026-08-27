@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, Mock, patch
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.modules.sc.wafer_data_gen import build_patch_sample
+from seedmaker.wafer_data import build_patch_sample
 from app.modules.training.port.http.deps import (
     get_training_submission,
 )
