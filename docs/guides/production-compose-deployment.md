@@ -26,6 +26,10 @@ The repository provides split production manifests under
 The former combined local release-validation stack was removed. Production and
 pre-release now have one source of truth: the split manifests above.
 
+The operational modes are `dev`, `pre-release`, and `prod`. `release` names the
+delivery workflow: `make up-release` starts these manifests with
+`APP_CONFIG_PROFILE=prod`; it does not introduce another runtime mode.
+
 ## Required Hardening
 
 Before deployment:
@@ -121,9 +125,9 @@ and run:
 make up-pre-release
 ```
 
-This invokes the same manifests, health waits, preparation step, and startup
-order as `make up-prod-all`. Only environment inputs and Compose project/network
-names differ.
+This invokes the same manifests and startup sequence as `make up-release`, but
+with the pre-release profile, isolated environment inputs, and pre-release
+Compose project/network names.
 
 ## Configuration
 
@@ -387,36 +391,21 @@ To roll back application images, rerun the deployment workflow with the previous
 accepted commit SHA. Do not use the workflow to downgrade the database; follow
 the migration-specific rollback policy below.
 
-## Split-Stack Startup
+## Deployed Startup
 
-Manage the supplied split manifests with distinct project names:
-
-```bash
-# 1. Create the shared network
-make create-prod-network
-
-# 2. Start the stateful data plane
-make up-prod-stateful
-
-# 3. Prepare database, MinIO, and Prefect
-make prepare-platform-prod
-
-# 4. Start the app platform
-make up-prod-platform
-
-# 5. Start observability
-make up-prod-observability
-
-# Or use the generic production wrapper
-make up-prod-all
-```
-
-The two complete deployed release commands are therefore:
+Use the two public deployment commands for the corresponding runtime mode:
 
 ```bash
-make up-pre-release  # pre-release env files and isolated project/network
-make up-prod-all     # production env files and production project/network
+make up-pre-release
+make up-release
 ```
+
+Both commands validate configuration, create the isolated network, start the
+stateful data plane, prepare the database/MinIO/Prefect state, start the app
+platform, and then start observability. Use `make ps-pre-release` or
+`make ps-release` to inspect the corresponding deployment. Production delivery
+should normally run through the protected GitHub Actions workflow described
+above, which invokes `make up-release`.
 
 The API performs read-only startup checks against the database revision, MinIO,
 Prefect, Redis, and Label Studio. If any dependency is unavailable or stale,
@@ -474,7 +463,7 @@ For each release:
 2. Back up PostgreSQL and verify object-storage replication or backup status.
 3. Pull or load the new images on the host.
 4. Render and review `docker compose config`.
-5. Run `make prepare-platform-prod` once from the new API image.
+5. Run the one-shot `prepare-platform` operation once from the new API image.
 6. Recreate API, web, and workers.
 7. Run readiness and smoke checks.
 8. Monitor errors, queue depth, and worker health.

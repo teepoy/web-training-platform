@@ -52,7 +52,7 @@ db-revision: ## Create a new Alembic revision (usage: make db-revision MSG="add 
 	cd $(API_DIR) && uv run --no-dev --frozen alembic revision --autogenerate -m "$(MSG)"
 
 .PHONY: build-web
-build-web: ## Build frontend for production
+build-web: ## Build the frontend bundle
 	cd $(WEB_DIR) && pnpm build
 
 .PHONY: docs-build

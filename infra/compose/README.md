@@ -14,18 +14,22 @@ The deployable split manifests are:
 
 ## Compose Modes
 
-The repository separates canonical deployed releases from local override stacks:
+The repository exposes three operational modes. Local pre-release acceptance is
+a workstation helper for the pre-release mode, not a fourth mode.
 
-| Mode                 | Command                     | Compose files                                    | Code source          |
-| -------------------- | --------------------------- | ------------------------------------------------ | -------------------- |
-| Dev                  | `make up-dev`               | infrastructure + dev                             | Bind-mounted source  |
-| Local pre-release    | `make up-pre-release-local` | production manifests + local acceptance overlays | Locally built images |
-| Deployed pre-release | `make up-pre-release`       | production manifests only                        | Released images      |
-| Production           | `make up-prod-all`          | production manifests only                        | Same released images |
+| Mode        | Command               | Compose files        | Code source         |
+| ----------- | --------------------- | -------------------- | ------------------- |
+| Dev         | `make up-dev`         | infrastructure + dev | Bind-mounted source |
+| Pre-release | `make up-pre-release` | production manifests | Candidate images    |
+| Prod        | `make up-release`     | production manifests | Accepted images     |
+
+`release` names the delivery workflow and its Make targets; it is not a fourth
+runtime mode. In particular, `make up-release` starts Compose with
+`APP_CONFIG_PROFILE=prod`.
 
 ### How the files compose
 
-There is one local development stack and one canonical release stack:
+There is one local development stack and one canonical production stack:
 
 | Manifest                     | Role                           | Use alone?                        |
 | ---------------------------- | ------------------------------ | --------------------------------- |
@@ -80,9 +84,9 @@ Adds via `docker-compose.dev.yaml`:
 - **image-parser** with Air reload for Go source changes
 - Profile `--profile gpu`: GPU Prefect worker (Linux/NVIDIA only)
 
-### Deployed Pre-release and Production
+### Deployed Pre-release and Prod
 
-Deployed pre-release and production use the exact same four manifests under
+Deployed pre-release and prod use the exact same four manifests under
 `production/`. Prepare three isolated pre-release environment files, then run:
 
 ```bash
@@ -97,12 +101,12 @@ the same candidate immutable image digests that will be promoted to prod.
 
 The intended release-environment differences are deliberately narrow:
 
-| Concern                        | Pre-release                                          | Production                                  |
+| Concern                        | Pre-release                                          | Prod                                        |
 | ------------------------------ | ---------------------------------------------------- | ------------------------------------------- |
 | Application profile            | `pre-release`                                        | `prod`                                      |
 | Application code               | Pulls candidate immutable image digests              | Promotes the accepted digests               |
 | Service topology and commands  | Same production manifests                            | Canonical production manifests              |
-| Dependencies and health checks | Same as production                                   | Canonical                                   |
+| Dependencies and health checks | Same as prod                                         | Canonical                                   |
 | Capacity                       | May use lower memory, worker, and concurrency values | Sized for production load                   |
 | Persistent storage source      | Explicit isolated durable test paths                 | Explicit durable production paths           |
 | Public access                  | No host ports; test TLS reverse proxy                | No host ports; production TLS reverse proxy |
@@ -144,17 +148,16 @@ make up-pre-release-local PRE_RELEASE_LOCAL_PROFILES="--profile gpu"
 credentials are safe only for a loopback-bound local machine; replace them
 before using the stack on a shared host.
 
-For production, these compatibility targets delegate to the same generic
-release workflow used by `make up-pre-release`:
+The shared deploy recipes keep the same stage order for pre-release and prod:
 
-| Step             | Command                      | Description                                     |
-| ---------------- | ---------------------------- | ----------------------------------------------- |
-| 1. Network       | `make create-prod-network`   | Create shared `finetune-prod` network           |
-| 2. Stateful      | `make up-prod-stateful`      | `postgres`, `minio`, `redis`, `label-studio`    |
-| 3. Prepare       | `make prepare-platform-prod` | Migrations, MinIO policy, Prefect registrations |
-| 4. Platform      | `make up-prod-platform`      | `prefect-server`, `api`, `web`, `workers`       |
-| 5. Observability | `make up-prod-observability` | `prometheus`, `grafana`, `loki`, ...            |
-| 6. All-in-one    | `make up-prod-all`           | Stateful, prepare, platform, and observability  |
+1. Validate configuration and create the mode's isolated network.
+2. Start stateful services.
+3. Run platform preparation.
+4. Start application services.
+5. Start observability services.
+
+Use `make up-pre-release` for candidate acceptance and `make up-release` for the
+accepted production release.
 
 The API performs read-only startup checks against the database revision, MinIO
 buckets/ILM, Prefect pools/deployments, Redis, and Label Studio.
@@ -162,7 +165,7 @@ If any dependency is unreachable, the container exits with code 1 so the orchest
 restarts it after a delay. This replaces cross-project `depends_on` which is silently
 ignored across separate Compose projects.
 
-The same split manifests are used for pre-release and production. Set
+The same split manifests are used for pre-release and prod. Set
 `APP_CONFIG_PROFILE=pre-release` for the deployable test/acceptance environment
 and `APP_CONFIG_PROFILE=prod` for production. Use different Compose project
 names, `PLATFORM_NETWORK_NAME`, credentials, URLs, and host data paths so the
@@ -170,8 +173,8 @@ environments cannot share state accidentally. The `test` API profile remains
 unit/integration-test-only and is never deployed.
 
 Run `make check-config` before starting or releasing a stack. It renders the
-dev, local pre-release, deployed pre-release, production, ops, and observability
-manifests without starting containers. It also runs
+dev, pre-release, and prod configurations—including their ops and observability
+manifests—without starting containers. It also runs
 `scripts/check_compose_parity.py`, which rejects pre-release drift in service
 sets, commands, dependencies, health checks, environment keys, mount targets,
 shared environment values, or other runtime behavior. Lower resource limits,
@@ -195,9 +198,8 @@ make up-pre-release-local
 # Deployed pre-release (requires deployed pre-release env files)
 make up-pre-release
 
-# Actual split-stack production (requires production env files)
-make up-prod-all
-
+# Production release (requires production env files)
+make up-release
 ```
 
 `make up-dev` starts the complete Compose development stack, including the
@@ -244,7 +246,7 @@ All services at a glance:
 
 ## Notes
 
-- Dev mode uses `uvicorn --reload` with bind mounts; release modes use baked images without source mounts.
+- Dev mode uses `uvicorn --reload` with bind mounts; pre-release and prod use baked images without source mounts.
 - `prepare-platform` is required before production traffic. Its managed MinIO
   `exports/` lifecycle expires completed export artifacts and aborts incomplete
   multipart uploads according to `storage.minio.lifecycle.exports` (one day for
@@ -252,7 +254,7 @@ All services at a glance:
 - Both Dataset and Collection prediction-export SSE routes use the Web Nginx
   long-running, unbuffered proxy policy; large downloads use the range-enabled
   unbuffered download policy.
-- Release services run from the image's prebuilt `/app/.venv`. The dev API uses `uv run` to execute the bind-mounted workspace environment.
+- Deployed services run from the image's prebuilt `/app/.venv`. The dev API uses `uv run` to execute the bind-mounted workspace environment.
 - The `web` service serves assets baked into the image (prod) or via Vite dev server (dev).
 - Use `make up-dev` for the complete bind-mounted development stack.
 - GPU profile (`--profile gpu`) requires Linux with NVIDIA GPU and NVIDIA Container Toolkit. On macOS/non-NVIDIA hosts, GPU workers are simply omitted.
@@ -265,7 +267,7 @@ All services at a glance:
   rejects worker/memory combinations that exceed the declared container limit.
 - The object cache uses a 10 GiB high watermark, cleans down to 8 GiB, and is
   stored in the shared `sc-data-provider-cache` volume in development or below
-  the platform data mount in release deployments.
+  the platform data mount in production deployments.
 - `SC_WAFER_MOCK_DEFECTS` controls both the inspection fixture and patch zip
   generation (300,000 by default); zip seeding validates the source defect IDs
   are the contiguous range `1..N` before uploading objects or metadata, then

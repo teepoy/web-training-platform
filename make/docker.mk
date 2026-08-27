@@ -23,16 +23,16 @@ build-dev: ## Build all dev-target Docker images
 	docker compose -f $(COMPOSE_DEV) build $(ARGS)
 
 .PHONY: check-config
-check-config: ## Render dev, local pre-release, deployed pre-release, and production configurations
+check-config: ## Render dev, pre-release, and prod configurations
 	docker compose -f $(COMPOSE_DEV) config --quiet
-	docker compose --env-file infra/compose/production/env-stateful.example -f $(COMPOSE_PROD_STATEFUL) config --quiet
-	APP_CONFIG_PROFILE=pre-release docker compose --env-file infra/compose/production/env-platform.example -f $(COMPOSE_PROD_PLATFORM) config --quiet
-	APP_CONFIG_PROFILE=prod docker compose --env-file infra/compose/production/env-platform.example -f $(COMPOSE_PROD_PLATFORM) config --quiet
-	APP_CONFIG_PROFILE=prod docker compose --env-file infra/compose/production/env-platform.example -f $(COMPOSE_PROD_OPS) --profile ops config --quiet
-	docker compose --env-file infra/compose/production/env-observability.example -f $(COMPOSE_PROD_OBSERVABILITY) config --quiet
-	$(PRE_RELEASE_LOCAL_RUNTIME_ENV) docker compose --env-file infra/compose/pre-release/env.example -p $(PRE_RELEASE_LOCAL_PROJECT)-stateful -f $(COMPOSE_PROD_STATEFUL) -f $(COMPOSE_PRE_RELEASE_STATEFUL) config --quiet
-	$(PRE_RELEASE_LOCAL_RUNTIME_ENV) docker compose --env-file infra/compose/pre-release/env.example -p $(PRE_RELEASE_LOCAL_PROJECT)-platform -f $(COMPOSE_PROD_PLATFORM) -f $(COMPOSE_PRE_RELEASE_BUILD) -f $(COMPOSE_PRE_RELEASE_PLATFORM) $(PRE_RELEASE_LOCAL_PROFILES) config --quiet
-	$(PRE_RELEASE_LOCAL_RUNTIME_ENV) docker compose --env-file infra/compose/pre-release/env.example -p $(PRE_RELEASE_LOCAL_PROJECT)-ops -f $(COMPOSE_PROD_OPS) --profile ops config --quiet
+	docker compose --env-file infra/compose/production/env-stateful.example -f $(COMPOSE_RELEASE_STATEFUL) config --quiet
+	APP_CONFIG_PROFILE=pre-release docker compose --env-file infra/compose/production/env-platform.example -f $(COMPOSE_RELEASE_PLATFORM) config --quiet
+	APP_CONFIG_PROFILE=prod docker compose --env-file infra/compose/production/env-platform.example -f $(COMPOSE_RELEASE_PLATFORM) config --quiet
+	APP_CONFIG_PROFILE=prod docker compose --env-file infra/compose/production/env-platform.example -f $(COMPOSE_RELEASE_OPS) --profile ops config --quiet
+	docker compose --env-file infra/compose/production/env-observability.example -f $(COMPOSE_RELEASE_OBSERVABILITY) config --quiet
+	$(PRE_RELEASE_LOCAL_RUNTIME_ENV) docker compose --env-file infra/compose/pre-release/env.example -p $(PRE_RELEASE_LOCAL_PROJECT)-stateful -f $(COMPOSE_RELEASE_STATEFUL) -f $(COMPOSE_PRE_RELEASE_STATEFUL) config --quiet
+	$(PRE_RELEASE_LOCAL_RUNTIME_ENV) docker compose --env-file infra/compose/pre-release/env.example -p $(PRE_RELEASE_LOCAL_PROJECT)-platform -f $(COMPOSE_RELEASE_PLATFORM) -f $(COMPOSE_PRE_RELEASE_BUILD) -f $(COMPOSE_PRE_RELEASE_PLATFORM) $(PRE_RELEASE_LOCAL_PROFILES) config --quiet
+	$(PRE_RELEASE_LOCAL_RUNTIME_ENV) docker compose --env-file infra/compose/pre-release/env.example -p $(PRE_RELEASE_LOCAL_PROJECT)-ops -f $(COMPOSE_RELEASE_OPS) --profile ops config --quiet
 	python3 scripts/check_compose_parity.py
 
 .PHONY: logs-dev

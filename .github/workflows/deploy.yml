@@ -184,11 +184,38 @@ jobs:
             "${digest_arguments[@]}"
 
       - name: Render and deploy release
-        run: make up-release
+        env:
+          TARGET_ENVIRONMENT: ${{ inputs.environment }}
+        run: |
+          if [[ "$TARGET_ENVIRONMENT" == "pre-release" ]]; then
+            make up-pre-release \
+              PRE_RELEASE_NETWORK="$RELEASE_NETWORK" \
+              PRE_RELEASE_PROJECT="$RELEASE_PROJECT" \
+              PRE_RELEASE_STATEFUL_ENV="$RELEASE_STATEFUL_ENV" \
+              PRE_RELEASE_PLATFORM_ENV="$RELEASE_PLATFORM_ENV" \
+              PRE_RELEASE_IMAGE_ENV="$RELEASE_IMAGE_ENV" \
+              PRE_RELEASE_OBSERVABILITY_ENV="$RELEASE_OBSERVABILITY_ENV" \
+              PRE_RELEASE_PROFILES="$RELEASE_PROFILES"
+          else
+            make up-release
+          fi
 
       - name: Verify deployed services
+        env:
+          TARGET_ENVIRONMENT: ${{ inputs.environment }}
         run: |
-          make ps-release
+          if [[ "$TARGET_ENVIRONMENT" == "pre-release" ]]; then
+            make ps-pre-release \
+              PRE_RELEASE_NETWORK="$RELEASE_NETWORK" \
+              PRE_RELEASE_PROJECT="$RELEASE_PROJECT" \
+              PRE_RELEASE_STATEFUL_ENV="$RELEASE_STATEFUL_ENV" \
+              PRE_RELEASE_PLATFORM_ENV="$RELEASE_PLATFORM_ENV" \
+              PRE_RELEASE_IMAGE_ENV="$RELEASE_IMAGE_ENV" \
+              PRE_RELEASE_OBSERVABILITY_ENV="$RELEASE_OBSERVABILITY_ENV" \
+              PRE_RELEASE_PROFILES="$RELEASE_PROFILES"
+          else
+            make ps-release
+          fi
           api_origin="${RELEASE_HEALTHCHECK_URL%/}"
           curl --fail --silent --show-error \
             --retry 12 --retry-delay 5 --retry-all-errors \
