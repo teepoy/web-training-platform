@@ -38,3 +38,5 @@ def test_yolo_prediction_stays_streaming_without_image_materialization() -> None
     assert ".materialize(" not in source
     assert ".collect(" not in source
     assert "prediction_max_materialized_bytes" not in source
+    assert '"total_samples": None' not in source
+    assert "_count_prediction_rows(rows)" in source

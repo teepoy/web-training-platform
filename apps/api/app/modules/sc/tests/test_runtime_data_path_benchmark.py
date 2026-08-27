@@ -33,7 +33,6 @@ async def test_fake_trainer_consumes_every_materialized_row(tmp_path) -> None:
         valid_samples=3,
         work_dir=tmp_path / "work",
         shuffle_seed=17,
-        shuffle_buffer_rows=128,
     )
 
     assert output.checkpoint_path.read_bytes() == b"fake-sc-training-checkpoint\n"
@@ -69,7 +68,6 @@ async def test_fake_trainer_rejects_partial_materialized_input(tmp_path) -> None
             valid_samples=3,
             work_dir=tmp_path / "work",
             shuffle_seed=17,
-            shuffle_buffer_rows=128,
         )
 
 

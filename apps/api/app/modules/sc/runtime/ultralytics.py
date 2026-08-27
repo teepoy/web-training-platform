@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
+import polars as pl
 from prefect import get_run_logger
 
 from app.modules.datasets.domain.sample_row import PredictionResult
@@ -87,6 +88,13 @@ def _model_metadata(
     }
 
 
+async def _count_prediction_rows(rows: pl.LazyFrame) -> int:
+    count = await rows.select(pl.len().alias("total_samples")).collect_async(
+        engine="streaming"
+    )
+    return int(count.item(0, "total_samples"))
+
+
 @dataclass(frozen=True, slots=True)
 class ScYoloTrainingResult:
     artifact: ArtifactOutput
@@ -113,15 +121,17 @@ async def execute_yolo_sc_training(
     async def report_epoch(
         epoch: int,
         total_epochs: int,
-        loss: float,
-        accuracy: float,
+        train_loss: float,
+        val_loss: float,
+        val_accuracy: float,
     ) -> None:
         _runtime_logger().info(
-            "SC YOLO epoch %d/%d loss=%.6f accuracy=%.6f",
+            "SC YOLO epoch %d/%d train_loss=%.6f val_loss=%.6f val_accuracy=%.6f",
             epoch,
             total_epochs,
-            loss,
-            accuracy,
+            train_loss,
+            val_loss,
+            val_accuracy,
         )
         await training_repository.add_event(
             TrainingEvent(
@@ -132,8 +142,9 @@ async def execute_yolo_sc_training(
                 payload={
                     "epoch": epoch,
                     "total_epochs": total_epochs,
-                    "loss": loss,
-                    "accuracy": accuracy,
+                    "train_loss": train_loss,
+                    "val_loss": val_loss,
+                    "val_accuracy": val_accuracy,
                     "progress": epoch / total_epochs,
                 },
             )
@@ -219,7 +230,6 @@ async def execute_yolo_sc_training(
                 valid_samples=valid_samples,
                 work_dir=work_dir,
                 shuffle_seed=pipeline.training_shuffle_seed,
-                shuffle_buffer_rows=pipeline.training_shuffle_buffer_rows,
                 on_epoch=report_epoch,
             )
             issues = (
@@ -373,6 +383,7 @@ async def _yolo_sc_predictor(
                 cast(Any, rows),
                 ctx.sample_filter,
             )
+        total_samples = await _count_prediction_rows(rows)
         model_version = ctx.model_version or f"model-{model.id[:8]}"
         summary: dict[str, Any] = {
             **existing_summary,
@@ -386,7 +397,7 @@ async def _yolo_sc_predictor(
             "reproducibility_capability": False,
             "source_dataset_ids": list(source.source_dataset_ids),
             "resolved_dataset_revision_ids": list(source.resolved_dataset_revision_ids),
-            "total_samples": None,
+            "total_samples": total_samples,
             "successful": 0,
             "failed": 0,
             "processed": 0,
@@ -466,7 +477,12 @@ async def _yolo_sc_predictor(
                     model_version=model_version,
                     batch_size=pipeline.prediction_write_batch_rows,
                 )
-        summary["total_samples"] = int(summary["processed"])
+        processed = int(summary["processed"])
+        if processed != total_samples:
+            raise RuntimeError(
+                "SC prediction result count changed while streaming: "
+                f"selected={total_samples} processed={processed}"
+            )
         source_dataset_ids = source.source_dataset_ids
 
     publisher = app_context.shared.redis_event_publisher

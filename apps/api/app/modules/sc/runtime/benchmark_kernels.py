@@ -18,15 +18,14 @@ async def fake_train_yolo(
     valid_samples: int,
     work_dir: Path,
     shuffle_seed: int,
-    shuffle_buffer_rows: int,
-    on_epoch: Callable[[int, int, float, float], Awaitable[None]] | None = None,
+    on_epoch: Callable[[int, int, float, float, float], Awaitable[None]] | None = None,
     **_unused: object,
 ) -> TrainingOutput:
     """Consume every materialized row without importing a GPU model."""
 
     from ml_library.models import TrainingOutput
 
-    del shuffle_seed, shuffle_buffer_rows
+    del shuffle_seed
     paths = (
         (Path(parquet_paths),)
         if isinstance(parquet_paths, (str, os.PathLike))
@@ -55,7 +54,7 @@ async def fake_train_yolo(
     checkpoint_path = work_dir / "checkpoint.pt"
     checkpoint_path.write_bytes(b"fake-sc-training-checkpoint\n")
     if on_epoch is not None:
-        await on_epoch(1, 1, 0.0, 1.0)
+        await on_epoch(1, 1, 0.0, 0.0, 1.0)
     return TrainingOutput(
         checkpoint_path=checkpoint_path,
         metrics={

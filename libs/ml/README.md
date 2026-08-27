@@ -37,14 +37,16 @@ factory:
   `DataLoader(shuffle=False)`; the dataset performs the shuffle itself.
 - `inspect_yolo_training_samples(...)` returns the active-label/count tuple for
   the SC YOLO branch.
-- YOLO train and prediction construct algorithm-owned streaming Torch datasets
-  over the Parquet paths. DataLoader workers decode the defective/template pair
-  as grayscale, resize each image to `128x128`, and stack them by channel into a
-  `[2, 128, 128]` tensor. Prediction uses batch size 256 and four workers.
-- Training builds the two-channel classifier from the Ultralytics package YAML
-  with a deterministic seed. It does not download pretrained weights at runtime
-  and does not enable AMP. The optional async epoch callback reports live loss
-  and accuracy without introducing a platform event type into this package.
+- YOLO training materializes the paired images in Ultralytics' classification
+  dataset layout. The RGB channels contain defective, template, and absolute
+  difference grayscale values. Prediction applies the same channel mapping and
+  uses batch size 256 with four preprocessing workers.
+- Training delegates the optimizer, loss, validation, checkpointing, and early
+  stopping loop to Ultralytics, starting from `yolov8n-cls.pt` pretrained
+  weights. The default horizon is 100 epochs with patience 20 and a deterministic
+  20% per-class validation split. The optional async epoch callback reports
+  training loss, validation loss, and validation top-1 accuracy without
+  introducing a platform event type into this package.
 
 The SC helpers do not introduce a cross-algorithm dataset or workspace object.
 

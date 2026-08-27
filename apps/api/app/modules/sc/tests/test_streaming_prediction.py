@@ -6,6 +6,7 @@ from collections.abc import Sequence
 import polars as pl
 import pytest
 
+from app.modules.sc.runtime import ultralytics
 from app.modules.sc.runtime.streaming_prediction import (
     stream_sc_prediction_image_pairs,
 )
@@ -74,6 +75,13 @@ def _rows(count: int) -> pl.LazyFrame:
             "defect_id": [str(index + 1) for index in range(count)],
         }
     ).lazy()
+
+
+@pytest.mark.asyncio
+async def test_prediction_progress_counts_filtered_rows_before_streaming() -> None:
+    rows = _rows(10).filter(pl.col("defect_id").cast(pl.Int64) > 6)
+
+    assert await ultralytics._count_prediction_rows(rows) == 4
 
 
 @pytest.mark.asyncio

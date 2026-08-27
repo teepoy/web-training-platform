@@ -25,27 +25,35 @@ def _image_bytes(value: int) -> bytes:
 class _TinyClassifier(nn.Module):
     def __init__(self, observed_batches: list[tuple[int, ...]] | None = None) -> None:
         super().__init__()
-        self.linear = nn.Linear(2, 2)
+        self.stem = nn.Conv2d(3, 3, kernel_size=1)
+        self.linear = nn.Linear(3, 2)
         self._observed_batches = observed_batches
+        self.task = "classify"
+        self.names = {0: "class_000000", 1: "class_000001"}
 
     def forward(self, images: Tensor) -> Tensor:
         if self._observed_batches is not None:
             self._observed_batches.append(tuple(images.shape))
-        features = images.mean(dim=(2, 3))
+        features = self.stem(images).mean(dim=(2, 3))
         return self.linear(features)
 
 
 def test_yolo_runtime_defaults() -> None:
-    assert ultralytics.YOLO_TRAIN_EPOCHS == 50
+    assert ultralytics.YOLO_TRAIN_EPOCHS == 100
+    assert ultralytics.YOLO_TRAIN_PATIENCE == 20
+    assert ultralytics.YOLO_VALIDATION_FRACTION == 0.2
+    assert ultralytics.YOLO_PRETRAINED_MODEL == "yolov8n-cls.pt"
     assert ultralytics.YOLO_PREDICTION_BATCH_SIZE == 256
     assert ultralytics.YOLO_IMAGE_SIZE == 128
     assert ultralytics.YOLO_DATALOADER_WORKERS == 4
     assert ultralytics.YOLO_PREDICTION_PREPROCESS_TASK_SIZE == 64
     assert ultralytics.YOLO_PREDICTION_PREFETCH_TASKS == 8
-    assert ultralytics.YOLO_INPUT_CHANNELS == 2
+    assert ultralytics.YOLO_INPUT_CHANNELS == 3
 
 
-def test_yolo_dataset_stacks_grayscale_images_by_channel(tmp_path: Path) -> None:
+def test_yolo_dataset_builds_defective_template_difference_channels(
+    tmp_path: Path,
+) -> None:
     parquet_path = tmp_path / "channel-stack.parquet"
     pq.write_table(
         pa.table(
@@ -66,19 +74,30 @@ def test_yolo_dataset_stacks_grayscale_images_by_channel(tmp_path: Path) -> None
     image = sample["image"]
 
     assert isinstance(image, Tensor)
-    assert tuple(image.shape) == (2, 128, 128)
-    assert torch.all(image[0] == -1)
+    assert tuple(image.shape) == (3, 128, 128)
+    assert torch.all(image[0] == 0)
     assert torch.all(image[1] == 1)
+    assert torch.all(image[2] == 1)
 
 
 def _write_training_parquet(path: Path) -> None:
     pq.write_table(
         pa.table(
             {
-                "sample_id": ["sample-a", "sample-c"],
-                "label": ["a", "c"],
-                "patch_defective_bytes": [_image_bytes(0), _image_bytes(255)],
-                "patch_template_bytes": [_image_bytes(255), _image_bytes(0)],
+                "sample_id": ["sample-a-1", "sample-a-2", "sample-c-1", "sample-c-2"],
+                "label": ["a", "a", "c", "c"],
+                "patch_defective_bytes": [
+                    _image_bytes(0),
+                    _image_bytes(32),
+                    _image_bytes(255),
+                    _image_bytes(224),
+                ],
+                "patch_template_bytes": [
+                    _image_bytes(255),
+                    _image_bytes(224),
+                    _image_bytes(0),
+                    _image_bytes(32),
+                ],
             }
         ),
         path,
@@ -86,32 +105,60 @@ def _write_training_parquet(path: Path) -> None:
     )
 
 
-def test_yolo_training_uses_two_channel_grayscale_dataset(
+def test_yolo_training_uses_native_trainer_pretrained_weights_and_validation(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
     parquet_path = tmp_path / "training.parquet"
     _write_training_parquet(parquet_path)
-    observed_batches: list[tuple[int, ...]] = []
-    monkeypatch.setattr(
-        ultralytics,
-        "_build_yolo_classifier",
-        lambda _classes: _TinyClassifier(observed_batches),
-    )
-    monkeypatch.setattr(
-        ultralytics,
-        "select_torch_device",
-        lambda _torch: torch.device("cpu"),
-    )
+    observed_train_args: dict[str, object] = {}
+    callbacks: dict[str, object] = {}
+
+    class FakeTrainer:
+        def __init__(self) -> None:
+            self.epoch = 99
+            self.epochs = 100
+            self.tloss = torch.tensor(0.25)
+            self.metrics = {
+                "val/loss": 0.2,
+                "metrics/accuracy_top1": 0.75,
+            }
+            self.best = tmp_path / "native-run" / "weights" / "best.pt"
+            self.last = tmp_path / "native-run" / "weights" / "last.pt"
+
+    class FakeYolo:
+        def __init__(self) -> None:
+            self.trainer = FakeTrainer()
+
+        def add_callback(self, event: str, callback: object) -> None:
+            callbacks[event] = callback
+
+        def train(self, **kwargs: object) -> None:
+            observed_train_args.update(kwargs)
+            self.trainer.best.parent.mkdir(parents=True)
+            self.trainer.best.write_bytes(b"native ultralytics checkpoint")
+            callback = callbacks["on_fit_epoch_end"]
+            assert callable(callback)
+            callback(self.trainer)
+
+    fake_yolo = FakeYolo()
+    monkeypatch.setattr(ultralytics, "_load_pretrained_yolo", lambda: fake_yolo)
+    monkeypatch.setattr(ultralytics, "select_ultralytics_device", lambda _torch: "cpu")
 
     labels, valid_samples, skipped = ultralytics.inspect_yolo_training_samples(
         parquet_path,
         ["a", "b", "c"],
     )
-    progress: list[tuple[int, int, float, float]] = []
+    progress: list[tuple[int, int, float, float, float]] = []
 
-    async def on_epoch(epoch: int, total: int, loss: float, accuracy: float) -> None:
-        progress.append((epoch, total, loss, accuracy))
+    async def on_epoch(
+        epoch: int,
+        total: int,
+        train_loss: float,
+        val_loss: float,
+        val_accuracy: float,
+    ) -> None:
+        progress.append((epoch, total, train_loss, val_loss, val_accuracy))
 
     output = asyncio.run(
         ultralytics.train_yolo(
@@ -120,8 +167,6 @@ def test_yolo_training_uses_two_channel_grayscale_dataset(
             valid_samples=valid_samples,
             work_dir=tmp_path,
             shuffle_seed=0,
-            shuffle_buffer_rows=2,
-            epochs=1,
             batch_size=2,
             image_size=128,
             workers=0,
@@ -131,18 +176,68 @@ def test_yolo_training_uses_two_channel_grayscale_dataset(
 
     assert labels == ("a", "c")
     assert skipped == 0
-    assert observed_batches == [(2, 2, 128, 128)]
-    assert output.metadata["input_channels"] == 2
+    assert observed_train_args["pretrained"] is True
+    assert observed_train_args["val"] is True
+    assert observed_train_args["epochs"] == 100
+    assert observed_train_args["patience"] == 20
+    assert output.metadata["input_channels"] == 3
+    assert output.metadata["channel_layout"] == [
+        "patch_defective",
+        "patch_template",
+        "absolute_difference",
+    ]
     assert output.metadata["image_roles"] == [
         "patch_defective",
         "patch_template",
     ]
     assert output.metadata["image_size"] == 128
     assert output.metadata["training_seed"] == 0
-    assert output.metrics["epochs"] == 1
+    assert output.metrics["epochs"] == 100
+    assert output.metrics["best_epoch"] == 100
+    assert output.metrics["train_loss"] == 0.25
+    assert output.metrics["val_loss"] == 0.2
+    assert output.metrics["val_accuracy"] == 0.75
     assert output.checkpoint_path.is_file()
     assert len(progress) == 1
-    assert progress[0][:2] == (1, 1)
+    assert progress[0] == (100, 100, 0.25, 0.2, 0.75)
+
+    dataset_root = Path(str(observed_train_args["data"]))
+    assert len(list((dataset_root / "train").rglob("*.png"))) == 2
+    assert len(list((dataset_root / "val").rglob("*.png"))) == 2
+    with Image.open(next((dataset_root / "train").rglob("*.png"))) as image:
+        assert image.mode == "RGB"
+
+
+def test_yolo_training_requires_validation_sample_for_every_class(
+    tmp_path: Path,
+) -> None:
+    parquet_path = tmp_path / "insufficient-validation.parquet"
+    pq.write_table(
+        pa.table(
+            {
+                "sample_id": ["sample-a", "sample-c"],
+                "label": ["a", "c"],
+                "patch_defective_bytes": [_image_bytes(0), _image_bytes(255)],
+                "patch_template_bytes": [_image_bytes(255), _image_bytes(0)],
+            }
+        ),
+        parquet_path,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="validation requires at least two readable samples per class",
+    ):
+        asyncio.run(
+            ultralytics.train_yolo(
+                parquet_path,
+                ("a", "c"),
+                valid_samples=2,
+                work_dir=tmp_path / "work",
+                shuffle_seed=0,
+                workers=0,
+            )
+        )
 
 
 def test_yolo_prediction_defaults_to_256_and_preprocesses_in_dataset_workers(
@@ -165,23 +260,15 @@ def test_yolo_prediction_defaults_to_256_and_preprocesses_in_dataset_workers(
         row_group_size=64,
     )
     observed_batches: list[tuple[int, ...]] = []
-    checkpoint_model = _TinyClassifier()
     checkpoint_path = tmp_path / "checkpoint.pt"
-    torch.save(
-        {
-            "model_state_dict": checkpoint_model.state_dict(),
-            "architecture": "yolov8n-cls",
-            "label_space": ["a", "c"],
-            "num_classes": 2,
-            "input_channels": 2,
-            "image_size": 128,
-        },
-        checkpoint_path,
-    )
+    checkpoint_path.write_bytes(b"native checkpoint")
     monkeypatch.setattr(
         ultralytics,
-        "_build_yolo_classifier",
-        lambda _classes: _TinyClassifier(observed_batches),
+        "_load_native_yolo_checkpoint",
+        lambda _path, _device: (
+            _TinyClassifier(observed_batches),
+            {"train_args": {"imgsz": 128}},
+        ),
     )
     monkeypatch.setattr(
         ultralytics,
@@ -199,7 +286,7 @@ def test_yolo_prediction_defaults_to_256_and_preprocesses_in_dataset_workers(
     )
 
     assert len(predictions) == row_count
-    assert observed_batches == [(256, 2, 128, 128), (1, 2, 128, 128)]
+    assert observed_batches == [(256, 3, 128, 128), (1, 3, 128, 128)]
     assert {prediction.label for prediction in predictions} <= {"a", "c"}
 
 
@@ -218,23 +305,15 @@ def test_yolo_prediction_reports_image_preprocess_errors(
         ),
         parquet_path,
     )
-    model = _TinyClassifier()
     checkpoint_path = tmp_path / "checkpoint.pt"
-    torch.save(
-        {
-            "model_state_dict": model.state_dict(),
-            "architecture": "yolov8n-cls",
-            "label_space": ["a", "c"],
-            "num_classes": 2,
-            "input_channels": 2,
-            "image_size": 128,
-        },
-        checkpoint_path,
-    )
+    checkpoint_path.write_bytes(b"native checkpoint")
     monkeypatch.setattr(
         ultralytics,
-        "_build_yolo_classifier",
-        lambda _classes: _TinyClassifier(),
+        "_load_native_yolo_checkpoint",
+        lambda _path, _device: (
+            _TinyClassifier(),
+            {"train_args": {"imgsz": 128}},
+        ),
     )
     monkeypatch.setattr(
         ultralytics,
@@ -265,8 +344,11 @@ def test_yolo_stream_prediction_processes_every_sample_and_final_partial_batch(
     checkpoint_path = _write_checkpoint(tmp_path)
     monkeypatch.setattr(
         ultralytics,
-        "_build_yolo_classifier",
-        lambda _classes: _TinyClassifier(observed_batches),
+        "_load_native_yolo_checkpoint",
+        lambda _path, _device: (
+            _TinyClassifier(observed_batches),
+            {"train_args": {"imgsz": 128}},
+        ),
     )
     monkeypatch.setattr(
         ultralytics,
@@ -300,7 +382,7 @@ def test_yolo_stream_prediction_processes_every_sample_and_final_partial_batch(
     assert [prediction.sample_id for prediction in predictions] == [
         f"sample-{index}" for index in range(row_count)
     ]
-    assert observed_batches == [(256, 2, 128, 128), (1, 2, 128, 128)]
+    assert observed_batches == [(256, 3, 128, 128), (1, 3, 128, 128)]
 
 
 def test_yolo_stream_prediction_preserves_source_item_errors(
@@ -310,8 +392,11 @@ def test_yolo_stream_prediction_preserves_source_item_errors(
     checkpoint_path = _write_checkpoint(tmp_path)
     monkeypatch.setattr(
         ultralytics,
-        "_build_yolo_classifier",
-        lambda _classes: _TinyClassifier(),
+        "_load_native_yolo_checkpoint",
+        lambda _path, _device: (
+            _TinyClassifier(),
+            {"train_args": {"imgsz": 128}},
+        ),
     )
     monkeypatch.setattr(
         ultralytics,
@@ -472,17 +557,6 @@ class _ManualShutdownExecutor(Executor):
 
 
 def _write_checkpoint(tmp_path: Path) -> Path:
-    model = _TinyClassifier()
     checkpoint_path = tmp_path / "stream-checkpoint.pt"
-    torch.save(
-        {
-            "model_state_dict": model.state_dict(),
-            "architecture": "yolov8n-cls",
-            "label_space": ["a", "c"],
-            "num_classes": 2,
-            "input_channels": 2,
-            "image_size": 128,
-        },
-        checkpoint_path,
-    )
+    checkpoint_path.write_bytes(b"native checkpoint")
     return checkpoint_path

@@ -238,7 +238,6 @@ class ScPipelineConfig(ConfigSection):
     training_max_rows: int
     training_max_materialized_bytes: int
     training_shuffle_seed: int
-    training_shuffle_buffer_rows: int
 
 
 class ScConfig(ConfigSection):
@@ -561,10 +560,6 @@ def load_config(skip_runtime_validation: bool = False) -> AppConfig:
             int,
         ),
         "SC_PIPELINE_TRAINING_SHUFFLE_SEED": ("training_shuffle_seed", int),
-        "SC_PIPELINE_TRAINING_SHUFFLE_BUFFER_ROWS": (
-            "training_shuffle_buffer_rows",
-            int,
-        ),
     }
     for environment_name, (field_name, converter) in sc_pipeline_environment.items():
         raw_value = os.getenv(environment_name)
