@@ -344,6 +344,41 @@ async def test_export_applies_review_sampling_extra_filter_before_rules() -> Non
 
 
 @pytest.mark.asyncio
+async def test_export_applies_page_sample_filter_without_review_sampling() -> None:
+    service, artifacts = _service()
+
+    result = await service.export(
+        dataset_id="dataset-1",
+        org_id="org-1",
+        created_by="user-1",
+        export_format=ScPredictionExportFormat.PARQUET,
+        result_source=ScPredictionExportResultSource.FINAL_CLASS,
+        sample_filter={
+            "combinator": "and",
+            "items": [
+                {
+                    "kind": "condition",
+                    "field": "images",
+                    "condition": {
+                        "filterType": "number",
+                        "type": "inRange",
+                        "filter": 1,
+                        "filterTo": 10,
+                    },
+                }
+            ],
+        },
+        sampling_program=None,
+        sampling_seed=None,
+    )
+
+    table = pq.read_table(io.BytesIO(next(iter(artifacts.objects.values()))))
+    assert result.sampled is False
+    assert result.row_count == 2
+    assert {row["sample_id"] for row in table.to_pylist()} == {"sample-1", "sample-3"}
+
+
+@pytest.mark.asyncio
 async def test_klarf_export_uses_annotation_sampling_result() -> None:
     service, artifacts = _service()
 

@@ -11,6 +11,7 @@
  */
 
 import type { Component } from "vue";
+import type { SampleFilterRequest } from "@/generated/orval/models/sampleFilterRequest";
 
 export type ExporterSurface = "dataset" | "prediction" | "preview";
 
@@ -28,6 +29,7 @@ export interface ExporterDescriptor {
  */
 export interface ExporterProps {
   datasetId: string;
+  sampleFilter?: SampleFilterRequest;
   onComplete: (result?: ExporterResult) => void;
   onCancel: () => void;
 }

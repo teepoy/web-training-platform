@@ -140,6 +140,7 @@ class ScPredictionExportService:
             ScPredictionExportResultSource.FINAL_CLASS
         ),
         klarf_version: ScKlarfVersion = ScKlarfVersion.V1_2,
+        sample_filter: dict[str, object] | None = None,
         sampling_program: ReviewSamplingProgram | None,
         sampling_seed: int | None,
         sampling_extra_filter: dict[str, object] | None = None,
@@ -169,6 +170,7 @@ class ScPredictionExportService:
             export_format=export_format,
             result_source=result_source,
             klarf_version=klarf_version,
+            sample_filter=sample_filter,
             sampling_program=sampling_program,
             sampling_seed=sampling_seed,
             sampling_extra_filter=sampling_extra_filter,
@@ -187,6 +189,7 @@ class ScPredictionExportService:
             ScPredictionExportResultSource.FINAL_CLASS
         ),
         klarf_version: ScKlarfVersion = ScKlarfVersion.V1_2,
+        sample_filter: dict[str, object] | None = None,
         sampling_program: ReviewSamplingProgram | None,
         sampling_seed: int | None,
         sampling_extra_filter: dict[str, object] | None = None,
@@ -249,6 +252,7 @@ class ScPredictionExportService:
             export_format=export_format,
             result_source=result_source,
             klarf_version=klarf_version,
+            sample_filter=sample_filter,
             sampling_program=sampling_program,
             sampling_seed=sampling_seed,
             sampling_extra_filter=sampling_extra_filter,
@@ -299,6 +303,7 @@ class ScPredictionExportService:
         export_format: ScPredictionExportFormat,
         result_source: ScPredictionExportResultSource,
         klarf_version: ScKlarfVersion,
+        sample_filter: dict[str, object] | None,
         sampling_program: ReviewSamplingProgram | None,
         sampling_seed: int | None,
         sampling_extra_filter: dict[str, object] | None,
@@ -315,10 +320,12 @@ class ScPredictionExportService:
             f"exports/orgs/{org_id}/{scope_kind}s/{scope_id}/predictions/{export_id}"
         )
         sampled = sampling_program is not None
-        if sampling_extra_filter is not None:
+        for export_filter in (sample_filter, sampling_extra_filter):
+            if export_filter is None:
+                continue
             try:
                 lazy_frame = parse_and_apply_workflow_sample_filter(
-                    lazy_frame, sampling_extra_filter
+                    lazy_frame, export_filter
                 )
             except ValueError as exc:
                 raise ScPredictionExportError(str(exc)) from exc
@@ -387,6 +394,7 @@ class ScPredictionExportService:
                 "row_count": row_count,
                 "inspection_count": len(klarf_paths),
                 "result_source": result_source.value,
+                "sample_filter": sample_filter,
                 "review_sampling_applied": sampled,
                 "review_sampling": _sampling_manifest(
                     sampling_program,

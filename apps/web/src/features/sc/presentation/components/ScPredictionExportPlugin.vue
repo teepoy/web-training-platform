@@ -6,6 +6,7 @@ import type {
   ScKlarfVersion,
   ScPredictionExportRequest,
   ScPredictionExportResultSource,
+  SampleFilterRequest,
 } from "@/generated/orval/models";
 import type { ExporterResult } from "@/shared/widgets/sdk";
 import { buildExportDownloadUrl } from "@/shared/api/datasets";
@@ -14,6 +15,7 @@ import { toUserMessage } from "@/shared/api";
 import type { ScSamplingCandidateScope } from "@/features/sc/application/inspectionFilterPolicy";
 import { SqlWorkbenchDataSource } from "@/features/sc/api/sqlWorkbenchDataSource";
 import type { ScDataFilterExpression } from "@/features/sc/domain/workbenchDataSource";
+import type { ScDataColumn } from "@/features/sc/domain/workbenchDataSource";
 import { emptyScGlobalFilter, toScWorkflowSampleFilter } from "@/features/sc/domain/globalFilter";
 import { buildScGlobalDataFilters } from "@/features/sc/application/workbenchDataFilter";
 import {
@@ -30,6 +32,7 @@ import ReviewSamplingModal from "./ReviewSamplingModal.vue";
 const props = withDefaults(
   defineProps<{
     datasetId?: string;
+    sampleFilter?: SampleFilterRequest;
     collectionId?: string;
     memberIds?: string[];
     memberDatasetIds?: string[];
@@ -69,6 +72,7 @@ const samplingAvailableCount = ref(0);
 const samplingProgram = ref<ScSamplingProgram>(loadScSamplingPreference("review"));
 const samplingScope = ref<ScSamplingCandidateScope>("all");
 const samplingExtraFilter = ref(emptyScGlobalFilter());
+const samplingExtraFilterColumns = ref<ScDataColumn[]>([]);
 const extraFilterDistinctValues = ref<Record<string, Array<string | number>>>({});
 const extraFilterNumericRanges = ref<Record<string, { min: number; max: number } | null>>({});
 const extraFilterNumericRangeLoading = ref<Record<string, boolean>>({});
@@ -175,8 +179,12 @@ const samplingSummary = computed(() =>
 async function prepareSampling(): Promise<void> {
   samplingLoading.value = true;
   try {
-    const groups = await loadMergedGroups("wafer_key", true);
+    const [groups, columns] = await Promise.all([
+      loadMergedGroups("wafer_key", true),
+      loadMergedColumns(),
+    ]);
     samplingAvailableCount.value = Object.values(groups).reduce((sum, count) => sum + count, 0);
+    samplingExtraFilterColumns.value = columns;
     samplingVisible.value = true;
   } catch (error) {
     message.error(toUserMessage(error, "Failed to prepare Review Sampling"));
@@ -302,6 +310,17 @@ async function loadMergedGroups(
   return merged;
 }
 
+async function loadMergedColumns(): Promise<ScDataColumn[]> {
+  const results = await Promise.all(
+    targetDatasetIds.value.map((datasetId) => sourceFor(datasetId).loadColumns()),
+  );
+  const columns = new Map<string, ScDataColumn>();
+  for (const column of results.flat()) {
+    if (!columns.has(column.name)) columns.set(column.name, column);
+  }
+  return [...columns.values()];
+}
+
 function confirmSampling(): void {
   samplingEnabled.value = true;
   samplingVisible.value = false;
@@ -316,6 +335,7 @@ async function runExport(): Promise<void> {
     result_source: resultSource.value,
     ...(format.value === "parquet" ? {} : { klarf_version: klarfVersion.value }),
     include_images: format.value === "parquet" ? false : includeImages.value,
+    sample_filter: props.sampleFilter,
     sampling: samplingEnabled.value
       ? {
           seed: SC_SAMPLING_RANDOM_SEED,
@@ -523,6 +543,7 @@ onUnmounted(() => {
       :table-selection-available="false"
       :show-candidate-scope="false"
       :show-extra-filter="true"
+      :extra-filter-columns="samplingExtraFilterColumns"
       :extra-filter-distinct-values="extraFilterDistinctValues"
       :extra-filter-numeric-ranges="extraFilterNumericRanges"
       :extra-filter-numeric-range-loading="extraFilterNumericRangeLoading"

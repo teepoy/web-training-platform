@@ -31,6 +31,7 @@ import {
   cloneScGlobalFilter,
   emptyScGlobalFilter,
   scGlobalFilterConditions,
+  toScWorkflowSampleFilter,
   type ScFilterCondition,
   type ScGlobalFilter,
 } from "@/features/sc/domain/globalFilter";
@@ -41,6 +42,7 @@ import type {
 import { SC_SAMPLING_RANDOM_SEED } from "@/features/sc/domain/samplingRules";
 import { supportsScPredictionExport } from "@/features/sc/domain/predictionExportCapability";
 import type { ScSamplingCandidateScope } from "@/features/sc/application/inspectionFilterPolicy";
+import type { ScDataColumn } from "@/features/sc/domain/workbenchDataSource";
 import {
   getCollectionApiV1DatasetCollectionsCollectionIdGet,
   getDatasetApiV1DatasetsDatasetIdGet,
@@ -96,6 +98,7 @@ const inspectionQuad = ref<{
     mapSelectionCount: number;
     tableSelectionAvailable: boolean;
   };
+  filterColumns: ScDataColumn[];
   querySamplingCandidateCount: (options: {
     scope: ScSamplingCandidateScope;
     extraFilterEnabled: boolean;
@@ -180,6 +183,7 @@ const samplingCohortStale = computed(
 const samplingFilterDistinctValues = computed(
   () => inspectionQuad.value?.filterDistinctValues ?? {},
 );
+const samplingFilterColumns = computed(() => inspectionQuad.value?.filterColumns ?? []);
 const samplingFilterNumericRanges = computed(() => inspectionQuad.value?.filterNumericRanges ?? {});
 const samplingFilterNumericRangeLoading = computed(
   () => inspectionQuad.value?.filterNumericRangeLoading ?? {},
@@ -618,6 +622,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
       :map-selection-count="samplingMapSelectionCount"
       :table-selection-available="samplingTableSelectionAvailable"
       :extra-filter="samplingExtraFilter"
+      :extra-filter-columns="samplingFilterColumns"
       :extra-filter-distinct-values="samplingFilterDistinctValues"
       :extra-filter-numeric-ranges="samplingFilterNumericRanges"
       :extra-filter-numeric-range-loading="samplingFilterNumericRangeLoading"
@@ -704,6 +709,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
     kind="export"
     title="Export current results"
     :dataset-id="datasetId"
+    :sample-filter="toScWorkflowSampleFilter(page.globalFilter.value) ?? undefined"
   />
 </template>
 

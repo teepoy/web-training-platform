@@ -352,6 +352,15 @@ test("Review Sampling manages rules and sends the backend sampling program from 
   await expect(page.reviewSamplingDialog.getByText("Extra filter", { exact: true })).toHaveCount(2);
   await expect(page.reviewSamplingDialog.getByTestId("query-add-condition")).toBeVisible();
   await expect(page.reviewSamplingDialog.getByTestId("query-add-group")).toBeVisible();
+  await page.reviewSamplingDialog.getByTestId("query-add-condition").click();
+  await page.reviewSamplingDialog.getByTestId("query-rule-property").click();
+  await page.reviewSamplingDialog
+    .getByTestId("query-rule-property")
+    .locator("input")
+    .fill("Rough Bin");
+  await authedPage.getByText("Rough Bin", { exact: true }).click();
+  await page.reviewSamplingDialog.getByRole("checkbox", { name: "2" }).check();
+  await page.reviewSamplingDialog.getByRole("button", { name: "Apply", exact: true }).click();
   await page.reviewSamplingDialog.getByText("Sampling rules", { exact: true }).click();
   const mapRequestsBeforeSampling = dataRequests.filter(
     (body) => body.description === "sc-workbench.map",
@@ -377,10 +386,8 @@ test("Review Sampling manages rules and sends the backend sampling program from 
     (body) => body.description === "sc-workbench.selection.sampling-program",
   );
   expect(samplingRequests).toHaveLength(1);
-  expect(samplingRequests[0]?.sql).toBe(
-    'SELECT "map_id", "index_x", "index_y", "inspection_time", "wafer_key" FROM samples',
-  );
-  expect(samplingRequests[0]?.parameters).toEqual([]);
+  expect(samplingRequests[0]?.sql).toContain('"rough_bin" = ANY(?)');
+  expect(samplingRequests[0]?.parameters).toEqual([[2]]);
   expect(samplingRequests[0]?.sampling).toMatchObject({
     seed: 42,
     program: {

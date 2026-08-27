@@ -10087,6 +10087,10 @@ components:
           type: boolean
           title: Include Images
           default: false
+        sample_filter:
+          anyOf:
+            - $ref: "#/components/schemas/ScWorkflowSampleFilter"
+            - type: "null"
         sampling:
           anyOf:
             - $ref: "#/components/schemas/ScPredictionExportSamplingRequest"
@@ -10303,6 +10307,10 @@ components:
           type: boolean
           title: Include Images
           default: false
+        sample_filter:
+          anyOf:
+            - $ref: "#/components/schemas/ScWorkflowSampleFilter"
+            - type: "null"
         sampling:
           anyOf:
             - $ref: "#/components/schemas/ScPredictionExportSamplingRequest"

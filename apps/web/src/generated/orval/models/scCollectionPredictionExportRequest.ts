@@ -7,6 +7,7 @@
 import type { ScPredictionExportFormat } from './scPredictionExportFormat';
 import type { ScPredictionExportResultSource } from './scPredictionExportResultSource';
 import type { ScCollectionPredictionExportRequestKlarfVersion } from './scCollectionPredictionExportRequestKlarfVersion';
+import type { ScCollectionPredictionExportRequestSampleFilter } from './scCollectionPredictionExportRequestSampleFilter';
 import type { ScCollectionPredictionExportRequestSampling } from './scCollectionPredictionExportRequestSampling';
 
 export interface ScCollectionPredictionExportRequest {
@@ -14,6 +15,7 @@ export interface ScCollectionPredictionExportRequest {
   result_source?: ScPredictionExportResultSource;
   klarf_version?: ScCollectionPredictionExportRequestKlarfVersion;
   include_images?: boolean;
+  sample_filter?: ScCollectionPredictionExportRequestSampleFilter;
   sampling?: ScCollectionPredictionExportRequestSampling;
   /** @minItems 1 */
   member_ids: string[];

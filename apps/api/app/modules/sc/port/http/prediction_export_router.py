@@ -85,6 +85,11 @@ async def export_sc_predictions_stream(
             export_format=body.format,
             result_source=body.result_source,
             klarf_version=body.klarf_version or ScKlarfVersion.V1_2,
+            sample_filter=(
+                body.sample_filter.model_dump(by_alias=True)
+                if body.sample_filter is not None
+                else None
+            ),
             sampling_program=(
                 sampling_program_from_request(sampling.program)
                 if sampling is not None
@@ -130,6 +135,11 @@ async def export_sc_collection_predictions_stream(
             export_format=body.format,
             result_source=body.result_source,
             klarf_version=body.klarf_version or ScKlarfVersion.V1_2,
+            sample_filter=(
+                body.sample_filter.model_dump(by_alias=True)
+                if body.sample_filter is not None
+                else None
+            ),
             sampling_program=(
                 sampling_program_from_request(sampling.program)
                 if sampling is not None

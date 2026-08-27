@@ -28,6 +28,7 @@ class ScPredictionExportRequest(BaseModel):
     )
     klarf_version: ScKlarfVersion | None = None
     include_images: bool = False
+    sample_filter: ScWorkflowSampleFilter | None = None
     sampling: ScPredictionExportSamplingRequest | None = None
 
     @model_validator(mode="after")

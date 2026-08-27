@@ -7,6 +7,7 @@
 import type { ScPredictionExportFormat } from './scPredictionExportFormat';
 import type { ScPredictionExportResultSource } from './scPredictionExportResultSource';
 import type { ScPredictionExportRequestKlarfVersion } from './scPredictionExportRequestKlarfVersion';
+import type { ScPredictionExportRequestSampleFilter } from './scPredictionExportRequestSampleFilter';
 import type { ScPredictionExportRequestSampling } from './scPredictionExportRequestSampling';
 
 export interface ScPredictionExportRequest {
@@ -14,5 +15,6 @@ export interface ScPredictionExportRequest {
   result_source?: ScPredictionExportResultSource;
   klarf_version?: ScPredictionExportRequestKlarfVersion;
   include_images?: boolean;
+  sample_filter?: ScPredictionExportRequestSampleFilter;
   sampling?: ScPredictionExportRequestSampling;
 }

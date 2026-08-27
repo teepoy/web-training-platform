@@ -16,6 +16,7 @@ import {
 } from "naive-ui";
 import type { ScSamplingCandidateScope } from "@/features/sc/application/inspectionFilterPolicy";
 import type { ScGlobalFilter } from "@/features/sc/domain/globalFilter";
+import type { ScDataColumn } from "@/features/sc/domain/workbenchDataSource";
 import {
   cloneScSamplingProgram,
   createDefaultScSamplingRule,
@@ -52,6 +53,7 @@ const props = withDefaults(
     mapSelectionCount: number;
     tableSelectionAvailable: boolean;
     extraFilter: ScGlobalFilter;
+    extraFilterColumns?: ScDataColumn[];
     extraFilterDistinctValues?: Record<string, Array<string | number>>;
     extraFilterNumericRanges?: Record<string, { min: number; max: number } | null>;
     extraFilterNumericRangeLoading?: Record<string, boolean>;
@@ -68,6 +70,7 @@ const props = withDefaults(
   }>(),
   {
     extraFilterDistinctValues: () => ({}),
+    extraFilterColumns: () => [],
     extraFilterNumericRanges: () => ({}),
     extraFilterNumericRangeLoading: () => ({}),
     extraFilterNumericRangeErrors: () => ({}),
@@ -499,6 +502,7 @@ watch(draft, (program) => emit("update:program", cloneScSamplingProgram(program)
           <ScGlobalFilterBar
             class="extra-filter-editor"
             :filter="extraFilter"
+            :columns="extraFilterColumns"
             :distinct-values="extraFilterDistinctValues"
             :numeric-ranges="extraFilterNumericRanges"
             :numeric-range-loading="extraFilterNumericRangeLoading"

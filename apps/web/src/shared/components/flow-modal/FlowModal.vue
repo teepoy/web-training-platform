@@ -4,6 +4,7 @@ import { NButton, NModal, NSpace } from "naive-ui";
 
 import FlowTypeSelector from "../flow-type-selector/FlowTypeSelector.vue";
 import type { FlowCard, FlowKind } from "../../flow";
+import type { SampleFilterRequest } from "@/generated/orval/models/sampleFilterRequest";
 
 const props = defineProps<{
   show: boolean;
@@ -11,6 +12,7 @@ const props = defineProps<{
   kind: FlowKind;
   title?: string;
   datasetId?: string;
+  sampleFilter?: SampleFilterRequest;
 }>();
 
 const emit = defineEmits<{
@@ -94,6 +96,7 @@ function handleBack(): void {
         :is="selectedFlow.component"
         v-else-if="props.kind === 'export'"
         :dataset-id="props.datasetId ?? ''"
+        :sample-filter="props.sampleFilter"
         embedded
         :on-complete="handleComplete"
         :on-cancel="handleCancel"

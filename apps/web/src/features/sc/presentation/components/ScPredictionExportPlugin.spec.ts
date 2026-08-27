@@ -14,6 +14,21 @@ vi.mock("@/shared/api/sse", () => ({ streamApiSse: streamApiSseMock }));
 vi.mock("@/features/sc/api/sqlWorkbenchDataSource", () => ({
   SqlWorkbenchDataSource: class {
     loadAggregates = loadAggregatesMock;
+    loadColumns = vi.fn().mockResolvedValue([
+      {
+        name: "rough_bin",
+        arrowType: "Int64",
+        nullable: false,
+        presentation: {
+          title: "Rough Bin",
+          width: 120,
+          filter: "set",
+          visibility: "default",
+          format: "plain",
+          order: 1,
+        },
+      },
+    ]);
     loadDistinctValues = vi.fn().mockResolvedValue([]);
     loadNumericRange = vi.fn().mockResolvedValue(null);
     close = vi.fn();

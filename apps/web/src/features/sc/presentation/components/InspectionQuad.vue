@@ -381,6 +381,7 @@ function handleReviewModeChange(mode: "patch" | "review"): void {
 defineExpose({
   getGlobalFilter,
   getSamplingContext,
+  filterColumns: sampleTableColumns,
   querySamplingCandidateCount,
   querySamplingDefectIds,
   querySamplingGroups,

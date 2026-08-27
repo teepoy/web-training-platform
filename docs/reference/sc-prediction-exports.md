@@ -34,14 +34,21 @@ sampling engine. Every rule receives only the preceding rule's output. KLARF, Pa
 therefore receive the same selected sample set, and the browser never downloads all candidate rows
 to perform sampling.
 
+When Export is opened from the Classify workspace, the page-owned Global Filter is sent as the
+request's independent `sample_filter` and limits the export even when Review Sampling is disabled.
+Review Sampling's Extra Filter remains separate and runs after that page filter but before the
+ordered sampling rules.
+
 ## API
 
 `POST /api/v1/sc/datasets/{dataset_id}/prediction-exports/stream` returns SSE
 progress, data, and terminal events. The request selects `result_source` as `annotation`,
 `prediction`, or `final_class`, and `format` as `klarf`, `parquet`, or `zip`; KLARF and ZIP requests
 may select `klarf_version` as `1.2` or `1.8`. Review Sampling carries a typed ordered program, seed,
-and optional recursive `extra_filter`. Omitted result sources keep Final Class behavior, and omitted versions keep the earlier
-`1.2` behavior for existing clients. A Parquet request carrying a KLARF version
+and optional recursive `extra_filter`. The optional top-level `sample_filter` applies the Classify
+workspace's recursive Global Filter without enabling Review Sampling. Omitted result sources keep
+Final Class behavior, and omitted versions keep the earlier `1.2` behavior for existing clients. A
+Parquet request carrying a KLARF version
 is rejected instead of silently ignoring it. KLARF and ZIP requests may set
 `include_images`; Parquet requests carrying that option are rejected. The endpoint currently requires an
 `image_sc` Dataset with `task_type=sc` using `file_shard_sparse` storage. The

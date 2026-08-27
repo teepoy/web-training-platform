@@ -18,9 +18,11 @@ from app.modules.sc.port.http.deps import get_sc_prediction_export_service
 
 class _SlowPredictionExport:
     def __init__(self) -> None:
+        self.dataset_kwargs: dict[str, object] = {}
         self.collection_kwargs: dict[str, object] = {}
 
-    async def export(self, **_kwargs: object) -> ScPredictionExportResult:
+    async def export(self, **kwargs: object) -> ScPredictionExportResult:
+        self.dataset_kwargs = kwargs
         await asyncio.sleep(0.04)
         return ScPredictionExportResult(
             uri="memory://exports/dataset-1/predictions/export.parquet",
@@ -63,6 +65,47 @@ def test_prediction_export_sends_heartbeat_during_long_generation(
     assert '"status":"processing"' in response.text
     assert "large files can take several minutes" in response.text
     assert '"event_type":"done"' in response.text
+
+
+def test_prediction_export_passes_page_sample_filter() -> None:
+    service = _SlowPredictionExport()
+    app.dependency_overrides[get_sc_prediction_export_service] = lambda: service
+    try:
+        with TestClient(app) as client:
+            response = client.post(
+                "/api/v1/sc/datasets/dataset-1/prediction-exports/stream",
+                json={
+                    "format": "parquet",
+                    "sample_filter": {
+                        "combinator": "and",
+                        "items": [
+                            {
+                                "kind": "condition",
+                                "field": "rough_bin",
+                                "condition": {
+                                    "filterType": "set",
+                                    "values": [2],
+                                },
+                            }
+                        ],
+                    },
+                    "sampling": None,
+                },
+            )
+    finally:
+        app.dependency_overrides.pop(get_sc_prediction_export_service, None)
+
+    assert response.status_code == 200, response.text
+    assert service.dataset_kwargs["sample_filter"] == {
+        "combinator": "and",
+        "items": [
+            {
+                "kind": "condition",
+                "field": "rough_bin",
+                "condition": {"filterType": "set", "values": [2], "exclude": False},
+            }
+        ],
+    }
 
 
 def test_collection_prediction_export_passes_selected_member_records() -> None:
