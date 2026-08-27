@@ -110,3 +110,45 @@ def test_sc_runtime_and_prediction_storage_accept_environment_overrides(
     assert cfg.sc.pipeline.prediction_progress_flush_rows == 777
     assert cfg.sc.pipeline.prediction_progress_flush_seconds == 2.5
     assert cfg.prediction.compaction_memory_limit == "256MiB"
+
+
+@pytest.mark.parametrize(
+    (
+        "profile",
+        "expected_cache_dir",
+        "expected_worker_count",
+        "expected_container_memory_mb",
+        "expected_service_headroom_mb",
+    ),
+    [
+        ("dev", "/var/cache/sc-data-provider", 1, 6144, 512),
+        ("pre-release", "/mnt/sc-data-provider-cache", 4, 6144, 512),
+        ("prod", "/mnt/sc-data-provider-cache", 4, 6144, 512),
+    ],
+)
+def test_deployable_sc_data_provider_values_come_from_profiles(
+    monkeypatch: pytest.MonkeyPatch,
+    profile: str,
+    expected_cache_dir: str,
+    expected_worker_count: int,
+    expected_container_memory_mb: int,
+    expected_service_headroom_mb: int,
+) -> None:
+    monkeypatch.setenv("APP_CONFIG_PROFILE", profile)
+    for name in (
+        "SC_DATA_PROVIDER_CACHE_DIR",
+        "SC_DATA_PROVIDER_WORKER_COUNT",
+        "SC_DATA_PROVIDER_CONTAINER_MEMORY_LIMIT_MB",
+        "SC_DATA_PROVIDER_SERVICE_HEADROOM_MB",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+    cfg = load_config(skip_runtime_validation=True)
+
+    assert cfg.sc.data_provider.cache_dir == expected_cache_dir
+    assert cfg.sc.data_provider.worker_count == expected_worker_count
+    assert (
+        cfg.sc.data_provider.container_memory_limit_mb
+        == expected_container_memory_mb
+    )
+    assert cfg.sc.data_provider.service_headroom_mb == expected_service_headroom_mb

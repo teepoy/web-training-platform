@@ -38,3 +38,10 @@ auth:
 oauth:
   enabled: false
   state_secret: ""
+
+sc:
+  data_provider:
+    cache_dir: /mnt/sc-data-provider-cache
+    worker_count: 4
+    container_memory_limit_mb: 6144
+    service_headroom_mb: 512

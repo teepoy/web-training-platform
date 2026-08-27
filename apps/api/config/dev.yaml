@@ -26,3 +26,7 @@ label_studio:
 sc:
   mock:
     db_url: "sqlite:////app/apps/api/wafer_inspection.db"
+  data_provider:
+    cache_dir: /var/cache/sc-data-provider
+    container_memory_limit_mb: 6144
+    service_headroom_mb: 512

@@ -259,12 +259,14 @@ All services at a glance:
 - Use `make up-dev` for the complete bind-mounted development stack.
 - GPU profile (`--profile gpu`) requires Linux with NVIDIA GPU and NVIDIA Container Toolkit. On macOS/non-NVIDIA hosts, GPU workers are simply omitted.
 - The API exposes `/health` for process liveness and `/ready` for database-backed readiness. Compose marks the API healthy only when `/ready` returns HTTP 200.
-- `SC_DATA_PROVIDER_CONTAINER_MEMORY_LIMIT_MB` sets the Compose memory limit
-  for the entire `sc-data-provider` container and defaults to `6144` MiB.
-  `SC_DATA_PROVIDER_WORKER_COUNT` defaults to four in production and one in
-  development. Each worker has an explicit 1 GiB DuckDB limit, a 1280 MiB
-  connection-recycle watermark, and a 1536 MiB readiness RSS ceiling. Startup
-  rejects worker/memory combinations that exceed the declared container limit.
+- SC data-provider tuning is owned by the selected API profile under
+  `sc.data_provider`; Compose does not override those values through
+  environment variables. The manifests align the process topology and
+  container limit with those profiles: four workers and 6144 MiB in
+  pre-release/production, one worker and 6144 MiB in development. Each worker
+  has an explicit 1 GiB DuckDB limit, a 1280 MiB connection-recycle watermark,
+  and a 1536 MiB readiness RSS ceiling. Startup rejects worker/memory
+  combinations that exceed the declared container limit.
 - The object cache uses a 10 GiB high watermark, cleans down to 8 GiB, and is
   stored in the shared `sc-data-provider-cache` volume in development or below
   the platform data mount in production deployments.

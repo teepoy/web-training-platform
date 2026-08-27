@@ -22,7 +22,6 @@ x-platform-environment: &platform-environment
   MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio:9000}
   MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?Set MINIO_ACCESS_KEY}
   MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?Set MINIO_SECRET_KEY}
-  MINIO_BUCKET: ${MINIO_BUCKET:-finetune-artifacts}
   SC_PATCH_S3_ENDPOINT: ${SC_PATCH_S3_ENDPOINT:-minio:9000}
   SC_PATCH_S3_ACCESS_KEY: ${SC_PATCH_S3_ACCESS_KEY:?Set SC_PATCH_S3_ACCESS_KEY}
   SC_PATCH_S3_SECRET_KEY: ${SC_PATCH_S3_SECRET_KEY:?Set SC_PATCH_S3_SECRET_KEY}
@@ -34,10 +33,8 @@ x-platform-environment: &platform-environment
   IMAGE_PARSER_GRPC_ADDR: image-parser:9092
   PLATFORM_API_URL: http://api:8000
   REDIS_HOST: redis
-  REDIS_PORT: "6379"
   LLM_BASE_URL: ${LLM_BASE_URL:-}
   LLM_API_KEY: ${LLM_API_KEY:-}
-  LLM_MODEL: ${LLM_MODEL:-qwen/qwen-max}
 
 services:
   prepare-platform:

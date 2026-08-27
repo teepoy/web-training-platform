@@ -11,6 +11,28 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 COMPOSE_ROOT = ROOT / "infra" / "compose"
+PROFILE_OWNED_FIXED_ENVIRONMENT_KEYS = frozenset(
+    {
+        "LLM_MODEL",
+        "MINIO_BUCKET",
+        "REDIS_PORT",
+    }
+)
+PROFILE_OWNED_FIXED_ENVIRONMENT_PREFIXES = (
+    "PREDICTION_COMPACTION_",
+    "SC_DATA_PROVIDER_",
+    "SC_PIPELINE_",
+)
+DEV_PROFILE_OWNED_ENVIRONMENT_KEYS = frozenset(
+    {
+        "JWT_SECRET_KEY",
+        "LABEL_STUDIO_API_KEY",
+        "LABEL_STUDIO_EXTERNAL_URL",
+        "MINIO_ACCESS_KEY",
+        "MINIO_SECRET_KEY",
+        "PREFECT_UI_URL",
+    }
+)
 ENVIRONMENT_SPECIFIC_VALUES = frozenset(
     {
         "APP_CONFIG_PROFILE",
@@ -45,11 +67,13 @@ ENVIRONMENT_SPECIFIC_VALUES = frozenset(
 
 def _render(
     *files: Path,
-    env_file: Path,
+    env_file: Path | None = None,
     profiles: tuple[str, ...] = (),
     environment: dict[str, str] | None = None,
 ) -> dict[str, Any]:
-    command = ["docker", "compose", "--env-file", str(env_file)]
+    command = ["docker", "compose"]
+    if env_file is not None:
+        command.extend(("--env-file", str(env_file)))
     for compose_file in files:
         command.extend(("-f", str(compose_file)))
     for profile in profiles:
@@ -211,9 +235,45 @@ def _assert_release_boundaries(
     return errors
 
 
+def _assert_profile_owned_settings_not_exposed(
+    projects: tuple[tuple[str, dict[str, Any]], ...],
+) -> list[str]:
+    errors: list[str] = []
+    for project_name, project in projects:
+        for service_name, service in project.get("services", {}).items():
+            environment = service.get("environment", {})
+            if "APP_CONFIG_PROFILE" not in environment:
+                continue
+            duplicates = {
+                key
+                for key in environment
+                if key in PROFILE_OWNED_FIXED_ENVIRONMENT_KEYS
+                or key.startswith(PROFILE_OWNED_FIXED_ENVIRONMENT_PREFIXES)
+            }
+            if environment["APP_CONFIG_PROFILE"] == "dev":
+                duplicates.update(
+                    key
+                    for key in DEV_PROFILE_OWNED_ENVIRONMENT_KEYS
+                    if key in environment
+                )
+            if duplicates:
+                errors.append(
+                    f"{project_name}/{service_name}: profile-owned settings must "
+                    f"not be exposed through Compose environment: "
+                    f"{', '.join(sorted(duplicates))}"
+                )
+    return errors
+
+
 def main() -> int:
     production = COMPOSE_ROOT / "production"
     pre_release = COMPOSE_ROOT / "pre-release"
+
+    dev = _render(
+        COMPOSE_ROOT / "docker-compose.yaml",
+        COMPOSE_ROOT / "docker-compose.dev.yaml",
+        profiles=("ops",),
+    )
 
     prod_stateful = _render(
         production / "compose.stateful.yaml",
@@ -308,6 +368,17 @@ def main() -> int:
                 deployed_pre_observability,
             ),
             (local_pre_stateful, local_pre_platform, local_pre_ops),
+        ),
+        *_assert_profile_owned_settings_not_exposed(
+            (
+                ("dev", dev),
+                ("prod/platform", prod_platform),
+                ("prod/ops", prod_ops),
+                ("deployed-pre-release/platform", deployed_pre_platform),
+                ("deployed-pre-release/ops", deployed_pre_ops),
+                ("local-pre-release/platform", local_pre_platform),
+                ("local-pre-release/ops", local_pre_ops),
+            )
         ),
     ]
     if errors:

@@ -154,7 +154,6 @@ PREFECT_UI_URL=https://prefect.example.com
 MINIO_ENDPOINT=minio:9000
 MINIO_ACCESS_KEY=<access-key>
 MINIO_SECRET_KEY=<secret-key>
-MINIO_BUCKET=finetune-artifacts
 SC_PATCH_S3_ACCESS_KEY=<access-key>
 SC_PATCH_S3_SECRET_KEY=<secret-key>
 SC_REVIEW_S3_ACCESS_KEY=<access-key>
@@ -179,8 +178,6 @@ IMAGE_PARSER_DATA_DIR=/srv/finetune/platform/image-parser
 PREFECT_SERVER_MEMORY=4g
 API_MEMORY=8g
 API_SHM_SIZE=1g
-SC_DATA_PROVIDER_WORKER_COUNT=4
-SC_DATA_PROVIDER_CONTAINER_MEMORY_LIMIT_MB=6144
 SC_DATA_PROVIDER_SHM_SIZE=1g
 WEB_MEMORY=1g
 CPU_WORKER_MEMORY=8g
@@ -193,6 +190,13 @@ IMAGE_PARSER_MEMORY=32g
 IMAGE_PARSER_SHM_SIZE=2g
 PLATFORM_PREPARE_MEMORY=2g
 ```
+
+Fixed application settings such as the artifact bucket, LLM model, SC pipeline
+batches, prediction compaction, and data-provider tuning come from the selected
+API profile YAML. Compose environment files contain only deployment-specific
+addresses, credentials, public URLs, and service/container controls. Keep the
+fixed four-worker/6144 MiB production process topology aligned when changing the
+corresponding `sc.data_provider` profile values.
 
 SC Datasets store only scalar Inspection identity. They do not persist an image
 parser choice, source root, credentials, staging policy, or cache path. The
