@@ -3130,6 +3130,76 @@ export function useListCollectionsApiV1DatasetCollectionsGet<TData = Awaited<Ret
 
 
 /**
+ * @summary List Collection Creators
+ */
+export const getListCollectionCreatorsApiV1DatasetCollectionsCreatorsGetUrl = () => {
+
+
+  return `/api/v1/dataset-collections/creators`
+}
+
+export const listCollectionCreatorsApiV1DatasetCollectionsCreatorsGet = async ( options?: RequestInit): Promise<CreatorSummary[]> => {
+
+  return orvalFetcher<CreatorSummary[]>(getListCollectionCreatorsApiV1DatasetCollectionsCreatorsGetUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getListCollectionCreatorsApiV1DatasetCollectionsCreatorsGetQueryKey = () => {
+    return ['api','v1','dataset-collections','creators'] as const;
+    }
+
+
+export const getListCollectionCreatorsApiV1DatasetCollectionsCreatorsGetQueryOptions = <TData = Awaited<ReturnType<typeof listCollectionCreatorsApiV1DatasetCollectionsCreatorsGet>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listCollectionCreatorsApiV1DatasetCollectionsCreatorsGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  getListCollectionCreatorsApiV1DatasetCollectionsCreatorsGetQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listCollectionCreatorsApiV1DatasetCollectionsCreatorsGet>>> = ({ signal }) => listCollectionCreatorsApiV1DatasetCollectionsCreatorsGet({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listCollectionCreatorsApiV1DatasetCollectionsCreatorsGet>>, TError, TData>
+}
+
+export type ListCollectionCreatorsApiV1DatasetCollectionsCreatorsGetQueryResult = NonNullable<Awaited<ReturnType<typeof listCollectionCreatorsApiV1DatasetCollectionsCreatorsGet>>>
+export type ListCollectionCreatorsApiV1DatasetCollectionsCreatorsGetQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List Collection Creators
+ */
+
+export function useListCollectionCreatorsApiV1DatasetCollectionsCreatorsGet<TData = Awaited<ReturnType<typeof listCollectionCreatorsApiV1DatasetCollectionsCreatorsGet>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listCollectionCreatorsApiV1DatasetCollectionsCreatorsGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+
+  ): UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListCollectionCreatorsApiV1DatasetCollectionsCreatorsGetQueryOptions(options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = unref(queryOptions).queryKey as DataTag<QueryKey, TData, TError>;
+
+  return query;
+}
+
+
+
+
+/**
  * @summary Get Collection
  */
 export const getGetCollectionApiV1DatasetCollectionsCollectionIdGetUrl = (collectionId: string,) => {

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 from uuid import uuid4
 
 from fastapi import HTTPException
@@ -383,8 +383,30 @@ class SchedulerService:
         *,
         offset: int = 0,
         limit: int = 50,
+        query: str | None = None,
+        creator_id: str | None = None,
+        state_types: list[str] | None = None,
+        sort_order: Literal["asc", "desc"] = "desc",
     ) -> tuple[list[dict[str, object]], int]:
         schedules = await self._repo.list_schedules(org_id)
+        normalized_query = query.strip().casefold() if query is not None else ""
+        schedules = [
+            schedule
+            for schedule in schedules
+            if (creator_id is None or schedule.created_by == creator_id)
+            and (
+                not normalized_query
+                or any(
+                    normalized_query in value.casefold()
+                    for value in (
+                        schedule.id,
+                        schedule.name,
+                        schedule.flow_name,
+                        schedule.created_by,
+                    )
+                )
+            )
+        ]
         schedules_by_deployment = {
             schedule.prefect_deployment_id: schedule
             for schedule in schedules
@@ -394,11 +416,16 @@ class SchedulerService:
         if not deployment_ids:
             return [], 0
 
-        total = await self._prefect.count_flow_runs_for_deployments(deployment_ids)
+        total = await self._prefect.count_flow_runs_for_deployments(
+            deployment_ids,
+            state_types=state_types,
+        )
         result = await self._prefect.filter_flow_runs_for_deployments(
             deployment_ids,
             offset=offset,
             limit=limit,
+            state_types=state_types,
+            sort_order=sort_order,
         )
         enriched: list[dict[str, object]] = []
         for run in result:

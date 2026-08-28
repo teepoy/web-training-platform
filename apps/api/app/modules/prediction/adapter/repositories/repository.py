@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import cast
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.shared.api.schemas import (
@@ -17,6 +17,7 @@ from app.shared.api.schemas import (
 )
 from app.shared.api.schemas import JobStatus
 from app.shared.db.models.auth import OrganizationORM
+from app.shared.db.models.auth import UserORM
 from app.shared.db.models.datasets import AnnotationVersionORM, DatasetORM
 from app.shared.db.models.prediction import (
     PlatformPredictionORM,
@@ -26,10 +27,19 @@ from app.shared.db.models.prediction import (
     PredictionJobORM,
     PredictionReviewActionORM,
 )
+from app.modules.prediction.domain.repository import (
+    PredictionJobSortField,
+    SortDirection,
+)
 
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _like_pattern(value: str) -> str:
+    escaped = value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
 
 
 def _platform_prediction_to_domain(
@@ -186,6 +196,11 @@ class PredictionRepository:
         *,
         offset: int = 0,
         limit: int | None = 50,
+        query: str | None = None,
+        status: JobStatus | None = None,
+        creator_id: str | None = None,
+        sort_by: PredictionJobSortField = "created_at",
+        sort_order: SortDirection = "desc",
     ) -> tuple[list[PredictionJob], int]:
         async with self.session_factory() as session:
             conditions = []
@@ -197,13 +212,51 @@ class PredictionRepository:
                 conditions.append(
                     PredictionJobORM.dataset_collection_id == collection_id
                 )
+            if status is not None:
+                conditions.append(PredictionJobORM.status == status.value)
+            if creator_id is not None:
+                conditions.append(PredictionJobORM.created_by == creator_id)
+            normalized_query = query.strip() if query is not None else ""
+            if normalized_query:
+                pattern = _like_pattern(normalized_query)
+                conditions.append(
+                    or_(
+                        PredictionJobORM.id.ilike(pattern, escape="\\"),
+                        PredictionJobORM.dataset_id.ilike(pattern, escape="\\"),
+                        PredictionJobORM.dataset_collection_id.ilike(
+                            pattern, escape="\\"
+                        ),
+                        PredictionJobORM.model_id.ilike(pattern, escape="\\"),
+                        PredictionJobORM.created_by.ilike(pattern, escape="\\"),
+                        UserORM.name.ilike(pattern, escape="\\"),
+                        UserORM.email.ilike(pattern, escape="\\"),
+                    )
+                )
             total = int(
                 await session.scalar(
                     select(func.count())
                     .select_from(PredictionJobORM)
+                    .outerjoin(UserORM, UserORM.id == PredictionJobORM.created_by)
                     .where(*conditions)
                 )
                 or 0
+            )
+            sort_columns = {
+                "created_at": PredictionJobORM.created_at,
+                "updated_at": PredictionJobORM.updated_at,
+                "status": PredictionJobORM.status,
+                "creator": func.coalesce(
+                    UserORM.name,
+                    UserORM.email,
+                    PredictionJobORM.created_by,
+                ),
+            }
+            sort_column = sort_columns[sort_by]
+            order = sort_column.asc() if sort_order == "asc" else sort_column.desc()
+            id_order = (
+                PredictionJobORM.id.asc()
+                if sort_order == "asc"
+                else PredictionJobORM.id.desc()
             )
             stmt = (
                 select(PredictionJobORM, OrganizationORM.name)
@@ -211,11 +264,9 @@ class PredictionRepository:
                     OrganizationORM,
                     OrganizationORM.id == PredictionJobORM.org_id,
                 )
+                .outerjoin(UserORM, UserORM.id == PredictionJobORM.created_by)
                 .where(*conditions)
-                .order_by(
-                    PredictionJobORM.created_at.desc(),
-                    PredictionJobORM.id.desc(),
-                )
+                .order_by(order.nulls_last(), id_order)
                 .offset(offset)
             )
             if limit is not None:

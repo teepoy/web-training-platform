@@ -15,6 +15,10 @@ limit?: number;
 q?: string | null;
 creator_id?: string | null;
 source_type?: 'dataset' | 'collection' | null;
+/**
+ * Comma-separated view IDs; a model may match any listed view.
+ */
+compatible_view_id?: string | null;
 sort_by?: ListModelsApiV1ModelsGetSortBy;
 sort_order?: ListModelsApiV1ModelsGetSortOrder;
 };

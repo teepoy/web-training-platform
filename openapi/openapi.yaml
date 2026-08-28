@@ -1346,6 +1346,23 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HTTPValidationError"
+  /api/v1/dataset-collections/creators:
+    get:
+      tags:
+        - dataset-collections
+      summary: List Collection Creators
+      operationId: list_collection_creators_api_v1_dataset_collections_creators_get
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/CreatorSummary"
+                type: array
+                title: Response List Collection Creators Api V1 Dataset Collections
+                  Creators Get
   /api/v1/dataset-collections/{collection_id}:
     get:
       tags:
@@ -2640,6 +2657,17 @@ paths:
                 type: string
               - type: "null"
             title: Source Type
+        - name: compatible_view_id
+          in: query
+          required: false
+          schema:
+            anyOf:
+              - type: string
+                minLength: 1
+              - type: "null"
+            description: Comma-separated view IDs; a model may match any listed view.
+            title: Compatible View Id
+          description: Comma-separated view IDs; a model may match any listed view.
         - name: sort_by
           in: query
           required: false
@@ -2914,6 +2942,54 @@ paths:
             description: Filter prediction jobs to one dataset collection.
             title: Collection Id
           description: Filter prediction jobs to one dataset collection.
+        - name: q
+          in: query
+          required: false
+          schema:
+            anyOf:
+              - type: string
+                maxLength: 200
+              - type: "null"
+            title: Q
+        - name: status
+          in: query
+          required: false
+          schema:
+            anyOf:
+              - $ref: "#/components/schemas/JobStatus"
+              - type: "null"
+            title: Status
+        - name: creator_id
+          in: query
+          required: false
+          schema:
+            anyOf:
+              - type: string
+                maxLength: 255
+              - type: "null"
+            title: Creator Id
+        - name: sort_by
+          in: query
+          required: false
+          schema:
+            enum:
+              - created_at
+              - updated_at
+              - status
+              - creator
+            type: string
+            default: created_at
+            title: Sort By
+        - name: sort_order
+          in: query
+          required: false
+          schema:
+            enum:
+              - asc
+              - desc
+            type: string
+            default: desc
+            title: Sort Order
         - name: offset
           in: query
           required: false
@@ -4166,6 +4242,42 @@ paths:
               - type: string
               - type: "null"
             title: Kind
+        - name: q
+          in: query
+          required: false
+          schema:
+            anyOf:
+              - type: string
+                maxLength: 200
+              - type: "null"
+            title: Q
+        - name: status
+          in: query
+          required: false
+          schema:
+            anyOf:
+              - $ref: "#/components/schemas/JobStatus"
+              - type: "null"
+            title: Status
+        - name: creator_id
+          in: query
+          required: false
+          schema:
+            anyOf:
+              - type: string
+                maxLength: 255
+              - type: "null"
+            title: Creator Id
+        - name: sort_order
+          in: query
+          required: false
+          schema:
+            enum:
+              - asc
+              - desc
+            type: string
+            default: desc
+            title: Sort Order
         - name: offset
           in: query
           required: false
@@ -4359,6 +4471,54 @@ paths:
             description: Filter by dataset
             title: Dataset Id
           description: Filter by dataset
+        - name: q
+          in: query
+          required: false
+          schema:
+            anyOf:
+              - type: string
+                maxLength: 200
+              - type: "null"
+            title: Q
+        - name: status
+          in: query
+          required: false
+          schema:
+            anyOf:
+              - $ref: "#/components/schemas/JobStatus"
+              - type: "null"
+            title: Status
+        - name: creator_id
+          in: query
+          required: false
+          schema:
+            anyOf:
+              - type: string
+                maxLength: 255
+              - type: "null"
+            title: Creator Id
+        - name: sort_by
+          in: query
+          required: false
+          schema:
+            enum:
+              - created_at
+              - updated_at
+              - status
+              - creator
+            type: string
+            default: created_at
+            title: Sort By
+        - name: sort_order
+          in: query
+          required: false
+          schema:
+            enum:
+              - asc
+              - desc
+            type: string
+            default: desc
+            title: Sort Order
         - name: offset
           in: query
           required: false
@@ -7824,6 +7984,10 @@ components:
           type: string
           format: date-time
           title: Updated At
+        creator_name:
+          type: string
+          title: Creator Name
+          default: ""
         default_model_id:
           anyOf:
             - type: string

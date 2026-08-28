@@ -139,7 +139,7 @@ test("Predict tab shows Start Prediction button and opens modal with model selec
   await expect(dialog.getByRole("button", { name: "Cancel" })).toBeVisible();
   await expect(dialog.getByRole("button", { name: "Start with selected model" })).toBeVisible();
   await expect(dialog.getByRole("columnheader", { name: "Model" })).toBeVisible();
-  await expect(dialog.getByPlaceholder(/Search model name/)).toBeVisible();
+  await expect(dialog.getByPlaceholder("Search models")).toBeVisible();
   await expect(dialog.getByText("Demo Model", { exact: true })).toBeVisible();
   await dialog.getByText("Demo Model", { exact: true }).click();
   await expect(dialog.getByRole("button", { name: "Start with selected model" })).toBeEnabled();

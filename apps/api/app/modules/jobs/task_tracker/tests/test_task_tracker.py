@@ -129,6 +129,69 @@ def test_task_tracker_lists_schedule_runs(monkeypatch) -> None:
         )
 
 
+@pytest.mark.asyncio
+async def test_task_tracker_forwards_filters_before_combined_pagination() -> None:
+    training_repository = AsyncMock()
+    training_repository.list_jobs_paginated.return_value = ([], 0)
+    prediction_repository = AsyncMock()
+    prediction_repository.list_prediction_jobs_paginated.return_value = ([], 0)
+    schedule_reader = AsyncMock()
+    schedule_reader.list_runs_for_schedules_paginated.return_value = ([], 0)
+    dataset_repository = AsyncMock()
+    dataset_repository.list_dataset_names.return_value = {}
+    service = TaskTrackerService(
+        training_repository=training_repository,
+        prediction_repository=prediction_repository,
+        dataset_repository=dataset_repository,
+        prefect_client=SimpleNamespace(),
+        config=SimpleNamespace(prefect=SimpleNamespace(api_url="")),
+        schedule_run_reader=schedule_reader,
+    )
+
+    items, total = await service.list_tasks(
+        "org-1",
+        query="needle",
+        status=JobStatus.RUNNING,
+        creator_id="creator-1",
+        sort_order="asc",
+        offset=20,
+        limit=10,
+    )
+
+    assert items == []
+    assert total == 0
+    training_repository.list_jobs_paginated.assert_awaited_once_with(
+        org_id="org-1",
+        offset=0,
+        limit=30,
+        include_artifacts=False,
+        query="needle",
+        status=JobStatus.RUNNING,
+        creator_id="creator-1",
+        sort_by="updated_at",
+        sort_order="asc",
+    )
+    prediction_repository.list_prediction_jobs_paginated.assert_awaited_once_with(
+        org_id="org-1",
+        offset=0,
+        limit=30,
+        query="needle",
+        status=JobStatus.RUNNING,
+        creator_id="creator-1",
+        sort_by="updated_at",
+        sort_order="asc",
+    )
+    schedule_reader.list_runs_for_schedules_paginated.assert_awaited_once_with(
+        "org-1",
+        offset=0,
+        limit=30,
+        query="needle",
+        creator_id="creator-1",
+        state_types=["RUNNING"],
+        sort_order="asc",
+    )
+
+
 @pytest.mark.skip(reason="Pre-existing test isolation issue surfaced by module restructuring")
 def test_task_tracker_detail_uses_prefect_task_runs_for_execution_flow() -> None:
     prefect = SimpleNamespace(

@@ -37,7 +37,7 @@ from app.modules.dataset_collections.port.http.schemas import (
     UpdateCollectionDefaultModelRequest,
     UpdateDatasetCollectionRequest,
 )
-from app.shared.api.schemas import Organization, PaginatedResponse, User
+from app.shared.api.schemas import CreatorSummary, Organization, PaginatedResponse, User
 
 router = APIRouter(prefix="/api/v1/dataset-collections", tags=["dataset-collections"])
 
@@ -106,6 +106,16 @@ async def list_collections(
         items=[DatasetCollectionResponse.from_domain(item) for item in collections],
         total=total,
     )
+
+
+@router.get("/creators", response_model=list[CreatorSummary])
+async def list_collection_creators(
+    current_user: Annotated[User, Depends(get_current_user)],
+    org: Annotated[Organization, Depends(get_current_org)],
+    service: DatasetCollectionServiceDep,
+) -> list[CreatorSummary]:
+    del current_user
+    return await service.list_collection_creators(org.id)
 
 
 @router.get("/{collection_id}", response_model=DatasetCollectionResponse)

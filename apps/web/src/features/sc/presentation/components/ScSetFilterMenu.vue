@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
-import { NButton, NCheckbox, NInput, NSpace, NText } from "naive-ui";
+import { NCheckbox, NInput, NText } from "naive-ui";
+import ScFilterPopover from "./ScFilterPopover.vue";
 
 const props = defineProps<{
   search: string;
@@ -75,13 +76,12 @@ function updateAllVisible(checked: boolean): void {
   emit("update:draftValues", Array.from(next));
 }
 
-function resetDraft(): void {
-  updateSearch("");
-  emit("update:draftValues", props.appliedValues.map(String));
-}
-
 function clearDraft(): void {
   emit("update:draftValues", []);
+}
+
+function cancel(): void {
+  emit("close");
 }
 
 function applyDraft(): void {
@@ -98,7 +98,7 @@ function applyDraft(): void {
 </script>
 
 <template>
-  <div class="sst-filter-popover sst-filter-popover--set">
+  <ScFilterPopover variant="set" @clear="clearDraft" @cancel="cancel" @apply="applyDraft">
     <div class="sst-filter-search-row">
       <NInput
         :value="search"
@@ -138,28 +138,10 @@ function applyDraft(): void {
         Loading...
       </NText>
     </div>
-    <NSpace :size="4">
-      <NButton size="tiny" quaternary @click="resetDraft">Reset</NButton>
-      <NButton size="tiny" quaternary @click="clearDraft">Clear</NButton>
-      <NButton size="tiny" type="primary" @click="applyDraft">Apply</NButton>
-    </NSpace>
-  </div>
+  </ScFilterPopover>
 </template>
 
 <style scoped>
-.sst-filter-popover {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 8px;
-  max-width: min(320px, calc(100vw - 48px));
-  min-width: 0;
-}
-
-.sst-filter-popover--set {
-  width: 260px;
-}
-
 .sst-set-filter-options {
   display: flex;
   flex-direction: column;

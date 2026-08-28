@@ -354,7 +354,7 @@ const columns = computed<DataTableColumns<DatasetCollectionResponse>>(() => [
     render: (row) =>
       row.created_by === authStore.user?.id
         ? authStore.user?.name || authStore.user?.email || "You"
-        : row.created_by,
+        : row.creator_name?.trim() || row.created_by,
   },
   {
     title: "Policy",

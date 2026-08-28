@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, watchEffect } from "vue";
-import { NButton, NInput, NRadioButton, NRadioGroup, NSpace, NText } from "naive-ui";
+import { NButton, NInput, NRadioButton, NRadioGroup, NText } from "naive-ui";
 import { parseDefectIds } from "./defectIdImport";
+import ScFilterPopover from "./ScFilterPopover.vue";
 
 const props = defineProps<{
   appliedValues: Array<string | number>;
@@ -39,7 +40,10 @@ function clear(): void {
   text.value = "";
   importStatus.value = "";
   validationError.value = "";
-  emit("apply", [], false);
+  mode.value = "include";
+}
+
+function cancel(): void {
   emit("close");
 }
 
@@ -74,7 +78,7 @@ async function importFile(event: Event): Promise<void> {
 </script>
 
 <template>
-  <div class="sst-filter-popover">
+  <ScFilterPopover variant="text" @clear="clear" @cancel="cancel" @apply="apply">
     <div class="sst-defect-filter-heading">
       <div>
         <NText strong class="sst-defect-filter-title">Defect IDs</NText>
@@ -111,24 +115,10 @@ async function importFile(event: Event): Promise<void> {
     <NText v-if="validationError" type="error" class="sst-defect-filter-status">
       {{ validationError }}
     </NText>
-    <NSpace :size="4">
-      <NButton size="tiny" type="primary" @click="apply">Apply</NButton>
-      <NButton size="tiny" quaternary @click="clear">Clear</NButton>
-    </NSpace>
-  </div>
+  </ScFilterPopover>
 </template>
 
 <style scoped>
-.sst-filter-popover {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 8px;
-  max-width: min(320px, calc(100vw - 48px));
-  min-width: 0;
-  width: 260px;
-}
-
 .sst-defect-filter-heading {
   display: flex;
   align-items: flex-start;

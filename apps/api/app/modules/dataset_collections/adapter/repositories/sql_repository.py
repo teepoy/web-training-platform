@@ -33,6 +33,8 @@ from app.shared.db.models.dataset_collections import (
     DatasetCollectionRevisionORM,
 )
 from app.shared.db.models.prediction import PredictionJobORM
+from app.shared.db.models.auth import UserORM
+from app.shared.api.schemas import CreatorSummary
 
 
 def _utcnow() -> datetime:
@@ -44,7 +46,17 @@ def _like_pattern(value: str) -> str:
     return f"%{escaped}%"
 
 
-def _collection(row: DatasetCollectionORM) -> DatasetCollection:
+def _creator_name(
+    created_by: str, user_name: str | None, user_email: str | None
+) -> str:
+    return str(user_name or user_email or created_by)
+
+
+def _collection(
+    row: DatasetCollectionORM,
+    *,
+    creator_name: str = "",
+) -> DatasetCollection:
     return DatasetCollection(
         id=row.id,
         org_id=row.org_id,
@@ -59,6 +71,7 @@ def _collection(row: DatasetCollectionORM) -> DatasetCollection:
         created_by=row.created_by,
         created_at=row.created_at,
         updated_at=row.updated_at,
+        creator_name=creator_name or row.created_by,
         default_model_id=row.default_model_id,
         model_binding_version=row.model_binding_version,
     )
@@ -191,7 +204,11 @@ class DatasetCollectionSqlRepository:
         async with self._session_factory() as session:
             sort_columns = {
                 "name": DatasetCollectionORM.name,
-                "creator": DatasetCollectionORM.created_by,
+                "creator": func.coalesce(
+                    UserORM.name,
+                    UserORM.email,
+                    DatasetCollectionORM.created_by,
+                ),
                 "created_at": DatasetCollectionORM.created_at,
                 "updated_at": DatasetCollectionORM.updated_at,
             }
@@ -225,21 +242,77 @@ class DatasetCollectionSqlRepository:
             )
             rows = (
                 await session.execute(
-                    select(DatasetCollectionORM)
+                    select(
+                        DatasetCollectionORM,
+                        UserORM.name,
+                        UserORM.email,
+                    )
+                    .outerjoin(UserORM, UserORM.id == DatasetCollectionORM.created_by)
                     .where(*conditions)
                     .order_by(order.nulls_last(), id_order)
                     .offset(offset)
                     .limit(limit)
                 )
-            ).scalars()
-            return [_collection(row) for row in rows], total
+            ).all()
+            return [
+                _collection(
+                    row,
+                    creator_name=_creator_name(row.created_by, user_name, user_email),
+                )
+                for row, user_name, user_email in rows
+            ], total
+
+    async def list_collection_creators(self, org_id: str) -> list[CreatorSummary]:
+        async with self._session_factory() as session:
+            rows = (
+                await session.execute(
+                    select(
+                        DatasetCollectionORM.created_by,
+                        UserORM.name,
+                        UserORM.email,
+                    )
+                    .outerjoin(UserORM, UserORM.id == DatasetCollectionORM.created_by)
+                    .where(DatasetCollectionORM.org_id == org_id)
+                    .distinct()
+                )
+            ).all()
+            creators = [
+                CreatorSummary(
+                    id=str(created_by),
+                    name=_creator_name(str(created_by), user_name, user_email),
+                )
+                for created_by, user_name, user_email in rows
+            ]
+            return sorted(
+                creators,
+                key=lambda creator: (creator.name.casefold(), creator.id),
+            )
 
     async def get_collection(
         self, collection_id: str, org_id: str
     ) -> DatasetCollection | None:
         async with self._session_factory() as session:
-            row = await self._collection_row(session, collection_id, org_id)
-            return _collection(row) if row is not None else None
+            result = (
+                await session.execute(
+                    select(
+                        DatasetCollectionORM,
+                        UserORM.name,
+                        UserORM.email,
+                    )
+                    .outerjoin(UserORM, UserORM.id == DatasetCollectionORM.created_by)
+                    .where(
+                        DatasetCollectionORM.id == collection_id,
+                        DatasetCollectionORM.org_id == org_id,
+                    )
+                )
+            ).one_or_none()
+            if result is None:
+                return None
+            row, user_name, user_email = result
+            return _collection(
+                row,
+                creator_name=_creator_name(row.created_by, user_name, user_email),
+            )
 
     async def update_collection(
         self,

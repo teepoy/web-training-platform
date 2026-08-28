@@ -4,12 +4,20 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
+import type { JobStatus } from './jobStatus';
+import type { ListJobsApiV1TrainingJobsGetSortBy } from './listJobsApiV1TrainingJobsGetSortBy';
+import type { ListJobsApiV1TrainingJobsGetSortOrder } from './listJobsApiV1TrainingJobsGetSortOrder';
 
 export type ListJobsApiV1TrainingJobsGetParams = {
 /**
  * Filter by dataset
  */
 dataset_id?: string | null;
+q?: string | null;
+status?: JobStatus | null;
+creator_id?: string | null;
+sort_by?: ListJobsApiV1TrainingJobsGetSortBy;
+sort_order?: ListJobsApiV1TrainingJobsGetSortOrder;
 offset?: number;
 limit?: number;
 };

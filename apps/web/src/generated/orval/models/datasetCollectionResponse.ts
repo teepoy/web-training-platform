@@ -20,6 +20,7 @@ export interface DatasetCollectionResponse {
   created_by: string;
   created_at: string;
   updated_at: string;
+  creator_name?: string;
   default_model_id: DatasetCollectionResponseDefaultModelId;
   model_binding_version: number;
 }

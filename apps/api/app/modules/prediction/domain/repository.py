@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Literal, Protocol
 
 from app.shared.api.schemas import (
     AnnotationVersion,
@@ -12,6 +12,9 @@ from app.shared.api.schemas import (
     PredictionJob,
     PredictionReviewAction,
 )
+
+PredictionJobSortField = Literal["created_at", "updated_at", "status", "creator"]
+SortDirection = Literal["asc", "desc"]
 
 
 class PredictionRepository(Protocol):
@@ -56,6 +59,11 @@ class PredictionRepository(Protocol):
         *,
         offset: int = 0,
         limit: int = 50,
+        query: str | None = None,
+        status: JobStatus | None = None,
+        creator_id: str | None = None,
+        sort_by: PredictionJobSortField = "created_at",
+        sort_order: SortDirection = "desc",
     ) -> tuple[list[PredictionJob], int]: ...
 
     async def add_prediction_event(self, event: PredictionEvent) -> None: ...

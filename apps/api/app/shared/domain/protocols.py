@@ -242,6 +242,8 @@ class PrefectClient(Protocol):
     async def count_flow_runs_for_deployments(
         self,
         deployment_ids: list[str],
+        *,
+        state_types: list[str] | None = None,
     ) -> int: ...
 
     async def filter_flow_runs_for_deployments(
@@ -250,6 +252,8 @@ class PrefectClient(Protocol):
         *,
         offset: int = 0,
         limit: int = 50,
+        state_types: list[str] | None = None,
+        sort_order: str = "desc",
     ) -> list[dict[str, Any]]: ...
 
 

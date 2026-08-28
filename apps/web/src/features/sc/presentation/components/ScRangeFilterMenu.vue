@@ -1,34 +1,52 @@
 <script setup lang="ts">
-import { NButton, NInputNumber, NSpace, NText } from "naive-ui";
+import { computed } from "vue";
+import { NInputNumber, NText } from "naive-ui";
+import ScFilterPopover from "./ScFilterPopover.vue";
 
-defineProps<{
+const props = defineProps<{
   min: number | null;
   max: number | null;
   loading?: boolean;
   rangeUnavailable?: boolean;
 }>();
 
+const canApply = computed(
+  () =>
+    (props.min === null && props.max === null) ||
+    (props.min !== null && props.max !== null && props.min <= props.max),
+);
+
 const emit = defineEmits<{
   (e: "update:min", value: number | null): void;
   (e: "update:max", value: number | null): void;
   (e: "apply"): void;
-  (e: "clear"): void;
   (e: "close"): void;
 }>();
 
 function apply(): void {
+  if (!canApply.value) return;
   emit("apply");
   emit("close");
 }
 
 function clear(): void {
-  emit("clear");
+  emit("update:min", null);
+  emit("update:max", null);
+}
+
+function cancel(): void {
   emit("close");
 }
 </script>
 
 <template>
-  <div class="sst-filter-popover">
+  <ScFilterPopover
+    variant="range"
+    :apply-disabled="loading || !canApply"
+    @clear="clear"
+    @cancel="cancel"
+    @apply="apply"
+  >
     <NText v-if="loading" depth="3" class="sst-range-status">Querying field range…</NText>
     <NText v-else-if="rangeUnavailable" type="error" class="sst-range-status">
       Could not load field range. You can still enter values manually.
@@ -57,23 +75,10 @@ function clear(): void {
         />
       </label>
     </div>
-    <NSpace :size="4">
-      <NButton size="tiny" :disabled="loading" @click="apply">Apply</NButton>
-      <NButton size="tiny" quaternary @click="clear">Clear</NButton>
-    </NSpace>
-  </div>
+  </ScFilterPopover>
 </template>
 
 <style scoped>
-.sst-filter-popover {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 8px;
-  max-width: min(320px, calc(100vw - 48px));
-  min-width: 0;
-}
-
 .sst-range-input {
   width: 128px;
 }

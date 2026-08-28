@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 from fastapi import HTTPException
 from injector import inject
@@ -67,6 +67,10 @@ class TaskTrackerService:
         org_id: str,
         kind: str | None = None,
         *,
+        query: str | None = None,
+        status: JobStatus | None = None,
+        creator_id: str | None = None,
+        sort_order: Literal["asc", "desc"] = "desc",
         offset: int = 0,
         limit: int = 50,
     ) -> tuple[list[TaskTrackerSummaryResponse], int]:
@@ -79,6 +83,11 @@ class TaskTrackerService:
                 offset=0 if kind is None else offset,
                 limit=fetch_limit if kind is None else limit,
                 include_artifacts=False,
+                query=query,
+                status=status,
+                creator_id=creator_id,
+                sort_by="updated_at",
+                sort_order=sort_order,
             )
             total += training_total
             tasks.extend(self._to_training_record(job) for job in jobs)
@@ -90,6 +99,11 @@ class TaskTrackerService:
                 org_id=org_id,
                 offset=0 if kind is None else offset,
                 limit=fetch_limit if kind is None else limit,
+                query=query,
+                status=status,
+                creator_id=creator_id,
+                sort_by="updated_at",
+                sort_order=sort_order,
             )
             total += prediction_total
             tasks.extend(self._to_prediction_record(job) for job in jobs)
@@ -98,6 +112,10 @@ class TaskTrackerService:
                 org_id,
                 offset=0 if kind is None else offset,
                 limit=fetch_limit if kind is None else limit,
+                query=query,
+                creator_id=creator_id,
+                state_types=self._prefect_state_types(status),
+                sort_order=sort_order,
             )
             total += schedule_total
             tasks.extend(schedule_tasks)
@@ -107,7 +125,7 @@ class TaskTrackerService:
                 task.platform_job.updated_at,
                 task.platform_job.id,
             ),
-            reverse=True,
+            reverse=sort_order == "desc",
         )
         if kind is None:
             tasks = tasks[offset : offset + limit]
@@ -202,11 +220,19 @@ class TaskTrackerService:
         *,
         offset: int,
         limit: int,
+        query: str | None,
+        creator_id: str | None,
+        state_types: list[str] | None,
+        sort_order: Literal["asc", "desc"],
     ) -> tuple[list[_TaskRecord], int]:
         runs, total = await self._schedule_run_reader.list_runs_for_schedules_paginated(
             org_id,
             offset=offset,
             limit=limit,
+            query=query,
+            creator_id=creator_id,
+            state_types=state_types,
+            sort_order=sort_order,
         )
         tasks = [
             task
@@ -214,6 +240,18 @@ class TaskTrackerService:
             if (task := self._to_schedule_run_record(run)) is not None
         ]
         return tasks, total
+
+    @staticmethod
+    def _prefect_state_types(status: JobStatus | None) -> list[str] | None:
+        if status is None:
+            return None
+        return {
+            JobStatus.QUEUED: ["SCHEDULED", "PENDING"],
+            JobStatus.RUNNING: ["RUNNING"],
+            JobStatus.COMPLETED: ["COMPLETED"],
+            JobStatus.FAILED: ["FAILED", "CRASHED"],
+            JobStatus.CANCELLED: ["CANCELLED", "CANCELLING"],
+        }[status]
 
     def _to_schedule_run_record(
         self,

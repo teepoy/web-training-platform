@@ -2,7 +2,7 @@ import { defineComponent } from "vue";
 import { createPinia, setActivePinia } from "pinia";
 import { flushPromises } from "@vue/test-utils";
 import { http, HttpResponse } from "msw";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAuthStore } from "@/features/auth/application/store";
 import { useOrgStore } from "@/features/auth/application/org";
 import { mountWithProviders } from "@/testing";
@@ -79,6 +79,9 @@ describe("Library workspace", () => {
           },
         ]),
       ),
+      http.get("/api/v1/dataset-collections/creators", () =>
+        HttpResponse.json([{ id: "user-2", name: "Collection Creator" }]),
+      ),
     );
   });
 
@@ -116,7 +119,7 @@ describe("Library workspace", () => {
 
     await wrapper.get('[data-testid="library-search"] input').setValue("review");
     await flushPromises();
-    expect(router.currentRoute.value.query.q).toBe("review");
+    await vi.waitFor(() => expect(router.currentRoute.value.query.q).toBe("review"));
   });
 
   it("keeps the explicit all-creators scope when Collections is opened directly", async () => {
@@ -125,6 +128,10 @@ describe("Library workspace", () => {
     expect(wrapper.findComponent(DatasetListStub).exists()).toBe(false);
     expect(wrapper.getComponent(CollectionListStub).props("creatorId")).toBeNull();
     expect(wrapper.get('[data-testid="library-new-collection"]').text()).toBe("New collection");
+    expect(wrapper.getComponent({ name: "CreatorScopeSelect" }).props("creators")).toContainEqual({
+      id: "user-2",
+      name: "Collection Creator",
+    });
   });
 
   it("opens collection creation from the shared filter toolbar", async () => {

@@ -41,6 +41,7 @@ class ModelManagementPort(Protocol):
         query: str | None = None,
         creator_id: str | None = None,
         source_type: ModelSourceType | None = None,
+        compatible_view_ids: tuple[str, ...] | None = None,
         sort_by: ModelSortField = "created_at",
         sort_order: SortDirection = "desc",
     ) -> list[Model]: ...
@@ -56,6 +57,7 @@ class ModelManagementPort(Protocol):
         query: str | None = None,
         creator_id: str | None = None,
         source_type: ModelSourceType | None = None,
+        compatible_view_ids: tuple[str, ...] | None = None,
         sort_by: ModelSortField = "created_at",
         sort_order: SortDirection = "desc",
     ) -> tuple[list[Model], int]: ...

@@ -26,6 +26,10 @@
       </select>
     </div>
 
+    <p class="compatibility-note">
+      Showing only models compatible with the selected dataset's registered views.
+    </p>
+
     <div class="model-table">
       <div class="table-head">
         <span></span><span>Model</span><span>Source</span><span>Trainer</span><span>Creator</span
@@ -99,6 +103,12 @@ h2 {
 p {
   margin: 0;
   color: #687180;
+}
+.compatibility-note {
+  padding: 9px 12px;
+  color: #4057bd;
+  background: #f2f5ff;
+  border-radius: 8px;
 }
 small {
   color: #5267c9;

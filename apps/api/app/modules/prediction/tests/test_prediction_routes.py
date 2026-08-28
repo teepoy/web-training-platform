@@ -92,6 +92,52 @@ def test_list_prediction_jobs_filters_by_dataset() -> None:
         assert resp.json()["total"] == 1
 
 
+def test_list_prediction_jobs_filters_before_pagination() -> None:
+    with TestClient(app) as c:
+        repo = app.state.app_context.prediction.prediction_repository
+
+        async def _seed() -> None:
+            await repo.create_prediction_job(
+                PredictionJob(
+                    id="ux-filter-prediction-completed",
+                    org_id=DEFAULT_ORG_ID,
+                    dataset_id=None,
+                    model_id="model-a",
+                    status=JobStatus.COMPLETED,
+                    created_by="creator-a",
+                ),
+                org_id=DEFAULT_ORG_ID,
+            )
+            await repo.create_prediction_job(
+                PredictionJob(
+                    id="ux-filter-prediction-running",
+                    org_id=DEFAULT_ORG_ID,
+                    dataset_id=None,
+                    model_id="model-b",
+                    status=JobStatus.RUNNING,
+                    created_by="creator-b",
+                ),
+                org_id=DEFAULT_ORG_ID,
+            )
+
+        asyncio.run(_seed())
+        response = c.get(
+            "/api/v1/prediction-jobs",
+            params={
+                "q": "ux-filter-prediction",
+                "status": "completed",
+                "creator_id": "creator-a",
+                "limit": 1,
+            },
+        )
+
+        assert response.status_code == 200, response.text
+        assert response.json()["total"] == 1
+        assert [item["id"] for item in response.json()["items"]] == [
+            "ux-filter-prediction-completed"
+        ]
+
+
 @pytest.mark.skip(reason="Pre-existing failure - see errors.md")
 def test_prediction_job_lifecycle() -> None:
     """Create a prediction job via /predictions/run, then test list/get/events/predictions."""

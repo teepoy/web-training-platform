@@ -48,7 +48,11 @@ from app.modules.prediction.port.http.schemas import (
     VersionExportPersistResponse,
     VersionExportRequest,
 )
-from app.shared.api.schemas import Organization, User
+from app.modules.prediction.domain.repository import (
+    PredictionJobSortField,
+    SortDirection,
+)
+from app.shared.api.schemas import JobStatus, Organization, User
 from app.shared.api.schemas import CancelJobResponse, PaginatedResponse
 
 router = APIRouter(prefix="/api/v1", tags=["prediction"])
@@ -163,6 +167,11 @@ async def list_prediction_jobs(
         default=None,
         description="Filter prediction jobs to one dataset collection.",
     ),
+    q: str | None = Query(default=None, max_length=200),
+    status: JobStatus | None = Query(default=None),
+    creator_id: str | None = Query(default=None, max_length=255),
+    sort_by: PredictionJobSortField = Query(default="created_at"),
+    sort_order: SortDirection = Query(default="desc"),
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=200),
 ) -> PaginatedResponse[PredictionJobResponse]:
@@ -172,6 +181,11 @@ async def list_prediction_jobs(
         collection_id=collection_id,
         offset=offset,
         limit=limit,
+        query=q,
+        status=status,
+        creator_id=creator_id,
+        sort_by=sort_by,
+        sort_order=sort_order,
     )
     return PaginatedResponse(
         items=[_prediction_job_to_response(job) for job in jobs],

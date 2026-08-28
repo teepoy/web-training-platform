@@ -815,13 +815,18 @@ class PrefectClient:
     async def count_flow_runs_for_deployments(
         self,
         deployment_ids: list[str],
+        *,
+        state_types: list[str] | None = None,
     ) -> int:
         """Count flow runs owned by the given deployment IDs."""
 
+        body: dict[str, object] = {"deployments": {"id": {"any_": deployment_ids}}}
+        if state_types is not None:
+            body["flow_runs"] = {"state": {"type": {"any_": state_types}}}
         result = await self._request(
             "POST",
             "/flow_runs/count",
-            json={"deployments": {"id": {"any_": deployment_ids}}},
+            json=body,
             resource_label="flow run count",
         )
         if not isinstance(result, int):
@@ -837,18 +842,27 @@ class PrefectClient:
         *,
         offset: int = 0,
         limit: int = 50,
+        state_types: list[str] | None = None,
+        sort_order: str = "desc",
     ) -> list[dict]:
         """List flow runs for a known set of organization-scoped deployments."""
 
+        body: dict[str, object] = {
+            "deployments": {"id": {"any_": deployment_ids}},
+            "offset": offset,
+            "limit": limit,
+            "sort": (
+                "EXPECTED_START_TIME_ASC"
+                if sort_order == "asc"
+                else "EXPECTED_START_TIME_DESC"
+            ),
+        }
+        if state_types is not None:
+            body["flow_runs"] = {"state": {"type": {"any_": state_types}}}
         result = await self._request(
             "POST",
             "/flow_runs/filter",
-            json={
-                "deployments": {"id": {"any_": deployment_ids}},
-                "offset": offset,
-                "limit": limit,
-                "sort": "EXPECTED_START_TIME_DESC",
-            },
+            json=body,
             resource_label="flow runs",
         )
         if not isinstance(result, list):

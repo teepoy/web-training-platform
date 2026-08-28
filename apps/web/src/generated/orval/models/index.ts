@@ -213,6 +213,8 @@ export * from './listDatasetsApiV1DatasetsGetParams';
 export * from './listDatasetsApiV1DatasetsGetSortBy';
 export * from './listDatasetsApiV1DatasetsGetSortOrder';
 export * from './listJobsApiV1TrainingJobsGetParams';
+export * from './listJobsApiV1TrainingJobsGetSortBy';
+export * from './listJobsApiV1TrainingJobsGetSortOrder';
 export * from './listLatestPredictionsApiV1DatasetsDatasetIdLatestPredictionsGetParams';
 export * from './listModelsApiV1ModelsGetParams';
 export * from './listModelsApiV1ModelsGetSortBy';
@@ -222,6 +224,8 @@ export * from './listPredictionCoverageApiV1DatasetCollectionsCollectionIdPredic
 export * from './listPredictionJobEventsApiV1PredictionJobsJobIdEventsGetParams';
 export * from './listPredictionJobPredictionsApiV1PredictionJobsJobIdPredictionsGetParams';
 export * from './listPredictionJobsApiV1PredictionJobsGetParams';
+export * from './listPredictionJobsApiV1PredictionJobsGetSortBy';
+export * from './listPredictionJobsApiV1PredictionJobsGetSortOrder';
 export * from './listReviewActionsApiV1PredictionReviewsGetParams';
 export * from './listRunsApiV1SchedulesScheduleIdRunsGetParams';
 export * from './listSamplePredictionsApiV1SamplesSampleIdPredictionsGetParams';
@@ -230,6 +234,7 @@ export * from './listSamplesWithLabelsEndpointApiV1DatasetsDatasetIdSamplesWithL
 export * from './listSchedulesApiV1SchedulesGetParams';
 export * from './listSettingsApiV1SettingsGet200';
 export * from './listTaskTrackerTasksApiV1TaskTrackerTasksGetParams';
+export * from './listTaskTrackerTasksApiV1TaskTrackerTasksGetSortOrder';
 export * from './listTrainersRouteApiV1TrainersGet200Item';
 export * from './listViewSamplesApiV1DatasetsDatasetIdViewsViewTypeSamplesGetParams';
 export * from './loginRequest';

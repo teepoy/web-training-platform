@@ -11,6 +11,7 @@ from app.modules.auth.port.http.deps import (
     get_current_user,
 )
 from app.shared.api.schemas import (
+    JobStatus,
     Organization,
     TrainingEvent,
     TrainingJob,
@@ -24,6 +25,7 @@ from app.modules.training.port.http.deps import (
     RepositoryDep,
     TrainingSubmissionDep,
 )
+from app.modules.training.domain.repository import SortDirection, TrainingJobSortField
 from app.modules.training.port.http.schemas import (
     CreateTrainingJobRequest,
     MarkLeftResponse,
@@ -164,6 +166,11 @@ async def list_jobs(
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
     dataset_id: str | None = Query(default=None, description="Filter by dataset"),
+    q: str | None = Query(default=None, max_length=200),
+    status: JobStatus | None = Query(default=None),
+    creator_id: str | None = Query(default=None, max_length=255),
+    sort_by: TrainingJobSortField = Query(default="created_at"),
+    sort_order: SortDirection = Query(default="desc"),
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=200),
 ) -> PaginatedResponse[TrainingJob]:
@@ -172,6 +179,11 @@ async def list_jobs(
         dataset_id=dataset_id,
         offset=offset,
         limit=limit,
+        query=q,
+        status=status,
+        creator_id=creator_id,
+        sort_by=sort_by,
+        sort_order=sort_order,
     )
     return PaginatedResponse(items=items, total=total)
 

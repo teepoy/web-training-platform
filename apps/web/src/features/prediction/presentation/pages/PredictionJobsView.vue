@@ -18,6 +18,25 @@
         </div>
         <n-button type="primary" @click="showModal = true">Start Prediction</n-button>
       </div>
+      <div class="history-filters">
+        <n-input v-model:value="jobSearch" clearable size="small" placeholder="Search jobs" />
+        <n-select
+          v-model:value="statusFilter"
+          clearable
+          size="small"
+          :options="statusOptions"
+          placeholder="All statuses"
+        />
+        <CreatorScopeSelect
+          v-model="creatorScope"
+          :creators="[]"
+          resource-label="prediction jobs"
+          class="history-creator-filter"
+        />
+        <n-button v-if="activeFilterCount > 0" size="small" quaternary @click="clearFilters">
+          Clear filters ({{ activeFilterCount }})
+        </n-button>
+      </div>
       <n-spin :show="isLoading">
         <n-data-table
           :columns="columns"
@@ -25,8 +44,11 @@
           :bordered="true"
           :striped="true"
           :loading="isLoading"
+          :pagination="jobsPagination"
           :row-key="predictionJobRowKey"
           :scroll-x="props.embedded ? 640 : 760"
+          remote
+          @update:sorter="handleSorterChange"
         >
           <template #empty>
             <n-empty
@@ -69,49 +91,12 @@
             />
           </n-form-item>
           <n-form-item label="Model" path="model_id" label-placement="top">
-            <div class="model-picker">
-              <n-text depth="3">
-                Search and page through the complete model history. Newest models are shown first.
-              </n-text>
-              <div class="model-picker-filters">
-                <n-input
-                  v-model:value="modelSearch"
-                  clearable
-                  placeholder="Search model name, ID, source, trainer, or creator"
-                />
-                <n-select
-                  v-model:value="modelSourceType"
-                  clearable
-                  :options="modelSourceOptions"
-                  placeholder="All training sources"
-                />
-                <n-select
-                  v-model:value="modelCreatorId"
-                  clearable
-                  filterable
-                  :options="modelCreatorOptions"
-                  placeholder="All creators"
-                />
-              </div>
-              <n-data-table
-                :columns="modelPickerColumns"
-                :data="availableModels"
-                :loading="modelsLoading"
-                :pagination="modelPagination"
-                :row-key="(row: ModelResponse) => row.id"
-                :checked-row-keys="formModel.model_id ? [formModel.model_id] : []"
-                :row-props="modelRowProps"
-                :scroll-x="820"
-                :max-height="320"
-                remote
-                size="small"
-                @update:checked-row-keys="selectModel"
-              >
-                <template #empty>
-                  <n-empty description="No models match these filters" />
-                </template>
-              </n-data-table>
-            </div>
+            <RemoteModelPicker
+              v-model="formModel.model_id"
+              :active="showModal"
+              :compatible-view-ids="selectedDatasetViewTypes"
+              @update:selected-model="selectedModelRecord = $event"
+            />
           </n-form-item>
         </template>
         <template v-else>
@@ -148,12 +133,11 @@
 
 <script setup lang="ts">
 import { ref, computed, h, provide, reactive, watch } from "vue";
-import { useRoute, useRouter } from "vue-router";
-import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { refDebounced } from "@vueuse/core";
+import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import type {
   DataTableColumns,
-  DataTableRowKey,
+  DataTableSortState,
   FormInst,
   FormRules,
   PaginationProps,
@@ -161,31 +145,38 @@ import type {
 } from "naive-ui";
 import { useMessage, NButton, NTag, NText } from "naive-ui";
 import { useOrgStore } from "@/features/auth/application/org";
+import { useAuthStore } from "@/features/auth/application/store";
 import {
-  useListModelCreatorsApiV1ModelsCreatorsGet,
-  useListModelsApiV1ModelsGet,
+  useListPredictionJobsApiV1PredictionJobsGet,
   useRunPredictionsApiV1PredictionsRunPost,
 } from "@/generated/orval/endpoints/api";
-import { listPredictionJobs } from "@/shared/api/predictions";
 import { listDatasets } from "@/shared/api/datasets";
 import { orgScopedQueryKey, toUserMessage } from "@/shared/api";
 import TaskInsightModal, { TASK_INSIGHT_ORG_ID_KEY } from "@/shared/components/task-insight-modal";
 import type {
+  JobStatus,
+  ListPredictionJobsApiV1PredictionJobsGetParams,
   ModelResponse,
   PredictionJobResponse as PredictionJob,
   TaskTrackerSummaryResponse as TaskTrackerSummary,
 } from "@/generated/orval/models";
 import type { RunPredictionRequest } from "@/generated/orval/models";
+import RemoteModelPicker from "@/features/models/presentation/components/RemoteModelPicker.vue";
+import CreatorScopeSelect from "@/shared/components/creator-scope-select";
 
-const props = withDefaults(defineProps<{ datasetId?: string | null; embedded?: boolean }>(), {
-  embedded: false,
-});
+const props = withDefaults(
+  defineProps<{
+    datasetId?: string | null;
+    compatibleViewTypes?: string[];
+    embedded?: boolean;
+  }>(),
+  { compatibleViewTypes: () => [], embedded: false },
+);
 
-const route = useRoute();
-const router = useRouter();
 const message = useMessage();
 const qc = useQueryClient();
 const orgStore = useOrgStore();
+const authStore = useAuthStore();
 const showModal = ref(false);
 const formRef = ref<FormInst | null>(null);
 const formModel = ref({
@@ -197,20 +188,92 @@ provide(
   computed(() => orgStore.currentOrgId),
 );
 
-const { data: jobs, isLoading } = useQuery({
-  queryKey: computed(() =>
-    orgScopedQueryKey(orgStore.currentOrgId, [
-      "prediction-jobs",
-      "all-pages",
-      props.datasetId ?? null,
-    ]),
-  ),
-  queryFn: () => listPredictionJobs(props.datasetId),
-  refetchInterval: 5000,
-  enabled: computed(() => !!orgStore.currentOrgId),
+const jobsPaginationState = reactive<PaginationProps>({
+  page: 1,
+  pageSize: 20,
+  itemCount: 0,
+  showSizePicker: true,
+  pageSizes: [10, 20, 50, 100],
+  onUpdatePage: (page: number) => {
+    jobsPaginationState.page = page;
+  },
+  onUpdatePageSize: (pageSize: number) => {
+    jobsPaginationState.pageSize = pageSize;
+    jobsPaginationState.page = 1;
+  },
+});
+const jobSearch = ref("");
+const debouncedJobSearch = refDebounced(jobSearch, 250);
+const statusFilter = ref<JobStatus | null>(null);
+const creatorScope = ref("me");
+const jobSorter = ref<DataTableSortState | null>({
+  columnKey: "created_at",
+  order: "descend",
+  sorter: true,
+});
+const jobCreatorId = computed(() =>
+  creatorScope.value === "all" ? undefined : authStore.user?.id,
+);
+const jobsParams = computed<ListPredictionJobsApiV1PredictionJobsGetParams>(() => ({
+  dataset_id: props.datasetId ?? undefined,
+  q: debouncedJobSearch.value.trim() || undefined,
+  status: statusFilter.value ?? undefined,
+  creator_id: jobCreatorId.value,
+  sort_by:
+    jobSorter.value?.columnKey === "updated_at" ||
+    jobSorter.value?.columnKey === "status" ||
+    jobSorter.value?.columnKey === "creator"
+      ? jobSorter.value.columnKey
+      : "created_at",
+  sort_order: jobSorter.value?.order === "ascend" ? "asc" : "desc",
+  offset: ((jobsPaginationState.page ?? 1) - 1) * (jobsPaginationState.pageSize ?? 20),
+  limit: jobsPaginationState.pageSize ?? 20,
+}));
+const jobsQuery = useListPredictionJobsApiV1PredictionJobsGet(jobsParams, {
+  query: {
+    queryKey: computed(() =>
+      orgScopedQueryKey(orgStore.currentOrgId, ["prediction-jobs", jobsParams.value]),
+    ),
+    refetchInterval: 5000,
+    enabled: computed(() => !!orgStore.currentOrgId),
+  },
+});
+const isLoading = computed(() => jobsQuery.isLoading.value);
+const visibleJobs = computed<PredictionJob[]>(() => jobsQuery.data.value?.items ?? []);
+const jobsPagination = computed(() => jobsPaginationState);
+
+watch(
+  () => jobsQuery.data.value?.total ?? 0,
+  (total) => {
+    jobsPaginationState.itemCount = total;
+  },
+  { immediate: true },
+);
+watch([debouncedJobSearch, statusFilter, creatorScope], () => {
+  jobsPaginationState.page = 1;
 });
 
-const visibleJobs = computed<PredictionJob[]>(() => jobs.value ?? []);
+const statusOptions = ["queued", "running", "completed", "failed", "cancelled"].map((status) => ({
+  label: status.replace(/^./, (value) => value.toUpperCase()),
+  value: status,
+}));
+const activeFilterCount = computed(
+  () =>
+    Number(jobSearch.value.trim().length > 0) +
+    Number(statusFilter.value !== null) +
+    Number(creatorScope.value !== "all"),
+);
+
+function clearFilters(): void {
+  jobSearch.value = "";
+  statusFilter.value = null;
+  creatorScope.value = "all";
+}
+
+function handleSorterChange(value: DataTableSortState | DataTableSortState[] | null): void {
+  jobSorter.value = Array.isArray(value) ? (value[0] ?? null) : value;
+  jobsPaginationState.page = 1;
+}
 
 const { data: datasets, isLoading: datasetsLoading } = useQuery({
   queryKey: computed(() =>
@@ -226,177 +289,23 @@ const datasetOptions = computed<SelectOption[]>(() =>
   })),
 );
 
+const selectedDatasetViewTypes = computed(() => {
+  if (props.datasetId) return props.compatibleViewTypes;
+  return (
+    (datasets.value ?? []).find((dataset) => dataset.id === formModel.value.dataset_id)
+      ?.view_types ?? []
+  );
+});
+
 function predictionJobRowKey(row: PredictionJob): string {
   return row.id;
 }
 
-const modelSearch = ref("");
-const debouncedModelSearch = refDebounced(modelSearch, 250);
-const modelSourceType = ref<"dataset" | "collection" | null>(null);
-const modelCreatorId = ref<string | null>(null);
-const modelPagination = reactive<PaginationProps>({
-  page: 1,
-  pageSize: 20,
-  itemCount: 0,
-  showSizePicker: true,
-  pageSizes: [10, 20, 50, 100],
-  onUpdatePage: (page: number) => {
-    modelPagination.page = page;
-  },
-  onUpdatePageSize: (pageSize: number) => {
-    modelPagination.pageSize = pageSize;
-    modelPagination.page = 1;
-  },
-});
-const modelListParams = computed(() => ({
-  offset: ((modelPagination.page ?? 1) - 1) * (modelPagination.pageSize ?? 20),
-  limit: modelPagination.pageSize ?? 20,
-  q: debouncedModelSearch.value.trim() || undefined,
-  source_type: modelSourceType.value ?? undefined,
-  creator_id: modelCreatorId.value ?? undefined,
-  sort_by: "created_at" as const,
-  sort_order: "desc" as const,
-}));
-const { data: modelsPage, isLoading: modelsLoading } = useListModelsApiV1ModelsGet(
-  modelListParams,
-  {
-    query: {
-      queryKey: computed(() =>
-        orgScopedQueryKey(orgStore.currentOrgId, [
-          "models",
-          "prediction-launcher",
-          debouncedModelSearch.value.trim(),
-          modelSourceType.value,
-          modelCreatorId.value,
-          modelPagination.page,
-          modelPagination.pageSize,
-        ]),
-      ),
-      enabled: computed(() => !!orgStore.currentOrgId && showModal.value),
-    },
-  },
-);
-
-const availableModels = computed<ModelResponse[]>(
-  () => (modelsPage.value?.items ?? []) as ModelResponse[],
-);
 const selectedModelRecord = ref<ModelResponse | null>(null);
-const selectedModel = computed(
-  () =>
-    availableModels.value.find((model) => model.id === formModel.value.model_id) ??
-    (selectedModelRecord.value?.id === formModel.value.model_id ? selectedModelRecord.value : null),
-);
-
-watch(
-  () => modelsPage.value?.total ?? 0,
-  (total) => {
-    modelPagination.itemCount = total;
-  },
-  { immediate: true },
-);
-
-watch([debouncedModelSearch, modelSourceType, modelCreatorId], () => {
-  modelPagination.page = 1;
-});
-
-const modelSourceOptions: SelectOption[] = [
-  { label: "Dataset", value: "dataset" },
-  { label: "Collection", value: "collection" },
-];
-const { data: modelCreators } = useListModelCreatorsApiV1ModelsCreatorsGet({
-  query: {
-    queryKey: computed(() => orgScopedQueryKey(orgStore.currentOrgId, ["models", "creators"])),
-    enabled: computed(() => !!orgStore.currentOrgId && showModal.value),
-  },
-});
-const modelCreatorOptions = computed<SelectOption[]>(() =>
-  (modelCreators.value ?? []).map((creator) => ({ label: creator.name, value: creator.id })),
-);
+const selectedModel = computed(() => selectedModelRecord.value);
 
 function modelDisplayName(model: ModelResponse): string {
   return model.name?.trim() || model.id.slice(0, 8);
-}
-
-function modelSourceName(model: ModelResponse): string {
-  if (model.dataset_id) return `Dataset · ${model.dataset_name?.trim() || model.dataset_id}`;
-  if (model.collection_id) {
-    return `Collection · ${model.collection_name?.trim() || model.collection_id}`;
-  }
-  return "Unknown source";
-}
-
-const modelPickerColumns = computed<DataTableColumns<ModelResponse>>(() => [
-  { type: "selection", multiple: false, width: 42 },
-  {
-    title: "Model",
-    key: "name",
-    minWidth: 180,
-    render: (model) =>
-      h("div", {}, [
-        h(
-          NText,
-          { strong: true, ellipsis: { tooltip: true }, style: { display: "block" } },
-          { default: () => modelDisplayName(model) },
-        ),
-        h(
-          "div",
-          {
-            title: model.id,
-            style: {
-              display: "block",
-              maxWidth: "190px",
-              marginTop: "2px",
-              overflow: "hidden",
-              color: "var(--n-text-color-3)",
-              fontSize: "11px",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            },
-          },
-          model.id,
-        ),
-      ]),
-  },
-  {
-    title: "Training source",
-    key: "source",
-    minWidth: 190,
-    render: (model) =>
-      h(
-        NText,
-        { ellipsis: { tooltip: true }, title: modelSourceName(model) },
-        { default: () => modelSourceName(model) },
-      ),
-  },
-  { title: "Trainer", key: "trainer_name", minWidth: 130 },
-  {
-    title: "Creator",
-    key: "creator_name",
-    minWidth: 130,
-    render: (model) => model.creator_name?.trim() || model.created_by,
-  },
-  {
-    title: "Created",
-    key: "created_at",
-    width: 170,
-    render: (model) => (model.created_at ? new Date(model.created_at).toLocaleString() : "—"),
-  },
-]);
-
-function selectModel(keys: DataTableRowKey[]): void {
-  formModel.value.model_id = keys.length ? String(keys[keys.length - 1]) : null;
-  selectedModelRecord.value =
-    availableModels.value.find((model) => model.id === formModel.value.model_id) ?? null;
-}
-
-function modelRowProps(model: ModelResponse): Record<string, unknown> {
-  return {
-    style: { cursor: "pointer" },
-    onClick: () => {
-      formModel.value.model_id = model.id;
-      selectedModelRecord.value = model;
-    },
-  };
 }
 
 type TagType = "default" | "info" | "success" | "error" | "warning";
@@ -426,6 +335,8 @@ const columns = computed<DataTableColumns<PredictionJob>>(() => {
       title: "Status",
       key: "status",
       width: 130,
+      sorter: true,
+      sortOrder: jobSorter.value?.columnKey === "status" ? jobSorter.value.order : false,
       render: (row) =>
         h(
           NTag,
@@ -454,9 +365,19 @@ const columns = computed<DataTableColumns<PredictionJob>>(() => {
         h(NText, { title: row.model_id }, { default: () => `${row.model_id.slice(0, 8)}…` }),
     },
     {
+      title: "Creator",
+      key: "creator",
+      width: 150,
+      sorter: true,
+      sortOrder: jobSorter.value?.columnKey === "creator" ? jobSorter.value.order : false,
+      render: (row) => (row.created_by === authStore.user?.id ? "You" : row.created_by || "system"),
+    },
+    {
       title: "Created At",
       key: "created_at",
       width: 180,
+      sorter: true,
+      sortOrder: jobSorter.value?.columnKey === "created_at" ? jobSorter.value.order : false,
       render: (row) => new Date(row.created_at).toLocaleString(),
     },
     {
@@ -540,18 +461,7 @@ function onCancel() {
 function resetForm() {
   formModel.value = { dataset_id: props.datasetId ?? null, model_id: null };
   selectedModelRecord.value = null;
-  modelSearch.value = "";
-  modelSourceType.value = null;
-  modelCreatorId.value = null;
-  modelPagination.page = 1;
   formRef.value?.restoreValidation();
-}
-
-function openTaskView(row: PredictionJob) {
-  router.push({
-    path: "/tasks",
-    query: { kind: "prediction", task: row.id, from: route.fullPath },
-  });
 }
 
 function openInsight(row: PredictionJob) {
@@ -607,16 +517,15 @@ function predictionTaskSummary(row: PredictionJob): TaskTrackerSummary {
   margin: 0 0 2px;
 }
 
-.model-picker {
+.history-filters {
   display: grid;
-  gap: 12px;
-  width: 100%;
+  grid-template-columns: minmax(220px, 1fr) 170px 210px auto;
+  gap: 8px;
+  align-items: center;
 }
 
-.model-picker-filters {
-  display: grid;
-  grid-template-columns: minmax(260px, 1fr) 190px 190px;
-  gap: 8px;
+.history-creator-filter {
+  min-width: 0;
 }
 
 @media (max-width: 640px) {
@@ -629,7 +538,7 @@ function predictionTaskSummary(row: PredictionJob): TaskTrackerSummary {
     width: 100%;
   }
 
-  .model-picker-filters {
+  .history-filters {
     grid-template-columns: 1fr;
   }
 }

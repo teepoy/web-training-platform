@@ -2,59 +2,184 @@
   <n-space vertical size="large">
     <n-page-header title="Task Explorer">
       <template #extra>
-        <n-button size="small" :loading="isFetching" @click="handleRefresh">
-          Refresh
-        </n-button>
+        <n-button size="small" :loading="isFetching" @click="handleRefresh"> Refresh </n-button>
       </template>
     </n-page-header>
+    <div class="task-filters">
+      <n-input v-model:value="search" clearable size="small" placeholder="Search tasks" />
+      <n-select
+        :value="taskKind"
+        clearable
+        size="small"
+        :options="kindOptions"
+        placeholder="All task kinds"
+        @update:value="setTaskKind"
+      />
+      <n-select
+        v-model:value="statusFilter"
+        clearable
+        size="small"
+        :options="statusOptions"
+        placeholder="All statuses"
+      />
+      <CreatorScopeSelect
+        v-model="creatorScope"
+        :creators="[]"
+        resource-label="tasks"
+        class="task-creator-filter"
+      />
+      <n-button v-if="activeFilterCount > 0" size="small" quaternary @click="clearFilters">
+        Clear filters ({{ activeFilterCount }})
+      </n-button>
+    </div>
     <n-spin :show="isLoading">
       <n-data-table
         :columns="columns"
-        :data="tasks ?? []"
+        :data="tasks"
         :row-key="taskRowKey"
         :bordered="true"
         :striped="true"
         :loading="isLoading"
+        :pagination="pagination"
+        remote
+        @update:sorter="handleSorterChange"
       />
     </n-spin>
-    <TaskInsightModal
-      v-model:show="insightVisible"
-      :task="selectedTask"
-      :handoff-enabled="false"
-    />
+    <TaskInsightModal v-model:show="insightVisible" :task="selectedTask" :handoff-enabled="false" />
   </n-space>
 </template>
 
 <script setup lang="ts">
-import { computed, h, provide, ref, watch } from "vue";
-import { useRoute } from "vue-router";
-import type { DataTableColumns } from "naive-ui";
+import { computed, h, provide, reactive, ref, watch } from "vue";
+import { refDebounced } from "@vueuse/core";
+import { useRoute, useRouter } from "vue-router";
+import type { DataTableColumns, DataTableSortState, PaginationProps } from "naive-ui";
 import { NButton, NTag } from "naive-ui";
 import { useOrgStore } from "@/features/auth/application/org";
+import { useAuthStore } from "@/features/auth/application/store";
 import { useTrackedTasksQuery } from "@/shared/api/hooks/task-tracker";
 import TaskInsightModal, { TASK_INSIGHT_ORG_ID_KEY } from "@/shared/components/task-insight-modal";
 import type { TaskTrackerSummaryResponse as TaskTrackerSummary } from "@/generated/orval/models";
+import type {
+  JobStatus,
+  ListTaskTrackerTasksApiV1TaskTrackerTasksGetParams,
+} from "@/generated/orval/models";
+import CreatorScopeSelect from "@/shared/components/creator-scope-select";
+import { orgScopedQueryKey } from "@/shared/api";
 
 const route = useRoute();
+const router = useRouter();
 const orgStore = useOrgStore();
-provide(TASK_INSIGHT_ORG_ID_KEY, computed(() => orgStore.currentOrgId));
+const authStore = useAuthStore();
+provide(
+  TASK_INSIGHT_ORG_ID_KEY,
+  computed(() => orgStore.currentOrgId),
+);
 
-const taskKind = computed<"training" | "prediction" | undefined>(() => {
+type TaskKind = "training" | "prediction" | "schedule_run";
+
+const taskKind = computed<TaskKind | undefined>(() => {
   const raw = route.query.kind;
   const value = Array.isArray(raw) ? raw[0] : raw;
-  return value === "training" || value === "prediction" ? value : undefined;
+  return value === "training" || value === "prediction" || value === "schedule_run"
+    ? value
+    : undefined;
 });
 
-const { data: tasks, isLoading, isFetching, refetch } = useTrackedTasksQuery(
-  () => taskKind.value,
-  { refetchInterval: false },
+const search = ref("");
+const debouncedSearch = refDebounced(search, 250);
+const statusFilter = ref<JobStatus | null>(null);
+const creatorScope = ref("me");
+const sortOrder = ref<"asc" | "desc">("desc");
+const paginationState = reactive<PaginationProps>({
+  page: 1,
+  pageSize: 20,
+  itemCount: 0,
+  showSizePicker: true,
+  pageSizes: [10, 20, 50, 100],
+  onUpdatePage: (page: number) => {
+    paginationState.page = page;
+  },
+  onUpdatePageSize: (pageSize: number) => {
+    paginationState.pageSize = pageSize;
+    paginationState.page = 1;
+  },
+});
+const creatorId = computed(() => (creatorScope.value === "all" ? undefined : authStore.user?.id));
+const queryParams = computed<ListTaskTrackerTasksApiV1TaskTrackerTasksGetParams>(() => ({
+  kind: taskKind.value,
+  q: debouncedSearch.value.trim() || undefined,
+  status: statusFilter.value ?? undefined,
+  creator_id: creatorId.value,
+  sort_order: sortOrder.value,
+  offset: ((paginationState.page ?? 1) - 1) * (paginationState.pageSize ?? 20),
+  limit: paginationState.pageSize ?? 20,
+}));
+const tasksQuery = useTrackedTasksQuery(queryParams, {
+  queryKey: computed(() =>
+    orgScopedQueryKey(orgStore.currentOrgId, ["task-tracker", queryParams.value]),
+  ),
+  enabled: computed(() => !!orgStore.currentOrgId),
+  refetchInterval: false,
+});
+const tasks = computed(() => tasksQuery.data.value?.items ?? []);
+const isLoading = computed(() => tasksQuery.isLoading.value);
+const isFetching = computed(() => tasksQuery.isFetching.value);
+const pagination = computed(() => paginationState);
+
+watch(
+  () => tasksQuery.data.value?.total ?? 0,
+  (total) => {
+    paginationState.itemCount = total;
+  },
+  { immediate: true },
 );
+watch([debouncedSearch, statusFilter, creatorScope, taskKind], () => {
+  paginationState.page = 1;
+});
+
+const kindOptions = [
+  { label: "Training", value: "training" },
+  { label: "Prediction", value: "prediction" },
+  { label: "Automation run", value: "schedule_run" },
+];
+const statusOptions = ["queued", "running", "completed", "failed", "cancelled"].map((status) => ({
+  label: status.replace(/^./, (value) => value.toUpperCase()),
+  value: status,
+}));
+const activeFilterCount = computed(
+  () =>
+    Number(search.value.trim().length > 0) +
+    Number(taskKind.value !== undefined) +
+    Number(statusFilter.value !== null) +
+    Number(creatorScope.value !== "all"),
+);
+
+function setTaskKind(value: TaskKind | null): void {
+  const query = { ...route.query };
+  if (value) query.kind = value;
+  else delete query.kind;
+  void router.replace({ query });
+}
+
+function clearFilters(): void {
+  search.value = "";
+  statusFilter.value = null;
+  creatorScope.value = "all";
+  setTaskKind(null);
+}
+
+function handleSorterChange(value: DataTableSortState | DataTableSortState[] | null): void {
+  const sorter = Array.isArray(value) ? value[0] : value;
+  sortOrder.value = sorter?.order === "ascend" ? "asc" : "desc";
+  paginationState.page = 1;
+}
 
 const insightVisible = ref(false);
 const selectedTask = ref<TaskTrackerSummary | null>(null);
 
 function handleRefresh(): void {
-  void refetch();
+  void tasksQuery.refetch();
 }
 
 function taskRowKey(row: TaskTrackerSummary): string {
@@ -65,7 +190,7 @@ watch(
   () => [route.query.task, tasks.value] as const,
   ([taskQuery, currentTasks]) => {
     const taskId = Array.isArray(taskQuery) ? taskQuery[0] : taskQuery;
-    if (!taskId || !currentTasks) return;
+    if (!taskId) return;
     const task = currentTasks.find((item) => item.id === taskId);
     if (!task) return;
     selectedTask.value = task;
@@ -86,8 +211,7 @@ const columns = computed<DataTableColumns<TaskTrackerSummary>>(() => [
     key: "dataset_name",
     width: 220,
     ellipsis: { tooltip: true },
-    render: (row) =>
-      row.dataset_name || (row.dataset_id ? `${row.dataset_id.slice(0, 8)}…` : "—"),
+    render: (row) => row.dataset_name || (row.dataset_id ? `${row.dataset_id.slice(0, 8)}…` : "—"),
   },
   {
     title: "Status",
@@ -102,6 +226,8 @@ const columns = computed<DataTableColumns<TaskTrackerSummary>>(() => [
     title: "Updated",
     key: "updated_at",
     width: 180,
+    sorter: true,
+    sortOrder: sortOrder.value === "asc" ? "ascend" : "descend",
     render: (row) => new Date(row.updated_at).toLocaleString(),
   },
   {
@@ -120,3 +246,22 @@ const columns = computed<DataTableColumns<TaskTrackerSummary>>(() => [
   },
 ]);
 </script>
+
+<style scoped>
+.task-filters {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) 170px 170px 190px auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.task-creator-filter {
+  min-width: 0;
+}
+
+@media (max-width: 820px) {
+  .task-filters {
+    grid-template-columns: 1fr;
+  }
+}
+</style>

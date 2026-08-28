@@ -6,7 +6,11 @@ from typing import cast
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.modules.training.domain.repository import ActiveTrainingExecution
+from app.modules.training.domain.repository import (
+    ActiveTrainingExecution,
+    SortDirection,
+    TrainingJobSortField,
+)
 from app.shared.api.schemas import (
     ArtifactRef,
     TrainingEvent,
@@ -14,7 +18,7 @@ from app.shared.api.schemas import (
 )
 from app.shared.api.schemas import JobStatus
 from app.shared.db.models.artifacts import ArtifactORM
-from app.shared.db.models.auth import OrganizationORM
+from app.shared.db.models.auth import OrganizationORM, UserORM
 from app.shared.db.models.training import (
     JobUserStateORM,
     TrainingEventORM,
@@ -24,6 +28,11 @@ from app.shared.db.models.training import (
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _like_pattern(value: str) -> str:
+    escaped = value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
 
 
 async def _org_name_for(session: AsyncSession, org_id: str | None) -> str:
@@ -178,6 +187,11 @@ class TrainingJobRepository:
         offset: int = 0,
         limit: int | None = 50,
         include_artifacts: bool = True,
+        query: str | None = None,
+        status: JobStatus | None = None,
+        creator_id: str | None = None,
+        sort_by: TrainingJobSortField = "created_at",
+        sort_order: SortDirection = "desc",
     ) -> tuple[list[TrainingJob], int]:
         async with self.session_factory() as session:
             conditions = []
@@ -190,12 +204,50 @@ class TrainingJobRepository:
                 )  # noqa: E712
             if dataset_id is not None:
                 conditions.append(TrainingJobORM.dataset_id == dataset_id)
+            if status is not None:
+                conditions.append(TrainingJobORM.status == status.value)
+            if creator_id is not None:
+                conditions.append(TrainingJobORM.created_by == creator_id)
+            normalized_query = query.strip() if query is not None else ""
+            if normalized_query:
+                pattern = _like_pattern(normalized_query)
+                conditions.append(
+                    or_(
+                        TrainingJobORM.id.ilike(pattern, escape="\\"),
+                        TrainingJobORM.dataset_id.ilike(pattern, escape="\\"),
+                        TrainingJobORM.collection_id.ilike(pattern, escape="\\"),
+                        TrainingJobORM.trainer_id.ilike(pattern, escape="\\"),
+                        TrainingJobORM.created_by.ilike(pattern, escape="\\"),
+                        UserORM.name.ilike(pattern, escape="\\"),
+                        UserORM.email.ilike(pattern, escape="\\"),
+                    )
+                )
 
             total = int(
                 await session.scalar(
-                    select(func.count()).select_from(TrainingJobORM).where(*conditions)
+                    select(func.count())
+                    .select_from(TrainingJobORM)
+                    .outerjoin(UserORM, UserORM.id == TrainingJobORM.created_by)
+                    .where(*conditions)
                 )
                 or 0
+            )
+            sort_columns = {
+                "created_at": TrainingJobORM.created_at,
+                "updated_at": TrainingJobORM.updated_at,
+                "status": TrainingJobORM.status,
+                "creator": func.coalesce(
+                    UserORM.name,
+                    UserORM.email,
+                    TrainingJobORM.created_by,
+                ),
+            }
+            sort_column = sort_columns[sort_by]
+            order = sort_column.asc() if sort_order == "asc" else sort_column.desc()
+            id_order = (
+                TrainingJobORM.id.asc()
+                if sort_order == "asc"
+                else TrainingJobORM.id.desc()
             )
             stmt = (
                 select(TrainingJobORM, OrganizationORM.name)
@@ -203,11 +255,9 @@ class TrainingJobRepository:
                     OrganizationORM,
                     OrganizationORM.id == TrainingJobORM.org_id,
                 )
+                .outerjoin(UserORM, UserORM.id == TrainingJobORM.created_by)
                 .where(*conditions)
-                .order_by(
-                    TrainingJobORM.created_at.desc(),
-                    TrainingJobORM.id.desc(),
-                )
+                .order_by(order.nulls_last(), id_order)
                 .offset(offset)
             )
             if limit is not None:

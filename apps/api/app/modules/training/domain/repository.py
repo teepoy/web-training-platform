@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 from app.shared.api.schemas import (
     ArtifactRef,
@@ -16,6 +16,10 @@ class ActiveTrainingExecution:
     job_id: str
     external_job_id: str
     status: JobStatus
+
+
+TrainingJobSortField = Literal["created_at", "updated_at", "status", "creator"]
+SortDirection = Literal["asc", "desc"]
 
 
 class TrainingRepository(Protocol):
@@ -45,6 +49,11 @@ class TrainingRepository(Protocol):
         offset: int = 0,
         limit: int = 50,
         include_artifacts: bool = True,
+        query: str | None = None,
+        status: JobStatus | None = None,
+        creator_id: str | None = None,
+        sort_by: TrainingJobSortField = "created_at",
+        sort_order: SortDirection = "desc",
     ) -> tuple[list[TrainingJob], int]: ...
 
     async def set_job_external_id(self, job_id: str, external_job_id: str) -> None: ...

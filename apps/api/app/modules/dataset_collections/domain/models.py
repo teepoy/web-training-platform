@@ -21,6 +21,7 @@ class DatasetCollection:
     created_by: str
     created_at: datetime
     updated_at: datetime
+    creator_name: str = ""
     default_model_id: str | None = None
     model_binding_version: int = 0
 

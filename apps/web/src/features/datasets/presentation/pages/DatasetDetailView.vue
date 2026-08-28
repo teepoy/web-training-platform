@@ -274,7 +274,7 @@ function handleTabBeforeLeave(name: string | number): boolean {
           <DatasetTrainTab :dataset-id="id" :dataset="dataset" />
         </n-tab-pane>
         <n-tab-pane name="predict" tab="Predict">
-          <DatasetPredictTab :dataset-id="id" />
+          <DatasetPredictTab :dataset-id="id" :compatible-view-types="dataset.view_types ?? []" />
         </n-tab-pane>
         <n-tab-pane v-if="supportsPredictionExport" name="export" tab="Export">
           <DatasetPredictionExportTab :dataset-id="id" />

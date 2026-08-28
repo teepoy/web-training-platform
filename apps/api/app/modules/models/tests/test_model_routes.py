@@ -195,6 +195,34 @@ def test_uploaded_model_persists_runtime_contract() -> None:
         assert metadata["trainer_id"]
 
 
+def test_list_models_filters_by_registered_view_compatibility() -> None:
+    with TestClient(app) as c:
+        _, _, model_id = _setup(c)
+
+        compatible = c.get(
+            "/api/v1/models",
+            params={"compatible_view_id": "patch_image_v1", "limit": 1},
+        )
+        incompatible = c.get(
+            "/api/v1/models",
+            params={"compatible_view_id": "image_input_v1", "limit": 1},
+        )
+        unknown = c.get(
+            "/api/v1/models",
+            params={"compatible_view_id": "not-a-registered-view"},
+        )
+
+        assert compatible.status_code == 200, compatible.text
+        assert compatible.json()["total"] == 1
+        assert [item["id"] for item in compatible.json()["items"]] == [model_id]
+        assert incompatible.status_code == 200, incompatible.text
+        assert incompatible.json() == {"items": [], "total": 0}
+        assert unknown.status_code == 422, unknown.text
+        assert unknown.json()["detail"] == (
+            "Unknown compatible view: not-a-registered-view"
+        )
+
+
 def test_delete_model_preserves_other_artifacts_from_same_training_job() -> None:
     with TestClient(app) as c:
         _, job_id, first_model_id = _setup(c)

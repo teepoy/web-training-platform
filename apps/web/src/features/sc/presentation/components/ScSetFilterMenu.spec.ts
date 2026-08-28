@@ -70,4 +70,29 @@ describe("ScSetFilterMenu", () => {
 
     expect(wrapper.emitted("apply")?.at(-1)?.[0]).toEqual([1, 2]);
   });
+
+  it("clears only the draft and cancels without applying", async () => {
+    const { wrapper } = await mountWithProviders(ScSetFilterMenu, {
+      props: {
+        search: "",
+        appliedValues: [1],
+        draftValues: ["1"],
+        options: [{ label: "One", value: 1 }],
+      },
+    });
+
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text() === "Clear")
+      ?.trigger("click");
+    expect(wrapper.emitted("update:draftValues")?.at(-1)?.[0]).toEqual([]);
+    expect(wrapper.emitted("apply")).toBeUndefined();
+
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text() === "Cancel")
+      ?.trigger("click");
+    expect(wrapper.emitted("close")).toHaveLength(1);
+    expect(wrapper.emitted("apply")).toBeUndefined();
+  });
 });

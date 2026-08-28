@@ -71,4 +71,23 @@ describe("ScTextFilterMenu", () => {
 
     expect(wrapper.emitted("apply")).toEqual([[[42, 87], true]]);
   });
+
+  it("clears only the draft and cancels without applying", async () => {
+    const { wrapper } = await mountWithProviders(ScTextFilterMenu, {
+      props: { appliedValues: [42], exclude: true },
+    });
+
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text() === "Clear")
+      ?.trigger("click");
+    expect(wrapper.emitted("apply")).toBeUndefined();
+
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text() === "Cancel")
+      ?.trigger("click");
+    expect(wrapper.emitted("close")).toHaveLength(1);
+    expect(wrapper.emitted("apply")).toBeUndefined();
+  });
 });

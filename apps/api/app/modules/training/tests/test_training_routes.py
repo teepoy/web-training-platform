@@ -7,11 +7,13 @@ Covers:
 """
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import AsyncMock, Mock, patch
 
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.shared.api.schemas import JobStatus, TrainingJob
 from seedmaker.wafer_data import build_patch_sample
 from app.modules.training.port.http.deps import (
     get_training_submission,
@@ -68,6 +70,52 @@ def test_set_job_public_disabled() -> None:
         resp = c.patch("/api/v1/training-jobs/nonexistent/public", json={"is_public": True})
         assert resp.status_code == 410
         assert resp.json()["detail"] == "Make Public is disabled"
+
+
+def test_list_training_jobs_filters_before_pagination() -> None:
+    with TestClient(app) as c:
+        repository = app.state.app_context.training.repository
+
+        async def _seed() -> None:
+            await repository.create_job(
+                TrainingJob(
+                    id="ux-filter-training-completed",
+                    dataset_id=None,
+                    trainer_id="trainer-a",
+                    status=JobStatus.COMPLETED,
+                    created_by="creator-a",
+                    org_id=DEFAULT_ORG_ID,
+                ),
+                org_id=DEFAULT_ORG_ID,
+            )
+            await repository.create_job(
+                TrainingJob(
+                    id="ux-filter-training-running",
+                    dataset_id=None,
+                    trainer_id="trainer-b",
+                    status=JobStatus.RUNNING,
+                    created_by="creator-b",
+                    org_id=DEFAULT_ORG_ID,
+                ),
+                org_id=DEFAULT_ORG_ID,
+            )
+
+        asyncio.run(_seed())
+        response = c.get(
+            "/api/v1/training-jobs",
+            params={
+                "q": "ux-filter-training",
+                "status": "completed",
+                "creator_id": "creator-a",
+                "limit": 1,
+            },
+        )
+
+        assert response.status_code == 200, response.text
+        assert response.json()["total"] == 1
+        assert [item["id"] for item in response.json()["items"]] == [
+            "ux-filter-training-completed"
+        ]
 
 
 # ---------------------------------------------------------------------------

@@ -21,12 +21,14 @@
           <input value="surface defects" readonly />
         </label>
         <label>
-          <span>Creator</span>
+          <span>Scope</span>
           <select>
-            <option>You</option>
+            <option>My datasets</option>
             <option>All creators</option>
+            <option>Alex Chen</option>
           </select>
         </label>
+        <button class="quiet">Clear filters</button>
       </div>
       <div class="advanced-row">
         <strong>Datasets</strong>

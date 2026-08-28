@@ -4,10 +4,11 @@ import asyncio
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
-from typing import Annotated
+from typing import Annotated, Literal
 
 from app.shared.api.schemas import (
     CancelJobResponse,
+    JobStatus,
     PaginatedResponse,
     TaskTrackerDetailResponse,
     TaskTrackerSummaryResponse,
@@ -34,6 +35,10 @@ router = APIRouter(prefix="/task-tracker", tags=["task_tracker"])
 async def list_task_tracker_tasks(
     task_tracker: Annotated[TaskTrackerService, Depends(get_task_tracker_service)],
     kind: str | None = Query(default=None),
+    q: str | None = Query(default=None, max_length=200),
+    status: JobStatus | None = Query(default=None),
+    creator_id: str | None = Query(default=None, max_length=255),
+    sort_order: Literal["asc", "desc"] = Query(default="desc"),
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
     offset: int = Query(default=0, ge=0),
@@ -44,6 +49,10 @@ async def list_task_tracker_tasks(
     tasks, total = await task_tracker.list_tasks(
         org_id=org.id,
         kind=kind,
+        query=q,
+        status=status,
+        creator_id=creator_id,
+        sort_order=sort_order,
         offset=offset,
         limit=limit,
     )

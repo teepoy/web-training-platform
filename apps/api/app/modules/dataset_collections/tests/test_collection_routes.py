@@ -499,6 +499,16 @@ def test_collection_list_can_filter_by_creator() -> None:
             for item in first_filtered.json()["items"]
         )
 
+        creators = client.get("/api/v1/dataset-collections/creators")
+        assert creators.status_code == 200, creators.text
+        creators_by_id = {item["id"]: item["name"] for item in creators.json()}
+        assert first_creator in creators_by_id
+        assert "second-creator" in creators_by_id
+        assert creators_by_id["second-creator"]
+        assert filtered.json()["items"][0]["creator_name"] == creators_by_id[
+            "second-creator"
+        ]
+
 
 def test_collection_list_can_search_name_description_and_id() -> None:
     with TestClient(app) as client:

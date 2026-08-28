@@ -27,9 +27,9 @@ import {
   createRevisionApiV1DatasetCollectionsCollectionIdRevisionsPost,
   createMembershipRuleApiV1DatasetCollectionsCollectionIdMembershipRulesPost,
   getCollectionApiV1DatasetCollectionsCollectionIdGet,
+  getModelApiV1ModelsModelIdGet,
   linkMembersApiV1DatasetCollectionsCollectionIdMembersPost,
   listDatasetsApiV1DatasetsGet,
-  listModelsApiV1ModelsGet,
   listMembershipRulesApiV1DatasetCollectionsCollectionIdMembershipRulesGet,
   listSourceConnectorsApiV1SourceConnectorsGet,
   listSourceProvidersApiV1SourceConnectorsProvidersGet,
@@ -44,7 +44,6 @@ import type {
   DatasetCollectionResponse,
   DatasetCollectionMemberResponse,
   DatasetCollectionRevisionResponse,
-  ModelResponse,
   CreateMembershipRuleRequest,
   FilterOperator,
   MembershipRuleResponse,
@@ -71,6 +70,7 @@ import { supportsScPredictionExport } from "@/features/sc/domain/predictionExpor
 import { useAuthStore } from "@/features/auth/application/store";
 import { useOrgStore } from "@/features/auth/application/org";
 import { orgScopedQueryKey, toUserMessage } from "@/shared/api";
+import RemoteModelPicker from "@/features/models/presentation/components/RemoteModelPicker.vue";
 
 const route = useRoute();
 const router = useRouter();
@@ -101,15 +101,6 @@ async function loadAllDatasets(): Promise<Dataset[]> {
     const page = await listDatasetsApiV1DatasetsGet({ offset: datasets.length, limit: 200 });
     datasets.push(...page.items);
     if (datasets.length >= page.total || page.items.length === 0) return datasets;
-  }
-}
-
-async function loadAllModels(): Promise<ModelResponse[]> {
-  const models: ModelResponse[] = [];
-  while (true) {
-    const page = await listModelsApiV1ModelsGet({ offset: models.length, limit: 200 });
-    models.push(...page.items);
-    if (models.length >= page.total || page.items.length === 0) return models;
   }
 }
 
@@ -156,11 +147,6 @@ const snapshotUpdateQuery = useQuery({
 const datasetsQuery = useQuery({
   queryKey: computed(() => orgScopedQueryKey(orgStore.currentOrgId, ["datasets", "all"])),
   queryFn: loadAllDatasets,
-  enabled: computed(() => !!orgStore.currentOrgId),
-});
-const modelsQuery = useQuery({
-  queryKey: computed(() => orgScopedQueryKey(orgStore.currentOrgId, ["models", "all"])),
-  queryFn: loadAllModels,
   enabled: computed(() => !!orgStore.currentOrgId),
 });
 const rulesQuery = useQuery({
@@ -408,18 +394,18 @@ const snapshotRefreshMutation = useMutation({
   onError: (error) => message.error(toUserMessage(error, "Failed to refresh snapshot")),
 });
 
-const models = computed(() => modelsQuery.data.value ?? []);
-const modelById = computed(() => new Map(models.value.map((model) => [model.id, model])));
-const defaultModel = computed(() => {
-  const modelId = collection.value?.default_model_id;
-  return modelId ? modelById.value.get(modelId) : undefined;
+const defaultModelQuery = useQuery({
+  queryKey: computed(() =>
+    orgScopedQueryKey(orgStore.currentOrgId, [
+      "models",
+      "collection-default",
+      collection.value?.default_model_id ?? null,
+    ]),
+  ),
+  queryFn: () => getModelApiV1ModelsModelIdGet(collection.value?.default_model_id ?? ""),
+  enabled: computed(() => !!orgStore.currentOrgId && !!collection.value?.default_model_id),
 });
-const modelOptions = computed(() =>
-  models.value.map((model) => ({
-    label: model.name || model.id,
-    value: model.id,
-  })),
-);
+const defaultModel = computed(() => defaultModelQuery.data.value);
 const coverage = computed(() => coverageQuery.data.value ?? []);
 const coverageByMemberId = computed(
   () => new Map(coverage.value.map((item) => [item.member_id, item])),
@@ -1323,19 +1309,17 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
       v-model:show="modelVisible"
       preset="card"
       title="Default prediction model"
-      :style="{ width: 'min(560px, calc(100vw - 32px))' }"
+      :style="{ width: 'min(960px, calc(100vw - 32px))' }"
     >
       <NText depth="3">
         The selected model applies only to newly added datasets. Existing results stay unchanged
         until you select and rerun them.
       </NText>
-      <NSelect
-        v-model:value="selectedDefaultModelId"
+      <RemoteModelPicker
+        v-model="selectedDefaultModelId"
         class="model-select"
-        filterable
-        clearable
-        :options="modelOptions"
-        placeholder="Choose an organization model"
+        :active="modelVisible"
+        :compatible-view-ids="collection ? [collection.target_view_id] : []"
       />
       <template #footer>
         <NSpace justify="space-between">

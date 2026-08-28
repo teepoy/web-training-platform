@@ -14,11 +14,13 @@ from app.shared.api.schemas import ArtifactRef, CreatorSummary, Model
 from app.shared.application.compatibility import validate_upload_metadata
 from app.modules.models.domain.repository import ModelRepository
 from app.modules.models.domain.repository import (
+    CompatibleModelSpec,
     ModelSortField,
     ModelSourceType,
     SortDirection,
 )
 from app.modules.runtime.catalog import runtime_catalog
+from app.modules.types.catalog import get_view_meta
 from app.shared.domain.protocols import ArtifactStorage
 
 
@@ -43,6 +45,7 @@ class ModelService:
         query: str | None = None,
         creator_id: str | None = None,
         source_type: ModelSourceType | None = None,
+        compatible_view_ids: tuple[str, ...] | None = None,
         sort_by: ModelSortField = "created_at",
         sort_order: SortDirection = "desc",
     ) -> list[Model]:
@@ -53,6 +56,7 @@ class ModelService:
             query=query,
             creator_id=creator_id,
             source_type=source_type,
+            compatible_specs=self._compatible_model_specs(compatible_view_ids),
             sort_by=sort_by,
             sort_order=sort_order,
         )
@@ -68,6 +72,7 @@ class ModelService:
         query: str | None = None,
         creator_id: str | None = None,
         source_type: ModelSourceType | None = None,
+        compatible_view_ids: tuple[str, ...] | None = None,
         sort_by: ModelSortField = "created_at",
         sort_order: SortDirection = "desc",
     ) -> tuple[list[Model], int]:
@@ -80,8 +85,34 @@ class ModelService:
             query=query,
             creator_id=creator_id,
             source_type=source_type,
+            compatible_specs=self._compatible_model_specs(compatible_view_ids),
             sort_by=sort_by,
             sort_order=sort_order,
+        )
+
+    @staticmethod
+    def _compatible_model_specs(
+        compatible_view_ids: tuple[str, ...] | None,
+    ) -> tuple[CompatibleModelSpec, ...] | None:
+        if compatible_view_ids is None:
+            return None
+        requested_views = set(compatible_view_ids)
+        for view_id in requested_views:
+            try:
+                get_view_meta(view_id)
+            except KeyError as exc:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Unknown compatible view: {view_id}",
+                ) from exc
+        return tuple(
+            CompatibleModelSpec(
+                trainer_id=trainer.id,
+                model_contract=trainer.output_model.contract,
+                model_schema_version=trainer.output_model.schema_version,
+            )
+            for trainer in runtime_catalog.list_trainers()
+            if trainer.input_view.view_id in requested_views
         )
 
     async def list_model_creators(self, org_id: str) -> list[CreatorSummary]:

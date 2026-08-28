@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Literal, Protocol
 
 from app.shared.api.schemas import ArtifactRef, CreatorSummary, Model
@@ -7,6 +8,13 @@ from app.shared.api.schemas import ArtifactRef, CreatorSummary, Model
 ModelSortField = Literal["name", "source", "trainer", "creator", "created_at"]
 ModelSourceType = Literal["dataset", "collection"]
 SortDirection = Literal["asc", "desc"]
+
+
+@dataclass(frozen=True, slots=True)
+class CompatibleModelSpec:
+    trainer_id: str
+    model_contract: str
+    model_schema_version: str
 
 
 class ModelRepository(Protocol):
@@ -18,6 +26,7 @@ class ModelRepository(Protocol):
         query: str | None = None,
         creator_id: str | None = None,
         source_type: ModelSourceType | None = None,
+        compatible_specs: tuple[CompatibleModelSpec, ...] | None = None,
         sort_by: ModelSortField = "created_at",
         sort_order: SortDirection = "desc",
     ) -> list[Model]: ...
@@ -33,6 +42,7 @@ class ModelRepository(Protocol):
         query: str | None = None,
         creator_id: str | None = None,
         source_type: ModelSourceType | None = None,
+        compatible_specs: tuple[CompatibleModelSpec, ...] | None = None,
         sort_by: ModelSortField = "created_at",
         sort_order: SortDirection = "desc",
     ) -> tuple[list[Model], int]: ...

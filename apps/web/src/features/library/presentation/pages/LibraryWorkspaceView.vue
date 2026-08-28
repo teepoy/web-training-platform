@@ -37,14 +37,16 @@
           class="library-search"
           @update:value="searchQuery = $event"
         />
-        <NSelect
-          :value="creatorScope"
-          :options="creatorOptions"
-          filterable
-          data-testid="library-creator"
+        <CreatorScopeSelect
+          v-model="creatorScope"
+          :creators="libraryCreators"
+          :loading="datasetCreatorsLoading || collectionCreatorsLoading"
+          resource-label="resources"
           class="library-creator"
-          @update:value="creatorScope = $event"
         />
+        <NButton v-if="activeFilterCount > 0" quaternary @click="clearFilters">
+          Clear filters ({{ activeFilterCount }})
+        </NButton>
         <NButton
           v-if="activeTab === 'collections'"
           type="primary"
@@ -70,15 +72,22 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
+import { refDebounced } from "@vueuse/core";
 import { useRoute, useRouter, type LocationQueryRaw } from "vue-router";
-import { NButton, NInput, NSelect } from "naive-ui";
-import { useListDatasetCreatorsApiV1DatasetsCreatorsGet } from "@/generated/orval/endpoints/api";
+import { NButton, NInput } from "naive-ui";
+import {
+  useListCollectionCreatorsApiV1DatasetCollectionsCreatorsGet,
+  useListDatasetCreatorsApiV1DatasetsCreatorsGet,
+} from "@/generated/orval/endpoints/api";
+import type { CreatorSummary } from "@/generated/orval/models";
 import { useAuthStore } from "@/features/auth/application/store";
 import { useOrgStore } from "@/features/auth/application/org";
 import DatasetListView from "@/features/datasets/presentation/pages/DatasetListView.vue";
 import DatasetCollectionListView from "@/features/dataset-collections/presentation/pages/DatasetCollectionListView.vue";
 import { orgScopedQueryKey } from "@/shared/api";
+import CreatorScopeSelect from "@/shared/components/creator-scope-select";
+import { useCreatorScopeQuery } from "@/shared/composables/useCreatorScopeQuery";
 
 type LibraryTab = "datasets" | "collections";
 
@@ -110,47 +119,59 @@ const activeTab = computed<LibraryTab>({
   set: (tab) => replaceQuery({ tab }),
 });
 
-const searchQuery = computed({
-  get: () => firstQueryValue(route.query.q) ?? "",
-  set: (value: string) => replaceQuery({ q: value.trim() || undefined }),
+const routeSearch = computed(() => firstQueryValue(route.query.q) ?? "");
+const searchQuery = ref(routeSearch.value);
+const debouncedSearchQuery = refDebounced(searchQuery, 250);
+watch(routeSearch, (value) => {
+  if (value !== searchQuery.value) searchQuery.value = value;
+});
+watch(debouncedSearchQuery, (value) => {
+  const normalized = value.trim();
+  if (normalized !== routeSearch.value) replaceQuery({ q: normalized || undefined });
 });
 
-const creatorScope = computed({
-  get: () => firstQueryValue(route.query.creator) ?? "me",
-  set: (value: string) => replaceQuery({ creator: value }),
-});
+const { creatorScope, creatorId } = useCreatorScopeQuery(
+  () => orgStore.currentOrgId,
+  () => authStore.user?.id,
+);
 
-const creatorId = computed<string | null>(() => {
-  if (creatorScope.value === "all") return null;
-  if (creatorScope.value === "me") return authStore.user?.id ?? null;
-  return creatorScope.value;
-});
+const { data: datasetCreators, isLoading: datasetCreatorsLoading } =
+  useListDatasetCreatorsApiV1DatasetsCreatorsGet({
+    query: {
+      queryKey: computed(() =>
+        orgScopedQueryKey(orgStore.currentOrgId, ["library", "dataset-creators"]),
+      ),
+      enabled: computed(() => !!orgStore.currentOrgId),
+    },
+  });
+const { data: collectionCreators, isLoading: collectionCreatorsLoading } =
+  useListCollectionCreatorsApiV1DatasetCollectionsCreatorsGet({
+    query: {
+      queryKey: computed(() =>
+        orgScopedQueryKey(orgStore.currentOrgId, ["library", "collection-creators"]),
+      ),
+      enabled: computed(() => !!orgStore.currentOrgId),
+    },
+  });
 
-const { data: datasetCreators } = useListDatasetCreatorsApiV1DatasetsCreatorsGet({
-  query: {
-    queryKey: computed(() => orgScopedQueryKey(orgStore.currentOrgId, ["library", "creators"])),
-    enabled: computed(() => !!orgStore.currentOrgId),
-  },
-});
-
-const creatorOptions = computed(() => {
-  const user = authStore.user;
-  const options: Array<{ label: string; value: string }> = [
-    { label: "All creators", value: "all" },
-  ];
-  if (user) {
-    options.unshift({ label: `${user.name || user.email || user.id} (You)`, value: "me" });
+const libraryCreators = computed<CreatorSummary[]>(() => {
+  const creators = new Map<string, CreatorSummary>();
+  for (const creator of [...(datasetCreators.value ?? []), ...(collectionCreators.value ?? [])]) {
+    creators.set(creator.id, creator);
   }
-  for (const creator of datasetCreators.value ?? []) {
-    if (creator.id === user?.id) continue;
-    options.push({ label: creator.name || creator.id, value: creator.id });
-  }
-  const selected = creatorScope.value;
-  if (selected !== "me" && selected !== "all" && !options.some(({ value }) => value === selected)) {
-    options.push({ label: selected, value: selected });
-  }
-  return options;
+  return [...creators.values()].sort((left, right) =>
+    (left.name || left.id).localeCompare(right.name || right.id),
+  );
 });
+
+const activeFilterCount = computed(
+  () => Number(searchQuery.value.trim().length > 0) + Number(creatorScope.value !== "all"),
+);
+
+function clearFilters(): void {
+  searchQuery.value = "";
+  creatorScope.value = "all";
+}
 
 const activeListView = computed(() =>
   activeTab.value === "collections" ? DatasetCollectionListView : DatasetListView,

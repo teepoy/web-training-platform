@@ -11,9 +11,23 @@
           placeholder="Search models"
           class="models-search"
         />
-        <n-text depth="3">
-          Use the Training Source and Creator column filters to narrow results.
-        </n-text>
+        <n-select
+          v-model:value="sourceTypeFilter"
+          size="small"
+          clearable
+          :options="sourceTypeOptions"
+          placeholder="All training sources"
+          class="models-source-filter"
+        />
+        <CreatorScopeSelect
+          v-model="creatorScope"
+          :creators="modelCreators ?? []"
+          resource-label="models"
+          class="models-creator-filter"
+        />
+        <n-button v-if="activeFilterCount > 0" size="small" quaternary @click="clearFilters">
+          Clear filters ({{ activeFilterCount }})
+        </n-button>
       </div>
 
       <BulkSelectionToolbar
@@ -39,13 +53,11 @@
         :pagination="tablePagination"
         :row-key="(row: ModelResponse) => row.id"
         :checked-row-keys="checkedModelIds"
-        :filters="tableFilters"
         :scroll-x="980"
         size="small"
         remote
         @update:checked-row-keys="checkedModelIds = $event"
         @update:sorter="handleSorterChange"
-        @update:filters="handleFiltersChange"
       >
         <template #empty>
           <n-empty :description="emptyDescription" />
@@ -78,7 +90,6 @@ import { refDebounced } from "@vueuse/core";
 import { useRouter } from "vue-router";
 import type {
   DataTableColumns,
-  DataTableFilterState,
   DataTableRowKey,
   DataTableSortState,
   PaginationProps,
@@ -106,7 +117,8 @@ import { orgScopedQueryKey, toUserMessage } from "@/shared/api";
 import { DatasetPageShell, DatasetToolbar } from "@/shared";
 import { useAuthStore } from "@/features/auth/application/store";
 import { useOrgStore } from "@/features/auth/application/org";
-import { useDefaultCreatorFilter } from "@/shared/composables/useDefaultCreatorFilter";
+import { useCreatorScopeQuery } from "@/shared/composables/useCreatorScopeQuery";
+import CreatorScopeSelect from "@/shared/components/creator-scope-select";
 import BulkSelectionToolbar from "@/shared/components/bulk-selection-toolbar/BulkSelectionToolbar.vue";
 import { runBatchAction } from "@/shared/utils/runBatchAction";
 
@@ -146,7 +158,11 @@ const pagination = reactive<PaginationProps>({
 
 const keyword = ref("");
 const debouncedKeyword = refDebounced(keyword, 250);
-const { creatorFilter, isReady: creatorFilterReady } = useDefaultCreatorFilter(
+const {
+  creatorScope,
+  creatorId: creatorFilter,
+  isReady: creatorFilterReady,
+} = useCreatorScopeQuery(
   () => orgStore.currentOrgId,
   () => authStore.user?.id,
 );
@@ -214,37 +230,26 @@ const { data: modelCreators } = useListModelCreatorsApiV1ModelsCreatorsGet({
     enabled: computed(() => !!orgStore.currentOrgId),
   },
 });
-const creatorOptions = computed(() => {
-  const options = (modelCreators.value ?? []).map((creator) => ({
-    label: creator.name,
-    value: creator.id,
-  }));
-  const user = authStore.user;
-  if (user && !options.some((option) => option.value === user.id)) {
-    options.unshift({ label: user.name || user.email || user.id, value: user.id });
-  }
-  return options;
-});
-
 watch([keyword, creatorFilter, sourceTypeFilter], () => {
   pagination.page = 1;
   checkedModelIds.value = [];
 });
 
-const tableFilters = computed<DataTableFilterState>(() => ({
-  source: sourceTypeFilter.value,
-  creator: creatorFilter.value,
-}));
+const sourceTypeOptions = [
+  { label: "Dataset", value: "dataset" },
+  { label: "Collection", value: "collection" },
+];
+const activeFilterCount = computed(
+  () =>
+    Number(keyword.value.trim().length > 0) +
+    Number(sourceTypeFilter.value !== null) +
+    Number(creatorScope.value !== "all"),
+);
 
-function firstFilterValue(value: DataTableFilterState[string]): string | null {
-  const resolved = Array.isArray(value) ? value[0] : value;
-  return typeof resolved === "string" ? resolved : null;
-}
-
-function handleFiltersChange(filters: DataTableFilterState): void {
-  const source = firstFilterValue(filters.source);
-  sourceTypeFilter.value = source === "dataset" || source === "collection" ? source : null;
-  creatorFilter.value = firstFilterValue(filters.creator);
+function clearFilters(): void {
+  keyword.value = "";
+  sourceTypeFilter.value = null;
+  creatorScope.value = "all";
 }
 
 function handleSorterChange(value: DataTableSortState | DataTableSortState[] | null): void {
@@ -409,13 +414,6 @@ const columns = computed<DataTableColumns<ModelRow>>(() => [
     width: 210,
     sorter: true,
     sortOrder: sorter.value?.columnKey === "source" ? sorter.value.order : false,
-    filter: true,
-    filterMultiple: false,
-    filterOptions: [
-      { label: "Dataset", value: "dataset" },
-      { label: "Collection", value: "collection" },
-    ],
-    filterOptionValue: sourceTypeFilter.value,
     render: (row) =>
       row.dataset_id || row.collection_id
         ? h(
@@ -446,10 +444,6 @@ const columns = computed<DataTableColumns<ModelRow>>(() => [
     width: 130,
     sorter: true,
     sortOrder: sorter.value?.columnKey === "creator" ? sorter.value.order : false,
-    filter: true,
-    filterMultiple: false,
-    filterOptions: creatorOptions.value,
-    filterOptionValue: creatorFilter.value,
     render: (row) => modelCreatorName(row),
   },
   {
@@ -467,6 +461,7 @@ const columns = computed<DataTableColumns<ModelRow>>(() => [
     fixed: "right",
     render: (row) => {
       const isCreator = row.created_by === authStore.user?.id;
+      if (!isCreator) return h(NText, { depth: 3 }, { default: () => "—" });
       return h(
         NSpace,
         { size: 6, wrap: false },
@@ -477,7 +472,6 @@ const columns = computed<DataTableColumns<ModelRow>>(() => [
               {
                 size: "small",
                 quaternary: true,
-                disabled: !isCreator,
                 onClick: () => openRename(row),
               },
               { default: () => "Rename" },
@@ -531,6 +525,11 @@ const columns = computed<DataTableColumns<ModelRow>>(() => [
   width: min(320px, 100%);
 }
 
+.models-source-filter,
+.models-creator-filter {
+  width: min(220px, 100%);
+}
+
 .mobile-table-hint {
   display: none;
 }
@@ -542,6 +541,8 @@ const columns = computed<DataTableColumns<ModelRow>>(() => [
   }
 
   .models-search,
+  .models-source-filter,
+  .models-creator-filter,
   .mobile-table-hint {
     display: block;
     margin-top: 10px;

@@ -4,6 +4,9 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
+import type { JobStatus } from './jobStatus';
+import type { ListPredictionJobsApiV1PredictionJobsGetSortBy } from './listPredictionJobsApiV1PredictionJobsGetSortBy';
+import type { ListPredictionJobsApiV1PredictionJobsGetSortOrder } from './listPredictionJobsApiV1PredictionJobsGetSortOrder';
 
 export type ListPredictionJobsApiV1PredictionJobsGetParams = {
 /**
@@ -14,6 +17,11 @@ dataset_id?: string | null;
  * Filter prediction jobs to one dataset collection.
  */
 collection_id?: string | null;
+q?: string | null;
+status?: JobStatus | null;
+creator_id?: string | null;
+sort_by?: ListPredictionJobsApiV1PredictionJobsGetSortBy;
+sort_order?: ListPredictionJobsApiV1PredictionJobsGetSortOrder;
 offset?: number;
 limit?: number;
 };

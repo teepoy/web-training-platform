@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Literal, Protocol
 
+from app.shared.api.schemas import CreatorSummary
+
 from app.modules.dataset_collections.domain.models import (
     CollectionPredictionBatch,
     CollectionPredictionBatchItem,
@@ -32,6 +34,8 @@ class DatasetCollectionRepository(Protocol):
         sort_by: CollectionSortField = "updated_at",
         sort_order: SortDirection = "desc",
     ) -> tuple[list[DatasetCollection], int]: ...
+
+    async def list_collection_creators(self, org_id: str) -> list[CreatorSummary]: ...
 
     async def get_collection(
         self, collection_id: str, org_id: str

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Literal, Protocol
 
 
 class ScheduleManagementPort(Protocol):
@@ -72,6 +72,10 @@ class ScheduleManagementPort(Protocol):
         *,
         offset: int = 0,
         limit: int = 50,
+        query: str | None = None,
+        creator_id: str | None = None,
+        state_types: list[str] | None = None,
+        sort_order: Literal["asc", "desc"] = "desc",
     ) -> tuple[list[dict[str, object]], int]: ...
 
     async def get_run(

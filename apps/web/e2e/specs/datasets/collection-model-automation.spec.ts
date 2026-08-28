@@ -1,4 +1,5 @@
 import { expect, test } from "../../fixtures";
+import { makeModel } from "../../mocks/factories";
 
 test("reruns only selected collection datasets with the pinned model @mock", async ({
   authedPage,
@@ -224,22 +225,39 @@ test("reruns only selected collection datasets with the pinned model @mock", asy
       }),
     });
   });
-  await authedPage.route("**/api/v1/models?**", async (route) => {
+  const approvedModel = makeModel({
+    id: "model-new",
+    name: "Approved defect model",
+    uri: "memory://model.pt",
+    metadata: {},
+    job_id: "training-1",
+    trainer_name: "yolo-sc-v1",
+    dataset_id: null,
+    dataset_name: null,
+  });
+  await authedPage.route("**/api/v1/models**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith("/models/creators")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([]),
+      });
+      return;
+    }
+    if (url.pathname.endsWith("/models/model-new")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(approvedModel),
+      });
+      return;
+    }
     await route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
-        items: [
-          {
-            id: "model-new",
-            name: "Approved defect model",
-            uri: "memory://model.pt",
-            kind: "model",
-            metadata: {},
-            job_id: "training-1",
-            trainer_name: "yolo-sc-v1",
-          },
-        ],
+        items: [approvedModel],
         total: 1,
       }),
     });
@@ -460,7 +478,12 @@ test("shows and explicitly refreshes an outdated Collection Snapshot @mock", asy
       }),
     });
   });
-  await authedPage.route("**/api/v1/models?**", async (route) => {
+  await authedPage.route("**/api/v1/models**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith("/models/creators")) {
+      await route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
+      return;
+    }
     await route.fulfill({
       status: 200,
       contentType: "application/json",

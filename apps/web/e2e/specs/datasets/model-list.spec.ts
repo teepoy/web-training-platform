@@ -27,10 +27,8 @@ test("model search and creator filters apply before pagination @mock", async ({
   await expect(authedPage.getByText("Beta Model")).toHaveCount(0);
 
   await authedPage.getByPlaceholder("Search models").clear();
-  const creatorHeader = authedPage.getByRole("columnheader", { name: /Creator/ });
-  await creatorHeader.locator("[data-data-table-filter]").click();
+  await authedPage.locator(".models-creator-filter").click();
   await authedPage.getByText("Bob", { exact: true }).last().click();
-  await authedPage.getByRole("button", { name: "Confirm" }).click();
   await expect(authedPage.getByText("Beta Model")).toBeVisible();
   await expect(authedPage.getByText("Alpha Model")).toHaveCount(0);
 });

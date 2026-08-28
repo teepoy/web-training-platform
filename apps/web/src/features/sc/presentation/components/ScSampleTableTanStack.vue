@@ -461,26 +461,24 @@ function applySetFilter(field: string, values: Array<string | number>): void {
 
 function applyRangeFilter(field: string): void {
   const state = filterState.value[field];
-  if (!state || state.min === null || state.max === null || state.min > state.max) return;
-  tableFilter.value = {
-    ...tableFilter.value,
-    [field]: {
-      filterType: "number",
-      type: "inRange",
-      filter: state.min,
-      filterTo: state.max,
-    },
-  };
+  if (!state) return;
+  if (state.min === null && state.max === null) {
+    const next = { ...tableFilter.value };
+    delete next[field];
+    tableFilter.value = next;
+  } else {
+    if (state.min === null || state.max === null || state.min > state.max) return;
+    tableFilter.value = {
+      ...tableFilter.value,
+      [field]: {
+        filterType: "number",
+        type: "inRange",
+        filter: state.min,
+        filterTo: state.max,
+      },
+    };
+  }
   emit("filter-change", tableFilter.value);
-  filterPopoverVersion.value += 1;
-}
-
-function clearFilter(field: string): void {
-  const next = { ...tableFilter.value };
-  delete next[field];
-  filterState.value[field] = { min: null, max: null };
-  tableFilter.value = next;
-  emit("filter-change", next);
   filterPopoverVersion.value += 1;
 }
 
@@ -494,8 +492,20 @@ function clearAllFilters(): void {
 }
 
 function openFilter(definition: ScSampleTablePresentationColumn, open: boolean): void {
-  if (!open || definition.filter !== "set") return;
-  setFilterDraft.value[definition.key] = new Set(getSetFilterValues(definition.key).map(String));
+  if (!open) {
+    filterPopoverVersion.value += 1;
+    return;
+  }
+  if (definition.filter === "set") {
+    setFilterSearch.value[definition.key] = "";
+    setFilterDraft.value[definition.key] = new Set(getSetFilterValues(definition.key).map(String));
+    return;
+  }
+  const applied = tableFilter.value[definition.key];
+  filterState.value[definition.key] =
+    applied?.filterType === "number"
+      ? { min: applied.filter, max: applied.filterTo }
+      : { min: null, max: null };
 }
 
 function closeFilterPopover(): void {
@@ -784,7 +794,7 @@ defineExpose({
           quaternary
           @click="clearAllFilters"
         >
-          Clear All Filters
+          Clear filters ({{ Object.keys(tableFilter).length }})
         </NButton>
         <NText v-if="streamStatus" depth="3" class="sst-tanstack-status-info">
           {{ streamStatus }}
@@ -986,7 +996,6 @@ defineExpose({
                       getFilterState(scrollColumns[virtualColumn.index]?.id ?? '').max = $event
                     "
                     @apply="applyRangeFilter(scrollColumns[virtualColumn.index]?.id ?? '')"
-                    @clear="clearFilter(scrollColumns[virtualColumn.index]?.id ?? '')"
                     @close="closeFilterPopover"
                   />
                 </NPopover>

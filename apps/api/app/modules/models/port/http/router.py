@@ -82,6 +82,11 @@ async def list_models(
     q: str | None = Query(default=None, max_length=200),
     creator_id: str | None = Query(default=None, max_length=255),
     source_type: ModelSourceType | None = Query(default=None),
+    compatible_view_id: str | None = Query(
+        default=None,
+        min_length=1,
+        description="Comma-separated view IDs; a model may match any listed view.",
+    ),
     sort_by: ModelSortField = Query(default="created_at"),
     sort_order: SortDirection = Query(default="desc"),
 ) -> PaginatedResponse[ModelResponse]:
@@ -94,6 +99,17 @@ async def list_models(
         query=q,
         creator_id=creator_id,
         source_type=source_type,
+        compatible_view_ids=(
+            tuple(
+                dict.fromkeys(
+                    view_id.strip()
+                    for view_id in compatible_view_id.split(",")
+                    if view_id.strip()
+                )
+            )
+            if compatible_view_id is not None
+            else None
+        ),
         sort_by=sort_by,
         sort_order=sort_order,
     )

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, false, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -11,6 +11,7 @@ from app.shared.db.models.dataset_collections import DatasetCollectionORM
 from app.shared.db.models.training import TrainingJobORM
 from app.shared.db.models.auth import UserORM
 from app.modules.models.domain.repository import (
+    CompatibleModelSpec,
     ModelSortField,
     ModelSourceType,
     SortDirection,
@@ -43,6 +44,7 @@ def _model_conditions(
     query: str | None,
     creator_id: str | None,
     source_type: ModelSourceType | None,
+    compatible_specs: tuple[CompatibleModelSpec, ...] | None,
 ) -> list[ColumnElement[bool]]:
     conditions: list[ColumnElement[bool]] = [
         ArtifactORM.kind == "model",
@@ -58,6 +60,20 @@ def _model_conditions(
         conditions.append(TrainingJobORM.dataset_id.is_not(None))
     elif source_type == "collection":
         conditions.append(TrainingJobORM.collection_id.is_not(None))
+    if compatible_specs is not None:
+        compatible_conditions = [
+            and_(
+                TrainingJobORM.trainer_id == spec.trainer_id,
+                ArtifactORM.metadata_json["model_contract"].as_string()
+                == spec.model_contract,
+                ArtifactORM.metadata_json["model_schema_version"].as_string()
+                == spec.model_schema_version,
+            )
+            for spec in compatible_specs
+        ]
+        conditions.append(
+            or_(*compatible_conditions) if compatible_conditions else false()
+        )
     normalized_query = query.strip() if query is not None else ""
     if normalized_query:
         pattern = _like_pattern(normalized_query)
@@ -92,6 +108,7 @@ class ModelArtifactRepository:
         query: str | None = None,
         creator_id: str | None = None,
         source_type: ModelSourceType | None = None,
+        compatible_specs: tuple[CompatibleModelSpec, ...] | None = None,
         sort_by: ModelSortField = "created_at",
         sort_order: SortDirection = "desc",
     ) -> list[Model]:
@@ -104,6 +121,7 @@ class ModelArtifactRepository:
             query=query,
             creator_id=creator_id,
             source_type=source_type,
+            compatible_specs=compatible_specs,
             sort_by=sort_by,
             sort_order=sort_order,
         )
@@ -120,6 +138,7 @@ class ModelArtifactRepository:
         query: str | None = None,
         creator_id: str | None = None,
         source_type: ModelSourceType | None = None,
+        compatible_specs: tuple[CompatibleModelSpec, ...] | None = None,
         sort_by: ModelSortField = "created_at",
         sort_order: SortDirection = "desc",
     ) -> tuple[list[Model], int]:
@@ -131,6 +150,7 @@ class ModelArtifactRepository:
                 query=query,
                 creator_id=creator_id,
                 source_type=source_type,
+                compatible_specs=compatible_specs,
             )
             sort_columns = {
                 "name": ArtifactORM.name,
@@ -222,6 +242,7 @@ class ModelArtifactRepository:
                 query=None,
                 creator_id=None,
                 source_type=None,
+                compatible_specs=None,
             )
             stmt = (
                 select(

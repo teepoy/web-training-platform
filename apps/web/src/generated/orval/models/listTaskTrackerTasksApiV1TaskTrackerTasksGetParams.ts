@@ -4,9 +4,15 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
+import type { JobStatus } from './jobStatus';
+import type { ListTaskTrackerTasksApiV1TaskTrackerTasksGetSortOrder } from './listTaskTrackerTasksApiV1TaskTrackerTasksGetSortOrder';
 
 export type ListTaskTrackerTasksApiV1TaskTrackerTasksGetParams = {
 kind?: string | null;
+q?: string | null;
+status?: JobStatus | null;
+creator_id?: string | null;
+sort_order?: ListTaskTrackerTasksApiV1TaskTrackerTasksGetSortOrder;
 offset?: number;
 limit?: number;
 };

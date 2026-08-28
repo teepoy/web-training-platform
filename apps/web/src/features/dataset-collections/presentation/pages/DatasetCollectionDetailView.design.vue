@@ -43,6 +43,13 @@
     <section class="summary">
       View contract · Current setup v4 · 3 linked datasets · Snapshot r3
     </section>
+    <section class="models-panel">
+      <div>
+        <strong>Default prediction model</strong>
+        <span>Searches compatible models only; results are loaded while this picker is open.</span>
+      </div>
+      <button>Choose model</button>
+    </section>
     <section class="panel muted">
       The remaining content is split across Data, Models, Snapshots, and Activity.
     </section>

@@ -32,7 +32,7 @@ from app.modules.datasets.domain.entities import DatasetRevision
 from app.modules.datasets.port.dataset_reader import DatasetReader
 from app.modules.datasets.port.local import DatasetRevisionReaderPort
 from app.modules.types.catalog import get_view_meta
-from app.shared.api.schemas import Dataset
+from app.shared.api.schemas import CreatorSummary, Dataset
 from app.shared.domain.protocols import ArtifactStorage
 
 
@@ -133,6 +133,9 @@ class DatasetCollectionService:
         if collection is None:
             raise DatasetCollectionNotFoundError("Dataset collection not found")
         return collection
+
+    async def list_collection_creators(self, org_id: str) -> list[CreatorSummary]:
+        return await self._repository.list_collection_creators(org_id)
 
     async def update_collection(
         self,

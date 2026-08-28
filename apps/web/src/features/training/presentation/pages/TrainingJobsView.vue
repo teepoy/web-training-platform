@@ -27,6 +27,26 @@
         {{ effectiveTrainDisabledReason }}
       </n-alert>
 
+      <div class="history-filters">
+        <n-input v-model:value="jobSearch" clearable size="small" placeholder="Search jobs" />
+        <n-select
+          v-model:value="statusFilter"
+          clearable
+          size="small"
+          :options="statusOptions"
+          placeholder="All statuses"
+        />
+        <CreatorScopeSelect
+          v-model="creatorScope"
+          :creators="[]"
+          resource-label="training jobs"
+          class="history-creator-filter"
+        />
+        <n-button v-if="activeFilterCount > 0" size="small" quaternary @click="clearFilters">
+          Clear filters ({{ activeFilterCount }})
+        </n-button>
+      </div>
+
       <n-spin :show="isLoading">
         <n-data-table
           :columns="columns"
@@ -36,6 +56,8 @@
           :striped="true"
           :loading="isLoading"
           :scroll-x="props.embedded ? 820 : 980"
+          remote
+          @update:sorter="handleSorterChange"
         >
           <template #empty>
             <n-empty
@@ -99,15 +121,24 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, h, provide, watch } from "vue";
+import { ref, computed, h, provide, reactive, watch } from "vue";
+import { refDebounced } from "@vueuse/core";
 import type { MaybeRef } from "vue";
 import { useRouter } from "vue-router";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
-import type { DataTableColumns, FormInst, FormRules, SelectOption } from "naive-ui";
+import type {
+  DataTableColumns,
+  DataTableSortState,
+  FormInst,
+  FormRules,
+  PaginationProps,
+  SelectOption,
+} from "naive-ui";
 import { useMessage, NTag, NButton } from "naive-ui";
 import { listDatasets } from "@/shared/api/datasets";
 import { orgScopedQueryKey, toUserMessage } from "@/shared/api";
 import { useOrgStore } from "@/features/auth/application/org";
+import { useAuthStore } from "@/features/auth/application/store";
 import {
   useListJobsApiV1TrainingJobsGet,
   useCreateTrainingJobApiV1TrainingJobsPost,
@@ -121,11 +152,13 @@ import type {
 } from "@/generated/orval/models";
 import type { Trainer } from "@/shared/api/types";
 import TaskInsightModal, { TASK_INSIGHT_ORG_ID_KEY } from "@/shared/components/task-insight-modal";
+import CreatorScopeSelect from "@/shared/components/creator-scope-select";
 
 const router = useRouter();
 const message = useMessage();
 const qc = useQueryClient();
 const orgStore = useOrgStore();
+const authStore = useAuthStore();
 const props = withDefaults(
   defineProps<{
     datasetId?: string | null;
@@ -143,11 +176,34 @@ provide(
 );
 
 const jobsPageNumber = ref(1);
-const jobsPageSize = 50;
+const jobsPageSize = ref(20);
+const jobSearch = ref("");
+const debouncedJobSearch = refDebounced(jobSearch, 250);
+const statusFilter = ref<JobStatus | null>(null);
+const creatorScope = ref("me");
+const sorter = ref<DataTableSortState | null>({
+  columnKey: "created_at",
+  order: "descend",
+  sorter: true,
+});
+const creatorId = computed(() => {
+  if (creatorScope.value === "all") return undefined;
+  return authStore.user?.id;
+});
 const jobsQueryParams = computed(() => ({
   dataset_id: props.datasetId ?? undefined,
-  offset: (jobsPageNumber.value - 1) * jobsPageSize,
-  limit: jobsPageSize,
+  q: debouncedJobSearch.value.trim() || undefined,
+  status: statusFilter.value ?? undefined,
+  creator_id: creatorId.value,
+  sort_by:
+    sorter.value?.columnKey === "updated_at" ||
+    sorter.value?.columnKey === "status" ||
+    sorter.value?.columnKey === "creator"
+      ? sorter.value.columnKey
+      : ("created_at" as const),
+  sort_order: sorter.value?.order === "ascend" ? ("asc" as const) : ("desc" as const),
+  offset: (jobsPageNumber.value - 1) * jobsPageSize.value,
+  limit: jobsPageSize.value,
 })) as MaybeRef<ListJobsApiV1TrainingJobsGetParams>;
 
 const { data: jobsPage, isLoading } = useListJobsApiV1TrainingJobsGet(jobsQueryParams, {
@@ -156,8 +212,13 @@ const { data: jobsPage, isLoading } = useListJobsApiV1TrainingJobsGet(jobsQueryP
       orgScopedQueryKey(orgStore.currentOrgId, [
         "jobs",
         props.datasetId,
+        debouncedJobSearch.value.trim(),
+        statusFilter.value,
+        creatorId.value,
+        sorter.value?.columnKey,
+        sorter.value?.order,
         jobsPageNumber.value,
-        jobsPageSize,
+        jobsPageSize.value,
       ]),
     ),
     refetchInterval: 5000,
@@ -171,16 +232,48 @@ const jobsTotal = computed(() =>
   jobsPage.value && "total" in jobsPage.value ? jobsPage.value.total : 0,
 );
 const jobsPagination = computed(() => {
-  if (jobsTotal.value <= jobsPageSize) return false;
-  return {
+  const pagination: PaginationProps = {
     page: jobsPageNumber.value,
-    pageSize: jobsPageSize,
+    pageSize: jobsPageSize.value,
     itemCount: jobsTotal.value,
+    showSizePicker: true,
+    pageSizes: [10, 20, 50, 100],
     onUpdatePage: (page: number) => {
       jobsPageNumber.value = page;
     },
+    onUpdatePageSize: (pageSize: number) => {
+      jobsPageSize.value = pageSize;
+      jobsPageNumber.value = 1;
+    },
   };
+  return pagination;
 });
+
+const statusOptions = ["queued", "running", "completed", "failed", "cancelled"].map((status) => ({
+  label: status.replace(/^./, (value) => value.toUpperCase()),
+  value: status,
+}));
+const activeFilterCount = computed(
+  () =>
+    Number(jobSearch.value.trim().length > 0) +
+    Number(statusFilter.value !== null) +
+    Number(creatorScope.value !== "all"),
+);
+
+watch([debouncedJobSearch, statusFilter, creatorScope], () => {
+  jobsPageNumber.value = 1;
+});
+
+function clearFilters(): void {
+  jobSearch.value = "";
+  statusFilter.value = null;
+  creatorScope.value = "all";
+}
+
+function handleSorterChange(value: DataTableSortState | DataTableSortState[] | null): void {
+  sorter.value = Array.isArray(value) ? (value[0] ?? null) : value;
+  jobsPageNumber.value = 1;
+}
 
 const { data: datasets, isLoading: datasetsLoading } = useQuery({
   queryKey: computed(() => orgScopedQueryKey(orgStore.currentOrgId, ["datasets", "all-pages"])),
@@ -260,6 +353,8 @@ const columns = computed<DataTableColumns<TrainingJob>>(() => {
       title: "Status",
       key: "status",
       width: 130,
+      sorter: true,
+      sortOrder: sorter.value?.columnKey === "status" ? sorter.value.order : false,
       render: (row) =>
         h(
           NTag,
@@ -301,9 +396,19 @@ const columns = computed<DataTableColumns<TrainingJob>>(() => {
       render: (row) => row.trainer_id,
     },
     {
+      title: "Creator",
+      key: "creator",
+      width: 150,
+      sorter: true,
+      sortOrder: sorter.value?.columnKey === "creator" ? sorter.value.order : false,
+      render: (row) => (row.created_by === authStore.user?.id ? "You" : row.created_by || "system"),
+    },
+    {
       title: "Created At",
       key: "created_at",
       width: 180,
+      sorter: true,
+      sortOrder: sorter.value?.columnKey === "created_at" ? sorter.value.order : false,
       render: (row) => new Date(row.created_at!).toLocaleString(),
     },
     {
@@ -457,6 +562,17 @@ function trainingTaskSummary(row: TrainingJob): TaskTrackerSummary {
   margin: 0 0 2px;
 }
 
+.history-filters {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) 170px 210px auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.history-creator-filter {
+  min-width: 0;
+}
+
 @media (max-width: 640px) {
   .embedded-section-header {
     align-items: stretch;
@@ -465,6 +581,10 @@ function trainingTaskSummary(row: TrainingJob): TaskTrackerSummary {
 
   .embedded-section-header :deep(.n-button) {
     width: 100%;
+  }
+
+  .history-filters {
+    grid-template-columns: 1fr;
   }
 }
 </style>

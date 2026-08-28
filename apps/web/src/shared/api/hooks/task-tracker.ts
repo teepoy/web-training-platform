@@ -1,21 +1,23 @@
 import { useQuery, type UseQueryOptions } from "@tanstack/vue-query";
-import { computed } from "vue";
+import { computed, toValue, type MaybeRefOrGetter } from "vue";
 import { getTaskTrackerTaskApiV1TaskTrackerTasksTaskIdGet } from "@/generated/orval/endpoints/api";
 import { listTrackedTasks } from "../task-tracker";
+import type { ListTaskTrackerTasksApiV1TaskTrackerTasksGetParams } from "@/generated/orval/models";
 
 export const taskTrackerKeys = {
   all: ["task-tracker"] as const,
-  list: (kind?: string) => ["task-tracker", "list", kind ?? "all"] as const,
+  list: (params: ListTaskTrackerTasksApiV1TaskTrackerTasksGetParams) =>
+    ["task-tracker", "list", params] as const,
   detail: (id: string) => ["task-tracker", "detail", id] as const,
 };
 
 export function useTrackedTasksQuery(
-  kind?: () => "training" | "prediction" | undefined,
+  params: MaybeRefOrGetter<ListTaskTrackerTasksApiV1TaskTrackerTasksGetParams>,
   options?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listTrackedTasks>>>>,
 ) {
   return useQuery({
-    queryKey: computed(() => taskTrackerKeys.list(kind?.())),
-    queryFn: () => listTrackedTasks(kind?.()),
+    queryKey: computed(() => taskTrackerKeys.list(toValue(params))),
+    queryFn: () => listTrackedTasks(toValue(params)),
     refetchInterval: 5000,
     ...options,
   });
