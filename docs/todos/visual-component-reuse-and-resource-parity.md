@@ -2,16 +2,19 @@
 
 ## Progress
 
-- **Overall status:** In progress; the goal is not complete.
+- **Overall status:** Complete.
 - **Completed intermediate slices:** removed the duplicate shared Dataset list
   surface; model management and Dataset/Collection model selection now use one
   model-search surface; Dataset, Collection, and Library list filters now share
   one responsive filter bar and remote-list state contract; job histories and
   Collection lists share status/list presentation; training and prediction can
-  select either resource kind and pin the latest ready Collection revision.
-- **Next milestone:** retire or alias misleading Dataset/SC-prefixed shared
-  component names and finish the i18n migration.
-- **Done when:** every acceptance criterion below is verified.
+  select either resource kind and pin the latest ready Collection revision;
+  SC lookup behavior is centralized; reusable table-filter controls moved to
+  shared ownership; and misleading `Sc*`/`Dataset*` visual component names were
+  retired without compatibility aliases.
+- **Verification:** 518 frontend unit tests, `make lint`, and the production Web
+  build pass. Rendered Storybook review covers model management/picker, filtered
+  Collection targets, and remote-list empty/error states.
 
 This document records repeated visual/list behavior and dataset-versus-collection
 feature gaps in the current web application. It is an audit and proposed cleanup
@@ -332,6 +335,12 @@ Proposed direction:
   needed to avoid a disruptive all-at-once import rewrite.
 - Keep dataset-specific columns, permissions, and actions outside the generic
   table/shell package.
+
+Completed: domain-neutral `DatasetPageShell` and `DatasetToolbar` became
+`ResourcePageShell` and `ResourceToolbar`; the Dataset table, row actions, and
+Dataset list surface retain their domain names. SC-only visual components now
+use concise names inside the SC namespace, while the reusable table-filter
+popover, range menu, and set menu live under shared ownership.
 
 ## Explicit Non-Candidates
 

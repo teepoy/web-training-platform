@@ -1,7 +1,7 @@
 <template>
   <div>
-    <DatasetPageShell v-bind="surface.pageShellProps.value">
-      <DatasetToolbar
+    <ResourcePageShell v-bind="surface.pageShellProps.value">
+      <ResourceToolbar
         v-if="!props.embedded"
         :title="activeDatasetType === 'image_sc' ? t('datasets.patchTitle') : t('datasets.title')"
       />
@@ -51,7 +51,7 @@
         @update:checked-row-keys="checkedDatasetIds = $event"
         @update:sorter="handleSorterChange"
       />
-    </DatasetPageShell>
+    </ResourcePageShell>
 
     <n-modal
       v-model:show="renameVisible"
@@ -87,7 +87,7 @@ import {
   type DataTableSortState,
 } from "naive-ui";
 import { useI18n } from "vue-i18n";
-import { DatasetPageShell, DatasetToolbar } from "@/shared";
+import { ResourcePageShell, ResourceToolbar } from "@/shared";
 import {
   deleteDatasetApiV1DatasetsDatasetIdDelete,
   getListDatasetsApiV1DatasetsGetQueryKey,

@@ -1,12 +1,12 @@
 <template>
-  <DatasetPageShell
+  <ResourcePageShell
     :is-loading="runsQuery.isLoading.value"
     :has-org="!!orgStore.currentOrgId"
     :error="runsQuery.error.value as Error | null"
   >
     <div class="automations-view" data-testid="automations-page">
       <div class="automation-toolbar">
-        <DatasetToolbar :title="t('automations.title')" />
+        <ResourceToolbar :title="t('automations.title')" />
         <NButton size="small" :loading="runsQuery.isFetching.value" @click="runsQuery.refetch()">
           {{ t("automations.refresh") }}
         </NButton>
@@ -58,7 +58,7 @@
         </template>
       </NDataTable>
     </div>
-  </DatasetPageShell>
+  </ResourcePageShell>
 </template>
 
 <script setup lang="ts">
@@ -89,7 +89,7 @@ import {
   type AutomationRunOverview,
 } from "@/features/automations/api/automationOverview";
 import { orgScopedQueryKey, toUserMessage } from "@/shared/api";
-import { DatasetPageShell, DatasetToolbar } from "@/shared";
+import { ResourcePageShell, ResourceToolbar } from "@/shared";
 import { formatDateTime } from "@/shared/i18n/format";
 
 const router = useRouter();

@@ -5,7 +5,7 @@ import ListShim from "./ListShim.vue";
 import type { DatasetListItem } from "@/shared/datasets/types";
 
 const stubs = {
-  DatasetToolbar: {
+  ResourceToolbar: {
     template: '<div data-testid="toolbar" />',
   },
   NButton: {

@@ -1,20 +1,21 @@
 import type { Meta, StoryObj } from "@storybook/vue3";
-import DatasetPageShell from "./DatasetPageShell.vue";
+import ResourcePageShell from "./ResourcePageShell.vue";
 
 const meta = {
-  title: "Shared/DatasetPageShell",
-  component: DatasetPageShell,
+  title: "Shared/ResourcePageShell",
+  component: ResourcePageShell,
   render: (args) => ({
-    components: { DatasetPageShell },
+    components: { ResourcePageShell },
     setup: () => ({ args }),
-    template: "<DatasetPageShell v-bind='args'><div style='padding: 12px'>Dataset table area</div></DatasetPageShell>",
+    template:
+      "<ResourcePageShell v-bind='args'><div style='padding: 12px'>Dataset table area</div></ResourcePageShell>",
   }),
   args: {
     isLoading: false,
     hasOrg: true,
     error: null,
   },
-} satisfies Meta<typeof DatasetPageShell>;
+} satisfies Meta<typeof ResourcePageShell>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;

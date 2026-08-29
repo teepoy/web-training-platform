@@ -39,13 +39,13 @@ export interface DatasetFlow {
   component: Component;
 }
 
-export interface DatasetPageShellProps {
+export interface ResourcePageShellProps {
   isLoading: boolean;
   hasOrg: boolean;
   error: Error | null;
 }
 
-export interface DatasetToolbarProps {
+export interface ResourceToolbarProps {
   importerFlows: FlowCard[];
   previewLauncherFlows: FlowCard[];
 }
@@ -90,8 +90,8 @@ export interface UseDatasetListSurfaceOptions<
 
 export interface UseDatasetListSurfaceResult<TDataset extends DatasetListItem = DatasetListItem> {
   datasets: ComputedRef<TDataset[]>;
-  pageShellProps: ComputedRef<DatasetPageShellProps>;
-  toolbarProps: ComputedRef<DatasetToolbarProps>;
+  pageShellProps: ComputedRef<ResourcePageShellProps>;
+  toolbarProps: ComputedRef<ResourceToolbarProps>;
   permissions: ComputedRef<DatasetListPermissions>;
   tableProps: ComputedRef<{
     datasets: TDataset[];

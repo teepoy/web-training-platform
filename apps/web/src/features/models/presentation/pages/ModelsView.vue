@@ -15,7 +15,7 @@ import { useAuthStore } from "@/features/auth/application/store";
 import { useOrgStore } from "@/features/auth/application/org";
 import { orgScopedQueryKey, toUserMessage } from "@/shared/api";
 import BulkSelectionToolbar from "@/shared/components/bulk-selection-toolbar/BulkSelectionToolbar.vue";
-import { DatasetPageShell, DatasetToolbar } from "@/shared";
+import { ResourcePageShell, ResourceToolbar } from "@/shared";
 import { runBatchAction } from "@/shared/utils/runBatchAction";
 import ModelSearchSurface from "../components/ModelSearchSurface.vue";
 
@@ -134,9 +134,9 @@ function submitRename(): false {
 </script>
 
 <template>
-  <DatasetPageShell :is-loading="false" :has-org="!!orgStore.currentOrgId">
+  <ResourcePageShell :is-loading="false" :has-org="!!orgStore.currentOrgId">
     <div class="models-view">
-      <DatasetToolbar :title="t('models.title')" />
+      <ResourceToolbar :title="t('models.title')" />
       <ModelSearchSurface
         v-model:checked-row-keys="checkedModelIds"
         mode="management"
@@ -205,7 +205,7 @@ function submitRename(): false {
         show-count
       />
     </NModal>
-  </DatasetPageShell>
+  </ResourcePageShell>
 </template>
 
 <style scoped>

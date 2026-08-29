@@ -7,9 +7,13 @@
   persistence, connected English and Simplified Chinese providers, and made
   Naive UI and VXE UI/Table follow the active locale; migrated global
   navigation, authentication/OAuth, settings/access-key, and admin/settings
-  shell copy and locale-aware access-key dates.
-- **Next milestone:** migrate shared feedback/formatting and core resource/job
-  workflows, then the SC workspace.
+  shell copy and locale-aware access-key dates; added shared date, number,
+  percentage, file-size, and relative-time formatting; localized Library,
+  Dataset/Collection lists, model search/management, training/prediction,
+  Dashboard, automations, task explorer, schedules, reusable target/status/list
+  controls, bulk selection, and shared table filters.
+- **Next milestone:** complete Dataset/Collection detail workflows and shared
+  widgets, then the SC workspace and literal-string enforcement.
 - **Done when:** every acceptance criterion below is verified; this phase covers
   frontend-visible strings only.
 

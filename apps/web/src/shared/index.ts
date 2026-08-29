@@ -3,10 +3,10 @@ export { annotationProgressPlugin as AnnotationProgressWidget } from "./componen
 export { default as BrowserSidebar } from "./components/browser-sidebar";
 export { browserSummaryPlugin as BrowserSummaryWidget } from "./components/browser-summary";
 export { dataTablePlugin as DataTableWidget } from "./components/data-table";
-export { default as DatasetPageShell } from "./components/datasets/dataset-page-shell";
+export { default as ResourcePageShell } from "./components/resource-page-shell";
 export { default as DatasetRowActions } from "./components/datasets/dataset-row-actions";
 export { default as DatasetTable } from "./components/datasets/dataset-table";
-export { default as DatasetToolbar } from "./components/datasets/dataset-toolbar";
+export { default as ResourceToolbar } from "./components/resource-toolbar";
 export { default as FlowModal } from "./components/flow-modal";
 export { default as FlowTypeSelector } from "./components/flow-type-selector";
 export { labelDistributionPlugin as LabelDistributionWidget } from "./components/label-distribution";

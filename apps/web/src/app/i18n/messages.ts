@@ -59,6 +59,8 @@ export const messages = {
       pause: "Pause",
       resume: "Resume",
       description: "Description",
+      pleaseTryAgain: "Please try again.",
+      loadResourcesFailed: "Failed to load resources",
     },
     creators: {
       mine: "My {resource}",
@@ -485,6 +487,8 @@ export const messages = {
       pause: "暂停",
       resume: "恢复",
       description: "描述",
+      pleaseTryAgain: "请重试。",
+      loadResourcesFailed: "无法加载资源",
     },
     creators: {
       mine: "我的{resource}",

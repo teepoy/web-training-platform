@@ -1,12 +1,14 @@
 import type { Meta, StoryObj } from "@storybook/vue3";
 import { defineComponent } from "vue";
-import DatasetToolbar from "./DatasetToolbar.vue";
+import ResourceToolbar from "./ResourceToolbar.vue";
 
-const MockPlugin = defineComponent({ template: "<div style='padding: 8px'>Mock flow content</div>" });
+const MockPlugin = defineComponent({
+  template: "<div style='padding: 8px'>Mock flow content</div>",
+});
 
 const meta = {
-  title: "Shared/DatasetToolbar",
-  component: DatasetToolbar,
+  title: "Shared/ResourceToolbar",
+  component: ResourceToolbar,
   args: {
     title: "Datasets",
     importerFlows: [
@@ -28,7 +30,7 @@ const meta = {
       },
     ],
   },
-} satisfies Meta<typeof DatasetToolbar>;
+} satisfies Meta<typeof ResourceToolbar>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
