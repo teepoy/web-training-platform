@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING
 import pyarrow.parquet as _pq
 from sqlalchemy import select
 
-from app.modules.sc.schema import find_images_by_role
+from app.modules.sc.schema import SC_SOURCE_SCHEMA_VERSION_V4, find_images_by_role
 from app.modules.sc.domain.image_url import build_sc_image_url
 from app.shared.db.registry import AnnotationORM
 from app.modules.storage.domain.sparse import DatasetPayloadStore, SparseManifestReader
@@ -48,6 +48,9 @@ _SPARSE_EXPORT_COLUMNS_V2 = [
     "images",
 ]
 """Scalar image identity plus the v2 embedded image list<struct>."""
+
+_SPARSE_EXPORT_COLUMNS_V4 = ["sample_id", "defect_id"]
+"""Closed identity membership stored by current SC imports."""
 
 _FINAL_PREDICTION_DIR = "final"
 _ACCUMULATED_PREDICTION_FILE = "accumulated.parquet"
@@ -103,8 +106,6 @@ class SparseExportAssembler:
         # ── 2. load annotations from DB ───────────────────────────────
         ann_label_by_sample: dict[str, str] = await self._load_annotations(
             manifest_sample_keys=list(manifest.sample_index.keys())
-            if manifest.sample_index
-            else [],
         )
 
         # ── 3. load accumulated final prediction results ──────────────
@@ -116,7 +117,11 @@ class SparseExportAssembler:
         shards_sorted = sorted(manifest.shards, key=lambda s: s.shard_index)
 
         schema_version = manifest.schema_version
-        if schema_version == "v3":
+        if schema_version == SC_SOURCE_SCHEMA_VERSION_V4:
+            columns = _SPARSE_EXPORT_COLUMNS_V4
+            export_format = "sparse-export-v4"
+            source_inspection_time, source_wafer_key = self._v4_source_identity(dataset)
+        elif schema_version == "v3":
             columns = [column.name for column in manifest.schema_columns]
             if not columns:
                 raise ValueError(
@@ -148,6 +153,13 @@ class SparseExportAssembler:
                 columns=columns,
             )
 
+            if not manifest.sample_index:
+                ann_label_by_sample.update(
+                    await self._load_annotations(
+                        [str(row.get("sample_id", "")) for row in rows]
+                    )
+                )
+
             for row_index, row in enumerate(rows):
                 sample_id = str(row.get("sample_id", ""))
 
@@ -157,7 +169,15 @@ class SparseExportAssembler:
                 # ── prediction join ───────────────────────────────
                 pred = pred_by_sample.get(sample_id)
 
-                if schema_version == "v3":
+                if schema_version == SC_SOURCE_SCHEMA_VERSION_V4:
+                    sample_row = self._assemble_v4_row(
+                        row=row,
+                        dataset_id=dataset_id,
+                        sample_id=sample_id,
+                        inspection_time=source_inspection_time,
+                        wafer_key=source_wafer_key,
+                    )
+                elif schema_version == "v3":
                     sample_row = self._assemble_v3_row(
                         row=row,
                         dataset_id=dataset_id,
@@ -350,6 +370,40 @@ class SparseExportAssembler:
     # ------------------------------------------------------------------
 
     @staticmethod
+    def _v4_source_identity(dataset: Dataset) -> tuple[str, int]:
+        inspection_time = dataset.dataset_meta.get("source_inspection_time")
+        wafer_key = dataset.dataset_meta.get("source_wafer_key")
+        if not isinstance(inspection_time, str) or not inspection_time.strip():
+            raise ValueError(
+                f"SC Dataset {dataset.id} is missing source_inspection_time"
+            )
+        if not isinstance(wafer_key, int) or isinstance(wafer_key, bool):
+            raise ValueError(f"SC Dataset {dataset.id} has invalid source_wafer_key")
+        return inspection_time, wafer_key
+
+    @staticmethod
+    def _assemble_v4_row(
+        *,
+        row: dict[str, object],
+        dataset_id: str,
+        sample_id: str,
+        inspection_time: str,
+        wafer_key: int,
+    ) -> dict:
+        """Export identity membership without treating stored legacy fields as source."""
+        identity_row = {
+            "sample_id": sample_id,
+            "defect_id": str(row.get("defect_id") or sample_id),
+            "inspection_time": inspection_time,
+            "wafer_key": wafer_key,
+        }
+        return SparseExportAssembler._assemble_v3_row(
+            row=identity_row,
+            dataset_id=dataset_id,
+            sample_id=sample_id,
+        )
+
+    @staticmethod
     def _assemble_v3_row(
         *,
         row: dict[str, object],
@@ -498,6 +552,7 @@ class SparseExportAssembler:
             "v1": "sparse-export-v1",
             "v2": "sparse-export-v2",
             "v3": "sparse-export-v3",
+            SC_SOURCE_SCHEMA_VERSION_V4: "sparse-export-v4",
         }.get(schema_version)
         if export_format is None:
             raise ValueError(

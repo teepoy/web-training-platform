@@ -139,7 +139,16 @@ Workers must not call the materialization endpoint before compute begins. Failur
 
 **Predict.** `predict_job` resolves selected identity membership against the current SC upstream rows before invoking the runtime. The Ultralytics module materializes bounded Parquet and downloads its checkpoint to its own temporary directory. A four-worker prediction DataLoader performs Parquet reads, grayscale decode, `128x128` resize, and two-channel stack; the GPU-facing model loop consumes collated batches of 256. Only the storage write path is shared. Predicting the full dataset should pass `sample_ids=None`; sending 100k IDs through Prefect parameters exceeds Prefect's serialized-parameter limit.
 
-**Export.** The `SparseExportAssembler` joins shard rows with annotations and prediction results, producing `sparse-export-v1` format output. Annotations are resolved via `sample_id IN (manifest.sample_index keys)` (batched at 500). Prediction results are joined by `(shard_index, row_index)` from the latest completed prediction job's per-shard Parquet output.
+**Generic export.** The `SparseExportAssembler` emits a format matching the
+physical sparse schema (`sparse-export-v1` through `sparse-export-v4`). For
+`v4_identity`, it reads only `sample_id` and `defect_id`, uses Dataset-level
+inspection identity to build deterministic patch references, and joins
+annotations and prediction results. Scalable v3 manifests load annotation IDs
+from each shard batch rather than requiring the retired in-memory
+`manifest.sample_index`. Mutable source columns are deliberately absent from
+this generic membership export; SC Parquet/KLARF/ZIP result exports resolve
+their requested fields from the latest upstream projection and fail if that
+source cannot be resolved.
 
 ### Unsupported SC Capabilities (Intentional)
 

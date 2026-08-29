@@ -2,16 +2,21 @@
 
 ## Progress
 
-- **Overall status:** In progress; the storage and authoritative read boundary
-  are implemented and covered by focused tests.
+- **Overall status:** Complete.
 - **Completed intermediate slice:** new imports write schema
   `v4_identity` (`sample_id`, `defect_id`); Dataset/Collection workbench,
   map/filter, runtime, and prediction-export paths rehydrate current source
   rows; v2/v3 extras are ignored; cache keys include inspection freshness; and
   the unused direct Sample table endpoints/client have been removed.
-- **Next milestone:** verify the generic sparse-export surface and complete
-  broad/E2E checks.
-- **Done when:** every acceptance criterion below is verified.
+- **Final slice:** the generic sparse exporter now accepts `v4_identity`, reads
+  only the two identity columns, joins annotations for scalable locator-index
+  manifests, and emits deterministic patch references from Dataset-level source
+  identity. Mutable source fields remain on the SC-specific export paths, which
+  resolve latest upstream values and fail on source errors.
+- **Verification:** identity import, latest-source projection, missing-source
+  failure, provider cache freshness, Dataset/Collection runtime, prediction
+  export, generic v1-v4 export, frontend unit/build, and mocked browser flows
+  pass. The federated architecture graphs are valid.
 
 This document records the proposal to give the SC Sample table one explicit
 source of truth for source attributes. Persistent Dataset storage should retain

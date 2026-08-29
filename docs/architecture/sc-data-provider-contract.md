@@ -190,6 +190,20 @@ its logical key, source freshness, and platform revision. Redis stores object
 metadata and access order; the file itself stays in the configured cache
 directory.
 
+Every visible Sample-table column has one authority:
+
+| Column category                                                              | Authority                                         |
+| ---------------------------------------------------------------------------- | ------------------------------------------------- |
+| `sample_id`, `defect_id`, Dataset/Collection membership                      | Persistent identity shard and Collection revision |
+| Inspection coordinates, bins, class/source metadata, mutable upstream fields | Latest SC upstream projection                     |
+| Annotation labels and annotation identity                                    | Platform annotation overlay                       |
+| Prediction labels, confidence, and prediction identity                       | Platform prediction overlay                       |
+| `row_key`, map/reticle values, display counts, and other view-only values    | Disposable query derivation                       |
+
+Neither the browser nor the generic storage aggregate chooses between these
+authorities. A missing upstream row or unavailable upstream fails a
+source-dependent query before overlays are exposed.
+
 ### Build and publication
 
 1. A reader validates Redis metadata, exact path, file size, and Parquet
