@@ -21,6 +21,7 @@ members = [
     "proto-stubs",
     "sampling-rules",
     "sc-upstream",
+    "sc-upstream-simulator",
 ]
 
 [[manifest.dependency-metadata]]
@@ -6363,6 +6364,37 @@ requires-dist = [
 dev = [
     { name = "pytest", specifier = ">=8.0" },
     { name = "watchfiles", specifier = ">=1.2.0" },
+]
+
+[[package]]
+name = "sc-upstream-simulator"
+version = "0.1.0"
+source = { editable = "services/sc-upstream-simulator" }
+dependencies = [
+    { name = "alembic" },
+    { name = "asyncpg" },
+    { name = "sqlalchemy" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "aiosqlite" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "alembic", specifier = ">=1.18" },
+    { name = "asyncpg", specifier = ">=0.31" },
+    { name = "sqlalchemy", specifier = ">=2.0" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "aiosqlite", specifier = ">=0.22" },
+    { name = "pytest", specifier = ">=8.0" },
+    { name = "pytest-asyncio", specifier = ">=1.3" },
 ]
 
 [[package]]

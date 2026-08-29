@@ -23,14 +23,10 @@ PROFILE_OWNED_FIXED_ENVIRONMENT_PREFIXES = (
     "SC_DATA_PROVIDER_",
     "SC_PIPELINE_",
 )
-DEV_PROFILE_OWNED_ENVIRONMENT_KEYS = frozenset(
+DEPLOYMENT_OWNED_PROFILE_PREFIX_EXCEPTIONS = frozenset(
     {
-        "JWT_SECRET_KEY",
-        "LABEL_STUDIO_API_KEY",
-        "LABEL_STUDIO_EXTERNAL_URL",
-        "MINIO_ACCESS_KEY",
-        "MINIO_SECRET_KEY",
-        "PREFECT_UI_URL",
+        "SC_DATA_PROVIDER_CACHE_DIR",
+        "SC_DATA_PROVIDER_CACHE_NAMESPACE",
     }
 )
 ENVIRONMENT_SPECIFIC_VALUES = frozenset(
@@ -247,15 +243,12 @@ def _assert_profile_owned_settings_not_exposed(
             duplicates = {
                 key
                 for key in environment
-                if key in PROFILE_OWNED_FIXED_ENVIRONMENT_KEYS
-                or key.startswith(PROFILE_OWNED_FIXED_ENVIRONMENT_PREFIXES)
-            }
-            if environment["APP_CONFIG_PROFILE"] == "dev":
-                duplicates.update(
-                    key
-                    for key in DEV_PROFILE_OWNED_ENVIRONMENT_KEYS
-                    if key in environment
+                if (
+                    key in PROFILE_OWNED_FIXED_ENVIRONMENT_KEYS
+                    or key.startswith(PROFILE_OWNED_FIXED_ENVIRONMENT_PREFIXES)
                 )
+                and key not in DEPLOYMENT_OWNED_PROFILE_PREFIX_EXCEPTIONS
+            }
             if duplicates:
                 errors.append(
                     f"{project_name}/{service_name}: profile-owned settings must "

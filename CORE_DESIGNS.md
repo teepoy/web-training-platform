@@ -59,7 +59,7 @@ SC 大表查询与普通 HTTP API 必须运行在不同进程和不同容器中�
 - Compose 使用独立 `sc-data-provider` 服务，由 Uvicorn `--workers 4` 在单个 `8001` socket 上管理四个 worker；Nginx 只代理 `sc-data-provider:8001`，不做容器内多端口负载均衡。
 - Kubernetes 每 Pod 只运行一个 Uvicorn worker，由 Deployment replicas 和 Service 分流。`emptyDir` cache 与 Redis cache metadata 按 Pod namespace 隔离，scope revision 在所有 Pod 间共享。
 - 每个 worker 只拥有一个 DuckDB connection、一条单线程执行队列和独立 spill 目录。内存、spill、响应大小、SQL timeout、cache 水位与 TTL 必须在配置和部署清单中显式声明。
-- `/health` 与 `/ready` 每次调用都以 info 级别记录当前 worker RSS；`/ready` 在超过 `SC_DATA_PROVIDER_MAX_RSS_MB` 时返回 503，容器/Pod 的硬内存 limit 作为最终保护。
+- `/health` 与 `/ready` 每次调用都以 info 级别记录当前 worker RSS；`/ready` 在超过 profile-owned `sc.data_provider.max_rss_mb` 时返回 503，容器/Pod 的硬内存 limit 作为最终保护。
 - Perspective WebSocket、Supervisor、watchdog、多端口 healthcheck 与相关包不属于目标架构，不得作为失败 fallback 恢复。
 
 > **迁移说明：** 旧版独立的 `gpu-worker` / `inference` / `embedding` 服务已并入 `apps/api` Prefect flow。原 `apps/worker`、`apps/inference`、`apps/embedding` 目录已移除。
@@ -488,6 +488,17 @@ Label Studio 是人工标注界面和临时同步界面，不是平台 predictio
 ## 8. 配置与环境
 
 运行行为必须由配置 profile 决定，不允许在业务代码中硬编码环境分支。
+
+- Git 跟踪的 `apps/api/config/base.yaml` 与所选 profile YAML 是稳定非 secret
+  application behavior、limits、bucket names、model choice 与 tuning 的唯一来源；
+  production image 必须直接包含并读取这些文件，不生成、挂载或从 release env 重建
+  第二份 `prod.yaml`。
+- 环境变量只拥有 secret 与 deployment topology，例如 credential、password-bearing
+  database URL、public/internal endpoint、mount/cache path 与 per-Pod namespace。业务
+  service 只读取 typed `AppConfig`，不在各 module 再次读取同一 environment variable。
+- 同一 setting 不得同时由 YAML 与 environment 提供。已退役的 non-secret override
+  environment variable 直接删除，不保留 alias；缺少 required secret/topology 时启动
+  明确失败。
 
 - `test` profile 只用于单元/集成测试，可以使用 SQLite、memory storage、mock 外部服务；不得作为可部署测试环境。
 - `pre-release` 是可部署的测试/验收环境，必须与 `prod` 使用相同的 Postgres、S3-compatible object storage、后台编排系统和 out-of-process runtime service 边界。

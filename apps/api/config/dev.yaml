@@ -1,11 +1,10 @@
+app:
+  env: dev
+
 execution:
   engine: prefect
 
-auth:
-  jwt_secret_key: "local-development-jwt-secret-not-for-shared-host"
-
 db:
-  url: "postgresql+asyncpg://postgres:postgres@localhost:5432/finetune"
   echo: false
   auto_create: false
 
@@ -17,14 +16,7 @@ k8s:
   incluster: true
   kubeconfig: null
 
-label_studio:
-  url: "http://localhost:8080"
-  external_url: "http://localhost:8080"
-  api_key: "ls-smoke-token-for-local-dev"
-  database_url: "postgresql+asyncpg://postgres:postgres@localhost:5432/labelstudio"
-
 sc:
   data_provider:
-    cache_dir: /var/cache/sc-data-provider
     container_memory_limit_mb: 6144
     service_headroom_mb: 512

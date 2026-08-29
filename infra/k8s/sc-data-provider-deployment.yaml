@@ -60,7 +60,7 @@ spec:
             requests:
               memory: 2Gi
             limits:
-              memory: 2Gi
+              memory: 6Gi
           volumeMounts:
             - name: cache
               mountPath: /var/cache/sc-data-provider

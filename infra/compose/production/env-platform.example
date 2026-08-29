@@ -10,6 +10,12 @@ FRONTEND_URL=https://finetune.example.com
 JWT_SECRET_KEY=<random-secret-at-least-32-bytes>
 # Required only when oauth.enabled=true in the selected API profile.
 OAUTH_STATE_SECRET=
+OAUTH_GOOGLE_CLIENT_ID=
+OAUTH_GOOGLE_CLIENT_SECRET=
+OAUTH_GITHUB_CLIENT_ID=
+OAUTH_GITHUB_CLIENT_SECRET=
+OAUTH_CUSTOM_CLIENT_ID=
+OAUTH_CUSTOM_CLIENT_SECRET=
 
 # Compose memory limits (platform services and one-shot ops)
 PREFECT_SERVER_MEMORY=4g
@@ -88,3 +94,4 @@ IMAGE_PARSER_CACHE_MAX_BYTES=34359738368
 # LLM (optional)
 LLM_BASE_URL=
 LLM_API_KEY=
+REDIS_PASSWORD=

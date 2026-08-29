@@ -16,7 +16,6 @@ test("API requests do NOT use duplicated /api/v1/ prefix @mock @smoke", async ({
   await apiMocks.core.mockDashboard();
   await apiMocks.core.mockHealth();
   await apiMocks.core.mockExportFormats();
-  await apiMocks.core.mockSettings();
   await apiMocks.core.mockPlugins();
 
   await authedPage.goto("/datasets", { waitUntil: "networkidle" });

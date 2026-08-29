@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 
 from injector import Binder, Injector, Module, provider, singleton
@@ -38,13 +37,6 @@ class ScDataProviderAppContext:
     shared: ScDataProviderSharedInfra
     injector: Injector
     upstream_reader: GrpcScUpstream
-
-
-def _required_environment(name: str) -> str:
-    value = os.environ.get(name)
-    if not value:
-        raise RuntimeError(f"Missing required SC data-provider configuration: {name}")
-    return value
 
 
 def _build_artifact_storage(cfg: AppConfig) -> ArtifactStorage:
@@ -163,13 +155,11 @@ class _ScDataProviderModule(Module):
 
 
 def build_sc_data_provider_app_context(cfg: AppConfig) -> ScDataProviderAppContext:
-    grpc_addr = _required_environment("SC_UPSTREAM_ADDR")
-    flight_addr = _required_environment("SC_UPSTREAM_FLIGHT_ADDR")
     db_engine = create_engine(db_url=str(cfg.db.url), echo=bool(cfg.db.echo))
     session_factory = AppDatabaseSessionFactory(create_session_factory(db_engine))
     upstream_reader = GrpcScUpstream(
-        grpc_addr=grpc_addr,
-        flight_addr=flight_addr,
+        grpc_addr=cfg.sc.upstream.grpc_addr,
+        flight_addr=cfg.sc.upstream.flight_addr,
     )
     injector = Injector(
         [

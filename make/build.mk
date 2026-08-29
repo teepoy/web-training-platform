@@ -36,7 +36,7 @@ dev-web: ## Start frontend dev server (default: 5173)
 prefect-worker-gpu-host: ## Start a host-side GPU Prefect worker (DO NOT run concurrently with compose --profile gpu)
 	cd apps/api && $(UV_RUN_INSTALLED) python -m prefect init --profile local --no-prompt && \
 	$(DEV_API_HOST_ENV) \
-	PLATFORM_API_URL=http://localhost:8000 \
+	PLATFORM_API_URL=$(API_URL) \
 	LITELLM_LOCAL_MODEL_COST_MAP="True" $(UV_RUN_INSTALLED) python -m prefect worker start --pool default-gpu
 
 # ──────────────────────────────────────────────
@@ -45,11 +45,11 @@ prefect-worker-gpu-host: ## Start a host-side GPU Prefect worker (DO NOT run con
 
 .PHONY: db-migrate
 db-migrate: ## Run Alembic migrations (upgrade head)
-	cd $(API_DIR) && uv run --no-dev --frozen alembic upgrade head
+	cd $(API_DIR) && $(DEV_API_HOST_ENV) uv run --no-dev --frozen alembic upgrade head
 
 .PHONY: db-revision
 db-revision: ## Create a new Alembic revision (usage: make db-revision MSG="add users table")
-	cd $(API_DIR) && uv run --no-dev --frozen alembic revision --autogenerate -m "$(MSG)"
+	cd $(API_DIR) && $(DEV_API_HOST_ENV) uv run --no-dev --frozen alembic revision --autogenerate -m "$(MSG)"
 
 .PHONY: build-web
 build-web: ## Build the frontend bundle
@@ -65,11 +65,11 @@ docs-serve: ## Serve the MkDocs documentation site locally
 
 .PHONY: create-superadmin
 create-superadmin: ## Create or promote a super admin user (EMAIL=, PASSWORD=, NAME= required)
-	cd $(API_DIR) && APP_CONFIG_PROFILE=dev BOOTSTRAP_SUPERADMIN_EMAIL='$(EMAIL)' BOOTSTRAP_SUPERADMIN_PASSWORD='$(PASSWORD)' BOOTSTRAP_SUPERADMIN_NAME='$(NAME)' uv run python scripts/create_superadmin.py
+	cd $(API_DIR) && $(DEV_API_HOST_ENV) BOOTSTRAP_SUPERADMIN_EMAIL='$(EMAIL)' BOOTSTRAP_SUPERADMIN_PASSWORD='$(PASSWORD)' BOOTSTRAP_SUPERADMIN_NAME='$(NAME)' uv run python scripts/create_superadmin.py
 
 .PHONY: reset-dev-database
 reset-dev-database: ## Destructively reset the dev database through Alembic
-	cd $(API_DIR) && APP_CONFIG_PROFILE=dev ALLOW_RESET_APP_DATA=1 uv run python scripts/reset_dev_database.py
+	cd $(API_DIR) && $(DEV_API_HOST_ENV) ALLOW_RESET_APP_DATA=1 uv run python scripts/reset_dev_database.py
 
 
 # ──────────────────────────────────────────────
@@ -126,7 +126,7 @@ seed-wafer-gallery-mock-inspections: ## Seed three small gallery profile inspect
 
 .PHONY: seed-wafer-patch-zips
 seed-wafer-patch-zips: ## Seed mock SC patch zips into MinIO and inspection_zips.db
-	uv run python infra/compose/seed_patch_zips.py \
+	uv run python scripts/seedmaker/sc_artifacts.py \
 		--s3-endpoint "$(SC_PATCH_ZIP_S3_ENDPOINT)" \
 		--bucket "$(SC_PATCH_ZIP_BUCKET)" \
 		--inspection-db-url "sqlite:///$(CURDIR)/$(DATA_DIR)/wafer_inspection.db" \
@@ -136,7 +136,7 @@ seed-wafer-patch-zips: ## Seed mock SC patch zips into MinIO and inspection_zips
 
 .PHONY: seed-wafer-gallery-patch-zips
 seed-wafer-gallery-patch-zips: ## Seed 8/16-bit one/two-instance gallery patch archives
-	uv run python infra/compose/seed_patch_zips.py \
+	uv run python scripts/seedmaker/sc_artifacts.py \
 		--s3-endpoint "$(SC_PATCH_ZIP_S3_ENDPOINT)" --bucket "$(SC_PATCH_ZIP_BUCKET)" \
 		--inspection-db-url "sqlite:///$(CURDIR)/$(DATA_DIR)/wafer_inspection.db" \
 		--zips-db-url "sqlite:///$(CURDIR)/$(DATA_DIR)/inspection_zips.db" \
@@ -145,7 +145,7 @@ seed-wafer-gallery-patch-zips: ## Seed 8/16-bit one/two-instance gallery patch a
 		--imaged-defects "$(SC_GALLERY_PROFILE_IMAGED)" --review-images-per-defect 1 \
 		--inspection-time "$(SC_WAFER_MOCK_INSPECTION_TIME)" \
 		--wafer-key 81 --patch-bit-depth 8 --reference-count 1 --difference-count 1
-	uv run python infra/compose/seed_patch_zips.py \
+	uv run python scripts/seedmaker/sc_artifacts.py \
 		--s3-endpoint "$(SC_PATCH_ZIP_S3_ENDPOINT)" --bucket "$(SC_PATCH_ZIP_BUCKET)" \
 		--inspection-db-url "sqlite:///$(CURDIR)/$(DATA_DIR)/wafer_inspection.db" \
 		--zips-db-url "sqlite:///$(CURDIR)/$(DATA_DIR)/inspection_zips.db" \
@@ -154,7 +154,7 @@ seed-wafer-gallery-patch-zips: ## Seed 8/16-bit one/two-instance gallery patch a
 		--imaged-defects "$(SC_GALLERY_PROFILE_IMAGED)" --review-images-per-defect 1 \
 		--inspection-time "$(SC_WAFER_MOCK_INSPECTION_TIME)" \
 		--wafer-key 82 --patch-bit-depth 16 --reference-count 1 --difference-count 1
-	uv run python infra/compose/seed_patch_zips.py \
+	uv run python scripts/seedmaker/sc_artifacts.py \
 		--s3-endpoint "$(SC_PATCH_ZIP_S3_ENDPOINT)" --bucket "$(SC_PATCH_ZIP_BUCKET)" \
 		--inspection-db-url "sqlite:///$(CURDIR)/$(DATA_DIR)/wafer_inspection.db" \
 		--zips-db-url "sqlite:///$(CURDIR)/$(DATA_DIR)/inspection_zips.db" \

@@ -81,28 +81,14 @@ def init_sc(
         )
 
     if upstream_reader is None:
-        import os
-
         from app.modules.sc.adapter.grpc_upstream import GrpcScUpstream
 
-        cfg = shared.config
-        sc_cfg = getattr(cfg, "sc", None)
-        upstream_cfg = getattr(sc_cfg, "upstream", None) if sc_cfg else None
-        grpc_addr = (
-            upstream_cfg.grpc_addr
-            if upstream_cfg
-            else os.environ.get("SC_UPSTREAM_ADDR", "sc-upstream:9091")
+        upstream_reader = GrpcScUpstream(
+            grpc_addr=shared.config.sc.upstream.grpc_addr,
+            flight_addr=shared.config.sc.upstream.flight_addr,
         )
-        flight_addr = (
-            upstream_cfg.flight_addr
-            if upstream_cfg
-            else os.environ.get("SC_UPSTREAM_FLIGHT_ADDR", "grpc://sc-upstream:9093")
-        )
-        upstream_reader = GrpcScUpstream(grpc_addr=grpc_addr, flight_addr=flight_addr)
 
-    import os
-
-    image_parser_addr = os.environ.get("IMAGE_PARSER_GRPC_ADDR", "image-parser:9092")
+    image_parser_addr = shared.config.sc.image_parser.grpc_addr
     if prediction_image_stream_factory is None:
         prediction_image_stream_factory = GrpcJobImageStreamFactory(
             addr=image_parser_addr,

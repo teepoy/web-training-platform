@@ -46,8 +46,10 @@ Configuration ownership is also split by concern:
 
 - Compose manifests own container topology, commands, dependencies, mounts,
   health checks, and resource limits.
-- `apps/api/config/*.yaml` owns application-profile defaults; Compose
-  environment variables provide deployment-specific overrides.
+- `apps/api/config/*.yaml` is the only source for stable application behavior,
+  limits, bucket names, model choice, and tuning. Compose environment variables
+  own only secrets and deployment topology; they do not override YAML-owned
+  settings.
 - `x-platform-environment` is repeated where services run as separate Compose
   projects because YAML anchors are file-local. In particular, platform and
   one-shot ops manifests cannot share an anchor; `make check-config` enforces
@@ -274,7 +276,7 @@ All services at a glance:
   generation (300,000 by default); zip seeding validates the source defect IDs
   are the contiguous range `1..N` before uploading objects or metadata, then
   clears stale SC upstream inspection/zip metadata after the replacement
-  succeeds. `infra/compose/seed_patch_zips.py --inspection-time <ISO timestamp>`
+  succeeds. `scripts/seedmaker/sc_artifacts.py --inspection-time <ISO timestamp>`
   can seed an older inspection explicitly when immutable imported datasets still
   reference it; the default remains the latest inspection for the wafer.
 - Dev services default `LOG_LEVEL` to `INFO`, so data-provider memory records

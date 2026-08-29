@@ -32,6 +32,11 @@ Configuration profiles:
 - `prod`: production; credentials, public URLs, and signing secrets are required
 - `APP_CONFIG_PROFILE` selects config file in `config/`.
 
+Tracked profile YAML owns stable application behavior, limits, bucket names,
+model choice, and tuning. Environment variables are accepted only for secrets
+and deployment topology such as database URLs, service endpoints, mount/cache
+paths, and per-Pod cache namespaces. Retired YAML overrides are not supported.
+
 Run tests:
 
 ```bash

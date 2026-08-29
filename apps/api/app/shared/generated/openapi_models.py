@@ -248,7 +248,6 @@ class CreateAnnotationRequest(BaseModel):
     annotation_value: Optional[Union[Dict[str, Any], List]] = Field(
         None, title="Annotation Value"
     )
-    created_by: Optional[str] = Field("demo-user", title="Created By")
 
 
 class CreateCollectionPredictionBatchRequest(BaseModel):

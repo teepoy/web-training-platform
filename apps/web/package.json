@@ -41,6 +41,7 @@
     "unplugin-vue-components": "^32.0.0",
     "vue": "^3.5.13",
     "vue-echarts": "^8.0.1",
+    "vue-i18n": "^11.4.10",
     "vue-router": "^4.5.0",
     "vxe-pc-ui": "^4.15.14",
     "vxe-table": "^4.19.21"

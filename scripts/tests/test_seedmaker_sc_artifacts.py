@@ -9,7 +9,7 @@ import zipfile
 import pytest
 from diskcache import Cache
 
-from infra.compose.seed_patch_zips import (
+from seedmaker.sc_artifacts import (
     clear_upstream_metadata_cache,
     create_patch_zips,
     create_review_images,

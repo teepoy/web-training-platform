@@ -1,14 +1,14 @@
 app:
   name: online-finetune-api
   env: dev
-  frontend_url: "http://localhost:5173"
+  frontend_url: ""
 
 execution:
   engine: local
   status_reconcile_interval_seconds: 2
 
 db:
-  url: "sqlite+aiosqlite:///./finetune.db"
+  url: ""
   echo: false
   auto_create: false
 
@@ -16,9 +16,9 @@ storage:
   kind: minio
   sparse_manifest_cache_max_bytes: 16777216
   minio:
-    endpoint: "localhost:9000"
-    access_key: "minioadmin"
-    secret_key: "minioadmin"
+    endpoint: ""
+    access_key: ""
+    secret_key: ""
     bucket: "finetune-artifacts"
     secure: false
     lifecycle:
@@ -47,7 +47,7 @@ notification:
 
 oauth:
   enabled: false
-  state_secret: "replace-me-in-production"
+  state_secret: ""
   providers:
     google:
       display_name: "Google"
@@ -83,8 +83,8 @@ oauth:
         provider_id: "sub"
 
 prefect:
-  api_url: "http://localhost:4200/api"
-  ui_url: "http://localhost:4200"
+  api_url: ""
+  ui_url: ""
   work_pool_name: "default-cpu"
   work_pool_type: "process"
   flow_name: "train-job"
@@ -126,7 +126,7 @@ prediction:
   compaction_row_group_rows: 100000
 
 redis:
-  host: "localhost"
+  host: ""
   port: 6379
   db: 0
   password: ""
@@ -135,6 +135,11 @@ startup_checks:
   dependency_timeout_seconds: 5
 
 sc:
+  upstream:
+    grpc_addr: ""
+    flight_addr: ""
+  image_parser:
+    grpc_addr: ""
   pipeline:
     import_batch_rows: 25000
     index_row_group_rows: 65536
@@ -153,8 +158,6 @@ sc:
   data_provider:
     implementation: duckdb
     max_rss_mb: 1536
-    cache_dir: /tmp/sc-data-provider
-    cache_namespace: sc-data-provider
     revision_namespace: sc-data-provider
     duckdb_memory_limit: 1GiB
     duckdb_threads: 1
@@ -188,6 +191,6 @@ sc:
     sse_max_connection_seconds: 60
 
 auth:
-  jwt_secret_key: "replace-me-in-production"
+  jwt_secret_key: ""
   jwt_algorithm: "HS256"
   access_token_expire_minutes: 60

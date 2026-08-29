@@ -1,5 +1,6 @@
 app:
   env: test
+  frontend_url: "http://localhost:5173"
 
 execution:
   engine: local
@@ -20,6 +21,9 @@ notification:
 label_studio:
   url: "http://localhost:8080"
   external_url: "http://localhost:8080"
+
+auth:
+  jwt_secret_key: "test-only-jwt-signing-key"
 
 oauth:
   enabled: false

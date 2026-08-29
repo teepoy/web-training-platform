@@ -7,7 +7,6 @@ from typing import Any, TypeAlias, TypeVar, cast
 from injector import Binder, Injector, Module, provider, singleton
 
 from app.core.config import AppConfig
-from app.core.settings.container import SettingsContext, SettingsModule
 from app.modules.agent.container import AgentContext, AgentModule
 from app.modules.automations.container import AutomationsModule
 from app.modules.auth.container import AuthContext, AuthModule
@@ -168,7 +167,6 @@ def build_app_context(cfg: AppConfig) -> AppContext:
             _AppContextModule(ctx),
             _SharedPersistenceModule(),
             AuthModule(),
-            SettingsModule(),
             StorageModule(),
             DatasetsModule(),
             DatasetCollectionsModule(),
@@ -185,7 +183,6 @@ def build_app_context(cfg: AppConfig) -> AppContext:
     )
     ctx.injector = injector
     ctx.auth = injector.get(AuthContext)
-    ctx.settings = injector.get(SettingsContext)
     ctx.storage = injector.get(StorageContext)
     ctx.datasets = injector.get(DatasetsContext)
     ctx.dataset_collections = injector.get(DatasetCollectionsContext)

@@ -13,6 +13,7 @@ import App from "./App.vue";
 import { router } from "./router";
 import { useAuthStore, getStoredToken } from "@/features/auth/application/store";
 import { useOrgStore } from "@/features/auth/application/org";
+import { i18n, initializeAppLocale } from "./i18n";
 
 configureTransport({
   getToken: () => {
@@ -56,12 +57,14 @@ const queryClient = new QueryClient({
 });
 
 async function bootstrap(): Promise<void> {
+  initializeAppLocale();
   app.use(pinia);
   const authStore = useAuthStore(pinia);
   authStore.hydrateFromStorage();
   app.use(router);
   app.use(VxeUI);
   app.use(VxeUITable);
+  app.use(i18n);
   app.use(VueQueryPlugin, { queryClient });
   app.mount("#app");
 }

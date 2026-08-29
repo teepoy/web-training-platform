@@ -57,11 +57,6 @@ export {
   FALLBACK_PLACEHOLDER,
 } from "./utils/image-adapters";
 export { listDatasets } from "./api/datasets";
-export {
-  buildDatasetColumns,
-  useDatasetListSurface,
-  resolveDefaultDatasetTaskType,
-} from "./datasets/surface";
 export type {
   DatasetListItem,
   DatasetListUser,

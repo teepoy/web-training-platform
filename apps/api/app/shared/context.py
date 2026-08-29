@@ -38,7 +38,6 @@ if TYPE_CHECKING:
     from app.modules.prediction.container import PredictionContext
     from app.modules.sc.container import ScContext
     from app.modules.jobs.container import JobsContext
-    from app.core.settings.container import SettingsContext
     from app.modules.storage.container import StorageContext
     from app.modules.training.container import TrainingContext
 
@@ -86,7 +85,6 @@ class AppContext:
     models: ModelsContext | None = None
     dashboard: DashboardContext | None = None
     jobs: JobsContext | None = None
-    settings: SettingsContext | None = None
     agent: AgentContext | None = None
     auth: AuthContext | None = None
     sc: ScContext | None = None

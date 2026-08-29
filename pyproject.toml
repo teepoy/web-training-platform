@@ -33,6 +33,7 @@ requires-dist = [
 members = [
   "apps/api",
   "services/sc-upstream",
+  "services/sc-upstream-simulator",
   "libs/protos",
   "libs/ml",
   "libs/sampling-rules",

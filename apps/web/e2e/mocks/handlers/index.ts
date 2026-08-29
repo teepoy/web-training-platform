@@ -48,7 +48,6 @@ export {
   mockExportFormats,
   mockHealth,
   mockDashboard,
-  mockSettings,
   mockPlugins,
 } from "./core";
 export type { CoreApiOverrides } from "./core";

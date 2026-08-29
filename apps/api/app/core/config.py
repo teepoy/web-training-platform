@@ -35,7 +35,7 @@ class ConfigSection(BaseModel):
 class AppSection(ConfigSection):
     name: str = "online-finetune-api"
     env: str = "dev"
-    frontend_url: str = "http://localhost:5173"
+    frontend_url: str = ""
 
 
 class ExecutionConfig(ConfigSection):
@@ -44,7 +44,7 @@ class ExecutionConfig(ConfigSection):
 
 
 class DatabaseConfig(ConfigSection):
-    url: str = "sqlite+aiosqlite:///./finetune.db"
+    url: str = ""
     echo: bool = False
     auto_create: bool = False
 
@@ -62,9 +62,9 @@ class MinioLifecycleConfig(ConfigSection):
 
 
 class MinioConfig(ConfigSection):
-    endpoint: str = "localhost:9000"
-    access_key: str = "minioadmin"
-    secret_key: str = "minioadmin"
+    endpoint: str = ""
+    access_key: str = ""
+    secret_key: str = ""
     bucket: str = "finetune-artifacts"
     secure: bool = False
     lifecycle: MinioLifecycleConfig = Field(default_factory=MinioLifecycleConfig)
@@ -115,13 +115,13 @@ class OAuthProviderConfig(ConfigSection):
 
 class OAuthConfig(ConfigSection):
     enabled: bool = False
-    state_secret: str = "replace-me-in-production"
+    state_secret: str = ""
     providers: dict[str, OAuthProviderConfig] = Field(default_factory=dict)
 
 
 class PrefectConfig(ConfigSection):
-    api_url: str = "http://localhost:4200/api"
-    ui_url: str = "http://localhost:4200"
+    api_url: str = ""
+    ui_url: str = ""
     work_pool_name: str = "default-cpu"
     work_pool_type: str = "process"
     flow_name: str = "train-job"
@@ -164,7 +164,7 @@ class AgentConfig(ConfigSection):
 
 
 class RedisConfig(ConfigSection):
-    host: str = "localhost"
+    host: str = ""
     port: int = 6379
     db: int = 0
     password: str = ""
@@ -176,7 +176,7 @@ class StartupChecksConfig(ConfigSection):
 
 class AuthConfig(ConfigSection):
     enabled: Literal[True] = True
-    jwt_secret_key: str = "replace-me-in-production"
+    jwt_secret_key: str = ""
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
 
@@ -184,8 +184,8 @@ class AuthConfig(ConfigSection):
 class ScDataProviderConfig(ConfigSection):
     implementation: Literal["duckdb"]
     max_rss_mb: int
-    cache_dir: str
-    cache_namespace: str
+    cache_dir: str = ""
+    cache_namespace: str = ""
     revision_namespace: str
     duckdb_memory_limit: str
     duckdb_threads: int
@@ -236,9 +236,20 @@ class ScPipelineConfig(ConfigSection):
     training_shuffle_seed: int
 
 
+class ScUpstreamConfig(ConfigSection):
+    grpc_addr: str = ""
+    flight_addr: str = ""
+
+
+class ScImageParserConfig(ConfigSection):
+    grpc_addr: str = ""
+
+
 class ScConfig(ConfigSection):
     data_provider: ScDataProviderConfig
     pipeline: ScPipelineConfig
+    upstream: ScUpstreamConfig = Field(default_factory=ScUpstreamConfig)
+    image_parser: ScImageParserConfig = Field(default_factory=ScImageParserConfig)
 
 
 def _default_sc_config() -> ScConfig:
@@ -271,18 +282,45 @@ class AppConfig(ConfigSection):
     dimension: int = 512
 
 
+# Environment-owned values are restricted to secrets and deployment topology.
+# Stable application behavior, limits, buckets, models, and tuning live only in
+# the selected tracked YAML profile.
+_ENVIRONMENT_CONFIG_PATHS = {
+    "FRONTEND_URL": "app.frontend_url",
+    "DATABASE_URL": "db.url",
+    "MINIO_ENDPOINT": "storage.minio.endpoint",
+    "MINIO_ACCESS_KEY": "storage.minio.access_key",
+    "MINIO_SECRET_KEY": "storage.minio.secret_key",
+    "LABEL_STUDIO_URL": "label_studio.url",
+    "LABEL_STUDIO_EXTERNAL_URL": "label_studio.external_url",
+    "LABEL_STUDIO_API_KEY": "label_studio.api_key",
+    "LABEL_STUDIO_DATABASE_URL": "label_studio.database_url",
+    "PREFECT_API_URL": "prefect.api_url",
+    "PREFECT_UI_URL": "prefect.ui_url",
+    "REDIS_HOST": "redis.host",
+    "REDIS_PASSWORD": "redis.password",
+    "LLM_BASE_URL": "llm.base_url",
+    "LLM_API_KEY": "llm.api_key",
+    "JWT_SECRET_KEY": "auth.jwt_secret_key",
+    "OAUTH_STATE_SECRET": "oauth.state_secret",
+    "OAUTH_GOOGLE_CLIENT_ID": "oauth.providers.google.client_id",
+    "OAUTH_GOOGLE_CLIENT_SECRET": "oauth.providers.google.client_secret",
+    "OAUTH_GITHUB_CLIENT_ID": "oauth.providers.github.client_id",
+    "OAUTH_GITHUB_CLIENT_SECRET": "oauth.providers.github.client_secret",
+    "OAUTH_CUSTOM_CLIENT_ID": "oauth.providers.custom.client_id",
+    "OAUTH_CUSTOM_CLIENT_SECRET": "oauth.providers.custom.client_secret",
+    "MNT": "data.dir",
+    "SC_UPSTREAM_ADDR": "sc.upstream.grpc_addr",
+    "SC_UPSTREAM_FLIGHT_ADDR": "sc.upstream.flight_addr",
+    "IMAGE_PARSER_GRPC_ADDR": "sc.image_parser.grpc_addr",
+    "SC_DATA_PROVIDER_CACHE_DIR": "sc.data_provider.cache_dir",
+    "SC_DATA_PROVIDER_CACHE_NAMESPACE": "sc.data_provider.cache_namespace",
+}
+
+
 def _require(value: str, field_name: str) -> None:
     if not value:
         raise RuntimeError(f"Missing required config: {field_name}")
-
-
-def _parse_boolean_environment(value: str) -> bool:
-    normalized = value.strip().lower()
-    if normalized == "true":
-        return True
-    if normalized == "false":
-        return False
-    raise ValueError(f"expected true or false, got {value!r}")
 
 
 def _as_app_config(cfg: AppConfig | DictConfig) -> AppConfig:
@@ -346,12 +384,29 @@ def _validate_runtime_config(cfg: AppConfig | DictConfig, profile: str) -> None:
     _require(str(cfg.label_studio.api_key), "label_studio.api_key")
     _require(str(cfg.label_studio.database_url), "label_studio.database_url")
     _require(str(cfg.auth.jwt_secret_key), "auth.jwt_secret_key")
+    _require(str(cfg.redis.host), "redis.host")
+    _require(str(cfg.sc.upstream.grpc_addr), "sc.upstream.grpc_addr")
+    _require(str(cfg.sc.upstream.flight_addr), "sc.upstream.flight_addr")
+    _require(str(cfg.sc.image_parser.grpc_addr), "sc.image_parser.grpc_addr")
+    _require(str(cfg.sc.data_provider.cache_dir), "sc.data_provider.cache_dir")
+    _require(
+        str(cfg.sc.data_provider.cache_namespace),
+        "sc.data_provider.cache_namespace",
+    )
     if cfg.auth.jwt_secret_key in _INSECURE_SECRET_VALUES:
         raise RuntimeError("auth.jwt_secret_key must not use a placeholder value")
     if cfg.oauth.enabled:
         _require(str(cfg.oauth.state_secret), "oauth.state_secret")
         if cfg.oauth.state_secret in _INSECURE_SECRET_VALUES:
             raise RuntimeError("oauth.state_secret must not use a placeholder value")
+        for provider_name, provider in cfg.oauth.providers.items():
+            if not provider.enabled:
+                continue
+            _require(provider.client_id, f"oauth.providers.{provider_name}.client_id")
+            _require(
+                provider.client_secret,
+                f"oauth.providers.{provider_name}.client_secret",
+            )
 
 
 def _config_root() -> Path:
@@ -369,224 +424,10 @@ def load_config(skip_runtime_validation: bool = False) -> AppConfig:
         )
     profile_path = _config_root() / f"{profile}.yaml"
     cfg = OmegaConf.merge(base, OmegaConf.load(profile_path))
-
-    frontend_url = os.getenv("FRONTEND_URL")
-    if frontend_url:
-        cfg.app.frontend_url = frontend_url
-    db_url = os.getenv("DATABASE_URL")
-    if db_url:
-        cfg.db.url = db_url
-    minio_endpoint = os.getenv("MINIO_ENDPOINT")
-    if minio_endpoint:
-        cfg.storage.minio.endpoint = minio_endpoint
-    minio_access_key = os.getenv("MINIO_ACCESS_KEY")
-    if minio_access_key:
-        cfg.storage.minio.access_key = minio_access_key
-    minio_secret_key = os.getenv("MINIO_SECRET_KEY")
-    if minio_secret_key:
-        cfg.storage.minio.secret_key = minio_secret_key
-    minio_bucket = os.getenv("MINIO_BUCKET")
-    if minio_bucket:
-        cfg.storage.minio.bucket = minio_bucket
-    ls_url = os.getenv("LABEL_STUDIO_URL")
-    if ls_url:
-        cfg.label_studio.url = ls_url
-    ls_external_url = os.getenv("LABEL_STUDIO_EXTERNAL_URL")
-    if ls_external_url:
-        cfg.label_studio.external_url = ls_external_url
-    ls_api_key = os.getenv("LABEL_STUDIO_API_KEY")
-    if ls_api_key:
-        cfg.label_studio.api_key = ls_api_key
-    ls_db_url = os.getenv("LABEL_STUDIO_DATABASE_URL")
-    if ls_db_url:
-        cfg.label_studio.database_url = ls_db_url
-    prefect_api_url = os.getenv("PREFECT_API_URL")
-    if prefect_api_url:
-        cfg.prefect.api_url = prefect_api_url
-    prefect_ui_url = os.getenv("PREFECT_UI_URL")
-    if prefect_ui_url:
-        cfg.prefect.ui_url = prefect_ui_url
-    redis_host = os.getenv("REDIS_HOST")
-    if redis_host:
-        cfg.redis.host = redis_host
-    redis_port = os.getenv("REDIS_PORT")
-    if redis_port:
-        cfg.redis.port = int(redis_port)
-    redis_db = os.getenv("REDIS_DB")
-    if redis_db:
-        cfg.redis.db = int(redis_db)
-    redis_password = os.getenv("REDIS_PASSWORD")
-    if redis_password:
-        cfg.redis.password = redis_password
-    startup_timeout = os.getenv("STARTUP_CHECK_DEPENDENCY_TIMEOUT_SECONDS")
-    if startup_timeout:
-        cfg.startup_checks.dependency_timeout_seconds = float(startup_timeout)
-    data_provider_environment = {
-        "SC_DATA_PROVIDER_IMPLEMENTATION": ("implementation", str),
-        "SC_DATA_PROVIDER_MAX_RSS_MB": ("max_rss_mb", int),
-        "SC_DATA_PROVIDER_CACHE_DIR": ("cache_dir", str),
-        "SC_DATA_PROVIDER_CACHE_NAMESPACE": ("cache_namespace", str),
-        "SC_DATA_PROVIDER_REVISION_NAMESPACE": ("revision_namespace", str),
-        "SC_DATA_PROVIDER_DUCKDB_MEMORY_LIMIT": ("duckdb_memory_limit", str),
-        "SC_DATA_PROVIDER_DUCKDB_THREADS": ("duckdb_threads", int),
-        "SC_DATA_PROVIDER_DUCKDB_TEMP_DIRECTORY_SIZE": (
-            "duckdb_temp_directory_size",
-            str,
-        ),
-        "SC_DATA_PROVIDER_DUCKDB_ALLOCATOR_BACKGROUND_THREADS": (
-            "duckdb_allocator_background_threads",
-            _parse_boolean_environment,
-        ),
-        "SC_DATA_PROVIDER_DUCKDB_PRESERVE_INSERTION_ORDER": (
-            "duckdb_preserve_insertion_order",
-            _parse_boolean_environment,
-        ),
-        "SC_DATA_PROVIDER_DUCKDB_ALLOCATOR_FLUSH_THRESHOLD": (
-            "duckdb_allocator_flush_threshold",
-            str,
-        ),
-        "SC_DATA_PROVIDER_DUCKDB_ALLOCATOR_BULK_DEALLOCATION_FLUSH_THRESHOLD": (
-            "duckdb_allocator_bulk_deallocation_flush_threshold",
-            str,
-        ),
-        "SC_DATA_PROVIDER_CONNECTION_RECYCLE_RSS_MB": (
-            "connection_recycle_rss_mb",
-            int,
-        ),
-        "SC_DATA_PROVIDER_WORKER_COUNT": ("worker_count", int),
-        "SC_DATA_PROVIDER_CONTAINER_MEMORY_LIMIT_MB": (
-            "container_memory_limit_mb",
-            int,
-        ),
-        "SC_DATA_PROVIDER_PYTHON_OVERHEAD_MB": ("python_overhead_mb", int),
-        "SC_DATA_PROVIDER_SERVICE_HEADROOM_MB": ("service_headroom_mb", int),
-        "SC_DATA_PROVIDER_OBJECT_CACHE_MAX_BYTES": ("object_cache_max_bytes", int),
-        "SC_DATA_PROVIDER_OBJECT_CACHE_LOW_WATERMARK_BYTES": (
-            "object_cache_low_watermark_bytes",
-            int,
-        ),
-        "SC_DATA_PROVIDER_OBJECT_IDLE_TTL_SECONDS": (
-            "object_idle_ttl_seconds",
-            int,
-        ),
-        "SC_DATA_PROVIDER_CLEANUP_INTERVAL_SECONDS": (
-            "cleanup_interval_seconds",
-            int,
-        ),
-        "SC_DATA_PROVIDER_STALE_WRITE_SECONDS": ("stale_write_seconds", int),
-        "SC_DATA_PROVIDER_LEASE_TTL_SECONDS": ("lease_ttl_seconds", int),
-        "SC_DATA_PROVIDER_LEASE_HEARTBEAT_SECONDS": (
-            "lease_heartbeat_seconds",
-            int,
-        ),
-        "SC_DATA_PROVIDER_BUILD_LOCK_TTL_SECONDS": (
-            "build_lock_ttl_seconds",
-            int,
-        ),
-        "SC_DATA_PROVIDER_BUILD_LOCK_HEARTBEAT_SECONDS": (
-            "build_lock_heartbeat_seconds",
-            int,
-        ),
-        "SC_DATA_PROVIDER_BUILD_WAIT_TIMEOUT_SECONDS": (
-            "build_wait_timeout_seconds",
-            int,
-        ),
-        "SC_DATA_PROVIDER_BUILD_POLL_INTERVAL_MS": ("build_poll_interval_ms", int),
-        "SC_DATA_PROVIDER_SQL_TIMEOUT_SECONDS": ("sql_timeout_seconds", int),
-        "SC_DATA_PROVIDER_MAX_RESPONSE_BYTES": ("max_response_bytes", int),
-        "SC_DATA_PROVIDER_ARROW_BATCH_ROWS": ("arrow_batch_rows", int),
-        "SC_DATA_PROVIDER_STREAM_QUEUE_CAPACITY": ("stream_queue_capacity", int),
-        "SC_DATA_PROVIDER_STREAM_QUEUE_POLL_INTERVAL_MS": (
-            "stream_queue_poll_interval_ms",
-            int,
-        ),
-        "SC_DATA_PROVIDER_SSE_HEARTBEAT_SECONDS": ("sse_heartbeat_seconds", int),
-        "SC_DATA_PROVIDER_SSE_MAX_CONNECTION_SECONDS": (
-            "sse_max_connection_seconds",
-            int,
-        ),
-    }
-    for environment_name, (field_name, converter) in data_provider_environment.items():
+    for environment_name, config_path in _ENVIRONMENT_CONFIG_PATHS.items():
         raw_value = os.getenv(environment_name)
         if raw_value is not None:
-            cfg.sc.data_provider[field_name] = converter(raw_value)
-    sc_pipeline_environment = {
-        "SC_PIPELINE_IMPORT_BATCH_ROWS": ("import_batch_rows", int),
-        "SC_PIPELINE_INDEX_ROW_GROUP_ROWS": ("index_row_group_rows", int),
-        "SC_PIPELINE_MATERIALIZATION_BATCH_ROWS": (
-            "materialization_batch_rows",
-            int,
-        ),
-        "SC_PIPELINE_MATERIALIZATION_MAX_ERROR_RECORDS": (
-            "materialization_max_error_records",
-            int,
-        ),
-        "SC_PIPELINE_PREDICTION_INPUT_BATCH_ROWS": (
-            "prediction_input_batch_rows",
-            int,
-        ),
-        "SC_PIPELINE_PREDICTION_PREPROCESS_TASK_ROWS": (
-            "prediction_preprocess_task_rows",
-            int,
-        ),
-        "SC_PIPELINE_PREDICTION_PREPROCESS_WORKERS": (
-            "prediction_preprocess_workers",
-            int,
-        ),
-        "SC_PIPELINE_PREDICTION_PREPROCESS_PREFETCH_TASKS": (
-            "prediction_preprocess_prefetch_tasks",
-            int,
-        ),
-        "SC_PIPELINE_PREDICTION_PROGRESS_FLUSH_ROWS": (
-            "prediction_progress_flush_rows",
-            int,
-        ),
-        "SC_PIPELINE_PREDICTION_PROGRESS_FLUSH_SECONDS": (
-            "prediction_progress_flush_seconds",
-            float,
-        ),
-        "SC_PIPELINE_PREDICTION_WRITE_BATCH_ROWS": (
-            "prediction_write_batch_rows",
-            int,
-        ),
-        "SC_PIPELINE_TRAINING_MAX_ROWS": ("training_max_rows", int),
-        "SC_PIPELINE_TRAINING_MAX_MATERIALIZED_BYTES": (
-            "training_max_materialized_bytes",
-            int,
-        ),
-        "SC_PIPELINE_TRAINING_SHUFFLE_SEED": ("training_shuffle_seed", int),
-    }
-    for environment_name, (field_name, converter) in sc_pipeline_environment.items():
-        raw_value = os.getenv(environment_name)
-        if raw_value is not None:
-            cfg.sc.pipeline[field_name] = converter(raw_value)
-    prediction_environment = {
-        "PREDICTION_COMPACTION_MEMORY_LIMIT": ("compaction_memory_limit", str),
-        "PREDICTION_COMPACTION_TEMP_LIMIT": ("compaction_temp_limit", str),
-        "PREDICTION_COMPACTION_ROW_GROUP_ROWS": ("compaction_row_group_rows", int),
-    }
-    for environment_name, (field_name, converter) in prediction_environment.items():
-        raw_value = os.getenv(environment_name)
-        if raw_value is not None:
-            cfg.prediction[field_name] = converter(raw_value)
-    llm_base_url = os.getenv("LLM_BASE_URL")
-    if llm_base_url:
-        cfg.llm.base_url = llm_base_url
-    llm_api_key = os.getenv("LLM_API_KEY")
-    if llm_api_key:
-        cfg.llm.api_key = llm_api_key
-    llm_model = os.getenv("LLM_MODEL")
-    if llm_model:
-        cfg.llm.model = llm_model
-    jwt_secret_key = os.getenv("JWT_SECRET_KEY")
-    if jwt_secret_key:
-        cfg.auth.jwt_secret_key = jwt_secret_key
-    oauth_state_secret = os.getenv("OAUTH_STATE_SECRET")
-    if oauth_state_secret:
-        cfg.oauth.state_secret = oauth_state_secret
-    mnt = os.getenv("MNT")
-    if mnt:
-        cfg.data.dir = mnt
+            OmegaConf.update(cfg, config_path, raw_value, merge=False)
     assert isinstance(cfg, DictConfig)
     config_data = OmegaConf.to_container(cfg, resolve=True)
     if not isinstance(config_data, dict):

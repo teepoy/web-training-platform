@@ -3,8 +3,14 @@ from __future__ import annotations
 from collections.abc import Iterator
 
 import pytest
+from omegaconf import OmegaConf
 
-from app.core.config import AuthConfig, load_config
+from app.core.config import (
+    _ENVIRONMENT_CONFIG_PATHS,
+    _config_root,
+    AuthConfig,
+    load_config,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -62,11 +68,13 @@ def test_deployable_profiles_require_runtime_secrets(
         load_config()
 
 
-def test_pre_release_profile_accepts_explicit_runtime_config(
+@pytest.mark.parametrize("profile", ["pre-release", "prod"])
+def test_deployable_profile_accepts_explicit_runtime_config(
     monkeypatch: pytest.MonkeyPatch,
+    profile: str,
 ) -> None:
     values = {
-        "APP_CONFIG_PROFILE": "pre-release",
+        "APP_CONFIG_PROFILE": profile,
         "FRONTEND_URL": "https://test.example.com",
         "DATABASE_URL": "postgresql+asyncpg://user:password@postgres:5432/finetune",
         "PREFECT_API_URL": "http://prefect-server:4200/api",
@@ -81,35 +89,74 @@ def test_pre_release_profile_accepts_explicit_runtime_config(
         "MINIO_ACCESS_KEY": "test-access-key",
         "MINIO_SECRET_KEY": "test-secret-key",
         "JWT_SECRET_KEY": "test-environment-jwt-secret",
+        "REDIS_HOST": "redis",
+        "SC_UPSTREAM_ADDR": "sc-upstream:9091",
+        "SC_UPSTREAM_FLIGHT_ADDR": "grpc://sc-upstream:9093",
+        "IMAGE_PARSER_GRPC_ADDR": "image-parser:9092",
+        "SC_DATA_PROVIDER_CACHE_DIR": "/mnt/sc-data-provider-cache",
+        "SC_DATA_PROVIDER_CACHE_NAMESPACE": "sc-data-provider",
     }
     for name, value in values.items():
         monkeypatch.setenv(name, value)
 
     cfg = load_config()
 
-    assert cfg.app.env == "pre-release"
+    assert cfg.app.env == profile
     assert cfg.auth.jwt_secret_key == "test-environment-jwt-secret"
 
 
-def test_sc_runtime_and_prediction_storage_accept_environment_overrides(
+def test_profile_owned_settings_ignore_retired_environment_variables(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("APP_CONFIG_PROFILE", "test")
+    monkeypatch.setenv("MINIO_BUCKET", "retired-bucket")
+    monkeypatch.setenv("REDIS_PORT", "6380")
+    monkeypatch.setenv("STARTUP_CHECK_DEPENDENCY_TIMEOUT_SECONDS", "99")
+    monkeypatch.setenv("LLM_MODEL", "retired-model")
     monkeypatch.setenv("SC_PIPELINE_IMPORT_BATCH_ROWS", "4096")
-    monkeypatch.setenv("SC_PIPELINE_TRAINING_MAX_ROWS", "12345")
-    monkeypatch.setenv("SC_PIPELINE_TRAINING_SHUFFLE_SEED", "91")
-    monkeypatch.setenv("SC_PIPELINE_PREDICTION_PROGRESS_FLUSH_ROWS", "777")
-    monkeypatch.setenv("SC_PIPELINE_PREDICTION_PROGRESS_FLUSH_SECONDS", "2.5")
     monkeypatch.setenv("PREDICTION_COMPACTION_MEMORY_LIMIT", "256MiB")
 
     cfg = load_config(skip_runtime_validation=True)
 
-    assert cfg.sc.pipeline.import_batch_rows == 4096
-    assert cfg.sc.pipeline.training_max_rows == 12345
-    assert cfg.sc.pipeline.training_shuffle_seed == 91
-    assert cfg.sc.pipeline.prediction_progress_flush_rows == 777
-    assert cfg.sc.pipeline.prediction_progress_flush_seconds == 2.5
-    assert cfg.prediction.compaction_memory_limit == "256MiB"
+    assert cfg.storage.minio.bucket == "finetune-artifacts"
+    assert cfg.redis.port == 6379
+    assert cfg.startup_checks.dependency_timeout_seconds == 5
+    assert cfg.llm.model == "qwen/qwen-max"
+    assert cfg.sc.pipeline.import_batch_rows == 25_000
+    assert cfg.prediction.compaction_memory_limit == "512MiB"
+
+
+def test_deployment_owned_sc_endpoints_use_central_config_loader(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("APP_CONFIG_PROFILE", "test")
+    monkeypatch.setenv("SC_UPSTREAM_ADDR", "upstream.example:19091")
+    monkeypatch.setenv(
+        "SC_UPSTREAM_FLIGHT_ADDR", "grpc://upstream.example:19093"
+    )
+    monkeypatch.setenv("IMAGE_PARSER_GRPC_ADDR", "parser.example:19092")
+    monkeypatch.setenv("SC_DATA_PROVIDER_CACHE_DIR", "/cache/sc")
+    monkeypatch.setenv("SC_DATA_PROVIDER_CACHE_NAMESPACE", "sc-pod-1")
+
+    cfg = load_config(skip_runtime_validation=True)
+
+    assert cfg.sc.upstream.grpc_addr == "upstream.example:19091"
+    assert cfg.sc.upstream.flight_addr == "grpc://upstream.example:19093"
+    assert cfg.sc.image_parser.grpc_addr == "parser.example:19092"
+    assert cfg.sc.data_provider.cache_dir == "/cache/sc"
+    assert cfg.sc.data_provider.cache_namespace == "sc-pod-1"
+
+
+def test_prod_yaml_does_not_define_environment_owned_settings() -> None:
+    prod = OmegaConf.load(_config_root() / "prod.yaml")
+
+    duplicated_paths = [
+        path
+        for path in _ENVIRONMENT_CONFIG_PATHS.values()
+        if OmegaConf.select(prod, path, default=None) is not None
+    ]
+
+    assert duplicated_paths == []
 
 
 @pytest.mark.parametrize(
@@ -135,13 +182,11 @@ def test_deployable_sc_data_provider_values_come_from_profiles(
     expected_service_headroom_mb: int,
 ) -> None:
     monkeypatch.setenv("APP_CONFIG_PROFILE", profile)
-    for name in (
-        "SC_DATA_PROVIDER_CACHE_DIR",
-        "SC_DATA_PROVIDER_WORKER_COUNT",
-        "SC_DATA_PROVIDER_CONTAINER_MEMORY_LIMIT_MB",
-        "SC_DATA_PROVIDER_SERVICE_HEADROOM_MB",
-    ):
-        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("SC_DATA_PROVIDER_CACHE_DIR", expected_cache_dir)
+    monkeypatch.setenv("SC_DATA_PROVIDER_CACHE_NAMESPACE", "sc-data-provider")
+    monkeypatch.setenv("SC_DATA_PROVIDER_WORKER_COUNT", "999")
+    monkeypatch.setenv("SC_DATA_PROVIDER_CONTAINER_MEMORY_LIMIT_MB", "999")
+    monkeypatch.setenv("SC_DATA_PROVIDER_SERVICE_HEADROOM_MB", "999")
 
     cfg = load_config(skip_runtime_validation=True)
 

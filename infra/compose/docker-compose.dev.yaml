@@ -12,11 +12,18 @@
 x-platform-environment: &platform-environment
   PYTHONPATH: /app/libs/protos/src
   APP_CONFIG_PROFILE: dev
+  FRONTEND_URL: http://localhost:5173
+  JWT_SECRET_KEY: ${JWT_SECRET_KEY:-local-development-jwt-secret-not-for-shared-host}
   DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/finetune
   PREFECT_API_URL: http://prefect-server:4200/api
+  PREFECT_UI_URL: http://localhost:4200
   LABEL_STUDIO_URL: "http://label-studio:8080"
+  LABEL_STUDIO_EXTERNAL_URL: http://localhost:8080
+  LABEL_STUDIO_API_KEY: ${LABEL_STUDIO_API_KEY:-ls-smoke-token-for-local-dev}
   LABEL_STUDIO_DATABASE_URL: "postgresql+asyncpg://postgres:postgres@postgres:5432/labelstudio"
   MINIO_ENDPOINT: minio:9000
+  MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+  MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
   SC_PATCH_S3_ENDPOINT: minio:9000
   SC_PATCH_S3_ACCESS_KEY: minioadmin
   SC_PATCH_S3_SECRET_KEY: minioadmin
@@ -28,9 +35,12 @@ x-platform-environment: &platform-environment
   SC_UPSTREAM_ADDR: sc-upstream:9091
   SC_UPSTREAM_FLIGHT_ADDR: grpc://sc-upstream:9093
   IMAGE_PARSER_GRPC_ADDR: image-parser:9092
+  SC_DATA_PROVIDER_CACHE_DIR: /var/cache/sc-data-provider
+  SC_DATA_PROVIDER_CACHE_NAMESPACE: sc-data-provider
   LLM_BASE_URL: ${LLM_BASE_URL:-}
   LLM_API_KEY: ${LLM_API_KEY:-}
   REDIS_HOST: redis
+  REDIS_PASSWORD: ${REDIS_PASSWORD:-}
   LOG_LEVEL: ${LOG_LEVEL:-INFO}
 
 x-api-runtime: &api-runtime

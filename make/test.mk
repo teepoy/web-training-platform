@@ -21,6 +21,10 @@ test-api: ## Run API tests
 test-web: ## Run frontend unit tests (vitest)
 	cd $(WEB_DIR) && pnpm test:unit
 
+.PHONY: test-seed-tools
+test-seed-tools: ## Run repository seed-tool unit tests
+	PYTHONPATH=scripts $(UV_RUN_INSTALLED) python -m pytest scripts/tests/test_seedmaker_sc_artifacts.py
+
 .PHONY: benchmark-sc-prediction
 benchmark-sc-prediction: ## Require >3000 samples/s for bounded SC prediction preprocessing
 	$(UV_RUN_INSTALLED) --package ml-library python libs/ml/benchmarks/sc_prediction_stream_throughput.py --minimum-samples-per-second 3000

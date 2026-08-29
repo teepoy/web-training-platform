@@ -209,11 +209,6 @@
                     placeholder="Enter label"
                     size="small"
                   />
-                  <n-input
-                    v-model:value="newAnnotationCreatedBy"
-                    placeholder="Created by"
-                    size="small"
-                  />
                   <n-button
                     type="primary"
                     size="small"
@@ -553,14 +548,12 @@ function deleteAnnot(id: string) {
 // Add annotation state
 // ---------------------------------------------------------------------------
 const newAnnotationLabel = ref("");
-const newAnnotationCreatedBy = ref("web-user");
 
 const createAnnotationMutation = useCreateAnnotationApiV1AnnotationsPost({
   mutation: {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: annotationsQueryKey.value });
       newAnnotationLabel.value = "";
-      newAnnotationCreatedBy.value = "web-user";
     },
     onError: (error) => {
       message.error(toUserMessage(error, "Failed to create annotation"));
@@ -575,7 +568,6 @@ function addAnnotation() {
       dataset_id: props.datasetId,
       sample_id: props.sampleId,
       label: newAnnotationLabel.value,
-      created_by: newAnnotationCreatedBy.value || "web-user",
     },
   });
 }
@@ -689,7 +681,6 @@ watch(
     editingAnnotationId.value = null;
     editingLabel.value = "";
     newAnnotationLabel.value = "";
-    newAnnotationCreatedBy.value = "web-user";
     replaceFile.value = null;
     if (replacePreviewUrl.value) {
       URL.revokeObjectURL(replacePreviewUrl.value);

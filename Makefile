@@ -17,7 +17,7 @@ SC_PROTO     := $(PROTO_DIR)/sc/v1/sample.proto
 API_PORT                         ?= 8000
 API_URL                          ?= http://localhost:$(API_PORT)
 WEB_PORT                         ?= 5173
-WEB_URL                          ?= http://localhost:5173
+WEB_URL                          ?= http://localhost:$(WEB_PORT)
 IMAGE_PARSER_GRPC_ADDR_HOST      ?= 127.0.0.1:9092
 ARTIFACTS_DIR                    ?= $(CURDIR)/artifacts
 HOST_BIN_DIR                     := $(ARTIFACTS_DIR)/bin
@@ -29,6 +29,8 @@ LITELLM_LOCAL_MODEL_COST_MAP="True"
 # Keeps host-run API, worker, seed, and benchmark targets aligned with dev Compose.
 DEV_API_HOST_ENV := \
 	APP_CONFIG_PROFILE=dev \
+	FRONTEND_URL=$(WEB_URL) \
+	JWT_SECRET_KEY=local-development-jwt-secret-not-for-shared-host \
 	DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/finetune \
 	PREFECT_API_URL=http://localhost:4200/api \
 	PREFECT_UI_URL=http://localhost:4200 \
@@ -39,12 +41,12 @@ DEV_API_HOST_ENV := \
 	MINIO_ENDPOINT=$(MINIO_ENDPOINT_HOST) \
 	MINIO_ACCESS_KEY=minioadmin \
 	MINIO_SECRET_KEY=minioadmin \
-	MINIO_BUCKET=finetune-artifacts \
 	REDIS_HOST=localhost \
-	REDIS_PORT=6379 \
 	SC_UPSTREAM_ADDR=127.0.0.1:9091 \
 	SC_UPSTREAM_FLIGHT_ADDR=grpc://127.0.0.1:9093 \
-	IMAGE_PARSER_GRPC_ADDR=$(IMAGE_PARSER_GRPC_ADDR_HOST)
+	IMAGE_PARSER_GRPC_ADDR=$(IMAGE_PARSER_GRPC_ADDR_HOST) \
+	SC_DATA_PROVIDER_CACHE_DIR=/tmp/sc-data-provider \
+	SC_DATA_PROVIDER_CACHE_NAMESPACE=sc-data-provider
 
 # Development seed data
 # Controls the repeatable SC inspection and showcase datasets created by seed targets.
@@ -56,7 +58,7 @@ DEV_SEED_CLASSIFICATION_SAMPLES  ?= 180
 DEV_SEED_REVIEW_SAMPLES          ?= 96
 DEV_SEED_SC_ANNOTATIONS          ?= 96
 SC_PATCH_ZIP_BUCKET              ?= sc-patch-images
-SC_PATCH_ZIP_S3_ENDPOINT         ?= http://localhost:9000
+SC_PATCH_ZIP_S3_ENDPOINT         ?= http://$(MINIO_ENDPOINT_HOST)
 
 # Tests and benchmarks
 # Sets timeout diagnostics and acceptance thresholds for test and SC benchmark targets.

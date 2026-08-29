@@ -17,6 +17,11 @@ os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")
 os.environ.setdefault(
     "DATABASE_URL", f"sqlite+aiosqlite:///./finetune-test-{uuid4().hex}.db"
 )
+os.environ.setdefault("SC_UPSTREAM_ADDR", "localhost:9091")
+os.environ.setdefault("SC_UPSTREAM_FLIGHT_ADDR", "grpc://localhost:9093")
+os.environ.setdefault("IMAGE_PARSER_GRPC_ADDR", "localhost:9092")
+os.environ.setdefault("SC_DATA_PROVIDER_CACHE_DIR", "/tmp/sc-data-provider-tests")
+os.environ.setdefault("SC_DATA_PROVIDER_CACHE_NAMESPACE", "sc-data-provider-tests")
 
 _OPEN_CONTAINERS = []
 

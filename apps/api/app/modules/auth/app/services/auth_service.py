@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import secrets
 from datetime import UTC, datetime, timedelta
 
@@ -11,7 +10,7 @@ from app.core.config import load_config
 from app.shared.db.registry import PersonalAccessTokenORM
 
 _cfg = load_config()
-JWT_SECRET_KEY: str = os.environ.get("JWT_SECRET_KEY") or str(_cfg.auth.jwt_secret_key)
+JWT_SECRET_KEY: str = str(_cfg.auth.jwt_secret_key)
 JWT_ALGORITHM: str = _cfg.auth.jwt_algorithm
 ACCESS_TOKEN_EXPIRE_MINUTES: int = _cfg.auth.access_token_expire_minutes
 

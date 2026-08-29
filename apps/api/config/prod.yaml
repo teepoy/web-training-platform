@@ -1,21 +1,15 @@
 app:
   env: prod
-  frontend_url: ""
 
 execution:
   engine: prefect
 
 db:
-  url: ""
   echo: false
   auto_create: false
 
 storage:
   kind: minio
-  minio:
-    endpoint: ""
-    access_key: ""
-    secret_key: ""
 
 k8s:
   namespace: "finetune"
@@ -24,24 +18,9 @@ k8s:
 
 oauth:
   enabled: false
-  state_secret: ""
-
-prefect:
-  api_url: ""
-  ui_url: ""
-
-label_studio:
-  url: ""
-  external_url: ""
-  api_key: ""
-  database_url: ""
-
-auth:
-  jwt_secret_key: ""
 
 sc:
   data_provider:
-    cache_dir: /mnt/sc-data-provider-cache
     worker_count: 4
     container_memory_limit_mb: 6144
     service_headroom_mb: 512

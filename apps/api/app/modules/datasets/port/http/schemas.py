@@ -131,7 +131,6 @@ class CreateAnnotationRequest(BaseModel):
     sample_id: str
     label: str
     annotation_value: dict | list | None = None
-    created_by: str = "demo-user"
 
 
 class UpdateAnnotationRequest(BaseModel):

@@ -198,6 +198,15 @@ addresses, credentials, public URLs, and service/container controls. Keep the
 fixed four-worker/6144 MiB production process topology aligned when changing the
 corresponding `sc.data_provider` profile values.
 
+`apps/api/config/prod.yaml`, merged with the tracked `base.yaml`, is bundled in
+the released API image and is the only production source for those non-secret
+application settings. Do not recreate it from a release environment file or
+mount a host-specific replacement. Environment files must not define retired
+YAML overrides such as `MINIO_BUCKET`, `LLM_MODEL`, `REDIS_PORT`,
+`SC_PIPELINE_*`, `PREDICTION_COMPACTION_*`, or fixed `SC_DATA_PROVIDER_*`
+values. `SC_DATA_PROVIDER_CACHE_DIR` and `SC_DATA_PROVIDER_CACHE_NAMESPACE`
+remain deployment-owned because they identify mounted/per-process cache state.
+
 SC Datasets store only scalar Inspection identity. They do not persist an image
 parser choice, source root, credentials, staging policy, or cache path. The
 image-parser service resolves the Inspection once, dispatches by its exact

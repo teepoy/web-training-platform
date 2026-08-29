@@ -1,9 +1,22 @@
 <template>
-  <n-config-provider :theme="computedTheme" :theme-overrides="themeOverrides">
+  <n-config-provider
+    :theme="computedTheme"
+    :theme-overrides="themeOverrides"
+    :locale="naiveLocale"
+    :date-locale="naiveDateLocale"
+  >
     <n-message-provider>
       <n-notification-provider>
         <n-dialog-provider>
           <template v-if="isAuthPage">
+            <n-button
+              quaternary
+              size="small"
+              style="position: fixed; top: 16px; right: 16px; z-index: 10"
+              @click="switchLocale"
+            >
+              {{ t("locale.switchLanguage") }}
+            </n-button>
             <RouterView />
           </template>
           <template v-else-if="isSettingsRoute || isAdminRoute">
@@ -47,10 +60,13 @@
                     gap: 12px;
                   "
                 >
-                  <span style="font-weight: 600; flex: 1">ML Training Platform</span>
-                  <n-button text @click="uiStore.toggleDarkMode">{{
-                    uiStore.darkMode ? "☀" : "🌙"
-                  }}</n-button>
+                  <span style="font-weight: 600; flex: 1">{{ t("app.title") }}</span>
+                  <n-button
+                    text
+                    :aria-label="t(uiStore.darkMode ? 'app.toggleLight' : 'app.toggleDark')"
+                    @click="uiStore.toggleDarkMode"
+                    >{{ uiStore.darkMode ? "☀" : "🌙" }}</n-button
+                  >
                   <n-dropdown
                     trigger="click"
                     :options="avatarDropdownOptions"
@@ -86,7 +102,16 @@
 <script setup lang="ts">
 import { computed, h, onMounted, watch, type Component } from "vue";
 import { useRouter, useRoute, RouterView } from "vue-router";
-import { darkTheme, NIcon, type GlobalThemeOverrides, type MenuOption } from "naive-ui";
+import {
+  darkTheme,
+  dateEnUS,
+  dateZhCN,
+  enUS,
+  NIcon,
+  zhCN,
+  type GlobalThemeOverrides,
+  type MenuOption,
+} from "naive-ui";
 import { AlbumsOutline, CubeOutline, ImagesOutline, PulseOutline } from "@vicons/ionicons5";
 import { useQueryClient } from "@tanstack/vue-query";
 import { useMediaQuery } from "@vueuse/core";
@@ -96,6 +121,8 @@ import { useAuthStore } from "@/features/auth/application/store";
 import { useOrgStore } from "@/features/auth/application/org";
 import { useAgentAdapter } from "@/features/agent/application/useAgentAdapter";
 import { AgentChatDrawer } from "@/shared";
+import { useI18n } from "vue-i18n";
+import { setAppLocale, type AppLocale } from "./i18n";
 
 const router = useRouter();
 const route = useRoute();
@@ -104,6 +131,7 @@ const authStore = useAuthStore();
 const orgStore = useOrgStore();
 const queryClient = useQueryClient();
 const globalAgent = useAgentAdapter();
+const { locale, t } = useI18n();
 const isNarrowScreen = useMediaQuery("(max-width: 767px)");
 const effectiveSidebarCollapsed = computed(() => isNarrowScreen.value || uiStore.sidebarCollapsed);
 
@@ -127,6 +155,8 @@ const contentStyle = computed(() => ({
 const computedTheme = computed(() => {
   return uiStore.darkMode ? darkTheme : null;
 });
+const naiveLocale = computed(() => (locale.value === "zh-CN" ? zhCN : enUS));
+const naiveDateLocale = computed(() => (locale.value === "zh-CN" ? dateZhCN : dateEnUS));
 
 watch(
   () => uiStore.darkMode,
@@ -164,12 +194,16 @@ function renderMenuIcon(icon: Component) {
   return () => h(NIcon, null, { default: () => h(icon) });
 }
 
-const menuOptions: MenuOption[] = [
-  { label: "Patch", key: "/sc", icon: renderMenuIcon(ImagesOutline) },
-  { label: "Library", key: "/library", icon: renderMenuIcon(AlbumsOutline) },
-  { label: "Models", key: "/models", icon: renderMenuIcon(CubeOutline) },
-  { label: "Automations", key: "/automations", icon: renderMenuIcon(PulseOutline) },
-];
+const menuOptions = computed<MenuOption[]>(() => [
+  { label: t("navigation.patch"), key: "/sc", icon: renderMenuIcon(ImagesOutline) },
+  { label: t("navigation.library"), key: "/library", icon: renderMenuIcon(AlbumsOutline) },
+  { label: t("navigation.models"), key: "/models", icon: renderMenuIcon(CubeOutline) },
+  {
+    label: t("navigation.automations"),
+    key: "/automations",
+    icon: renderMenuIcon(PulseOutline),
+  },
+]);
 
 const userInitials = computed(() => authStore.user?.name?.slice(0, 2).toUpperCase() ?? "LU");
 
@@ -177,19 +211,24 @@ const avatarDropdownOptions = computed(() => {
   const options: Array<
     { label: string; key: string; disabled: boolean } | { type: "divider"; key: string }
   > = [
-    { label: authStore.user?.name || "Local User", key: "name", disabled: true },
+    { label: authStore.user?.name || t("user.local"), key: "name", disabled: true },
     { type: "divider" as const, key: "d1" },
-    { label: "Profile", key: "profile", disabled: true },
-    { label: "Settings", key: "settings", disabled: false },
+    { label: t("user.profile"), key: "profile", disabled: true },
+    { label: t("user.settings"), key: "settings", disabled: false },
+    { label: t("locale.switchLanguage"), key: "locale", disabled: false },
   ];
   if (isAdmin.value) {
-    options.push({ label: "Admin", key: "admin", disabled: false });
+    options.push({ label: t("user.admin"), key: "admin", disabled: false });
   }
-  options.push({ label: "Logout", key: "logout", disabled: false });
+  options.push({ label: t("user.logout"), key: "logout", disabled: false });
   return options;
 });
 
 function handleAvatarSelect(key: string) {
+  if (key === "locale") {
+    switchLocale();
+    return;
+  }
   if (key === "settings") {
     router.push("/settings/access-keys");
     return;
@@ -202,6 +241,10 @@ function handleAvatarSelect(key: string) {
     authStore.logout();
     router.push("/login");
   }
+}
+
+function switchLocale() {
+  setAppLocale((locale.value === "zh-CN" ? "en-US" : "zh-CN") as AppLocale);
 }
 
 onMounted(async () => {

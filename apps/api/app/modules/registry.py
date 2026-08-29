@@ -40,7 +40,6 @@ from app.modules.jobs.schedules.port.http.router import (
     runs_router,
 )
 from app.modules.jobs.sensors.port.http.router import router as sensors_router
-from app.core.settings.port.http.router import router as settings_router
 from app.modules.jobs.task_tracker.port.http.router import (
     router as task_tracker_router,
 )
@@ -75,7 +74,6 @@ MODULE_ROUTERS: list[APIRouter] = [
     schedules_router,
     runs_router,
     sensors_router,
-    settings_router,
     task_tracker_router,
     training_router,
     sc_router,

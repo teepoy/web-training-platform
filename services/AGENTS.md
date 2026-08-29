@@ -9,6 +9,7 @@ If this file conflicts with root `AGENTS.md` or `CORE_DESIGNS.md`, treat `CORE_D
 | Service      | Path                    | Role                                                                                            |
 | ------------ | ----------------------- | ----------------------------------------------------------------------------------------------- |
 | SC upstream  | `services/sc-upstream`  | Python gRPC + Arrow Flight service exposing wafer inspection upstream data and zip metadata     |
+| SC simulator | `services/sc-upstream-simulator` | Development-only PostgreSQL owner for simulated upstream inspection publication        |
 | Image parser | `services/image-parser` | Go HTTP + gRPC service resolving SC image references, sprites, cache, and S3-backed image reads |
 
 Development-only service fixtures belong under the service's `tools/`
@@ -28,6 +29,9 @@ from release images.
 ## Verification
 
 - For `services/sc-upstream`, run service-local Python checks from `services/sc-upstream` when changing Python code. At minimum run targeted tests if they exist and an import/type smoke for touched modules.
+- For `services/sc-upstream-simulator`, run its service-local tests and migration
+  checks. SQLite is acceptable only for repository unit tests; PostgreSQL
+  migration and transaction behavior requires the development database or CI.
 - For `services/image-parser`, run Go checks from `services/image-parser`: `go test ./...` for code changes, and `go test ./... -run TestName` for a narrow test while iterating.
 - For Docker-relevant service changes, verify the relevant compose image build when feasible, for example `docker compose -f infra/compose/docker-compose.yaml build sc-upstream image-parser`.
 - If a required service check cannot be run, state why and what remains unverified.

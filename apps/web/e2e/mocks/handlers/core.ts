@@ -64,16 +64,6 @@ export async function mockDashboard(page: Page): Promise<void> {
   });
 }
 
-export async function mockSettings(page: Page): Promise<void> {
-  await page.route("**/api/v1/settings", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({}),
-    });
-  });
-}
-
 export async function mockCollectionCreators(page: Page): Promise<void> {
   await page.route("**/api/v1/dataset-collections/creators", async (route) => {
     await route.fulfill({

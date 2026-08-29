@@ -11,5 +11,4 @@ export interface CreateAnnotationRequest {
   sample_id: string;
   label: string;
   annotation_value?: CreateAnnotationRequestAnnotationValue;
-  created_by?: string;
 }

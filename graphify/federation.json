@@ -234,6 +234,7 @@
         "apps/api/app/modules/sc",
         "apps/web/src/features/sc",
         "services/sc-upstream/src",
+        "services/sc-upstream-simulator/src",
         "services/image-parser",
         "libs/sc-ml/src",
         "libs/sampling-rules/src"
@@ -245,6 +246,7 @@
           "roots": [
             "apps/api/app/modules/sc/tests",
             "services/sc-upstream/tests",
+            "services/sc-upstream-simulator/tests",
             "libs/sc-ml/tests",
             "libs/sampling-rules/tests"
           ],
@@ -309,7 +311,7 @@
         "apps/web/src/features/dashboard",
         "apps/web/src/features/settings"
       ],
-      "include_globs": ["apps/api/app/shared/context.py", "apps/api/app/core/settings/**/*.py"],
+      "include_globs": ["apps/api/app/shared/context.py"],
       "max_source_files": 180,
       "max_nodes": 5000,
       "overlays": {

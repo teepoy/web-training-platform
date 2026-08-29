@@ -1,4 +1,4 @@
-"""RED tests for runtime bucket configuration contract.
+"""Tests for the runtime bucket configuration contract.
 
 These tests assert the expected contract for a fixed runtime bucket config key
 (``storage.runtime_bucket``) that **all jobs share** — jobs use object-name
@@ -14,10 +14,6 @@ Assertions
 3. The runtime bucket is distinct from the existing artifact bucket
    (``finetune-artifacts``).
 
-Status
-------
-**RED** — the ``storage.runtime_bucket`` key does not exist in
-``config/base.yaml`` and no validation check is wired yet.
 """
 
 from __future__ import annotations
@@ -34,9 +30,6 @@ class TestRuntimeBucketKeyExists:
         from app.core.config import load_config
 
         cfg = load_config(skip_runtime_validation=True)
-        # RED: ``storage.runtime_bucket`` is not in ``config/base.yaml`` yet.
-        # Attribute-style access on a missing OmegaConf key raises
-        # ``ConfigAttributeError`` (subclass of ``AttributeError``).
         bucket = cfg.storage.runtime_bucket
         assert bucket, "runtime_bucket must not be empty"
         assert bucket == "finetune-runtime-inputs", (
@@ -48,7 +41,6 @@ class TestRuntimeBucketKeyExists:
         from app.core.config import load_config
 
         cfg = load_config(skip_runtime_validation=True)
-        # RED: same missing-key failure as above.
         runtime = cfg.storage.runtime_bucket
         artifact = cfg.storage.minio.bucket
         assert runtime != artifact, (
@@ -64,8 +56,10 @@ class TestRuntimeBucketValidation:
     def _config_without_runtime_bucket() -> DictConfig:
         """Build a dev-profile config that satisfies all existing ``_validate_runtime_config``
         checks except the missing ``storage.runtime_bucket``."""
-        return OmegaConf.create({
-            "app": {"env": "dev"},
+        from app.core.config import _config_root
+
+        cfg = OmegaConf.merge(OmegaConf.load(_config_root() / "base.yaml"), {
+            "app": {"env": "dev", "frontend_url": "http://localhost:5173"},
             "execution": {"engine": "prefect"},
             "db": {"url": "postgresql+asyncpg://localhost/test"},
             "storage": {
@@ -78,13 +72,29 @@ class TestRuntimeBucketValidation:
                     "secure": False,
                 },
             },
-            "prefect": {"api_url": "http://localhost:4200/api"},
+            "prefect": {
+                "api_url": "http://localhost:4200/api",
+                "ui_url": "http://localhost:4200",
+            },
             "label_studio": {
                 "url": "http://localhost:8080",
+                "external_url": "http://localhost:8080",
                 "api_key": "test",
                 "database_url": "postgresql://localhost/ls",
             },
+            "auth": {"jwt_secret_key": "test-only-secret"},
+            "redis": {"host": "localhost"},
+            "sc": {
+                "upstream": {
+                    "grpc_addr": "localhost:9091",
+                    "flight_addr": "grpc://localhost:9093",
+                },
+                "image_parser": {"grpc_addr": "localhost:9092"},
+            },
         })
+        assert isinstance(cfg, DictConfig)
+        del cfg.storage.runtime_bucket
+        return cfg
 
     def test_missing_runtime_bucket_raises_runtime_error(self) -> None:
         """``_validate_runtime_config`` must raise ``RuntimeError`` mentioning
@@ -92,10 +102,6 @@ class TestRuntimeBucketValidation:
         from app.core.config import _validate_runtime_config
 
         cfg = self._config_without_runtime_bucket()
-        # RED: ``storage.runtime_bucket`` validation is not wired yet →
-        # ``_validate_runtime_config`` returns without error →
-        # ``pytest.raises(RuntimeError, ...)`` fails because no exception
-        # was raised.
         with pytest.raises(RuntimeError, match=r"runtime.*bucket"):
             _validate_runtime_config(cfg, profile="dev")
 

@@ -48,7 +48,6 @@ import {
   mockExportFormats,
   mockHealth,
   mockDashboard,
-  mockSettings,
   mockPlugins,
   // agent
   mockAgentUnavailable,
@@ -181,7 +180,6 @@ export interface ApiMocks {
     mockExportFormats: (formats?: { format_id: string }[]) => Promise<void>;
     mockHealth: () => Promise<void>;
     mockDashboard: () => Promise<void>;
-    mockSettings: () => Promise<void>;
     mockPlugins: () => Promise<void>;
   };
   auth: {
@@ -336,7 +334,6 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
         mockExportFormats: (formats) => mockExportFormats(page, formats),
         mockHealth: () => mockHealth(page),
         mockDashboard: () => mockDashboard(page),
-        mockSettings: () => mockSettings(page),
         mockPlugins: () => mockPlugins(page),
       },
       auth: {

@@ -95,8 +95,8 @@ export function buildDatasetColumns<TDataset extends DatasetListItem>(
       title: "View Types",
       key: "view_types",
       render: (row: TDataset) => {
-        const viewTypes = (row as any).view_types;
-        if (!viewTypes || !Array.isArray(viewTypes) || viewTypes.length === 0) {
+        const viewTypes = row.view_types;
+        if (!viewTypes || viewTypes.length === 0) {
           return h("span", { style: "color: #999" }, "—");
         }
         return h(

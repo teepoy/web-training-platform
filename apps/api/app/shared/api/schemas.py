@@ -334,14 +334,6 @@ class BulkCreateSampleResponse(BaseModel):
     errors: list[str] = Field(default_factory=list)
 
 
-class CreateAnnotationRequest(BaseModel):
-    dataset_id: str
-    sample_id: str
-    label: str
-    annotation_value: dict | list | None = None
-    created_by: str = "demo-user"
-
-
 class UpdateAnnotationRequest(BaseModel):
     dataset_id: str
     label: str

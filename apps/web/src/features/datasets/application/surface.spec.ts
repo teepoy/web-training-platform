@@ -2,8 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 import { ref } from "vue";
 import type { VNode } from "vue";
 
+import type {
+  DatasetListItem,
+  DatasetListUser,
+  UseDatasetListSurfaceResult,
+} from "@/shared/datasets/types";
+
 import { useDatasetListSurface } from "./surface";
-import type { DatasetListItem, DatasetListUser, UseDatasetListSurfaceResult } from "./types";
 
 function makeDataset(overrides: Partial<DatasetListItem> = {}): DatasetListItem {
   return {

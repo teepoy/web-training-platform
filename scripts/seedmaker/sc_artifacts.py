@@ -1,8 +1,8 @@
-"""Seed mock patch zip images into MinIO and inspection_patch_images_zip.
+"""Seed mock SC image artifacts and inspection zip metadata for development.
 
 The image-parser resolver reads patch images from zip files referenced by
-sc-upstream's inspection zips DB. This script creates those zip objects and
-the matching SQLite metadata for local dev.
+sc-upstream's inspection zips DB. This module creates those zip objects and the
+matching SQLite metadata outside production packages.
 """
 
 from __future__ import annotations
@@ -24,7 +24,12 @@ DEFECTS_PER_ZIP = 500
 
 PATCH_BUCKET = "sc-patch-images"
 REVIEW_BUCKET = "wafer-review-images"
-DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
+DATA_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+    "infra",
+    "compose",
+    "data",
+)
 INSPECTION_DB_URL = f"sqlite:///{os.path.join(DATA_DIR, 'wafer_inspection.db')}"
 ZIPS_DB_URL = f"sqlite:///{os.path.join(DATA_DIR, 'inspection_zips.db')}"
 
