@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import json
 import os
 import threading
@@ -17,7 +16,7 @@ import pytest
 
 from sc_upstream.cache import QueryCache
 from sc_upstream.flight_server import UpstreamFlightServer, _parse_ticket
-from sc_upstream.upstream_db import SampleBatchStream, _MockUpstreamDB
+from sc_upstream.upstream_db import SampleBatchStream
 
 
 class _FakeRedis:
@@ -122,20 +121,6 @@ def test_query_cache_raw_samples_file_cache_reads_and_cleans_orphans(
     cache._cleanup_raw_samples_cache()
 
     assert list(cache._raw_objects_dir.iterdir()) == []
-
-
-def test_empty_database_sample_stream_preserves_query_schema(tmp_path: Path) -> None:
-    db = _MockUpstreamDB(f"sqlite:///{tmp_path / 'empty.db'}")
-    try:
-        stream = db.open_list_samples_stream(datetime(2026, 1, 1), 7)
-
-        assert "defect_id" in stream.schema.names
-        assert "die_x" in stream.schema.names
-        assert "die_y" in stream.schema.names
-        assert sum(frame.height for frame in stream.batches) == 0
-    finally:
-        db._sync_engine.dispose()
-        asyncio.run(db._engine.dispose())
 
 
 class TinyDB:
@@ -288,6 +273,33 @@ def test_do_get_preserves_schema_when_the_result_has_no_batches(
                 pa.field("wafer_key", pa.int64(), nullable=False),
             ]
         )
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+
+
+def test_do_get_can_stream_directly_without_a_cache(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SC_FLIGHT_BATCH_SIZE", "8192")
+    db = TinyDB()
+    server = UpstreamFlightServer(
+        db,  # type: ignore[arg-type]
+        None,
+        location="grpc://127.0.0.1:0",
+    )
+    thread = threading.Thread(target=server.serve, daemon=True)
+    thread.start()
+
+    try:
+        client = flight.FlightClient(f"grpc://127.0.0.1:{server.port}")
+
+        first = client.do_get(make_ticket()).read_all()
+        second = client.do_get(make_ticket()).read_all()
+
+        assert first.num_rows == 2
+        assert second.num_rows == 2
+        assert db.calls == 2
     finally:
         server.shutdown()
         thread.join(timeout=5)

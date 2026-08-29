@@ -99,6 +99,8 @@ class GrpcScUpstream:
                 "origin_y": i.origin_y,
                 "die_size_x": i.die_size_x,
                 "die_size_y": i.die_size_y,
+                "latest_update": i.latest_update,
+                "change_token": i.change_token,
             }
             for i in resp.items
         ]

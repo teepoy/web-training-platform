@@ -32,8 +32,8 @@ x-platform-environment: &platform-environment
   SC_REVIEW_S3_ACCESS_KEY: minioadmin
   SC_REVIEW_S3_SECRET_KEY: minioadmin
   SC_REVIEW_S3_BUCKET: sc-review-images
-  SC_UPSTREAM_ADDR: sc-upstream:9091
-  SC_UPSTREAM_FLIGHT_ADDR: grpc://sc-upstream:9093
+  SC_UPSTREAM_ADDR: sc-upstream-simulator:9091
+  SC_UPSTREAM_FLIGHT_ADDR: grpc://sc-upstream-simulator:9093
   IMAGE_PARSER_GRPC_ADDR: image-parser:9092
   SC_DATA_PROVIDER_CACHE_DIR: /var/cache/sc-data-provider
   SC_DATA_PROVIDER_CACHE_NAMESPACE: sc-data-provider
@@ -71,7 +71,7 @@ x-api-runtime: &api-runtime
       condition: service_healthy
     redis:
       condition: service_healthy
-    sc-upstream:
+    sc-upstream-simulator:
       condition: service_healthy
     image-parser:
       condition: service_healthy
@@ -114,14 +114,19 @@ services:
       SC_SIMULATOR_ALLOW_MUTATIONS: "1"
       SC_SIMULATOR_DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/sc_simulator
       SC_SIMULATOR_API_TOKEN: ${SC_SIMULATOR_API_TOKEN:-local-development-sc-simulator-token}
+      SC_SIMULATOR_GRPC_PORT: "9091"
+      SC_SIMULATOR_FLIGHT_PORT: "9093"
+      SC_FLIGHT_BATCH_SIZE: "65536"
     command:
       [
         "/bin/sh",
         "-lc",
-        "/app/.venv/bin/alembic -c /app/alembic.ini upgrade head && exec /app/.venv/bin/uvicorn --factory sc_upstream_simulator.server:create_app --host 0.0.0.0 --port 8094",
+        "/workspace/devtools/sc-upstream-simulator/.venv/bin/alembic -c /workspace/devtools/sc-upstream-simulator/alembic.ini upgrade head && exec /workspace/devtools/sc-upstream-simulator/.venv/bin/uvicorn --factory sc_upstream_simulator.server:create_app --host 0.0.0.0 --port 8094",
       ]
     ports:
       - "8094:8094"
+      - "9091:9091"
+      - "9093:9093"
     healthcheck:
       test:
         [
@@ -242,7 +247,7 @@ services:
         limits:
           memory: ${IMAGE_PARSER_MEMORY:-2g}
     depends_on:
-      sc-upstream:
+      sc-upstream-simulator:
         condition: service_healthy
       minio:
         condition: service_healthy
@@ -252,7 +257,7 @@ services:
       PORT: "8090"
       GRPC_PORT: "9092"
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-local-development-jwt-secret-not-for-shared-host}
-      SC_UPSTREAM_ADDR: sc-upstream:9091
+      SC_UPSTREAM_ADDR: sc-upstream-simulator:9091
       SC_PATCH_S3_ENDPOINT: http://minio:9000
       SC_PATCH_S3_REGION: us-east-1
       SC_PATCH_S3_ACCESS_KEY: minioadmin
@@ -274,58 +279,6 @@ services:
       - "9092:9092"
     healthcheck:
       test: ["CMD", "wget", "-q", "-T", "5", "-O", "/dev/null", "http://127.0.0.1:8090/health"]
-      interval: 30s
-      timeout: 20s
-      retries: 12
-      start_period: 60s
-    restart: on-failure
-
-  # ───────────────────────────────────────────────────────────────────
-  # sc-upstream — Python hot reload with bind-mounted service + proto stubs
-  # ───────────────────────────────────────────────────────────────────
-  sc-upstream:
-    build:
-      context: ../..
-      dockerfile: services/sc-upstream/Dockerfile
-    deploy:
-      resources:
-        limits:
-          memory: ${SC_UPSTREAM_MEMORY:-2g}
-    depends_on:
-      redis:
-        condition: service_healthy
-    volumes:
-      - ./data:/data
-      - ../../services/sc-upstream:/app/services/sc-upstream
-      - ../../libs/protos:/app/libs/protos
-    command:
-      [
-        "/bin/sh",
-        "-lc",
-        "cd /app/services/sc-upstream && uv sync --frozen --package sc-upstream && exec /app/.venv/bin/python -m watchfiles --filter python --target-type command '/app/.venv/bin/python -m sc_upstream.server' /app/services/sc-upstream/src /app/libs/protos/src",
-      ]
-    environment:
-      PYTHONPATH: /app/libs/protos/src
-      GRPC_PORT: "9091"
-      FLIGHT_PORT: "9093"
-      CACHE_DIR: /data/cache
-      SC_UPSTREAM_CACHE_SIZE_LIMIT_BYTES: ${SC_UPSTREAM_CACHE_SIZE_LIMIT_BYTES:-10737418240}
-      SC_UPSTREAM_RAW_CACHE_CLEANUP_INTERVAL_SECONDS: ${SC_UPSTREAM_RAW_CACHE_CLEANUP_INTERVAL_SECONDS:-7200}
-      REDIS_URL: redis://redis:6379/0
-    expose:
-      - "9091"
-      - "9093"
-    ports:
-      - "9091:9091"
-      - "9093:9093"
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "python",
-          "-c",
-          "import socket; s=socket.create_connection(('127.0.0.1', 9091), timeout=20); s.close()",
-        ]
       interval: 30s
       timeout: 20s
       retries: 12

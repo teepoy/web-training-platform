@@ -16,7 +16,10 @@ from .upstream_db import UpstreamDB
 
 class UpstreamFlightServer(flight.FlightServerBase):
     def __init__(
-        self, db: UpstreamDB, cache: QueryCache, location: str = "grpc://0.0.0.0:9093"
+        self,
+        db: UpstreamDB,
+        cache: QueryCache | None,
+        location: str = "grpc://0.0.0.0:9093",
     ) -> None:
         super().__init__(location)
         self._db = db
@@ -33,6 +36,16 @@ class UpstreamFlightServer(flight.FlightServerBase):
         count: int | None = req["count"]
         batch_rows: int = req["batch_rows"]
         projection: list[str] | None = req["projection"]
+
+        if self._cache is None:
+            return self._uncached_stream(
+                inspection_time=inspection_time,
+                wafer_key=wafer_key,
+                offset=offset,
+                count=count,
+                batch_rows=batch_rows,
+                projection=projection,
+            )
 
         cached = self._cache.sync_get_list_samples(req["inspection_time"], wafer_key)
         if cached is not None:

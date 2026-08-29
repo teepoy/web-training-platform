@@ -8,12 +8,16 @@ from proto_stubs.sc.v1 import upstream_pb2 as pb
 from proto_stubs.sc.v1 import upstream_pb2_grpc as pb_grpc
 
 from .cache import QueryCache
+from .direct_cache import DirectMetadataCache
 from .upstream_db import InspectionZipsDB, UpstreamDB
 
 
 class ScUpstreamService(pb_grpc.ScUpstreamServicer):
     def __init__(
-        self, upstream_db: UpstreamDB, zips_db: InspectionZipsDB, cache: QueryCache
+        self,
+        upstream_db: UpstreamDB,
+        zips_db: InspectionZipsDB,
+        cache: QueryCache | DirectMetadataCache,
     ) -> None:
         self._db = upstream_db
         self._zips = zips_db
@@ -304,6 +308,7 @@ def _to_inspection_response(record: dict) -> pb.GetInspectionResponse:
         origin_index_x=record.get("origin_index_x", 0),
         origin_index_y=record.get("origin_index_y", 0),
         latest_update=record.get("latest_update", 0),
+        change_token=record.get("change_token", 0),
     )
 
 
@@ -327,4 +332,6 @@ def _to_summary_item(record: dict) -> pb.InspectionSummary:
         die_size_y=record.get("die_size_y", 0),
         origin_index_x=record.get("origin_index_x", 0),
         origin_index_y=record.get("origin_index_y", 0),
+        latest_update=record.get("latest_update", 0),
+        change_token=record.get("change_token", 0),
     )

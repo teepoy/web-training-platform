@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from collections.abc import AsyncIterator
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
 from sqlalchemy import delete, func, select
@@ -28,14 +29,16 @@ from sc_upstream_simulator.repository import (
     SimulatorRepository,
     SimulatorStateError,
 )
+from sc_upstream_simulator.upstream_adapter import SimulatorUpstreamAdapter
 
 
 @pytest.fixture
-async def repository() -> AsyncIterator[
-    tuple[SimulatorRepository, async_sessionmaker[AsyncSession]]
-]:
+async def repository(
+    tmp_path: Path,
+) -> AsyncIterator[tuple[SimulatorRepository, async_sessionmaker[AsyncSession], str]]:
     database_url = os.environ.get(
-        "SC_SIMULATOR_TEST_DATABASE_URL", "sqlite+aiosqlite:///:memory:"
+        "SC_SIMULATOR_TEST_DATABASE_URL",
+        f"sqlite+aiosqlite:///{tmp_path / 'simulator.db'}",
     )
     engine = create_async_engine(database_url)
     if database_url.startswith("sqlite"):
@@ -53,7 +56,7 @@ async def repository() -> AsyncIterator[
             await session.execute(delete(model))
         session.add(SimulatorClockORM(id=1, next_change_token=1))
 
-    yield SimulatorRepository(sessions), sessions
+    yield SimulatorRepository(sessions), sessions, database_url
     await engine.dispose()
 
 
@@ -119,9 +122,9 @@ def _draft(*, duplicate_defects: bool = False) -> InspectionDraft:
 
 @pytest.mark.asyncio
 async def test_create_then_publish_allocates_one_visible_change_token(
-    repository: tuple[SimulatorRepository, async_sessionmaker[AsyncSession]],
+    repository: tuple[SimulatorRepository, async_sessionmaker[AsyncSession], str],
 ) -> None:
-    repo, sessions = repository
+    repo, sessions, _ = repository
     draft = _draft()
 
     await repo.create_draft(draft)
@@ -148,9 +151,9 @@ async def test_create_then_publish_allocates_one_visible_change_token(
 
 @pytest.mark.asyncio
 async def test_failed_child_insert_rolls_back_whole_draft(
-    repository: tuple[SimulatorRepository, async_sessionmaker[AsyncSession]],
+    repository: tuple[SimulatorRepository, async_sessionmaker[AsyncSession], str],
 ) -> None:
-    repo, sessions = repository
+    repo, sessions, _ = repository
     draft = _draft(duplicate_defects=True)
 
     with pytest.raises(SimulatorConflictError):
@@ -165,9 +168,9 @@ async def test_failed_child_insert_rolls_back_whole_draft(
 
 @pytest.mark.asyncio
 async def test_published_inspection_cannot_be_published_again(
-    repository: tuple[SimulatorRepository, async_sessionmaker[AsyncSession]],
+    repository: tuple[SimulatorRepository, async_sessionmaker[AsyncSession], str],
 ) -> None:
-    repo, _ = repository
+    repo, _, _ = repository
     draft = _draft()
     published_at = datetime(2026, 8, 29, 1, 5, tzinfo=timezone.utc)
     await repo.create_draft(draft)
@@ -180,3 +183,89 @@ async def test_published_inspection_cannot_be_published_again(
 def test_inspection_identity_requires_timezone() -> None:
     with pytest.raises(ValueError, match="inspection_time must include a timezone"):
         InspectionKey(wafer_key=7, inspection_time=datetime(2026, 8, 29, 1, 2))
+
+
+@pytest.mark.asyncio
+async def test_published_state_is_exposed_live_through_transport_adapter(
+    repository: tuple[
+        SimulatorRepository,
+        async_sessionmaker[AsyncSession],
+        str,
+    ],
+) -> None:
+    repo, sessions, database_url = repository
+    draft = _draft()
+    adapter = SimulatorUpstreamAdapter(sessions, database_url=database_url)
+    try:
+        await repo.create_draft(draft)
+        assert (
+            await adapter.get_inspection(draft.key.inspection_time, draft.key.wafer_key)
+            is None
+        )
+
+        published_at = datetime(2026, 8, 29, 1, 5, tzinfo=timezone.utc)
+        await repo.publish(draft.key, published_at=published_at)
+
+        inspection = await adapter.get_inspection(
+            draft.key.inspection_time, draft.key.wafer_key
+        )
+        assert inspection is not None
+        assert inspection["device"] == "DEVICE-1"
+        assert inspection["change_token"] == 1
+        assert inspection["defects"] == 1
+        assert inspection["images"] == 1
+
+        listed = await adapter.list_inspections(
+            datetime(2026, 8, 29, tzinfo=timezone.utc),
+            datetime(2026, 8, 30, tzinfo=timezone.utc),
+            lot_id="LOT-*",
+        )
+        assert listed.collect().height == 1
+        assert (
+            await adapter.get_sample_count(
+                draft.key.inspection_time, draft.key.wafer_key
+            )
+            == 1
+        )
+        samples = (
+            await adapter.list_samples(draft.key.inspection_time, draft.key.wafer_key)
+        ).collect()
+        assert samples["defect_id"].to_list() == [10]
+        assert samples["die_x"].to_list() == [0]
+        assert "die_y" in samples.columns
+        stream = adapter.open_list_samples_stream(
+            draft.key.inspection_time,
+            draft.key.wafer_key,
+            batch_size=1,
+        )
+        assert "defect_id" in stream.schema.names
+        assert sum(batch.height for batch in stream.batches) == 1
+        assert (
+            len(
+                await adapter.list_review_images(
+                    draft.key.inspection_time, draft.key.wafer_key
+                )
+            )
+            == 1
+        )
+        assert await adapter.get_inspection_patch_zips(
+            draft.key.inspection_time,
+            draft.lot_id,
+            draft.wafer_id,
+            draft.device,
+            draft.layer_id,
+        ) == [{"s3_bucket": "sc-patch-images", "s3_key": "7/inspection.zip"}]
+
+        await repo.update_published(
+            draft.key,
+            changed_at=datetime(2026, 8, 29, 1, 6, tzinfo=timezone.utc),
+            changes={"device": "DEVICE-2"},
+        )
+        changed = await adapter.get_inspection(
+            draft.key.inspection_time, draft.key.wafer_key
+        )
+        assert changed is not None
+        assert changed["device"] == "DEVICE-2"
+        assert changed["change_token"] == 2
+    finally:
+        adapter.close()

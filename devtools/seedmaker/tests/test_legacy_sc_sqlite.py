@@ -7,7 +7,7 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from sc_upstream.models import (
+from seedmaker.legacy_sc_models import (
     Base,
     BaseZips,
     InspWaferSummaryORM,

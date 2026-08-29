@@ -13,7 +13,7 @@ from sqlalchemy import create_engine, func, inspect, or_
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
-from sc_upstream.models import (
+from seedmaker.legacy_sc_models import (
     Base,
     BaseZips,
     ClassORM,

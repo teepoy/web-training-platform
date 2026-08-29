@@ -6,9 +6,13 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from sc_upstream.direct_cache import DirectMetadataCache
+from sc_upstream.server import start_servers
+
 from .api import create_control_app
 from .repository import SimulatorRepository
 from .settings import SimulatorSettings
+from .upstream_adapter import SimulatorUpstreamAdapter
 
 
 def create_app() -> FastAPI:
@@ -18,8 +22,24 @@ def create_app() -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-        yield
-        await engine.dispose()
+        adapter = SimulatorUpstreamAdapter(
+            sessions,
+            database_url=settings.database_url,
+        )
+        running = await start_servers(
+            upstream=adapter,
+            zips=adapter,
+            metadata_cache=DirectMetadataCache(),
+            flight_cache=None,
+            grpc_port=settings.grpc_port,
+            flight_port=settings.flight_port,
+        )
+        try:
+            yield
+        finally:
+            await running.stop()
+            adapter.close()
+            await engine.dispose()
 
     return create_control_app(
         repository=SimulatorRepository(sessions),

@@ -226,12 +226,6 @@ class ScSourceRecordProvider:
         if not isinstance(wafer_key, int) or isinstance(wafer_key, bool):
             raise ValueError("SC Source record has no wafer_key")
         inspection_time = source_time.isoformat()
-        latest_update = row.get("latest_update")
-        source_version = (
-            str(latest_update)
-            if isinstance(latest_update, int) and latest_update > 0
-            else None
-        )
         attributes = {
             key: _json_value(row.get(column)) for key, column in _FIELD_COLUMNS.items()
         }
@@ -242,7 +236,7 @@ class ScSourceRecordProvider:
         layer = attributes.get("layer_id") or "unlayered"
         return SourceRecord(
             record_key=f"{inspection_time}::{wafer_key}",
-            source_version=source_version,
+            source_version=None,
             observed_at=source_time.astimezone(UTC),
             display_name=f"{lot}-{wafer}-{layer}-{source_time:%Y%m%d-%H%M%S}",
             attributes=attributes,

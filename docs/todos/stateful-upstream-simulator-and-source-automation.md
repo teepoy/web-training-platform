@@ -2,9 +2,9 @@
 
 ## Progress
 
-- **Overall status:** In progress; the database/publication foundation is
-  implemented and operable through its control interface, but it is not yet
-  connected to the platform-facing read interfaces.
+- **Overall status:** In progress; the database, control, and platform-facing
+  read interfaces are complete. Seed/object generation and recurring
+  Collection discovery remain.
 - **Completed intermediate slices:** resolved the PostgreSQL, HTTP API, CLI,
   latest-value, and five-minute automation decisions; recorded the current
   direct-write inventory; moved the artifact generator out of Compose code;
@@ -14,8 +14,13 @@
   change token; added the bearer-authenticated HTTP control API, HTTP-only CLI,
   simulator-owned development database, and Compose service; and separated its
   dependency lock and image build from the production uv workspace/images.
-- **Next milestone:** expose only published rows through the existing
-  gRPC/Flight contracts and transport the latest-change freshness value.
+  The simulator now also serves published rows through the existing gRPC and
+  Arrow Flight contracts, transports latest-update/change-token freshness, and
+  performs metadata reads directly so mutable source values are never hidden by
+  the production query cache.
+- **Next milestone:** route every upstream seed record and generated object
+  reference through simulator behavior, then add the five-minute internal
+  Collection-discovery trigger.
 - **Done when:** every acceptance criterion below is verified. Package
   relocation is not simulator completion.
 
@@ -300,8 +305,10 @@ initial inspection, defect, review-image, patch-archive, publication, and
 change-clock schema. Repository tests verify atomic child-record rollback,
 single publication, timezone-aware identity, and change-token allocation. The
 same suite has been verified against the migrated PostgreSQL schema. Development
-Development Compose wiring and the HTTP control surface are complete. The
-gRPC/Flight read interfaces remain open.
+Development Compose wiring, the HTTP control surface, and the gRPC/Flight read
+interfaces are complete. The production transport package no longer contains
+the SQLite mock schema or adapter, and the development platform reads the
+simulator directly.
 
 ### P0: Add an explicit development control surface
 
@@ -343,6 +350,12 @@ manifests do not include it.
 - Verify that a mutable source-field change appears on the next resolved read
   without re-import and without `source_changed`/Needs attention behavior.
 - Deletion/tombstones are outside the initial simulator and source contract.
+
+Completed: `GetInspectionResponse` and `InspectionSummary` carry the additive
+latest-update/change-token fields. This is a current-state freshness signal,
+not source versioning. Unit tests cover live adapter reads and an end-to-end
+Compose smoke test verified HTTP publication, gRPC metadata, Flight samples,
+and an immediately visible mutable-field update.
 
 ### P1: Move image and archive generation behind simulator behavior
 

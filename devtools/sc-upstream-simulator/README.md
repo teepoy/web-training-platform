@@ -14,9 +14,10 @@ The current implementation provides:
 - a bearer-authenticated HTTP control API for create, append, publish, update,
   list, and inspect operations;
 - a thin `sc-upstream-simulator` CLI that calls only that HTTP API.
+- the platform-facing gRPC metadata and Arrow Flight sample-read interfaces,
+  backed by the same published PostgreSQL state.
 
-It does not yet provide the gRPC/Flight read interfaces or object generation.
-Those are subsequent tracked slices in
+Object generation and recurring source-discovery automation remain tracked in
 `docs/todos/stateful-upstream-simulator-and-source-automation.md`.
 
 Apply migrations from the repository root:
@@ -38,8 +39,9 @@ set `SC_SIMULATOR_TEST_DATABASE_URL` to that isolated database before running
 the test command. The suite resets only simulator-owned tables in the selected
 database.
 
-The local Compose stack exposes the control API on port `8094`. The CLI requires
-the endpoint and bearer credential explicitly:
+The local Compose stack exposes the control API on port `8094`, gRPC on `9091`,
+and Arrow Flight on `9093`. The CLI requires the endpoint and bearer credential
+explicitly:
 
 ```bash
 export SC_SIMULATOR_API_URL=http://127.0.0.1:8094

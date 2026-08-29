@@ -1,17 +1,13 @@
 from __future__ import annotations
 
 from .service import ScUpstreamService
-from .upstream_db import (
-    InspectionZipsDB,
-    UpstreamDB,
-    create_mock_inspection_zips_db,
-    create_mock_upstream_db,
-)
+from .direct_cache import DirectMetadataCache
+from .upstream_db import InspectionZipsDB, SampleBatchStream, UpstreamDB
 
 __all__ = [
     "ScUpstreamService",
+    "DirectMetadataCache",
     "InspectionZipsDB",
+    "SampleBatchStream",
     "UpstreamDB",
-    "create_mock_inspection_zips_db",
-    "create_mock_upstream_db",
 ]

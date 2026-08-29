@@ -97,6 +97,7 @@ class GetInspectionResponse(_message.Message):
     ORIGIN_INDEX_X_FIELD_NUMBER: _builtins.int
     ORIGIN_INDEX_Y_FIELD_NUMBER: _builtins.int
     LATEST_UPDATE_FIELD_NUMBER: _builtins.int
+    CHANGE_TOKEN_FIELD_NUMBER: _builtins.int
     inspection_time: _builtins.str
     wafer_key: _builtins.int
     lot_id: _builtins.str
@@ -116,6 +117,7 @@ class GetInspectionResponse(_message.Message):
     origin_index_x: _builtins.int
     origin_index_y: _builtins.int
     latest_update: _builtins.int
+    change_token: _builtins.int
     def __init__(
         self,
         *,
@@ -138,10 +140,11 @@ class GetInspectionResponse(_message.Message):
         origin_index_x: _builtins.int = ...,
         origin_index_y: _builtins.int = ...,
         latest_update: _builtins.int = ...,
+        change_token: _builtins.int = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["center_x", b"center_x", "center_y", b"center_y", "defects", b"defects", "device", b"device", "die_size_x", b"die_size_x", "die_size_y", b"die_size_y", "eqp_id", b"eqp_id", "images", b"images", "inspection_time", b"inspection_time", "latest_update", b"latest_update", "layer_id", b"layer_id", "lot_id", b"lot_id", "origin_index_x", b"origin_index_x", "origin_index_y", b"origin_index_y", "origin_x", b"origin_x", "origin_y", b"origin_y", "recipe_id", b"recipe_id", "wafer_id", b"wafer_id", "wafer_key", b"wafer_key"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["center_x", b"center_x", "center_y", b"center_y", "change_token", b"change_token", "defects", b"defects", "device", b"device", "die_size_x", b"die_size_x", "die_size_y", b"die_size_y", "eqp_id", b"eqp_id", "images", b"images", "inspection_time", b"inspection_time", "latest_update", b"latest_update", "layer_id", b"layer_id", "lot_id", b"lot_id", "origin_index_x", b"origin_index_x", "origin_index_y", b"origin_index_y", "origin_x", b"origin_x", "origin_y", b"origin_y", "recipe_id", b"recipe_id", "wafer_id", b"wafer_id", "wafer_key", b"wafer_key"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 
@@ -396,6 +399,8 @@ class InspectionSummary(_message.Message):
     DIE_SIZE_Y_FIELD_NUMBER: _builtins.int
     ORIGIN_INDEX_X_FIELD_NUMBER: _builtins.int
     ORIGIN_INDEX_Y_FIELD_NUMBER: _builtins.int
+    LATEST_UPDATE_FIELD_NUMBER: _builtins.int
+    CHANGE_TOKEN_FIELD_NUMBER: _builtins.int
     inspection_time: _builtins.str
     wafer_key: _builtins.int
     lot_id: _builtins.str
@@ -414,6 +419,8 @@ class InspectionSummary(_message.Message):
     die_size_y: _builtins.int
     origin_index_x: _builtins.int
     origin_index_y: _builtins.int
+    latest_update: _builtins.int
+    change_token: _builtins.int
     def __init__(
         self,
         *,
@@ -435,10 +442,12 @@ class InspectionSummary(_message.Message):
         die_size_y: _builtins.int = ...,
         origin_index_x: _builtins.int = ...,
         origin_index_y: _builtins.int = ...,
+        latest_update: _builtins.int = ...,
+        change_token: _builtins.int = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["center_x", b"center_x", "center_y", b"center_y", "defects", b"defects", "device", b"device", "die_size_x", b"die_size_x", "die_size_y", b"die_size_y", "eqp_id", b"eqp_id", "images", b"images", "inspection_time", b"inspection_time", "layer_id", b"layer_id", "lot_id", b"lot_id", "origin_index_x", b"origin_index_x", "origin_index_y", b"origin_index_y", "origin_x", b"origin_x", "origin_y", b"origin_y", "recipe_id", b"recipe_id", "wafer_id", b"wafer_id", "wafer_key", b"wafer_key"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["center_x", b"center_x", "center_y", b"center_y", "change_token", b"change_token", "defects", b"defects", "device", b"device", "die_size_x", b"die_size_x", "die_size_y", b"die_size_y", "eqp_id", b"eqp_id", "images", b"images", "inspection_time", b"inspection_time", "latest_update", b"latest_update", "layer_id", b"layer_id", "lot_id", b"lot_id", "origin_index_x", b"origin_index_x", "origin_index_y", b"origin_index_y", "origin_x", b"origin_x", "origin_y", b"origin_y", "recipe_id", b"recipe_id", "wafer_id", b"wafer_id", "wafer_key", b"wafer_key"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 

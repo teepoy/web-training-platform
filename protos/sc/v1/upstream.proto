@@ -44,6 +44,7 @@ message GetInspectionResponse {
   int32 origin_index_x = 17;
   int32 origin_index_y = 18;
   int32 latest_update = 19;
+  int64 change_token = 20;
 }
 
 message GetInspectionPatchZipsRequest {
@@ -119,6 +120,8 @@ message InspectionSummary {
   int32 die_size_y = 16;
   int32 origin_index_x = 17;
   int32 origin_index_y = 18;
+  int32 latest_update = 19;
+  int64 change_token = 20;
 }
 
 message ListInspectionsResponse {

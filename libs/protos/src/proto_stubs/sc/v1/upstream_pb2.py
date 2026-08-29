@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x14sc/v1/upstream.proto\x12\x05sc.v1\"\x0f\n\rHealthRequest\" \n\x0eHealthResponse\x12\x0e\n\x06status\x18\x01 \x01(\t\"B\n\x14GetInspectionRequest\x12\x17\n\x0finspection_time\x18\x01 \x01(\t\x12\x11\n\twafer_key\x18\x02 \x01(\x05\"\x82\x03\n\x15GetInspectionResponse\x12\x17\n\x0finspection_time\x18\x01 \x01(\t\x12\x11\n\twafer_key\x18\x02 \x01(\x05\x12\x0e\n\x06lot_id\x18\x03 \x01(\t\x12\x10\n\x08wafer_id\x18\x04 \x01(\t\x12\x0e\n\x06\x64\x65vice\x18\x05 \x01(\t\x12\x10\n\x08layer_id\x18\x06 \x01(\t\x12\x10\n\x08\x63\x65nter_x\x18\x07 \x01(\x05\x12\x10\n\x08\x63\x65nter_y\x18\x08 \x01(\x05\x12\x10\n\x08origin_x\x18\t \x01(\x05\x12\x10\n\x08origin_y\x18\n \x01(\x05\x12\x12\n\ndie_size_x\x18\x0b \x01(\x05\x12\x12\n\ndie_size_y\x18\x0c \x01(\x05\x12\x0e\n\x06\x65qp_id\x18\r \x01(\t\x12\x11\n\trecipe_id\x18\x0e \x01(\t\x12\x0f\n\x07\x64\x65\x66\x65\x63ts\x18\x0f \x01(\x05\x12\x0e\n\x06images\x18\x10 \x01(\x05\x12\x16\n\x0eorigin_index_x\x18\x11 \x01(\x05\x12\x16\n\x0eorigin_index_y\x18\x12 \x01(\x05\x12\x15\n\rlatest_update\x18\x13 \x01(\x05\"|\n\x1dGetInspectionPatchZipsRequest\x12\x17\n\x0finspection_time\x18\x01 \x01(\t\x12\x0e\n\x06lot_id\x18\x02 \x01(\t\x12\x10\n\x08wafer_id\x18\x03 \x01(\t\x12\x0e\n\x06\x64\x65vice\x18\x04 \x01(\t\x12\x10\n\x08layer_id\x18\x05 \x01(\t\"+\n\x06ZipRef\x12\x11\n\ts3_bucket\x18\x01 \x01(\t\x12\x0e\n\x06s3_key\x18\x02 \x01(\t\"=\n\x1eGetInspectionPatchZipsResponse\x12\x1b\n\x04zips\x18\x01 \x03(\x0b\x32\r.sc.v1.ZipRef\"p\n\x1dGetReviewImageFileSpecRequest\x12\x17\n\x0finspection_time\x18\x01 \x01(\t\x12\x11\n\twafer_key\x18\x02 \x01(\x05\x12\x11\n\tdefect_id\x18\x03 \x01(\x05\x12\x10\n\x08image_id\x18\x04 \x01(\x05\"8\n\x1eGetReviewImageFileSpecResponse\x12\x16\n\x0eimage_filespec\x18\x01 \x01(\t\"X\n\x17ListReviewImagesRequest\x12\x17\n\x0finspection_time\x18\x01 \x01(\t\x12\x11\n\twafer_key\x18\x02 \x01(\x05\x12\x11\n\tdefect_id\x18\x03 \x01(\x05\"a\n\x0eReviewImageRef\x12\x16\n\x0eimage_filespec\x18\x01 \x01(\t\x12\x11\n\tdefect_id\x18\x02 \x01(\x05\x12\x10\n\x08image_id\x18\x03 \x01(\x05\x12\x12\n\nimage_type\x18\x04 \x01(\t\"A\n\x18ListReviewImagesResponse\x12%\n\x06images\x18\x01 \x03(\x0b\x32\x15.sc.v1.ReviewImageRef\"\x82\x01\n\x16ListInspectionsRequest\x12\x12\n\nstart_time\x18\x01 \x01(\t\x12\x10\n\x08\x65nd_time\x18\x02 \x01(\t\x12\x0e\n\x06lot_id\x18\x03 \x01(\t\x12\x10\n\x08wafer_id\x18\x04 \x01(\t\x12\x10\n\x08layer_id\x18\x05 \x01(\t\x12\x0e\n\x06\x64\x65vice\x18\x06 \x01(\t\"\xe7\x02\n\x11InspectionSummary\x12\x17\n\x0finspection_time\x18\x01 \x01(\t\x12\x11\n\twafer_key\x18\x02 \x01(\x05\x12\x0e\n\x06lot_id\x18\x03 \x01(\t\x12\x10\n\x08wafer_id\x18\x04 \x01(\t\x12\x0e\n\x06\x64\x65vice\x18\x05 \x01(\t\x12\x10\n\x08layer_id\x18\x06 \x01(\t\x12\x0e\n\x06\x65qp_id\x18\x07 \x01(\t\x12\x11\n\trecipe_id\x18\x08 \x01(\t\x12\x0f\n\x07\x64\x65\x66\x65\x63ts\x18\t \x01(\x05\x12\x0e\n\x06images\x18\n \x01(\x05\x12\x10\n\x08\x63\x65nter_x\x18\x0b \x01(\x05\x12\x10\n\x08\x63\x65nter_y\x18\x0c \x01(\x05\x12\x10\n\x08origin_x\x18\r \x01(\x05\x12\x10\n\x08origin_y\x18\x0e \x01(\x05\x12\x12\n\ndie_size_x\x18\x0f \x01(\x05\x12\x12\n\ndie_size_y\x18\x10 \x01(\x05\x12\x16\n\x0eorigin_index_x\x18\x11 \x01(\x05\x12\x16\n\x0eorigin_index_y\x18\x12 \x01(\x05\"B\n\x17ListInspectionsResponse\x12\'\n\x05items\x18\x01 \x03(\x0b\x32\x18.sc.v1.InspectionSummary2\x84\x04\n\nScUpstream\x12\x35\n\x06Health\x12\x14.sc.v1.HealthRequest\x1a\x15.sc.v1.HealthResponse\x12J\n\rGetInspection\x12\x1b.sc.v1.GetInspectionRequest\x1a\x1c.sc.v1.GetInspectionResponse\x12\x65\n\x16GetInspectionPatchZips\x12$.sc.v1.GetInspectionPatchZipsRequest\x1a%.sc.v1.GetInspectionPatchZipsResponse\x12\x65\n\x16GetReviewImageFileSpec\x12$.sc.v1.GetReviewImageFileSpecRequest\x1a%.sc.v1.GetReviewImageFileSpecResponse\x12S\n\x10ListReviewImages\x12\x1e.sc.v1.ListReviewImagesRequest\x1a\x1f.sc.v1.ListReviewImagesResponse\x12P\n\x0fListInspections\x12\x1d.sc.v1.ListInspectionsRequest\x1a\x1e.sc.v1.ListInspectionsResponseB&Z$ft-platform/protos/gen/go/sc/v1;scv1b\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x14sc/v1/upstream.proto\x12\x05sc.v1\"\x0f\n\rHealthRequest\" \n\x0eHealthResponse\x12\x0e\n\x06status\x18\x01 \x01(\t\"B\n\x14GetInspectionRequest\x12\x17\n\x0finspection_time\x18\x01 \x01(\t\x12\x11\n\twafer_key\x18\x02 \x01(\x05\"\x98\x03\n\x15GetInspectionResponse\x12\x17\n\x0finspection_time\x18\x01 \x01(\t\x12\x11\n\twafer_key\x18\x02 \x01(\x05\x12\x0e\n\x06lot_id\x18\x03 \x01(\t\x12\x10\n\x08wafer_id\x18\x04 \x01(\t\x12\x0e\n\x06\x64\x65vice\x18\x05 \x01(\t\x12\x10\n\x08layer_id\x18\x06 \x01(\t\x12\x10\n\x08\x63\x65nter_x\x18\x07 \x01(\x05\x12\x10\n\x08\x63\x65nter_y\x18\x08 \x01(\x05\x12\x10\n\x08origin_x\x18\t \x01(\x05\x12\x10\n\x08origin_y\x18\n \x01(\x05\x12\x12\n\ndie_size_x\x18\x0b \x01(\x05\x12\x12\n\ndie_size_y\x18\x0c \x01(\x05\x12\x0e\n\x06\x65qp_id\x18\r \x01(\t\x12\x11\n\trecipe_id\x18\x0e \x01(\t\x12\x0f\n\x07\x64\x65\x66\x65\x63ts\x18\x0f \x01(\x05\x12\x0e\n\x06images\x18\x10 \x01(\x05\x12\x16\n\x0eorigin_index_x\x18\x11 \x01(\x05\x12\x16\n\x0eorigin_index_y\x18\x12 \x01(\x05\x12\x15\n\rlatest_update\x18\x13 \x01(\x05\x12\x14\n\x0c\x63hange_token\x18\x14 \x01(\x03\"|\n\x1dGetInspectionPatchZipsRequest\x12\x17\n\x0finspection_time\x18\x01 \x01(\t\x12\x0e\n\x06lot_id\x18\x02 \x01(\t\x12\x10\n\x08wafer_id\x18\x03 \x01(\t\x12\x0e\n\x06\x64\x65vice\x18\x04 \x01(\t\x12\x10\n\x08layer_id\x18\x05 \x01(\t\"+\n\x06ZipRef\x12\x11\n\ts3_bucket\x18\x01 \x01(\t\x12\x0e\n\x06s3_key\x18\x02 \x01(\t\"=\n\x1eGetInspectionPatchZipsResponse\x12\x1b\n\x04zips\x18\x01 \x03(\x0b\x32\r.sc.v1.ZipRef\"p\n\x1dGetReviewImageFileSpecRequest\x12\x17\n\x0finspection_time\x18\x01 \x01(\t\x12\x11\n\twafer_key\x18\x02 \x01(\x05\x12\x11\n\tdefect_id\x18\x03 \x01(\x05\x12\x10\n\x08image_id\x18\x04 \x01(\x05\"8\n\x1eGetReviewImageFileSpecResponse\x12\x16\n\x0eimage_filespec\x18\x01 \x01(\t\"X\n\x17ListReviewImagesRequest\x12\x17\n\x0finspection_time\x18\x01 \x01(\t\x12\x11\n\twafer_key\x18\x02 \x01(\x05\x12\x11\n\tdefect_id\x18\x03 \x01(\x05\"a\n\x0eReviewImageRef\x12\x16\n\x0eimage_filespec\x18\x01 \x01(\t\x12\x11\n\tdefect_id\x18\x02 \x01(\x05\x12\x10\n\x08image_id\x18\x03 \x01(\x05\x12\x12\n\nimage_type\x18\x04 \x01(\t\"A\n\x18ListReviewImagesResponse\x12%\n\x06images\x18\x01 \x03(\x0b\x32\x15.sc.v1.ReviewImageRef\"\x82\x01\n\x16ListInspectionsRequest\x12\x12\n\nstart_time\x18\x01 \x01(\t\x12\x10\n\x08\x65nd_time\x18\x02 \x01(\t\x12\x0e\n\x06lot_id\x18\x03 \x01(\t\x12\x10\n\x08wafer_id\x18\x04 \x01(\t\x12\x10\n\x08layer_id\x18\x05 \x01(\t\x12\x0e\n\x06\x64\x65vice\x18\x06 \x01(\t\"\x94\x03\n\x11InspectionSummary\x12\x17\n\x0finspection_time\x18\x01 \x01(\t\x12\x11\n\twafer_key\x18\x02 \x01(\x05\x12\x0e\n\x06lot_id\x18\x03 \x01(\t\x12\x10\n\x08wafer_id\x18\x04 \x01(\t\x12\x0e\n\x06\x64\x65vice\x18\x05 \x01(\t\x12\x10\n\x08layer_id\x18\x06 \x01(\t\x12\x0e\n\x06\x65qp_id\x18\x07 \x01(\t\x12\x11\n\trecipe_id\x18\x08 \x01(\t\x12\x0f\n\x07\x64\x65\x66\x65\x63ts\x18\t \x01(\x05\x12\x0e\n\x06images\x18\n \x01(\x05\x12\x10\n\x08\x63\x65nter_x\x18\x0b \x01(\x05\x12\x10\n\x08\x63\x65nter_y\x18\x0c \x01(\x05\x12\x10\n\x08origin_x\x18\r \x01(\x05\x12\x10\n\x08origin_y\x18\x0e \x01(\x05\x12\x12\n\ndie_size_x\x18\x0f \x01(\x05\x12\x12\n\ndie_size_y\x18\x10 \x01(\x05\x12\x16\n\x0eorigin_index_x\x18\x11 \x01(\x05\x12\x16\n\x0eorigin_index_y\x18\x12 \x01(\x05\x12\x15\n\rlatest_update\x18\x13 \x01(\x05\x12\x14\n\x0c\x63hange_token\x18\x14 \x01(\x03\"B\n\x17ListInspectionsResponse\x12\'\n\x05items\x18\x01 \x03(\x0b\x32\x18.sc.v1.InspectionSummary2\x84\x04\n\nScUpstream\x12\x35\n\x06Health\x12\x14.sc.v1.HealthRequest\x1a\x15.sc.v1.HealthResponse\x12J\n\rGetInspection\x12\x1b.sc.v1.GetInspectionRequest\x1a\x1c.sc.v1.GetInspectionResponse\x12\x65\n\x16GetInspectionPatchZips\x12$.sc.v1.GetInspectionPatchZipsRequest\x1a%.sc.v1.GetInspectionPatchZipsResponse\x12\x65\n\x16GetReviewImageFileSpec\x12$.sc.v1.GetReviewImageFileSpecRequest\x1a%.sc.v1.GetReviewImageFileSpecResponse\x12S\n\x10ListReviewImages\x12\x1e.sc.v1.ListReviewImagesRequest\x1a\x1f.sc.v1.ListReviewImagesResponse\x12P\n\x0fListInspections\x12\x1d.sc.v1.ListInspectionsRequest\x1a\x1e.sc.v1.ListInspectionsResponseB&Z$ft-platform/protos/gen/go/sc/v1;scv1b\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -39,29 +39,29 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_GETINSPECTIONREQUEST']._serialized_start=82
   _globals['_GETINSPECTIONREQUEST']._serialized_end=148
   _globals['_GETINSPECTIONRESPONSE']._serialized_start=151
-  _globals['_GETINSPECTIONRESPONSE']._serialized_end=537
-  _globals['_GETINSPECTIONPATCHZIPSREQUEST']._serialized_start=539
-  _globals['_GETINSPECTIONPATCHZIPSREQUEST']._serialized_end=663
-  _globals['_ZIPREF']._serialized_start=665
-  _globals['_ZIPREF']._serialized_end=708
-  _globals['_GETINSPECTIONPATCHZIPSRESPONSE']._serialized_start=710
-  _globals['_GETINSPECTIONPATCHZIPSRESPONSE']._serialized_end=771
-  _globals['_GETREVIEWIMAGEFILESPECREQUEST']._serialized_start=773
-  _globals['_GETREVIEWIMAGEFILESPECREQUEST']._serialized_end=885
-  _globals['_GETREVIEWIMAGEFILESPECRESPONSE']._serialized_start=887
-  _globals['_GETREVIEWIMAGEFILESPECRESPONSE']._serialized_end=943
-  _globals['_LISTREVIEWIMAGESREQUEST']._serialized_start=945
-  _globals['_LISTREVIEWIMAGESREQUEST']._serialized_end=1033
-  _globals['_REVIEWIMAGEREF']._serialized_start=1035
-  _globals['_REVIEWIMAGEREF']._serialized_end=1132
-  _globals['_LISTREVIEWIMAGESRESPONSE']._serialized_start=1134
-  _globals['_LISTREVIEWIMAGESRESPONSE']._serialized_end=1199
-  _globals['_LISTINSPECTIONSREQUEST']._serialized_start=1202
-  _globals['_LISTINSPECTIONSREQUEST']._serialized_end=1332
-  _globals['_INSPECTIONSUMMARY']._serialized_start=1335
-  _globals['_INSPECTIONSUMMARY']._serialized_end=1694
-  _globals['_LISTINSPECTIONSRESPONSE']._serialized_start=1696
-  _globals['_LISTINSPECTIONSRESPONSE']._serialized_end=1762
-  _globals['_SCUPSTREAM']._serialized_start=1765
-  _globals['_SCUPSTREAM']._serialized_end=2281
+  _globals['_GETINSPECTIONRESPONSE']._serialized_end=559
+  _globals['_GETINSPECTIONPATCHZIPSREQUEST']._serialized_start=561
+  _globals['_GETINSPECTIONPATCHZIPSREQUEST']._serialized_end=685
+  _globals['_ZIPREF']._serialized_start=687
+  _globals['_ZIPREF']._serialized_end=730
+  _globals['_GETINSPECTIONPATCHZIPSRESPONSE']._serialized_start=732
+  _globals['_GETINSPECTIONPATCHZIPSRESPONSE']._serialized_end=793
+  _globals['_GETREVIEWIMAGEFILESPECREQUEST']._serialized_start=795
+  _globals['_GETREVIEWIMAGEFILESPECREQUEST']._serialized_end=907
+  _globals['_GETREVIEWIMAGEFILESPECRESPONSE']._serialized_start=909
+  _globals['_GETREVIEWIMAGEFILESPECRESPONSE']._serialized_end=965
+  _globals['_LISTREVIEWIMAGESREQUEST']._serialized_start=967
+  _globals['_LISTREVIEWIMAGESREQUEST']._serialized_end=1055
+  _globals['_REVIEWIMAGEREF']._serialized_start=1057
+  _globals['_REVIEWIMAGEREF']._serialized_end=1154
+  _globals['_LISTREVIEWIMAGESRESPONSE']._serialized_start=1156
+  _globals['_LISTREVIEWIMAGESRESPONSE']._serialized_end=1221
+  _globals['_LISTINSPECTIONSREQUEST']._serialized_start=1224
+  _globals['_LISTINSPECTIONSREQUEST']._serialized_end=1354
+  _globals['_INSPECTIONSUMMARY']._serialized_start=1357
+  _globals['_INSPECTIONSUMMARY']._serialized_end=1761
+  _globals['_LISTINSPECTIONSRESPONSE']._serialized_start=1763
+  _globals['_LISTINSPECTIONSRESPONSE']._serialized_end=1829
+  _globals['_SCUPSTREAM']._serialized_start=1832
+  _globals['_SCUPSTREAM']._serialized_end=2348
 # @@protoc_insertion_point(module_scope)

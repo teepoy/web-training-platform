@@ -174,6 +174,7 @@ type GetInspectionResponse struct {
 	OriginIndexX   int32                  `protobuf:"varint,17,opt,name=origin_index_x,json=originIndexX,proto3" json:"origin_index_x,omitempty"`
 	OriginIndexY   int32                  `protobuf:"varint,18,opt,name=origin_index_y,json=originIndexY,proto3" json:"origin_index_y,omitempty"`
 	LatestUpdate   int32                  `protobuf:"varint,19,opt,name=latest_update,json=latestUpdate,proto3" json:"latest_update,omitempty"`
+	ChangeToken    int64                  `protobuf:"varint,20,opt,name=change_token,json=changeToken,proto3" json:"change_token,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -337,6 +338,13 @@ func (x *GetInspectionResponse) GetOriginIndexY() int32 {
 func (x *GetInspectionResponse) GetLatestUpdate() int32 {
 	if x != nil {
 		return x.LatestUpdate
+	}
+	return 0
+}
+
+func (x *GetInspectionResponse) GetChangeToken() int64 {
+	if x != nil {
+		return x.ChangeToken
 	}
 	return 0
 }
@@ -901,6 +909,8 @@ type InspectionSummary struct {
 	DieSizeY       int32                  `protobuf:"varint,16,opt,name=die_size_y,json=dieSizeY,proto3" json:"die_size_y,omitempty"`
 	OriginIndexX   int32                  `protobuf:"varint,17,opt,name=origin_index_x,json=originIndexX,proto3" json:"origin_index_x,omitempty"`
 	OriginIndexY   int32                  `protobuf:"varint,18,opt,name=origin_index_y,json=originIndexY,proto3" json:"origin_index_y,omitempty"`
+	LatestUpdate   int32                  `protobuf:"varint,19,opt,name=latest_update,json=latestUpdate,proto3" json:"latest_update,omitempty"`
+	ChangeToken    int64                  `protobuf:"varint,20,opt,name=change_token,json=changeToken,proto3" json:"change_token,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -1061,6 +1071,20 @@ func (x *InspectionSummary) GetOriginIndexY() int32 {
 	return 0
 }
 
+func (x *InspectionSummary) GetLatestUpdate() int32 {
+	if x != nil {
+		return x.LatestUpdate
+	}
+	return 0
+}
+
+func (x *InspectionSummary) GetChangeToken() int64 {
+	if x != nil {
+		return x.ChangeToken
+	}
+	return 0
+}
+
 type ListInspectionsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Items         []*InspectionSummary   `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
@@ -1115,7 +1139,7 @@ const file_sc_v1_upstream_proto_rawDesc = "" +
 	"\x06status\x18\x01 \x01(\tR\x06status\"\\\n" +
 	"\x14GetInspectionRequest\x12'\n" +
 	"\x0finspection_time\x18\x01 \x01(\tR\x0einspectionTime\x12\x1b\n" +
-	"\twafer_key\x18\x02 \x01(\x05R\bwaferKey\"\xc1\x04\n" +
+	"\twafer_key\x18\x02 \x01(\x05R\bwaferKey\"\xe4\x04\n" +
 	"\x15GetInspectionResponse\x12'\n" +
 	"\x0finspection_time\x18\x01 \x01(\tR\x0einspectionTime\x12\x1b\n" +
 	"\twafer_key\x18\x02 \x01(\x05R\bwaferKey\x12\x15\n" +
@@ -1138,7 +1162,8 @@ const file_sc_v1_upstream_proto_rawDesc = "" +
 	"\x06images\x18\x10 \x01(\x05R\x06images\x12$\n" +
 	"\x0eorigin_index_x\x18\x11 \x01(\x05R\foriginIndexX\x12$\n" +
 	"\x0eorigin_index_y\x18\x12 \x01(\x05R\foriginIndexY\x12#\n" +
-	"\rlatest_update\x18\x13 \x01(\x05R\flatestUpdate\"\xad\x01\n" +
+	"\rlatest_update\x18\x13 \x01(\x05R\flatestUpdate\x12!\n" +
+	"\fchange_token\x18\x14 \x01(\x03R\vchangeToken\"\xad\x01\n" +
 	"\x1dGetInspectionPatchZipsRequest\x12'\n" +
 	"\x0finspection_time\x18\x01 \x01(\tR\x0einspectionTime\x12\x15\n" +
 	"\x06lot_id\x18\x02 \x01(\tR\x05lotId\x12\x19\n" +
@@ -1176,7 +1201,7 @@ const file_sc_v1_upstream_proto_rawDesc = "" +
 	"\x06lot_id\x18\x03 \x01(\tR\x05lotId\x12\x19\n" +
 	"\bwafer_id\x18\x04 \x01(\tR\awaferId\x12\x19\n" +
 	"\blayer_id\x18\x05 \x01(\tR\alayerId\x12\x16\n" +
-	"\x06device\x18\x06 \x01(\tR\x06device\"\x98\x04\n" +
+	"\x06device\x18\x06 \x01(\tR\x06device\"\xe0\x04\n" +
 	"\x11InspectionSummary\x12'\n" +
 	"\x0finspection_time\x18\x01 \x01(\tR\x0einspectionTime\x12\x1b\n" +
 	"\twafer_key\x18\x02 \x01(\x05R\bwaferKey\x12\x15\n" +
@@ -1198,7 +1223,9 @@ const file_sc_v1_upstream_proto_rawDesc = "" +
 	"\n" +
 	"die_size_y\x18\x10 \x01(\x05R\bdieSizeY\x12$\n" +
 	"\x0eorigin_index_x\x18\x11 \x01(\x05R\foriginIndexX\x12$\n" +
-	"\x0eorigin_index_y\x18\x12 \x01(\x05R\foriginIndexY\"I\n" +
+	"\x0eorigin_index_y\x18\x12 \x01(\x05R\foriginIndexY\x12#\n" +
+	"\rlatest_update\x18\x13 \x01(\x05R\flatestUpdate\x12!\n" +
+	"\fchange_token\x18\x14 \x01(\x03R\vchangeToken\"I\n" +
 	"\x17ListInspectionsResponse\x12.\n" +
 	"\x05items\x18\x01 \x03(\v2\x18.sc.v1.InspectionSummaryR\x05items2\x84\x04\n" +
 	"\n" +
