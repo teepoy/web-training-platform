@@ -18,6 +18,7 @@ import {
   useMessage,
 } from "naive-ui";
 import { useRoute, useRouter } from "vue-router";
+import { useI18n } from "vue-i18n";
 import { FullScreenLayout } from "@/shared/components/full-screen-layout";
 import { FlowModal, type FlowCard } from "@/shared";
 import { widgetRegistry } from "@/app/registrations";
@@ -52,6 +53,7 @@ const themeVars = useThemeVars();
 const message = useMessage();
 const router = useRouter();
 const route = useRoute();
+const { t } = useI18n();
 const datasetId = computed(() => route.params.id as string);
 const collectionId = computed(() => {
   const value = route.params.collectionId;
@@ -72,7 +74,7 @@ const collectionStackQuery = useQuery({
   queryFn: async () => {
     const id = collectionId.value;
     const revisionId = collectionRevisionId.value;
-    if (!id || !revisionId) throw new Error("Collection revision is required");
+    if (!id || !revisionId) throw new Error(t("sc.revisionRequired"));
     const [collection, revision] = await Promise.all([
       getCollectionApiV1DatasetCollectionsCollectionIdGet(id),
       getRevisionApiV1DatasetCollectionsCollectionIdRevisionsRevisionIdGet(id, revisionId),
@@ -87,7 +89,9 @@ const collectionStackQuery = useQuery({
 });
 const collectionSnapshotLabel = computed(() => {
   const revisionNumber = collectionStackQuery.data.value?.revision.revision_number;
-  return revisionNumber === undefined ? "Fixed snapshot" : `Snapshot r${revisionNumber}`;
+  return revisionNumber === undefined
+    ? t("sc.fixedSnapshot")
+    : t("sc.snapshot", { revision: revisionNumber });
 });
 const globalFilterTriggerTarget = ref<HTMLElement | null>(null);
 const taskInsightVisible = ref(false);
@@ -240,7 +244,7 @@ function applyAnnotationCode(code: string): void {
 async function handleTrainAndPredictClick(): Promise<void> {
   const quad = inspectionQuad.value;
   if (!quad) {
-    message.error("Data is still loading. Try again in a moment.");
+    message.error(t("sc.dataLoading"));
     return;
   }
   const workflowFilter = page.resolveTrainSampleFilter();
@@ -255,9 +259,7 @@ async function handleTrainAndPredictClick(): Promise<void> {
       });
       filterConfirmationVisible.value = true;
     } catch (error) {
-      message.error(
-        error instanceof Error ? error.message : "Failed to resolve filtered workflow samples",
-      );
+      message.error(error instanceof Error ? error.message : t("sc.filteredResolveFailed"));
     } finally {
       isPreparingFilteredWorkflow.value = false;
     }
@@ -281,8 +283,8 @@ const globalFilterEntries = computed(() =>
 function formatWorkflowCondition(field: string, condition: ScFilterCondition): string {
   if (field === "defect_id" && condition.filterType === "set") {
     return condition.exclude
-      ? `excludes ${condition.values.length} defects`
-      : `includes ${condition.values.length} defects`;
+      ? t("sc.excludesDefects", { count: condition.values.length })
+      : t("sc.includesDefects", { count: condition.values.length });
   }
   return JSON.stringify(condition);
 }
@@ -291,7 +293,7 @@ async function openSamplingModal(): Promise<void> {
   isPreparingSampling.value = true;
   try {
     const quad = inspectionQuad.value;
-    if (!quad) throw new Error("Data is still loading. Try again in a moment.");
+    if (!quad) throw new Error(t("sc.dataLoading"));
     const context = quad.getSamplingContext();
     samplingMapSelectionCount.value = context.mapSelectionCount;
     samplingTableSelectionAvailable.value = context.tableSelectionAvailable;
@@ -304,7 +306,7 @@ async function openSamplingModal(): Promise<void> {
     page.showSamplingModal.value = true;
     await refreshSamplingAvailableCount();
   } catch (error) {
-    message.error(toUserMessage(error, "Failed to prepare sampling"));
+    message.error(toUserMessage(error, t("sc.samplingPrepareFailed")));
   } finally {
     isPreparingSampling.value = false;
   }
@@ -312,14 +314,14 @@ async function openSamplingModal(): Promise<void> {
 
 async function refreshSamplingAvailableCount(): Promise<void> {
   const quad = inspectionQuad.value;
-  if (!quad) throw new Error("Data is still loading. Try again in a moment.");
+  if (!quad) throw new Error(t("sc.dataLoading"));
   const count = await quad.querySamplingCandidateCount(samplingOptions.value);
   samplingAvailableCount.value = count;
 }
 
 async function loadSamplingGroups(field: string): Promise<ScSamplingGroupPopulation[]> {
   const quad = inspectionQuad.value;
-  if (!quad) throw new Error("Data is still loading. Try again in a moment.");
+  if (!quad) throw new Error(t("sc.dataLoading"));
   return quad.querySamplingGroups(field, samplingOptions.value);
 }
 
@@ -340,7 +342,7 @@ async function handleSamplingScopeChange(): Promise<void> {
   try {
     await refreshSamplingAvailableCount();
   } catch (error) {
-    message.error(toUserMessage(error, "Failed to update sampling candidates"));
+    message.error(toUserMessage(error, t("sc.samplingUpdateFailed")));
   } finally {
     isPreparingSampling.value = false;
   }
@@ -355,11 +357,11 @@ async function applyRandomSampling(): Promise<void> {
       SC_SAMPLING_RANDOM_SEED,
       samplingOptions.value,
     );
-    if (!ids) throw new Error("Data is still loading. Try again in a moment.");
+    if (!ids) throw new Error(t("sc.dataLoading"));
     page.applySampling(ids.map(String));
     if (ids.length > 0) appliedSamplingConfigurationKey.value = configurationKey;
   } catch (error) {
-    message.error(toUserMessage(error, "Failed to sample defects"));
+    message.error(toUserMessage(error, t("sc.samplingFailed")));
   } finally {
     isPreparingSampling.value = false;
   }
@@ -411,7 +413,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
         class="sc-state"
       >
         <template #footer>
-          <NButton @click="goBack">Go Back</NButton>
+          <NButton @click="goBack">{{ t("sc.goBack") }}</NButton>
         </template>
       </NResult>
 
@@ -426,7 +428,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
         <div class="sc-header">
           <div class="sc-context-row">
             <div class="sc-context-primary">
-              <NButton text size="small" @click="goBack"> ← Back </NButton>
+              <NButton text size="small" @click="goBack">{{ t("sc.back") }}</NButton>
               <div class="sc-context-copy">
                 <div class="sc-context-title-row">
                   <NText
@@ -435,25 +437,33 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
                   >
                     {{
                       collectionId
-                        ? (collectionStackQuery.data.value?.collection.name ?? "Collection")
-                        : (page.dataset.value?.name ?? "Reclassify")
+                        ? (collectionStackQuery.data.value?.collection.name ?? t("sc.collection"))
+                        : (page.dataset.value?.name ?? t("sc.reclassify"))
                     }}
                   </NText>
                   <NTag v-if="collectionId" size="small" type="info">
                     {{ collectionSnapshotLabel }}
                   </NTag>
                   <NTag v-if="collectionId" size="small" :bordered="false">
-                    {{ collectionStackQuery.data.value?.datasets.length ?? 0 }} datasets
+                    {{
+                      t("sc.datasetsCount", {
+                        count: collectionStackQuery.data.value?.datasets.length ?? 0,
+                      })
+                    }}
                   </NTag>
                 </div>
                 <div v-if="collectionId" class="sc-dataset-title" data-testid="sc-dataset-name">
                   <NTooltip>
                     <template #trigger>
                       <NText depth="3" class="sc-dataset-name">
-                        Active dataset · {{ page.dataset.value?.name ?? "Reclassify" }}
+                        {{
+                          t("sc.activeDataset", {
+                            name: page.dataset.value?.name ?? t("sc.reclassify"),
+                          })
+                        }}
                       </NText>
                     </template>
-                    {{ page.dataset.value?.name ?? "Reclassify" }}
+                    {{ page.dataset.value?.name ?? t("sc.reclassify") }}
                   </NTooltip>
                 </div>
               </div>
@@ -467,7 +477,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
                 :aria-expanded="exportVisible"
                 @click.stop="openExport"
               >
-                Export
+                {{ t("common.export") }}
               </NButton>
               <NButton
                 v-if="page.trainPredictTaskId.value"
@@ -475,10 +485,10 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
                 quaternary
                 @click="taskInsightVisible = true"
               >
-                View Task
+                {{ t("sc.viewTask") }}
               </NButton>
               <NButton size="small" quaternary @click="router.push('/sc/handbook')">
-                Handbook
+                {{ t("sc.handbook") }}
               </NButton>
             </div>
           </div>
@@ -504,10 +514,16 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
                   :loading="isPreparingSampling"
                   @click="openSamplingModal"
                 >
-                  Annotation Sampling{{
+                  {{
                     page.galleryRandomSamplingDefectIds.value.size
-                      ? ` (${page.galleryRandomSamplingDefectIds.value.size}${samplingCohortStale ? " · outdated" : ""})`
-                      : ""
+                      ? samplingCohortStale
+                        ? t("sc.annotationSamplingOutdated", {
+                            count: page.galleryRandomSamplingDefectIds.value.size,
+                          })
+                        : t("sc.annotationSamplingCount", {
+                            count: page.galleryRandomSamplingDefectIds.value.size,
+                          })
+                      : t("sc.annotationSampling")
                   }}
                 </NButton>
                 <NButton
@@ -517,7 +533,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
                   quaternary
                   @click="clearSamplingCohort"
                 >
-                  Clear
+                  {{ t("common.clear") }}
                 </NButton>
               </div>
             </div>
@@ -526,7 +542,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
                 v-model:value="page.selectedTrainerId.value"
                 data-testid="sc-trainer-select"
                 :options="page.trainerOptions.value"
-                placeholder="Select trainer"
+                :placeholder="t('sc.selectTrainer')"
                 size="small"
                 class="sc-trainer-select"
               />
@@ -538,7 +554,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
                 :loading="page.isTrainPredictRunning.value || isPreparingFilteredWorkflow"
                 @click="handleTrainAndPredictClick"
               >
-                Train &amp; Predict
+                {{ t("sc.trainPredict") }}
               </NButton>
             </div>
           </div>
@@ -556,7 +572,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
             </NText>
             <NTooltip v-if="page.trainingSampleLimitNotice.value" trigger="hover">
               <template #trigger>
-                <NText type="warning">Training uses at most 1,000 samples per class</NText>
+                <NText type="warning">{{ t("sc.trainingLimit") }}</NText>
               </template>
               {{ page.trainingSampleLimitNotice.value }}
             </NTooltip>
@@ -567,7 +583,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
         <div class="classify-layout">
           <NEmpty
             v-if="!page.inspectionContext.value"
-            description="Inspection metadata not available for this dataset"
+            :description="t('sc.noInspectionMetadata')"
           />
           <InspectionQuad
             ref="inspectionQuad"
@@ -634,27 +650,26 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
       <template #after-sampling>
         <div class="sc-after-sampling">
           <div>
-            <strong>Draft label</strong>
+            <strong>{{ t("sc.draftLabel") }}</strong>
             <NText depth="3">
-              Apply one draft label to every sampled defect. Existing drafts outside the sample are
-              preserved.
+              {{ t("sc.draftLabelHelp") }}
             </NText>
           </div>
           <NCheckbox
             v-model:checked="page.assignSampledDraftLabel.value"
             data-testid="sampling-assign-draft-label"
           >
-            Assign draft label
+            {{ t("sc.assignDraftLabel") }}
           </NCheckbox>
           <NSelect
             v-model:value="page.samplingDraftLabel.value"
             data-testid="sampling-draft-label"
             :options="samplingDraftLabelOptions"
             :disabled="!page.assignSampledDraftLabel.value"
-            placeholder="Select draft label"
+            :placeholder="t('sc.selectDraftLabel')"
           />
           <NText v-if="samplingDraftLabelMissing" type="error">
-            Select a draft label before applying sampling.
+            {{ t("sc.draftLabelRequired") }}
           </NText>
         </div>
       </template>
@@ -662,12 +677,11 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
     <NModal
       v-model:show="filterConfirmationVisible"
       preset="card"
-      title="Filtered Train & Predict"
+      :title="t('sc.filteredTrainPredict')"
       :style="{ width: '560px' }"
     >
       <NText>
-        The current workbench scope will limit both training and prediction to
-        {{ filteredWorkflowCount }} defects.
+        {{ t("sc.filteredWorkflowHelp", { count: filteredWorkflowCount }) }}
       </NText>
       <NDescriptions bordered :column="1" size="small" style="margin-top: 16px">
         <NDescriptionsItem v-for="item in globalFilterEntries" :key="item.id" :label="item.field">
@@ -676,13 +690,13 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
       </NDescriptions>
       <template #footer>
         <div class="sc-sampling-footer">
-          <NButton @click="filterConfirmationVisible = false">Cancel</NButton>
+          <NButton @click="filterConfirmationVisible = false">{{ t("common.cancel") }}</NButton>
           <NButton
             type="primary"
             :disabled="filteredWorkflowCount === 0"
             @click="submitTrainAndPredict"
           >
-            Continue with {{ filteredWorkflowCount }} defects
+            {{ t("sc.continueDefects", { count: filteredWorkflowCount }) }}
           </NButton>
         </div>
       </template>
@@ -702,7 +716,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
     v-model:show="exportVisible"
     :flows="predictionExportFlows"
     kind="export"
-    title="Export current results"
+    :title="t('sc.exportResults')"
     :dataset-id="datasetId"
   />
 </template>

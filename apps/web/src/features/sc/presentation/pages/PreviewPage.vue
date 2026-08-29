@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import { useI18n } from "vue-i18n";
 import {
   NButton,
   NInput,
@@ -25,6 +26,7 @@ const page = usePreviewPage();
 const router = useRouter();
 const themeVars = useThemeVars();
 const message = useMessage();
+const { t } = useI18n();
 const selectedInspectionKeys = ref<string[]>([]);
 const collectionModalVisible = ref(false);
 const collectionName = ref("");
@@ -83,7 +85,10 @@ function openCollectionModal(): void {
   if (selectedInspections.value.length === 0) return;
   const first = selectedInspections.value[0];
   collectionName.value = first
-    ? `Patch collection ${first.lot_id} (${selectedInspections.value.length})`
+    ? t("sc.patchCollection", {
+        lot: first.lot_id,
+        count: selectedInspections.value.length,
+      })
     : "";
   completedImports.value = 0;
   collectionModalVisible.value = true;
@@ -117,12 +122,12 @@ async function buildCollection(): Promise<void> {
         sampling_spec: {},
       })),
     });
-    message.success(`Collection created with ${datasetIds.length} datasets`);
+    message.success(t("sc.collectionCreated", { count: datasetIds.length }, datasetIds.length));
     collectionModalVisible.value = false;
     selectedInspectionKeys.value = [];
     await router.push(`/dataset-collections/${collection.id}`);
   } catch (error) {
-    message.error(toUserMessage(error, "Failed to build dataset collection"));
+    message.error(toUserMessage(error, t("sc.collectionBuildFailed")));
   } finally {
     isBuildingCollection.value = false;
   }
@@ -134,10 +139,10 @@ async function buildCollection(): Promise<void> {
     <div class="sc-preview" :style="containerStyle">
       <div class="sc-preview-body">
         <div class="sc-preview-tab-bar">
-          <div class="sc-preview-title">Inspection summary</div>
+          <div class="sc-preview-title">{{ t("sc.inspectionSummary") }}</div>
           <div class="sc-preview-toolbar">
             <NButton size="small" quaternary @click="router.push('/sc/handbook')">
-              Handbook
+              {{ t("sc.handbook") }}
             </NButton>
           </div>
         </div>
@@ -177,18 +182,17 @@ async function buildCollection(): Promise<void> {
     <NModal
       v-model:show="collectionModalVisible"
       preset="card"
-      title="Import inspections as a collection"
+      :title="t('sc.importCollection')"
       :style="{ width: '520px' }"
       :mask-closable="!isBuildingCollection"
     >
       <NInput
         v-model:value="collectionName"
-        placeholder="Collection name"
+        :placeholder="t('sc.collectionName')"
         :disabled="isBuildingCollection"
       />
       <NText depth="3" class="collection-modal-copy">
-        Each selected inspection is imported as a standalone dataset, then dynamically linked to the
-        collection.
+        {{ t("sc.importCollectionHelp") }}
       </NText>
       <NProgress
         v-if="isBuildingCollection"
@@ -200,7 +204,7 @@ async function buildCollection(): Promise<void> {
       <template #footer>
         <NSpace justify="end">
           <NButton :disabled="isBuildingCollection" @click="collectionModalVisible = false">
-            Cancel
+            {{ t("common.cancel") }}
           </NButton>
           <NButton
             type="primary"
@@ -208,7 +212,7 @@ async function buildCollection(): Promise<void> {
             :loading="isBuildingCollection"
             @click="buildCollection"
           >
-            Import &amp; create
+            {{ t("sc.importCreate") }}
           </NButton>
         </NSpace>
       </template>

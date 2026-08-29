@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
+import { useI18n } from "vue-i18n";
 import { NButton, NIcon, NInputNumber, NModal, NSwitch } from "naive-ui";
 import { SettingsOutline } from "@vicons/ionicons5";
 import {
@@ -26,6 +27,7 @@ const showModal = ref(false);
 const draft = ref<ReticleMapOptions>({ ...props.modelValue });
 const draftShowImageMarkers = ref(props.showImageMarkers ?? true);
 const draftDefectSize = ref(props.defectSize ?? 2);
+const { t } = useI18n();
 
 function openModal(): void {
   draft.value = { ...props.modelValue };
@@ -67,25 +69,25 @@ function applyOptions(): void {
     data-testid="sc-map-settings"
     :size="size ?? 'tiny'"
     :quaternary="quaternary"
-    title="Map settings"
+    :title="t('sc.mapSettings')"
     @click="openModal"
   >
     <template v-if="iconOnly" #icon>
       <NIcon><SettingsOutline /></NIcon>
     </template>
-    <template v-if="!iconOnly">Options</template>
+    <template v-if="!iconOnly">{{ t("sc.options") }}</template>
   </NButton>
   <NModal
     v-model:show="showModal"
     preset="card"
-    title="Map Settings"
+    :title="t('sc.mapSettings')"
     class="srmo-modal"
     :style="{ width: '520px', maxWidth: 'calc(100vw - 32px)' }"
   >
     <div class="srmo-grid">
-      <h3>Reticle layout</h3>
+      <h3>{{ t("sc.reticleLayout") }}</h3>
       <label>
-        X die count
+        {{ t("sc.xDieCount") }}
         <NInputNumber
           :min="1"
           :precision="0"
@@ -94,7 +96,7 @@ function applyOptions(): void {
         />
       </label>
       <label>
-        Y die count
+        {{ t("sc.yDieCount") }}
         <NInputNumber
           :min="1"
           :precision="0"
@@ -103,7 +105,7 @@ function applyOptions(): void {
         />
       </label>
       <label>
-        X Die Shift
+        {{ t("sc.xDieShift") }}
         <NInputNumber
           :precision="0"
           :value="draft.xDieShift"
@@ -111,27 +113,27 @@ function applyOptions(): void {
         />
       </label>
       <label>
-        Y Die Shift
+        {{ t("sc.yDieShift") }}
         <NInputNumber
           :precision="0"
           :value="draft.yDieShift"
           @update:value="(v) => updateDraft('yDieShift', v)"
         />
       </label>
-      <h3>Defect display</h3>
+      <h3>{{ t("sc.defectDisplay") }}</h3>
       <label>
-        Image box indicator
+        {{ t("sc.imageBoxIndicator") }}
         <NSwitch v-model:value="draftShowImageMarkers" />
       </label>
       <label>
-        Defect size (px)
+        {{ t("sc.defectSize") }}
         <NInputNumber v-model:value="draftDefectSize" :min="1" :max="24" :step="1" />
       </label>
     </div>
     <template #footer>
       <div class="srmo-footer">
-        <NButton @click="showModal = false">Cancel</NButton>
-        <NButton type="primary" @click="applyOptions">Apply</NButton>
+        <NButton @click="showModal = false">{{ t("common.cancel") }}</NButton>
+        <NButton type="primary" @click="applyOptions">{{ t("common.apply") }}</NButton>
       </div>
     </template>
   </NModal>

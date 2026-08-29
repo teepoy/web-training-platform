@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { useI18n } from "vue-i18n";
 import { NButton, NIcon, NTag, NTooltip } from "naive-ui";
 import { EyeOffOutline, EyeOutline } from "@vicons/ionicons5";
 import {
@@ -41,6 +42,7 @@ const emit = defineEmits<{
   (e: "update:colorMap", colorMap: Record<string, string>): void;
   (e: "update:hiddenKeys", hiddenKeys: string[]): void;
 }>();
+const { t } = useI18n();
 
 function groupDisplayName(group: DefectList): string | null {
   const record = group as unknown as Record<string, unknown>;
@@ -73,9 +75,9 @@ const legendData = computed(() => {
   const colorFn = source === "bin" ? binColor : classColor;
   const labelPrefix = source === "class" || source === "bin" ? "" : "";
   const missingLabels: Record<string, string> = {
-    [UNLABELED_KEY]: "Unlabeled",
-    [NO_PREDICTION_KEY]: "No Prediction",
-    [UNCLASSIFIED_KEY]: "Unclassified",
+    [UNLABELED_KEY]: t("sc.unlabeled"),
+    [NO_PREDICTION_KEY]: t("sc.noPrediction"),
+    [UNCLASSIFIED_KEY]: t("sc.unclassified"),
   };
   if (compactGroups && Object.keys(compactGroups).length > 0) {
     return Object.entries(compactGroups)
@@ -158,7 +160,7 @@ const handleVisibleToggle = (rawKey: string) => {
     <div v-if="legendData.length > 0" class="sc-legend-list" data-testid="sc-legend-list">
       <div class="sc-legend-toggle-row">
         <NButton size="tiny" quaternary @click="handleToggleAll">
-          {{ allVisible ? "Hide All" : "Show All" }}
+          {{ allVisible ? t("sc.hideAll") : t("sc.showAll") }}
         </NButton>
       </div>
       <div
@@ -183,7 +185,7 @@ const handleVisibleToggle = (rawKey: string) => {
             class="sc-legend-color-input"
             type="color"
             :value="item.color"
-            :aria-label="`Set color for ${item.label}`"
+            :aria-label="t('sc.setColor', { label: item.label })"
             @input="
               (event) => handleColorUpdate(item.colorKey, (event.target as HTMLInputElement).value)
             "
@@ -202,7 +204,9 @@ const handleVisibleToggle = (rawKey: string) => {
               quaternary
               circle
               :aria-label="
-                hiddenKeySet.has(item.rawKey) ? `Show ${item.label}` : `Hide ${item.label}`
+                hiddenKeySet.has(item.rawKey)
+                  ? t('sc.showLabel', { label: item.label })
+                  : t('sc.hideLabel', { label: item.label })
               "
               :data-testid="`sc-legend-visible-${item.key}`"
               @click.stop="handleVisibleToggle(item.rawKey)"
@@ -215,12 +219,14 @@ const handleVisibleToggle = (rawKey: string) => {
               </template>
             </NButton>
           </template>
-          {{ hiddenKeySet.has(item.rawKey) ? "Show" : "Hide" }}
+          {{ hiddenKeySet.has(item.rawKey) ? t("sc.show") : t("sc.hide") }}
         </NTooltip>
         <NTag size="small" :bordered="false" class="sc-legend-count">{{ item.count }}</NTag>
       </div>
     </div>
-    <div v-else class="sc-legend-empty" data-testid="sc-legend-empty">No classes</div>
+    <div v-else class="sc-legend-empty" data-testid="sc-legend-empty">
+      {{ t("sc.noClasses") }}
+    </div>
   </div>
 </template>
 

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, h, reactive, ref } from "vue";
+import { useI18n } from "vue-i18n";
 import {
   NButton,
   NDataTable,
@@ -50,6 +51,7 @@ const emit = defineEmits<{
 }>();
 
 const datasetListVisible = ref(false);
+const { t } = useI18n();
 const datasetList = ref<InspectionSummaryItem["datasets"]>([]);
 
 function showDatasets(row: InspectionSummaryItem): void {
@@ -66,13 +68,13 @@ const selectableColumns = computed<DataTableColumns<InspectionSummaryItem>>(() =
   ...props.inspectionColumns,
   {
     key: "datasets",
-    title: "Dataset",
+    title: t("datasetDetail.dataset"),
     width: 150,
     fixed: "right",
     render: (row) => {
       const datasets = row.datasets ?? [];
       if (datasets.length === 0) {
-        return h(NText, { depth: 3 }, { default: () => "None" });
+        return h(NText, { depth: 3 }, { default: () => t("sc.none") });
       }
       if (datasets.length === 1) {
         const dataset = datasets[0];
@@ -89,7 +91,7 @@ const selectableColumns = computed<DataTableColumns<InspectionSummaryItem>>(() =
               emit("openDataset", dataset.id);
             },
           },
-          { default: () => "Open dataset" },
+          { default: () => t("sc.openDataset") },
         );
       }
       return h(
@@ -105,13 +107,13 @@ const selectableColumns = computed<DataTableColumns<InspectionSummaryItem>>(() =
             showDatasets(row);
           },
         },
-        { default: () => `Datasets (${datasets.length})` },
+        { default: () => t("sc.datasets", { count: datasets.length }) },
       );
     },
   },
   {
     key: "actions",
-    title: "Actions",
+    title: t("common.actions"),
     width: 190,
     fixed: "right",
     render: (row) =>
@@ -132,7 +134,7 @@ const selectableColumns = computed<DataTableColumns<InspectionSummaryItem>>(() =
                   emit("rowClick", row);
                 },
               },
-              { default: () => "Preview" },
+              { default: () => t("common.preview") },
             ),
             h(
               NButton,
@@ -151,7 +153,7 @@ const selectableColumns = computed<DataTableColumns<InspectionSummaryItem>>(() =
                   emit("createDataset", row);
                 },
               },
-              { default: () => "New dataset" },
+              { default: () => t("sc.newDataset") },
             ),
           ],
         },
@@ -204,53 +206,53 @@ function rowProps(row: InspectionSummaryItem): Record<string, unknown> {
           <template #trigger>
             <NInput
               :value="deviceFilter"
-              placeholder="Device"
+              :placeholder="t('sc.device')"
               size="small"
               style="width: 140px"
               clearable
               @update:value="emit('update:deviceFilter', $event)"
             />
           </template>
-          Separate values with commas; use * as a wildcard. Blank includes every device.
+          {{ t("sc.filterHelp", { item: t("sc.device").toLowerCase() }) }}
         </NTooltip>
         <NTooltip trigger="hover">
           <template #trigger>
             <NInput
               :value="layerIdFilter"
-              placeholder="Layer ID"
+              :placeholder="t('sc.layerId')"
               size="small"
               style="width: 140px"
               clearable
               @update:value="emit('update:layerIdFilter', $event)"
             />
           </template>
-          Separate values with commas; use * as a wildcard. Blank includes every layer.
+          {{ t("sc.filterHelp", { item: t("sc.layerId").toLowerCase() }) }}
         </NTooltip>
         <NTooltip trigger="hover">
           <template #trigger>
             <NInput
               :value="lotIdFilter"
-              placeholder="Lot ID"
+              :placeholder="t('sc.lotId')"
               size="small"
               style="width: 140px"
               clearable
               @update:value="emit('update:lotIdFilter', $event)"
             />
           </template>
-          Separate values with commas; use * as a wildcard. Blank includes every lot.
+          {{ t("sc.filterHelp", { item: t("sc.lotId").toLowerCase() }) }}
         </NTooltip>
         <NTooltip trigger="hover">
           <template #trigger>
             <NInput
               :value="eqpIdFilter"
-              placeholder="Equipment ID"
+              :placeholder="t('sc.equipmentId')"
               size="small"
               style="width: 160px"
               clearable
               @update:value="emit('update:eqpIdFilter', $event)"
             />
           </template>
-          Separate values with commas; use * as a wildcard. Blank includes every equipment ID.
+          {{ t("sc.filterHelp", { item: t("sc.equipmentId").toLowerCase() }) }}
         </NTooltip>
         <NButton
           type="primary"
@@ -259,7 +261,7 @@ function rowProps(row: InspectionSummaryItem): Record<string, unknown> {
           @click="emit('search')"
           size="small"
         >
-          Search
+          {{ t("common.search") }}
         </NButton>
         <NButton
           v-if="selectedRowKeys.length > 0"
@@ -269,10 +271,10 @@ function rowProps(row: InspectionSummaryItem): Record<string, unknown> {
           data-testid="build-collection"
           @click="emit('buildCollection')"
         >
-          Build collection ({{ selectedRowKeys.length }})
+          {{ t("sc.buildCollection", { count: selectedRowKeys.length }) }}
         </NButton>
         <NText v-if="lastOpenedSummaryLabel" depth="3" class="sc-preview-last-opened">
-          Last opened: {{ lastOpenedSummaryLabel }}
+          {{ t("sc.lastOpened", { label: lastOpenedSummaryLabel }) }}
         </NText>
       </NSpace>
     </div>
@@ -298,17 +300,15 @@ function rowProps(row: InspectionSummaryItem): Record<string, unknown> {
         <template #empty>
           <div class="sc-preview-empty">
             <NText v-if="summariesError" type="error">{{ summariesError }}</NText>
-            <NEmpty
-              v-else-if="summariesEmpty"
-              description="No inspections in this time range"
-              size="small"
-            >
+            <NEmpty v-else-if="summariesEmpty" :description="t('sc.noInspections')" size="small">
               <template #extra>
-                <NText depth="3">Try a wider date range or adjust the filters.</NText>
+                <NText depth="3">{{ t("sc.widenRange") }}</NText>
               </template>
             </NEmpty>
-            <NEmpty v-else description="Choose a time range, then search" size="small" />
-            <NButton v-if="summariesError" size="small" @click="emit('search')"> Retry </NButton>
+            <NEmpty v-else :description="t('sc.chooseRange')" size="small" />
+            <NButton v-if="summariesError" size="small" @click="emit('search')">
+              {{ t("common.retry") }}
+            </NButton>
           </div>
         </template>
       </NDataTable>
@@ -317,7 +317,7 @@ function rowProps(row: InspectionSummaryItem): Record<string, unknown> {
     <NModal
       v-model:show="datasetListVisible"
       preset="card"
-      title="Datasets created from this inspection"
+      :title="t('sc.inspectionDatasets')"
       style="width: min(560px, 92vw)"
     >
       <NList bordered>
@@ -331,7 +331,7 @@ function rowProps(row: InspectionSummaryItem): Record<string, unknown> {
               :data-testid="`open-dataset-${dataset.id}`"
               @click="emit('openDataset', dataset.id)"
             >
-              Open in new tab
+              {{ t("datasetDetail.openNewTab") }}
             </NButton>
           </div>
         </NListItem>

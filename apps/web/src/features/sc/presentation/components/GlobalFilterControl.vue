@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onScopeDispose, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import { NButton, NSpin, NTag, NText, useMessage } from "naive-ui";
 import { buildScGlobalDataFilters } from "@/features/sc/application/workbenchDataFilter";
 import { useScReclassifyStore } from "@/features/sc/application/reclassifyStore";
@@ -14,12 +15,14 @@ import type { ScDataColumn } from "@/features/sc/domain/workbenchDataSource";
 import { useScDataWorkbench } from "@/features/sc/presentation/composables/useScDataWorkbench";
 import { useScFilterLookupController } from "@/features/sc/presentation/composables/useScFilterLookupController";
 import GlobalFilterModal from "./GlobalFilterModal.vue";
+import { formatNumber } from "@/shared/i18n/format";
 
 const props = defineProps<{
   datasetId: string;
 }>();
 
 const message = useMessage();
+const { t } = useI18n();
 const reclassifyStore = useScReclassifyStore();
 const workbench = useScDataWorkbench();
 const modalVisible = ref(false);
@@ -109,7 +112,7 @@ async function loadColumns(): Promise<void> {
   } catch (error) {
     if (version === columnsVersion) {
       columns.value = [];
-      message.error(error instanceof Error ? error.message : "Failed to load filter columns");
+      message.error(error instanceof Error ? error.message : t("sc.filterColumnsFailed"));
     }
   }
 }
@@ -128,8 +131,7 @@ async function searchFilterOptions(payload: { field: string; search: string }): 
         sort: null,
         filters: [],
       }),
-    (error) =>
-      message.error(error instanceof Error ? error.message : "Failed to load filter options"),
+    (error) => message.error(error instanceof Error ? error.message : t("sc.filterOptionsFailed")),
   );
 }
 
@@ -193,7 +195,11 @@ onScopeDispose(() => {
         :type="conditionCount > 0 ? 'primary' : 'default'"
         @click="modalVisible = true"
       >
-        Global Filter{{ conditionCount > 0 ? ` (${conditionCount})` : "" }}
+        {{
+          conditionCount > 0
+            ? t("sc.globalFilterCount", { count: conditionCount })
+            : t("sc.globalFilter")
+        }}
       </NButton>
       <NButton
         v-if="conditionCount > 0"
@@ -202,27 +208,31 @@ onScopeDispose(() => {
         quaternary
         @click="clearGlobalFilter"
       >
-        Clear
+        {{ t("common.clear") }}
       </NButton>
     </div>
 
     <div class="sc-dataset-global-filter__stats" data-testid="sc-dataset-filter-stats">
       <NSpin v-if="statsLoading" size="small" />
-      <NText v-else-if="statsError" type="error"
-        >Filter statistics unavailable: {{ statsError }}</NText
-      >
+      <NText v-else-if="statsError" type="error">
+        {{ t("sc.filterStatsUnavailable", { error: statsError }) }}
+      </NText>
       <template v-else-if="totalCount !== null && filteredCount !== null">
         <NText>
-          <strong>{{ filteredCount.toLocaleString() }}</strong>
-          / {{ totalCount.toLocaleString() }} samples
+          {{
+            t("sc.sampleRatio", {
+              filtered: formatNumber(filteredCount),
+              total: formatNumber(totalCount),
+            })
+          }}
         </NText>
         <NTag v-if="conditionCount > 0 && filteredPercent !== null" size="small" round type="info">
           {{ filteredPercent }}%
         </NTag>
         <NText v-if="conditionCount > 0 && excludedCount !== null" depth="3">
-          {{ excludedCount.toLocaleString() }} excluded
+          {{ t("sc.excluded", { count: formatNumber(excludedCount) }) }}
         </NText>
-        <NText v-else depth="3">No filter applied</NText>
+        <NText v-else depth="3">{{ t("sc.noFilter") }}</NText>
       </template>
     </div>
 

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from "vue";
+import { useI18n } from "vue-i18n";
 import { NButton, NDivider, NInput, NModal, NPopconfirm, NScrollbar, NTag, NText } from "naive-ui";
 import type { ReclassifyCodeLabel } from "../../application/useReclassifyPage";
 
@@ -21,6 +22,7 @@ const emit = defineEmits<{
 }>();
 
 const codeSearch = ref("");
+const { t } = useI18n();
 const shortcutModalVisible = ref(false);
 const shortcutTarget = ref<ReclassifyCodeLabel | null>(null);
 const draftValues = computed(() => Object.values(props.annotationDraft));
@@ -76,27 +78,27 @@ onBeforeUnmount(() => {
   <aside class="sc-sidebar">
     <div class="sc-annotate">
       <div class="sc-annotate-header">
-        <NText strong>Annotation</NText>
+        <NText strong>{{ t("sc.annotation") }}</NText>
         <NTag v-if="selectedCount > 0" size="tiny" :bordered="false" type="warning">
-          {{ selectedCount }} sample{{ selectedCount === 1 ? "" : "s" }}
+          {{ t("sc.sampleCount", { count: selectedCount }, selectedCount) }}
         </NTag>
       </div>
 
       <NDivider style="margin: 8px 0" />
 
       <div class="sc-code-search">
-        <label class="sc-code-search-label">Search</label>
+        <label class="sc-code-search-label">{{ t("common.search") }}</label>
         <NInput
           v-model:value="codeSearch"
           clearable
           data-testid="reclassify-code-search-input"
-          placeholder="Filter code names..."
+          :placeholder="t('sc.filterCodes')"
           size="small"
         />
       </div>
 
       <div class="sc-bulk-apply">
-        <NText depth="3" class="sc-bulk-hint"> Apply to all selected: </NText>
+        <NText depth="3" class="sc-bulk-hint">{{ t("sc.applySelected") }}</NText>
         <NScrollbar
           class="sc-code-list"
           content-style="max-height: min(555px, 75vh);"
@@ -104,9 +106,9 @@ onBeforeUnmount(() => {
           style="max-height: min(555px, 75vh)"
         >
           <div class="sc-code-row sc-code-row-head">
-            <span>Code</span>
-            <span>Name</span>
-            <span>Key</span>
+            <span>{{ t("sc.code") }}</span>
+            <span>{{ t("sc.name") }}</span>
+            <span>{{ t("sc.key") }}</span>
           </div>
           <div
             v-for="label in filteredCodeLabels"
@@ -129,7 +131,7 @@ onBeforeUnmount(() => {
               :data-testid="`reclassify-shortcut-button-${label.code}`"
               size="tiny"
               quaternary
-              :aria-label="`Set shortcut for code ${label.code}`"
+              :aria-label="t('sc.shortcutAria', { code: label.code })"
               @click.stop="openShortcutModal(label)"
               @keydown.stop
             >
@@ -137,14 +139,14 @@ onBeforeUnmount(() => {
             </NButton>
           </div>
           <div v-if="filteredCodeLabels.length === 0" class="sc-code-empty">
-            No code names match "{{ codeSearch.trim() }}"
+            {{ t("sc.noCodeMatches", { query: codeSearch.trim() }) }}
           </div>
         </NScrollbar>
       </div>
 
       <div v-if="draftCount > 0" class="sc-draft-summary">
         <NText depth="3">
-          {{ draftCount }} annotation{{ draftCount === 1 ? "" : "s" }} pending
+          {{ t("sc.pendingAnnotations", { count: draftCount }, draftCount) }}
         </NText>
       </div>
 
@@ -158,18 +160,20 @@ onBeforeUnmount(() => {
           :loading="isSubmitting"
           @click="emit('submit')"
         >
-          Submit {{ draftCount > 0 ? `(${draftCount})` : "" }}
+          {{ draftCount > 0 ? t("sc.submitCount", { count: draftCount }) : t("sc.submit") }}
         </NButton>
         <NPopconfirm
           v-if="draftCount > 0"
-          negative-text="Cancel"
-          positive-text="Clear drafts"
+          :negative-text="t('common.cancel')"
+          :positive-text="t('sc.clearDrafts')"
           @positive-click="emit('clear-drafts')"
         >
           <template #trigger>
-            <NButton data-testid="clear-drafts-trigger" size="small"> Clear Drafts </NButton>
+            <NButton data-testid="clear-drafts-trigger" size="small">
+              {{ t("sc.clearDrafts") }}
+            </NButton>
           </template>
-          Clear all pending annotation drafts? This cannot be undone.
+          {{ t("sc.clearDraftsConfirm") }}
         </NPopconfirm>
         <NButton
           v-if="selectedCount > 0"
@@ -177,7 +181,7 @@ onBeforeUnmount(() => {
           :disabled="selectedDraftCount === 0"
           @click="emit('clear-selected-drafts')"
         >
-          Clear Selected Draft{{ selectedDraftCount === 1 ? "" : "s" }}
+          {{ t("sc.clearSelectedDrafts", {}, selectedDraftCount) }}
         </NButton>
       </div>
 
@@ -187,28 +191,30 @@ onBeforeUnmount(() => {
     <NModal
       v-model:show="shortcutModalVisible"
       preset="card"
-      title="Assign Key"
+      :title="t('sc.assignKey')"
       :style="{ width: '320px' }"
       @update:show="(show) => !show && closeShortcutModal()"
       @keydown.stop
     >
       <div class="sc-shortcut-modal">
         <div class="sc-shortcut-target">
-          <NText depth="3">Code</NText>
+          <NText depth="3">{{ t("sc.code") }}</NText>
           <NTag size="small" :bordered="false">{{ shortcutTarget?.code }}</NTag>
           <NText class="sc-shortcut-target-name">
             {{ shortcutTarget?.name }}
           </NText>
         </div>
         <div class="sc-shortcut-status" aria-live="polite">
-          <NText depth="3" class="sc-shortcut-hint"> Press a single key to assign it. </NText>
+          <NText depth="3" class="sc-shortcut-hint">{{ t("sc.assignKeyHelp") }}</NText>
           <span class="sc-shortcut-current">{{ shortcutDisplay }}</span>
         </div>
       </div>
       <template #footer>
         <div class="sc-shortcut-footer">
-          <NButton size="small" @click="clearShortcut">Clear</NButton>
-          <NButton size="small" type="primary" @click="closeShortcutModal"> Done </NButton>
+          <NButton size="small" @click="clearShortcut">{{ t("common.clear") }}</NButton>
+          <NButton size="small" type="primary" @click="closeShortcutModal">
+            {{ t("common.done") }}
+          </NButton>
         </div>
       </template>
     </NModal>

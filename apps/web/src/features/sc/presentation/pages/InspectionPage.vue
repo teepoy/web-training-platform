@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { useI18n } from "vue-i18n";
 import { NButton, NResult, NSpin, useMessage, useThemeVars } from "naive-ui";
 import InspectionQuad from "@/features/sc/presentation/components/InspectionQuad.vue";
 import { FullScreenLayout } from "@/shared/components/full-screen-layout";
@@ -26,6 +27,7 @@ const route = useRoute();
 const router = useRouter();
 const themeVars = useThemeVars();
 const message = useMessage();
+const { t } = useI18n();
 
 const inspectionTime = computed(() => String(route.params.inspectionTime ?? ""));
 const waferKey = computed(() => Number(route.params.waferKey));
@@ -49,9 +51,9 @@ const inspectionItem = computed<InspectionSummaryItem | null>(() => {
   return isInspectionSummaryItem(payload) ? payload : null;
 });
 const samplesError = computed(() => {
-  if (!Number.isFinite(waferKey.value)) return "Invalid wafer key";
-  if (inspectionQuery.error.value) return "Failed to load inspection";
-  if (!inspectionFetching.value && !inspectionItem.value) return "Inspection not found";
+  if (!Number.isFinite(waferKey.value)) return t("sc.invalidWaferKey");
+  if (inspectionQuery.error.value) return t("sc.inspectionLoadFailed");
+  if (!inspectionFetching.value && !inspectionItem.value) return t("sc.inspectionNotFound");
   return null;
 });
 const waferGeometry = computed(() => {
@@ -69,7 +71,7 @@ const waferGeometry = computed(() => {
 });
 const pageTitle = computed(() => {
   const row = inspectionItem.value;
-  if (!row) return "Inspection";
+  if (!row) return t("sc.inspection");
   return row.lot_id ? `${row.lot_id}#${row.wafer_id}` : `W${row.wafer_key}`;
 });
 const containerStyle = computed(() => ({
@@ -113,12 +115,13 @@ async function startReclassifyImport(): Promise<void> {
     };
     if (resp.status === "completed" && resp.dataset_id) {
       importedDatasetId.value = resp.dataset_id;
-      message.success(`Import complete: ${resp.imported_count ?? 0} samples imported`);
+      const count = resp.imported_count ?? 0;
+      message.success(t("sc.importComplete", { count }, count));
       return;
     }
-    message.error(resp.error || "Import failed");
+    message.error(resp.error || t("sc.importFailed"));
   } catch (error) {
-    message.error(toUserMessage(error, "Import failed"));
+    message.error(toUserMessage(error, t("sc.importFailed")));
   } finally {
     isImporting.value = false;
   }
@@ -138,8 +141,12 @@ async function startReclassifyImport(): Promise<void> {
           />
         </div>
         <div class="sc-inspection-actions">
-          <NButton size="small" quaternary @click="router.push('/sc/preview')">Summary</NButton>
-          <NButton size="small" quaternary @click="router.push('/sc/handbook')">Handbook</NButton>
+          <NButton size="small" quaternary @click="router.push('/sc/preview')">
+            {{ t("sc.summary") }}
+          </NButton>
+          <NButton size="small" quaternary @click="router.push('/sc/handbook')">
+            {{ t("sc.handbook") }}
+          </NButton>
           <NButton
             v-if="!importedDatasetId"
             size="small"
@@ -148,7 +155,7 @@ async function startReclassifyImport(): Promise<void> {
             :disabled="!inspectionItem"
             @click="startReclassifyImport"
           >
-            Reclassify
+            {{ t("sc.reclassify") }}
           </NButton>
           <NButton
             v-else
@@ -158,7 +165,7 @@ async function startReclassifyImport(): Promise<void> {
             target="_blank"
             :href="`/datasets/${importedDatasetId}/sc/classify`"
           >
-            Open Dataset
+            {{ t("sc.openDataset") }}
           </NButton>
         </div>
       </div>
