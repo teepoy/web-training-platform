@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/vue3";
 import PredictionSummaryWidget from "./PredictionSummaryWidget.vue";
-import { provideWebUiContext } from "../../storybook/mocks";
+import { provideWebUiContext } from "../../../../.storybook/support/mocks";
 
 const meta = {
   title: "Shared/PredictionSummaryWidget",

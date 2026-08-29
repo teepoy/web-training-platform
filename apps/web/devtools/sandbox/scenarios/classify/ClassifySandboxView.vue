@@ -1,3 +1,4 @@
+<!-- Development-only component showcase. -->
 <template>
   <div class="classify-sandbox">
     <n-space vertical size="large">
@@ -13,7 +14,7 @@
 </template>
 
 <script setup lang="ts">
-import { NH2, NCard, NSpace, NText } from 'naive-ui'
+import { NH2, NCard, NSpace, NText } from "naive-ui";
 </script>
 
 <style scoped>

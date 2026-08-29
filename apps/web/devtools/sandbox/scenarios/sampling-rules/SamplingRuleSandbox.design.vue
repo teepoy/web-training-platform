@@ -1,3 +1,4 @@
+<!-- Development-only design reference; never registered as a product route. -->
 <template>
   <main class="rule-builder-design">
     <header>

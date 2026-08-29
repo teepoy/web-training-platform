@@ -1,9 +1,7 @@
 import type { Decorator } from "@storybook/vue3";
 import { provide, shallowRef, onUnmounted } from "vue";
-import {
-  BROWSER_DASHBOARD_KEY,
-} from "@/shared/widgets/sdk";
-import { DATA_PIPELINE_KEY, createDataPipeline } from "../composables/useDataPipeline";
+import { BROWSER_DASHBOARD_KEY } from "@/shared/widgets/sdk";
+import { DATA_PIPELINE_KEY, createDataPipeline } from "@/shared/composables/useDataPipeline";
 import { fn } from "@storybook/test";
 import type {
   ImporterProps,
@@ -28,7 +26,8 @@ export function provideFetchMock(entries: FetchMockEntry[]): Decorator {
       const originalFetch = window.fetch.bind(window);
 
       window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-        const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+        const url =
+          typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
         const method = (init?.method ?? "GET").toUpperCase();
 
         for (const entry of entries) {
@@ -62,9 +61,7 @@ export function provideFetchMock(entries: FetchMockEntry[]): Decorator {
   });
 }
 
-export function mockImportProps(
-  overrides: Partial<ImporterProps> = {},
-): ImporterProps {
+export function mockImportProps(overrides: Partial<ImporterProps> = {}): ImporterProps {
   return {
     datasetId: "dataset-storybook-001",
     onComplete: fn(),
@@ -73,9 +70,7 @@ export function mockImportProps(
   };
 }
 
-export function mockExportProps(
-  overrides: Partial<ExporterProps> = {},
-): ExporterProps {
+export function mockExportProps(overrides: Partial<ExporterProps> = {}): ExporterProps {
   return {
     datasetId: "dataset-storybook-001",
     onComplete: fn(),
@@ -101,9 +96,7 @@ export interface MockContextOverrides {
   classifyGridItems?: Array<Record<string, unknown>>;
 }
 
-export function provideWebUiContext(
-  overrides: MockContextOverrides = {},
-): Decorator {
+export function provideWebUiContext(overrides: MockContextOverrides = {}): Decorator {
   return (story) => ({
     components: { story },
     setup() {
@@ -135,14 +128,8 @@ export function provideWebUiContext(
       );
 
       provide(DATA_PIPELINE_KEY, createDataPipeline(shallowRef([])));
-      provide(
-        "pr-grid-items",
-        () => overrides.predictionGridItems ?? [],
-      );
-      provide(
-        "classify-grid-items",
-        () => overrides.classifyGridItems ?? [],
-      );
+      provide("pr-grid-items", () => overrides.predictionGridItems ?? []);
+      provide("classify-grid-items", () => overrides.classifyGridItems ?? []);
 
       return {};
     },

@@ -1,3 +1,4 @@
+/** Development-only catalog used by sandbox navigation hosts. */
 export interface SandboxDemo {
   id: string;
   name: string;

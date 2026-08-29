@@ -61,6 +61,10 @@ async function bootstrap(): Promise<void> {
   app.use(pinia);
   const authStore = useAuthStore(pinia);
   authStore.hydrateFromStorage();
+  if (import.meta.env.DEV) {
+    const { registerDevelopmentRoutes } = await import("../../devtools/register");
+    registerDevelopmentRoutes(router);
+  }
   app.use(router);
   app.use(VxeUI);
   app.use(VxeUITable);

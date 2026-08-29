@@ -1,7 +1,6 @@
 import { createRouter, createWebHistory } from "vue-router";
 import { getStoredToken } from "@/features/auth/application/store";
 import { useAuthStore } from "@/features/auth/application/store";
-import { sandboxRoutes } from "@/features/sandbox/router";
 import AdminLayout from "@/app/layouts/AdminLayout.vue";
 import SettingsLayout from "@/app/layouts/SettingsLayout.vue";
 import { adminRoutes } from "@/features/admin/router";
@@ -57,7 +56,6 @@ export const router = createRouter({
         },
       ],
     },
-    ...(import.meta.env.DEV ? sandboxRoutes : []),
     { path: "/:pathMatch(.*)*", name: "not-found", redirect: "/sc/preview" },
   ],
 });

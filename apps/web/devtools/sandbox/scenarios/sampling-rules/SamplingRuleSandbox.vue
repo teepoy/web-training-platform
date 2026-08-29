@@ -1,3 +1,4 @@
+<!-- Development-only production-component showcase. -->
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { NButton, NTag, useMessage, useThemeVars } from "naive-ui";

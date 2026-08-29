@@ -2,7 +2,7 @@
 
 ## Progress
 
-- **Overall status:** In progress; the goal is not complete.
+- **Overall status:** Complete.
 - **Completed intermediate slices:** removed the disposable settings scaffold,
   established the root `devtools/` boundary; moved seedmaker, synthetic SC
   artifacts, the legacy SQLite fixture CLI, fake-kernel benchmarks, and the SC
@@ -13,10 +13,14 @@
   `tests/support` and are installed only by pytest's composition root. The SC
   showcase now publishes all upstream rows and image/archive objects through a
   named simulator HTTP scenario; the old SQLite/S3/cache/restart Make chain and
-  overlapping artifact generator were removed.
-- **Next milestone:** review web demo pages and Storybook-only providers.
-- **Done when:** every acceptance criterion below is verified. The artifact
-  generator move alone does not satisfy the upstream simulator goal.
+  overlapping artifact generator were removed. The web sandbox now lives under
+  `apps/web/devtools`, is loaded only by the development bootstrap, and emits no
+  production bundle chunk. Storybook providers live under
+  `apps/web/.storybook/support` instead of shared runtime source.
+- **Verification:** production Web build, Storybook build, frontend unit suite,
+  API/service boundary tests, simulator checks, and the generated API contract
+  all pass. Boundary tests prevent sandbox and Storybook helpers from returning
+  to production package paths.
 
 This document records the current inventory of mock, seed, fixture, demo, and
 test-double code that appears in production-oriented package paths. It is an
@@ -234,6 +238,14 @@ Proposed ownership:
 - Keep production components consumed by the sandbox in their existing feature
   packages.
 
+Completed: the router, scenario catalog, and pages moved to
+`apps/web/devtools/sandbox`. The development bootstrap dynamically imports the
+devtools registration only behind `import.meta.env.DEV` and registers the
+routes before the first navigation. The normal product router has no sandbox
+import, and the production build contains no sandbox route or chunk. The
+existing `ensure-sandbox-datasets` target remains a development-only seed CLI
+front door; it does not participate in production composition.
+
 ### P2: Demo identity remains in API request schemas
 
 Files and features:
@@ -268,6 +280,10 @@ is lower risk than the candidates above. It should nevertheless be considered
 for a Storybook-only support package such as `apps/web/.storybook/support/` if
 the build currently includes it in runtime source discovery.
 
+Completed: the providers moved to `apps/web/.storybook/support/mocks.ts`, all
+story imports point to that support package, and the Storybook production build
+passes. No `src/shared/storybook` runtime directory remains.
+
 ## Explicit Non-Candidates
 
 The following matched search terms but already have appropriate ownership or
@@ -276,8 +292,7 @@ are not mocks:
 - `devtools/seedmaker/` is the existing dedicated repository seed package.
 - `devtools/benchmarks/` is the existing dedicated fake-kernel/benchmark package.
 - `devtools/seedmaker/legacy_sc_sqlite.py` is correctly placed as a
-  development-only compatibility tool; only its dependency on production mock
-  ORM models still needs separation.
+  development-only compatibility tool and owns its legacy SQLite schema.
 - `apps/web/e2e/mocks/`, `apps/web/e2e/seed/`, and
   `apps/web/src/testing/` are dedicated test support trees.
 - Generated gRPC classes named `*Stub` are transport clients, not test stubs.
