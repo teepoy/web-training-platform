@@ -10,6 +10,7 @@ from dataclasses import asdict, dataclass
 from typing import cast
 
 import polars as pl
+import pyarrow as pa
 
 from app.modules.sc.app.services.prediction_export_service import (
     ScPredictionExportService,
@@ -21,6 +22,7 @@ from app.modules.sc.domain.prediction_export import (
     ScPredictionExportFormat,
 )
 from app.modules.sc.domain.image_stream import ScExportImageStreamFactory
+from app.modules.sc.domain.upstream_reader import ScUpstreamReader
 from app.modules.storage.port.local import DatasetStorageFactoryPort
 from app.shared.api.schemas import Dataset, DatasetStorageMode, TaskSpec
 from app.shared.infrastructure.storage.minio import MinioArtifactStorage
@@ -83,6 +85,21 @@ class _UnusedCollectionReader:
 
 class _UnusedImageSourceFactory:
     pass
+
+
+class _BenchmarkUpstream:
+    def __init__(self, rows: pl.LazyFrame) -> None:
+        self._rows = rows
+
+    async def get_sample_count(self, _time: object, _wafer_key: int) -> int:
+        return self._rows.collect().height
+
+    async def stream_sample_batches(
+        self, _time: object, _wafer_key: int, **_kwargs: object
+    ):
+        for batch in self._rows.collect().to_arrow().to_batches():
+            assert isinstance(batch, pa.RecordBatch)
+            yield batch
 
 
 def _benchmark_rows(samples: int) -> pl.LazyFrame:
@@ -150,7 +167,12 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
         dataset_type="image_sc",
         task_spec=TaskSpec(task_type="sc"),
         storage_mode=DatasetStorageMode.FILE_SHARD_SPARSE,
+        dataset_meta={
+            "source_inspection_time": "2026-08-20T00:00:00+00:00",
+            "source_wafer_key": 1,
+        },
     )
+    rows = _benchmark_rows(args.samples)
     service = ScPredictionExportService(
         repository=cast(DatasetRepository, _DatasetRepository(dataset)),
         collection_reader=cast(
@@ -159,7 +181,7 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
         ),
         storage_factory=cast(
             DatasetStorageFactoryPort,
-            _StorageFactory(_DatasetStorage(_benchmark_rows(args.samples))),
+            _StorageFactory(_DatasetStorage(rows)),
         ),
         artifact_storage=artifact_storage,
         image_stream_factory=cast(
@@ -167,6 +189,8 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
             _UnusedImageSourceFactory(),
         ),
         image_batch_rows=512,
+        upstream_reader=cast(ScUpstreamReader, _BenchmarkUpstream(rows)),
+        source_batch_rows=65_536,
     )
     export_format = ScPredictionExportFormat(args.format)
     measurements: list[_Measurement] = []

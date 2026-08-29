@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from typing import Any, cast
 
 import polars as pl
+import pyarrow as pa
 import pytest
 
 from app.modules.runtime.domain.context import TrainingRuntimeContext
@@ -18,8 +19,28 @@ from app.modules.datasets.domain.entities import (
 )
 from app.modules.datasets.port.local import DatasetRevisionReaderPort
 from app.modules.sc.runtime.data_source import open_sc_runtime_source
+from app.modules.sc.domain.upstream_reader import ScUpstreamReader
 from app.modules.storage.port.local import DatasetStorageFactoryPort
 from app.shared.api.schemas import Dataset, ImageSourceBinding, TaskSpec
+
+
+class _Upstream:
+    async def get_sample_count(self, _time: datetime, _wafer_key: int) -> int:
+        return 1
+
+    async def stream_sample_batches(
+        self, _time: datetime, wafer_key: int, **_kwargs: object
+    ):
+        yield pa.RecordBatch.from_pylist(
+            [
+                {
+                    "defect_id": "42",
+                    "inspection_time": "2026-08-07T00:00:00+08:00",
+                    "wafer_key": wafer_key,
+                    "rough_bin": 9,
+                }
+            ]
+        )
 
 
 @pytest.mark.asyncio
@@ -37,6 +58,10 @@ async def test_dataset_runtime_source_reuses_storage_metadata_without_direct_ses
             contract="filesystem.image-source.v1",
             format="sc.legacy-range-zip.v1",
         ),
+        dataset_meta={
+            "source_inspection_time": "2026-08-07T00:00:00+08:00",
+            "source_wafer_key": 1,
+        },
     )
     calls: list[tuple[str, object]] = []
 
@@ -54,7 +79,7 @@ async def test_dataset_runtime_source_reuses_storage_metadata_without_direct_ses
                     "metadata_json": [
                         {
                             "sample_id": "upstream-sample-1",
-                            "defect_id": "defect-1",
+                            "defect_id": "42",
                             "inspection_time": "2026-08-07",
                         }
                     ],
@@ -69,7 +94,9 @@ async def test_dataset_runtime_source_reuses_storage_metadata_without_direct_ses
             return storage
 
     class Injector:
-        def get(self, _interface: object) -> StorageFactory:
+        def get(self, interface: object) -> object:
+            if interface is ScUpstreamReader:
+                return _Upstream()
             return StorageFactory()
 
     class ForbiddenSessionFactory:
@@ -80,7 +107,14 @@ async def test_dataset_runtime_source_reuses_storage_metadata_without_direct_ses
         Any,
         SimpleNamespace(
             injector=Injector(),
-            shared=SimpleNamespace(session_factory=ForbiddenSessionFactory()),
+            shared=SimpleNamespace(
+                session_factory=ForbiddenSessionFactory(),
+                config=SimpleNamespace(
+                    sc=SimpleNamespace(
+                        pipeline=SimpleNamespace(materialization_batch_rows=100)
+                    )
+                ),
+            ),
         ),
     )
     runtime_ctx = TrainingRuntimeContext(
@@ -104,8 +138,10 @@ async def test_dataset_runtime_source_reuses_storage_metadata_without_direct_ses
         assert source.rows.collect().to_dicts() == [
             {
                 "sample_id": "sample-1",
-                "defect_id": "defect-1",
-                "inspection_time": "2026-08-07",
+                "defect_id": "42",
+                "inspection_time": "2026-08-07T00:00:00+08:00",
+                "wafer_key": 1,
+                "rough_bin": 9,
             }
         ]
 
@@ -172,6 +208,10 @@ async def test_observed_collection_runtime_resolves_current_member_data() -> Non
                     contract="filesystem.image-source.v1",
                     format="filesystem.role-paths.v1",
                 ),
+                dataset_meta={
+                    "source_inspection_time": "2026-08-07T00:00:00+08:00",
+                    "source_wafer_key": 1,
+                },
             )
 
         async def list_samples(self, **_kwargs: object) -> pl.LazyFrame:
@@ -226,6 +266,8 @@ async def test_observed_collection_runtime_resolves_current_member_data() -> Non
                 return StorageFactory()
             if interface is DatasetRevisionReaderPort:
                 return DatasetRevisionReader()
+            if interface is ScUpstreamReader:
+                return _Upstream()
             raise AssertionError(f"Unexpected dependency: {interface}")
 
     class ForbiddenArtifactStorage:
@@ -236,7 +278,14 @@ async def test_observed_collection_runtime_resolves_current_member_data() -> Non
         Any,
         SimpleNamespace(
             injector=Injector(),
-            shared=SimpleNamespace(artifact_storage=ForbiddenArtifactStorage()),
+            shared=SimpleNamespace(
+                artifact_storage=ForbiddenArtifactStorage(),
+                config=SimpleNamespace(
+                    sc=SimpleNamespace(
+                        pipeline=SimpleNamespace(materialization_batch_rows=100)
+                    )
+                ),
+            ),
         ),
     )
     runtime_ctx = TrainingRuntimeContext(
@@ -258,8 +307,11 @@ async def test_observed_collection_runtime_resolves_current_member_data() -> Non
         assert source.rows.collect().to_dicts() == [
             {
                 "sample_id": "dataset-1::sample-1",
-                "defect_id": 42,
+                "defect_id": "42",
                 "label": "scratch",
+                "inspection_time": "2026-08-07T00:00:00+08:00",
+                "wafer_key": 1,
+                "rough_bin": 9,
                 "source_sample_id": "sample-1",
                 "source_dataset_id": "dataset-1",
                 "collection_member_id": "member-1",

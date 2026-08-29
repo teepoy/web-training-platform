@@ -177,7 +177,7 @@ class SparseDatasetStorage:
         sample_id = self._extract_sample_id(row)
 
         if self._dataset_type == "image_sc":
-            if schema_version == "v3":
+            if schema_version in ("v3", "v4_identity"):
                 return self._normalize_v3_row(row, sample_id)
             if schema_version == "v2":
                 if "images" not in row:

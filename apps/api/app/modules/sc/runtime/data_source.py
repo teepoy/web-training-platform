@@ -18,6 +18,11 @@ from app.modules.runtime.domain.context import (
     PredictionRuntimeContext,
     TrainingRuntimeContext,
 )
+from app.modules.sc.app.services.latest_source import (
+    resolve_latest_sc_source,
+    sc_dataset_source_identity,
+)
+from app.modules.sc.domain.upstream_reader import ScUpstreamReader
 from app.modules.storage.port.local import DatasetStorageFactoryPort
 from app.modules.storage.domain.storage_agg import DatasetStorageAgg
 from app.shared.api.schemas import Dataset
@@ -51,6 +56,8 @@ async def open_sc_runtime_source(
     if app_context.injector is None:
         raise RuntimeError("AppContext injector was not initialized")
     source = runtime_ctx.data_source
+    upstream_reader = app_context.injector.get(ScUpstreamReader)
+    batch_rows = app_context.shared.config.sc.pipeline.materialization_batch_rows
     if source.kind == "dataset":
         assert source.dataset_id is not None
         storage_factory = app_context.injector.get(DatasetStorageFactoryPort)
@@ -69,6 +76,17 @@ async def open_sc_runtime_source(
             ),
         )
         rows = _normalize_storage_rows(rows)
+        inspection_time, wafer_key = sc_dataset_source_identity(
+            dataset, source.dataset_id
+        )
+        rows = await resolve_latest_sc_source(
+            upstream_reader=upstream_reader,
+            membership=rows,
+            inspection_time=inspection_time,
+            wafer_key=wafer_key,
+            dataset_id=source.dataset_id,
+            batch_rows=batch_rows,
+        )
         yield ScRuntimeSource(
             rows=rows,
             source_identity=source.identity,
@@ -100,6 +118,10 @@ async def open_sc_runtime_source(
         for item in revision.source_snapshot
         if item.get("source_dataset_id") is not None
     )
+    storage_factory = app_context.injector.get(DatasetStorageFactoryPort)
+    storages = await asyncio.gather(
+        *(storage_factory.open(dataset_id, org_id) for dataset_id in source_dataset_ids)
+    )
     first_snapshot = revision.source_snapshot[0] if revision.source_snapshot else {}
     raw_label_space = first_snapshot.get("label_space", [])
     label_space = (
@@ -112,13 +134,6 @@ async def open_sc_runtime_source(
         # through the SC runtime router while this module is initializing.
         from app.modules.datasets.port.local import DatasetRevisionReaderPort
 
-        storage_factory = app_context.injector.get(DatasetStorageFactoryPort)
-        storages = await asyncio.gather(
-            *(
-                storage_factory.open(dataset_id, org_id)
-                for dataset_id in source_dataset_ids
-            )
-        )
         frames = await asyncio.gather(
             *(
                 _observed_member_rows(
@@ -127,6 +142,8 @@ async def open_sc_runtime_source(
                     member_id=str(snapshot.get("member_id", "")),
                     with_labels=with_labels,
                     with_predictions=with_predictions,
+                    upstream_reader=upstream_reader,
+                    batch_rows=batch_rows,
                 )
                 for storage, dataset_id, snapshot in zip(
                     storages,
@@ -178,6 +195,21 @@ async def open_sc_runtime_source(
             str(data_path),
         )
         rows = pl.scan_parquet(data_path)
+        frames: list[pl.LazyFrame] = []
+        for storage, dataset_id in zip(storages, source_dataset_ids, strict=True):
+            dataset = cast(Dataset, await storage.get_dataset_metadata())
+            inspection_time, wafer_key = sc_dataset_source_identity(dataset, dataset_id)
+            frames.append(
+                await resolve_latest_sc_source(
+                    upstream_reader=upstream_reader,
+                    membership=rows.filter(pl.col("source_dataset_id") == dataset_id),
+                    inspection_time=inspection_time,
+                    wafer_key=wafer_key,
+                    dataset_id=dataset_id,
+                    batch_rows=batch_rows,
+                )
+            )
+        rows = pl.concat(frames, how="diagonal_relaxed")
         if runtime_ctx.sample_ids is not None:
             rows = rows.filter(pl.col("sample_id").is_in(runtime_ctx.sample_ids))
         yield ScRuntimeSource(
@@ -200,6 +232,8 @@ async def _observed_member_rows(
     member_id: str,
     with_labels: bool,
     with_predictions: bool,
+    upstream_reader: ScUpstreamReader,
+    batch_rows: int,
 ) -> pl.LazyFrame:
     rows = cast(
         pl.LazyFrame,
@@ -210,6 +244,16 @@ async def _observed_member_rows(
         ),
     )
     rows = _normalize_storage_rows(rows)
+    dataset = cast(Dataset, await storage.get_dataset_metadata())
+    inspection_time, wafer_key = sc_dataset_source_identity(dataset, dataset_id)
+    rows = await resolve_latest_sc_source(
+        upstream_reader=upstream_reader,
+        membership=rows,
+        inspection_time=inspection_time,
+        wafer_key=wafer_key,
+        dataset_id=dataset_id,
+        batch_rows=batch_rows,
+    )
     if "sample_id" not in rows.collect_schema().names():
         raise ValueError(f"Dataset '{dataset_id}' does not expose sample_id")
     source_sample = pl.col("sample_id").cast(pl.String)

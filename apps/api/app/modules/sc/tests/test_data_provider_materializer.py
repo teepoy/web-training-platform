@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import polars as pl
+import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
@@ -19,6 +20,7 @@ from app.modules.sc.data_provider.cache import CachedDataObject, ScDataObjectCac
 from app.modules.sc.data_provider.materializer import ScDataMaterializer
 from app.modules.sc.data_provider.scope import ScDataScope
 from app.modules.sc.domain.upstream_reader import ScUpstreamReader
+from app.modules.sc.domain.models import ScInspectionRecord
 from app.modules.storage.port.local import DatasetStorageFactoryPort
 from app.shared.domain.protocols import ArtifactStorage
 
@@ -62,6 +64,15 @@ def _ready_revision(manifest_uri: str) -> DatasetCollectionRevision:
     )
 
 
+def _inspection(wafer_key: int, *, latest_update: int = 1) -> ScInspectionRecord:
+    return ScInspectionRecord(
+        inspection_time=datetime(2026, 8, 1, 4, 0, tzinfo=timezone.utc),
+        wafer_key=wafer_key,
+        device=f"device-{wafer_key}",
+        latest_update=latest_update,
+    )
+
+
 @pytest.mark.asyncio
 async def test_dataset_cache_hits_use_dataset_metadata_without_scanning_samples(
     tmp_path: Path,
@@ -78,6 +89,7 @@ async def test_dataset_cache_hits_use_dataset_metadata_without_scanning_samples(
     storage_factory = AsyncMock(spec=DatasetStorageFactoryPort)
     storage_factory.open.return_value = storage
     upstream_reader = AsyncMock(spec=ScUpstreamReader)
+    upstream_reader.get_inspection.return_value = _inspection(1)
     cache = AsyncMock(spec=ScDataObjectCache)
     review_images = _cached_object(tmp_path / "review.parquet", "review")
     samples_base = _cached_object(tmp_path / "samples.parquet", "samples")
@@ -86,9 +98,7 @@ async def test_dataset_cache_hits_use_dataset_metadata_without_scanning_samples(
     materializer = ScDataMaterializer(
         upstream_reader=upstream_reader,
         storage_factory=storage_factory,
-        collection_revision_reader=AsyncMock(
-            spec=DatasetCollectionRevisionReaderPort
-        ),
+        collection_revision_reader=AsyncMock(spec=DatasetCollectionRevisionReaderPort),
         artifact_storage=AsyncMock(spec=ArtifactStorage),
         cache=cache,
         batch_rows=50_000,
@@ -138,6 +148,7 @@ async def test_dataset_overlays_track_the_monotonic_scope_revision(
     storage_factory = AsyncMock(spec=DatasetStorageFactoryPort)
     storage_factory.open.return_value = storage
     upstream_reader = AsyncMock(spec=ScUpstreamReader)
+    upstream_reader.get_inspection.return_value = _inspection(1)
     cache = AsyncMock(spec=ScDataObjectCache)
     cache.get_or_build.return_value = _cached_object(
         tmp_path / "review.parquet", "review"
@@ -148,9 +159,7 @@ async def test_dataset_overlays_track_the_monotonic_scope_revision(
     materializer = ScDataMaterializer(
         upstream_reader=upstream_reader,
         storage_factory=storage_factory,
-        collection_revision_reader=AsyncMock(
-            spec=DatasetCollectionRevisionReaderPort
-        ),
+        collection_revision_reader=AsyncMock(spec=DatasetCollectionRevisionReaderPort),
         artifact_storage=AsyncMock(spec=ArtifactStorage),
         cache=cache,
         batch_rows=50_000,
@@ -169,6 +178,96 @@ async def test_dataset_overlays_track_the_monotonic_scope_revision(
     assert len(overlay_calls) == 2
     assert {call["scope_revision"] for call in overlay_calls} == {7}
     storage.list_samples.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_dataset_materialization_projects_membership_and_reads_latest_source(
+    tmp_path: Path,
+) -> None:
+    storage = AsyncMock()
+    storage.get_dataset_metadata.return_value = SimpleNamespace(
+        dataset_meta={
+            "source_inspection_time": "2026-08-01T04:00:00+08:00",
+            "source_wafer_key": 1,
+        }
+    )
+    storage.list_samples.return_value = pl.DataFrame(
+        {
+            "sample_id": ["42"],
+            "defect_id": [42],
+            "rough_bin": [1],
+            "obsolete_source_field": ["ignored"],
+        }
+    ).lazy()
+    storage.annotation_overlay_lazyframe.return_value = (None, "0" * 64)
+    storage.prediction_overlay_lazyframe.return_value = (None, "0" * 64)
+    storage_factory = AsyncMock(spec=DatasetStorageFactoryPort)
+    storage_factory.open.return_value = storage
+    upstream_reader = AsyncMock(spec=ScUpstreamReader)
+    upstream_reader.get_inspection.return_value = _inspection(1, latest_update=2)
+    upstream_reader.get_sample_count.return_value = 1
+
+    async def stream_samples(*_args: object, **_kwargs: object):
+        yield pa.RecordBatch.from_pylist(
+            [
+                {
+                    "defect_id": 42,
+                    "rough_bin": 9,
+                    "future_source_field": "latest",
+                }
+            ]
+        )
+
+    upstream_reader.stream_sample_batches.side_effect = stream_samples
+    upstream_reader.list_review_images.return_value = pl.DataFrame(
+        {"defect_id": [42], "image_id": [100]}
+    ).lazy()
+    cache = AsyncMock(spec=ScDataObjectCache)
+    object_count = 0
+
+    async def get_or_build_file(**kwargs) -> CachedDataObject:
+        nonlocal object_count
+        object_count += 1
+        path = tmp_path / f"dataset-file-{object_count}.parquet"
+        await kwargs["builder"](path)
+        return _cached_object(path, f"file-{object_count}")
+
+    async def get_or_build(**kwargs) -> CachedDataObject:
+        nonlocal object_count
+        object_count += 1
+        path = tmp_path / f"dataset-table-{object_count}.parquet"
+        pq.write_table(await kwargs["builder"](), path)
+        return _cached_object(path, f"table-{object_count}")
+
+    cache.get_or_build_file.side_effect = get_or_build_file
+    cache.get_or_build.side_effect = get_or_build
+    materializer = ScDataMaterializer(
+        upstream_reader=upstream_reader,
+        storage_factory=storage_factory,
+        collection_revision_reader=AsyncMock(spec=DatasetCollectionRevisionReaderPort),
+        artifact_storage=AsyncMock(spec=ArtifactStorage),
+        cache=cache,
+        batch_rows=50_000,
+    )
+
+    result = await materializer.materialize(
+        ScDataScope.dataset(dataset_id="dataset-1", org_id="org-1"),
+        revision=3,
+    )
+
+    samples = pl.read_parquet(result.samples_base.path)
+    assert samples["sample_id"].to_list() == ["42"]
+    assert samples["rough_bin"].to_list() == [9]
+    assert samples["future_source_field"].to_list() == ["latest"]
+    assert "obsolete_source_field" not in samples.columns
+    source_keys = [
+        call.kwargs["logical_key"]
+        for call in cache.get_or_build_file.await_args_list
+        if ":samples-base:" in call.kwargs["logical_key"]
+    ]
+    assert source_keys == [
+        "dataset:org-1/dataset-1:samples-base:v7-latest-source:source-2"
+    ]
 
 
 @pytest.mark.asyncio
@@ -219,6 +318,29 @@ async def test_collection_revision_materializes_combined_rows_and_overlays(
 
     artifact_storage.get_file.side_effect = get_file
     upstream_reader = AsyncMock(spec=ScUpstreamReader)
+    upstream_reader.get_inspection.side_effect = lambda _time, wafer_key: _inspection(
+        wafer_key
+    )
+    upstream_reader.get_sample_count.return_value = 1
+
+    async def stream_samples(
+        _time: datetime,
+        wafer_key: int,
+        **_kwargs: object,
+    ):
+        yield pa.RecordBatch.from_pylist(
+            [
+                {
+                    "defect_id": 42,
+                    "inspection_time": "2026-08-01T04:00:00+08:00",
+                    "wafer_key": wafer_key,
+                    "wafer_x": wafer_key * 10,
+                    "rough_bin": wafer_key,
+                }
+            ]
+        )
+
+    upstream_reader.stream_sample_batches.side_effect = stream_samples
     upstream_reader.list_review_images.side_effect = lambda _time, wafer_key: (
         pl.DataFrame({"defect_id": [42], "image_id": [wafer_key * 100]}).lazy()
     )

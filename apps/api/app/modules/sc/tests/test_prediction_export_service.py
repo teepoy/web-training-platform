@@ -10,6 +10,7 @@ from typing import cast
 from unittest.mock import AsyncMock
 
 import polars as pl
+import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 from klarf import Klarf12ImageList, KlarfArray, KlarfSymbol, loads
@@ -30,6 +31,7 @@ from app.modules.sc.domain.prediction_export import (
     ScPredictionExportFormat,
     ScPredictionExportResultSource,
 )
+from app.modules.sc.domain.upstream_reader import ScUpstreamReader
 from app.shared.api.schemas import (
     Dataset,
     DatasetStorageMode,
@@ -92,6 +94,22 @@ class _ArtifactStorage:
             for name in sorted(self.objects)
             if name.startswith(prefix)
         ]
+
+
+class _Upstream:
+    def __init__(self, frames: dict[int, pl.LazyFrame]) -> None:
+        self._frames = frames
+
+    async def get_sample_count(self, _time: datetime, wafer_key: int) -> int:
+        return self._frames[wafer_key].collect().height
+
+    async def stream_sample_batches(
+        self, _time: datetime, wafer_key: int, **_kwargs: object
+    ):
+        table = self._frames[wafer_key].collect().to_arrow()
+        for batch in table.to_batches():
+            assert isinstance(batch, pa.RecordBatch)
+            yield batch
 
 
 class _ImageResolver:
@@ -209,6 +227,10 @@ def _service(
         dataset_type="image_sc",
         task_spec=TaskSpec(task_type="sc"),
         storage_mode=DatasetStorageMode.FILE_SHARD_SPARSE,
+        dataset_meta={
+            "source_inspection_time": "2026-08-20T01:02:03+00:00",
+            "source_wafer_key": 17,
+        },
     )
     repository = AsyncMock()
     repository.get_dataset = AsyncMock(return_value=dataset)
@@ -227,6 +249,8 @@ def _service(
             artifact_storage=artifacts,
             image_stream_factory=_ImageSourceFactory(image_resolver),
             image_batch_rows=image_batch_rows,
+            upstream_reader=cast(ScUpstreamReader, _Upstream({17: _frame()})),
+            source_batch_rows=512,
         ),
         artifacts,
     )
@@ -286,7 +310,9 @@ async def test_annotation_result_export_omits_unclassified_rows() -> None:
 
 
 @pytest.mark.asyncio
-async def test_prediction_result_export_uses_predictions_and_omits_only_missing_results() -> None:
+async def test_prediction_result_export_uses_predictions_and_omits_only_missing_results() -> (
+    None
+):
     service, artifacts = _service()
 
     result = await service.export(
@@ -418,7 +444,9 @@ async def test_prediction_export_rejects_non_sc_dataset_type() -> None:
 
 
 @pytest.mark.asyncio
-async def test_klarf_image_export_resolves_sampled_rows_and_packages_exact_references() -> None:
+async def test_klarf_image_export_resolves_sampled_rows_and_packages_exact_references() -> (
+    None
+):
     image_resolver = _ImageResolver()
     service, artifacts = _service(image_resolver)
 
@@ -449,19 +477,16 @@ async def test_klarf_image_export_resolves_sampled_rows_and_packages_exact_refer
             for record in document.find_records("TiffFileName")
         }
         defect_rows = [
-            row
-            for table in document.find_tables("DefectList")
-            for row in table.rows
+            row for table in document.find_tables("DefectList") for row in table.rows
         ]
 
         assert image_names == image_references
         assert len(image_names) == 2
-        assert all(archive.read(name).startswith(b"png:sample-") for name in image_names)
-        assert all(row[15] == 1 for row in defect_rows)
         assert all(
-            row[16] == Klarf12ImageList(items=((1, 0),))
-            for row in defect_rows
+            archive.read(name).startswith(b"png:sample-") for name in image_names
         )
+        assert all(row[15] == 1 for row in defect_rows)
+        assert all(row[16] == Klarf12ImageList(items=((1, 0),)) for row in defect_rows)
         manifest = archive.read("manifest.json")
         assert b'"image_binaries_included": true' in manifest
         assert b'"image_count": 2' in manifest
@@ -555,8 +580,9 @@ async def test_klarf_18_export_uses_hierarchical_records() -> None:
 @pytest.mark.asyncio
 async def test_klarf_export_requires_complete_wafer_geometry() -> None:
     service, _artifacts = _service()
-    storage = service._storage_factory.open.return_value  # type: ignore[attr-defined]
-    storage.list_samples.return_value = _frame().drop("die_size_x", "die_size_y")
+    service._upstream_reader = _Upstream(  # type: ignore[assignment]
+        {17: _frame().drop("die_size_x", "die_size_y")}
+    )
 
     with pytest.raises(ScPredictionExportError, match="die_size_x"):
         await service.export(
@@ -610,16 +636,13 @@ async def test_zip_export_packages_parquet_klarf_and_manifest(
 
 
 @pytest.mark.asyncio
-async def test_klarf_export_splits_complete_files_by_inspection() -> None:
+async def test_klarf_export_ignores_stale_source_fields_in_legacy_shards() -> None:
     service, artifacts = _service()
-    first = _frame()
-    second = _frame(
-        inspection_time="2026-08-20T01:02:03",
-        wafer_key=18,
-        sample_prefix="second",
-    )
     storage = service._storage_factory.open.return_value  # type: ignore[attr-defined]
-    storage.list_samples.return_value = pl.concat([first, second])
+    storage.list_samples.return_value = _frame().with_columns(
+        pl.lit("STALE-LOT").alias("lot_id"),
+        pl.lit("STALE-WAFER").alias("wafer_id"),
+    )
 
     result = await service.export(
         dataset_id="dataset-1",
@@ -630,21 +653,11 @@ async def test_klarf_export_splits_complete_files_by_inspection() -> None:
         sampling_seed=None,
     )
 
-    assert result.filename.endswith("_klarf.zip")
-    with zipfile.ZipFile(io.BytesIO(next(iter(artifacts.objects.values())))) as archive:
-        names = sorted(
-            name for name in archive.namelist() if name.endswith((".000", ".001"))
-        )
-        assert len(names) == 2
-        assert names == [
-            "METAL-1-LOT-042-WAFER-17.000",
-            "METAL-1-LOT-042-WAFER-17.001",
-        ]
-        for name in names:
-            content = archive.read(name).decode("utf-8")
-            assert content.startswith("FileVersion 1 2;\n")
-            assert content.endswith("EndOfFile;\n")
-            assert len(loads12(content).find_tables("DefectList")[0].rows) == 3
+    assert result.filename.endswith(".000")
+    content = next(iter(artifacts.objects.values())).decode("utf-8")
+    document = loads12(content)
+    assert document.find_records("LotID")[0].values == ("LOT-042",)
+    assert document.find_records("WaferID")[0].values == ("WAFER-17",)
 
 
 @pytest.mark.asyncio
@@ -655,9 +668,20 @@ async def test_collection_export_packages_only_selected_members_by_inspection() 
         dataset_type="image_sc",
         task_spec=TaskSpec(task_type="sc"),
         storage_mode=DatasetStorageMode.FILE_SHARD_SPARSE,
+        dataset_meta={
+            "source_inspection_time": "2026-08-20T01:02:03+00:00",
+            "source_wafer_key": 17,
+        },
     )
     dataset_2 = dataset_1.model_copy(
-        update={"id": "dataset-2", "name": "Inspection 18"}
+        update={
+            "id": "dataset-2",
+            "name": "Inspection 18",
+            "dataset_meta": {
+                "source_inspection_time": "2026-08-20T01:02:03+00:00",
+                "source_wafer_key": 18,
+            },
+        }
     )
     repository = AsyncMock()
     repository.list_datasets_by_ids = AsyncMock(return_value=[dataset_1, dataset_2])
@@ -733,6 +757,20 @@ async def test_collection_export_packages_only_selected_members_by_inspection() 
         artifact_storage=artifacts,
         image_stream_factory=_ImageSourceFactory(_ImageResolver()),
         image_batch_rows=512,
+        upstream_reader=cast(
+            ScUpstreamReader,
+            _Upstream(
+                {
+                    17: _frame(),
+                    18: _frame(
+                        inspection_time="2026-08-20T01:02:03",
+                        wafer_key=18,
+                        sample_prefix="second",
+                    ),
+                }
+            ),
+        ),
+        source_batch_rows=512,
     )
 
     result = await service.export_collection(
@@ -762,10 +800,13 @@ async def test_collection_export_packages_only_selected_members_by_inspection() 
         referenced_images: set[str] = set()
         for name in klarf_names:
             document = loads12(archive.read(name).decode("utf-8"))
-            assert sum(
-                len(defect_table.rows)
-                for defect_table in document.find_tables("DefectList")
-            ) == 3
+            assert (
+                sum(
+                    len(defect_table.rows)
+                    for defect_table in document.find_tables("DefectList")
+                )
+                == 3
+            )
             referenced_images.update(
                 value.value if isinstance(value, KlarfSymbol) else str(value)
                 for record in document.find_records("TiffFileName")
@@ -792,9 +833,20 @@ async def test_collection_sampling_identity_includes_source_dataset() -> None:
         dataset_type="image_sc",
         task_spec=TaskSpec(task_type="sc"),
         storage_mode=DatasetStorageMode.FILE_SHARD_SPARSE,
+        dataset_meta={
+            "source_inspection_time": "2026-08-20T01:02:03+00:00",
+            "source_wafer_key": 17,
+        },
     )
     dataset_2 = dataset_1.model_copy(
-        update={"id": "dataset-2", "name": "Inspection 17 duplicate IDs"}
+        update={
+            "id": "dataset-2",
+            "name": "Inspection 17 duplicate IDs",
+            "dataset_meta": {
+                "source_inspection_time": "2026-08-20T01:02:03+00:00",
+                "source_wafer_key": 18,
+            },
+        }
     )
     repository = AsyncMock()
     repository.list_datasets_by_ids = AsyncMock(return_value=[dataset_1, dataset_2])
@@ -850,6 +902,8 @@ async def test_collection_sampling_identity_includes_source_dataset() -> None:
         artifact_storage=artifacts,
         image_stream_factory=_ImageSourceFactory(_ImageResolver()),
         image_batch_rows=512,
+        upstream_reader=cast(ScUpstreamReader, _Upstream({17: _frame(), 18: _frame()})),
+        source_batch_rows=512,
     )
 
     result = await service.export_collection(

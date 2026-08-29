@@ -1,11 +1,10 @@
 """SC sparse source schema contracts.
 
-Version 3 is the current write schema.  It preserves the complete upstream
-Arrow schema and adds the platform identity columns required by sparse
-storage.  Images are still fetched on demand: v3 does not construct the v2
-``list<struct>`` patch-image payload.  Version 2 remains defined here as a
-read-compatibility contract for existing datasets whose shards contain that
-embedded ``images`` column.
+Version 4 is the current write schema. It stores only platform membership and
+upstream defect identity. Inspection time and wafer key live once in Dataset
+metadata, while source-owned fields are resolved from the latest upstream row.
+Versions 2 and 3 remain readable through identity projection; their extra
+stored fields are ignored rather than treated as authoritative.
 
 Image role mapping
 ------------------
@@ -26,18 +25,15 @@ Image role mapping
 
 Schema version
 --------------
-``SC_SOURCE_SCHEMA_VERSION = "v3"`` is persisted in both the dataset manifest
+``SC_SOURCE_SCHEMA_VERSION = "v4_identity"`` is persisted in the dataset manifest
 and new Parquet shard key-value metadata.  Older v2 shards may not contain the
 Parquet metadata, so their manifest remains the authoritative version marker.
 
-V3 write behavior
+V4 write behavior
 -----------------
-- Preserve every upstream Arrow column and type supported by the Parquet
-  writer; do not project rows to the required-core list below.
-- Add/normalize the platform identity fields and persist the complete concrete
-  schema in the dataset manifest.
-- Do not construct deterministic patch image structs; resolve images on
-  demand.
+- Persist only ``sample_id`` and ``defect_id`` as strings.
+- Store inspection time and wafer key once in Dataset metadata.
+- Resolve source fields and images on demand from the latest upstream state.
 
 V2 differences from v1
 ----------------------
@@ -64,7 +60,8 @@ if TYPE_CHECKING:
 
 SC_SOURCE_SCHEMA_VERSION_V2 = "v2"
 SC_SOURCE_SCHEMA_VERSION_V3 = "v3"
-SC_SOURCE_SCHEMA_VERSION = SC_SOURCE_SCHEMA_VERSION_V3
+SC_SOURCE_SCHEMA_VERSION_V4 = "v4_identity"
+SC_SOURCE_SCHEMA_VERSION = SC_SOURCE_SCHEMA_VERSION_V4
 
 # ── Image struct dtype ────────────────────────────────────────────────────
 
@@ -159,6 +156,12 @@ images and supplied by the review-image query for review images.  V3 never
 constructs the v2 embedded image structs, but an upstream scalar ``images``
 metadata column is preserved like any other upstream column.
 """
+
+SC_SPARSE_SHARD_SCHEMA_V4: list[dict[str, str]] = [
+    {"name": "sample_id", "type": "string"},
+    {"name": "defect_id", "type": "string"},
+]
+"""Closed identity-only schema for current SC Dataset writes."""
 
 # ── Image role constants ──────────────────────────────────────────────────
 
@@ -259,6 +262,11 @@ def _build_v2_pyarrow_schema() -> pa.Schema:
 def _build_v3_pyarrow_schema() -> pa.Schema:
     """Build the minimum v3 schema used when an import has no data rows."""
     return _build_pyarrow_schema(SC_SPARSE_SHARD_SCHEMA_V3)
+
+
+def _build_v4_pyarrow_schema() -> pa.Schema:
+    """Build the closed identity-only schema used by current imports."""
+    return _build_pyarrow_schema(SC_SPARSE_SHARD_SCHEMA_V4)
 
 
 def _build_pyarrow_schema(columns: list[dict[str, str]]) -> pa.Schema:

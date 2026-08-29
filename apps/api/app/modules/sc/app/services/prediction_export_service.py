@@ -39,6 +39,11 @@ from app.modules.sc.domain.prediction_export import (
     ScPredictionExportResult,
     ScPredictionExportResultSource,
 )
+from app.modules.sc.app.services.latest_source import (
+    resolve_latest_sc_source,
+    sc_dataset_source_identity,
+)
+from app.modules.sc.domain.upstream_reader import ScUpstreamReader
 from app.modules.sc.app.services.sample_filter import (
     parse_and_apply_workflow_sample_filter,
 )
@@ -119,15 +124,21 @@ class ScPredictionExportService:
         artifact_storage: ArtifactStorage,
         image_stream_factory: ScExportImageStreamFactory,
         image_batch_rows: int,
+        upstream_reader: ScUpstreamReader,
+        source_batch_rows: int,
     ) -> None:
         if image_batch_rows <= 0:
             raise ValueError("image_batch_rows must be greater than zero")
+        if source_batch_rows <= 0:
+            raise ValueError("source_batch_rows must be greater than zero")
         self._repository = repository
         self._collection_reader = collection_reader
         self._storage_factory = storage_factory
         self._artifact_storage = artifact_storage
         self._image_stream_factory = image_stream_factory
         self._image_batch_rows = image_batch_rows
+        self._upstream_reader = upstream_reader
+        self._source_batch_rows = source_batch_rows
 
     async def export(
         self,
@@ -274,8 +285,17 @@ class ScPredictionExportService:
                 raise ScPredictionExportError(
                     "SC prediction export requires a bulk LazyFrame data source"
                 )
+            inspection_time, wafer_key = sc_dataset_source_identity(dataset, dataset.id)
+            resolved = await resolve_latest_sc_source(
+                upstream_reader=self._upstream_reader,
+                membership=lazy_rows,
+                inspection_time=inspection_time,
+                wafer_key=wafer_key,
+                dataset_id=dataset.id,
+                batch_rows=self._source_batch_rows,
+            )
             lazy_frames.append(
-                lazy_rows.with_columns(
+                resolved.with_columns(
                     pl.lit(dataset.id).alias("source_dataset_id"),
                     pl.lit(dataset.name).alias("source_dataset_name"),
                 )

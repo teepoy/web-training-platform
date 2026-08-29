@@ -21,7 +21,7 @@ from app.modules.sc.app.services.import_rows import (
 )
 from app.modules.sc.schema import (
     SC_SOURCE_SCHEMA_VERSION,
-    _build_v3_pyarrow_schema,
+    _build_v4_pyarrow_schema,
 )
 from app.shared.api.schemas import (
     Dataset,
@@ -76,63 +76,16 @@ def _transform_upstream_batch(
     wafer_key: int,
     schema: pa.Schema | None = None,
 ) -> pa.Table:
-    """Normalize one upstream batch without projecting away metadata columns.
-
-    The first batch establishes the concrete v3 schema.  Later batches are
-    reordered and cast to that schema, and fail explicitly if the upstream
-    changes its set of columns during one import.
-    """
+    """Project one upstream batch to the closed identity-only shard schema."""
     frame: pl.DataFrame = pl.from_arrow(batch)  # type: ignore[assignment]
-    required = {
-        "defect_id",
-        "wafer_x",
-        "wafer_y",
-        "die_x",
-        "die_y",
-        "rough_bin",
-    }
+    required = {"defect_id"}
     missing = required - set(frame.columns)
     if missing:
         raise ValueError(f"SC upstream batch is missing columns: {sorted(missing)}")
 
-    inspection_value = inspection_time.isoformat()
+    del inspection_time, wafer_key
     defect_id = pl.col("defect_id").cast(pl.Utf8)
-
-    optional_expressions: list[pl.Expr] = []
-    for column, dtype, default in (
-        ("class_number", pl.Int32, None),
-        ("test_id", pl.Int32, None),
-        ("lot_id", pl.Utf8, ""),
-    ):
-        if column not in frame.columns:
-            optional_expressions.append(pl.lit(default).cast(dtype).alias(column))
-    if optional_expressions:
-        frame = frame.with_columns(optional_expressions)
-
-    output = frame.with_columns(
-        defect_id.alias("sample_id"),
-        defect_id.alias("defect_id"),
-        pl.lit(inspection_value).cast(pl.Utf8).alias("inspection_time"),
-        pl.lit(wafer_key).cast(pl.Int32).alias("wafer_key"),
-        pl.col("wafer_x").cast(pl.Int32),
-        pl.col("wafer_y").cast(pl.Int32),
-        pl.col("die_x").cast(pl.Int32),
-        pl.col("die_y").cast(pl.Int32),
-        pl.col("rough_bin").cast(pl.Int32),
-        pl.col("class_number").cast(pl.Int32),
-        pl.col("test_id").cast(pl.Int32),
-        pl.col("lot_id").cast(pl.Utf8),
-        (
-            pl.col("has_review").cast(pl.Int32, strict=False)
-            if "has_review" in frame.columns
-            else pl.lit(0).cast(pl.Int32)
-        ).alias("has_review"),
-        *(
-            [pl.col("cluster").cast(pl.Int64, strict=False).alias("cluster_id")]
-            if "cluster" in frame.columns and "cluster_id" not in frame.columns
-            else []
-        ),
-    )
+    output = frame.select(defect_id.alias("sample_id"), defect_id.alias("defect_id"))
     table = cast(pa.Table, output.to_arrow())
     if schema is None:
         return table
@@ -406,7 +359,7 @@ class ScImportService:
             return {"dataset_id": dataset_id, "imported_count": 0, "total_available": 0}
 
         if target_rows == 0:
-            empty_schema = _build_v3_pyarrow_schema()
+            empty_schema = _build_v4_pyarrow_schema()
             empty_session = operator.begin_columnar_import(
                 schema_columns=_schema_columns(empty_schema),
                 schema_version=SC_SOURCE_SCHEMA_VERSION,

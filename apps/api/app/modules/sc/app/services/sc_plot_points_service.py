@@ -14,6 +14,8 @@ from app.modules.sc.app.services.sample_filter import (
     sample_table_filter_requires_label_columns,
 )
 from app.modules.sc.domain.models import _coerce_naive_to_upstream_tz
+from app.modules.sc.app.services.latest_source import resolve_latest_sc_source
+from app.modules.sc.domain.upstream_reader import ScUpstreamReader
 from app.modules.sc.proto_adapter import make_wafer_map_response_pb
 from app.shared.api.schemas import DatasetStorageMode
 
@@ -335,9 +337,15 @@ class ScPlotPointsService:
         *,
         repository: DatasetRepository,
         storage_factory: DatasetStorageFactoryPort,
+        upstream_reader: ScUpstreamReader,
+        source_batch_rows: int,
     ) -> None:
+        if source_batch_rows <= 0:
+            raise ValueError("source_batch_rows must be greater than zero")
         self._repository = repository
         self._storage_factory = storage_factory
+        self._upstream_reader = upstream_reader
+        self._source_batch_rows = source_batch_rows
 
     async def ensure_plot_points_allowed(self, dataset_id: str, org_id: str) -> None:
         dataset = await self._repository.get_dataset(dataset_id, org_id=org_id)
@@ -432,6 +440,14 @@ class ScPlotPointsService:
         )
         source_inspection_time, source_wafer_key = await _dataset_source_identity(
             dataset.dataset_meta, lf
+        )
+        lf = await resolve_latest_sc_source(
+            upstream_reader=upstream_reader,
+            membership=lf,
+            inspection_time=source_inspection_time,
+            wafer_key=source_wafer_key,
+            dataset_id=dataset_id,
+            batch_rows=self._source_batch_rows,
         )
         lf = await _join_upstream_image_counts(
             lf,
@@ -548,6 +564,17 @@ class ScPlotPointsService:
                 with_labels=filter_needs_labels,
                 with_predictions=filter_needs_predictions,
             ),
+        )
+        source_inspection_time, source_wafer_key = await _dataset_source_identity(
+            dataset.dataset_meta, lf
+        )
+        lf = await resolve_latest_sc_source(
+            upstream_reader=self._upstream_reader,
+            membership=lf,
+            inspection_time=source_inspection_time,
+            wafer_key=source_wafer_key,
+            dataset_id=dataset_id,
+            batch_rows=self._source_batch_rows,
         )
         if mode == "reticle":
             geometry_raw = dataset.dataset_meta.get("geometry")

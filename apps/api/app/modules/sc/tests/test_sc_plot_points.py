@@ -337,7 +337,9 @@ async def test_build_plot_points_response_with_geometry_in_dataset_meta() -> Non
 
     from app.modules.storage.adapter.factory import DatasetStorageFactory
     from app.shared.api.schemas import Dataset, DatasetStorageMode
-    from app.modules.datasets.adapter.repositories.dataset_sql_repository import DatasetSqlRepository
+    from app.modules.datasets.adapter.repositories.dataset_sql_repository import (
+        DatasetSqlRepository,
+    )
 
     n = 10
     df = pl.DataFrame(
@@ -398,9 +400,18 @@ async def test_build_plot_points_response_with_geometry_in_dataset_meta() -> Non
         ).lazy()
     )
 
+    async def sample_stream(*_args, **_kwargs):
+        for batch in df.to_arrow().to_batches():
+            yield batch
+
+    mock_upstream.get_sample_count = AsyncMock(return_value=df.height)
+    mock_upstream.stream_sample_batches = sample_stream
+
     svc = ScPlotPointsService(
         repository=mock_repo,  # type: ignore
         storage_factory=mock_storage_factory,  # type: ignore
+        upstream_reader=mock_upstream,
+        source_batch_rows=100,
     )
 
     pb_bytes = await svc.build_plot_points_response(
@@ -430,7 +441,9 @@ async def test_build_plot_points_response_rejects_missing_geometry() -> None:
 
     from app.modules.storage.adapter.factory import DatasetStorageFactory
     from app.shared.api.schemas import Dataset, DatasetStorageMode
-    from app.modules.datasets.adapter.repositories.dataset_sql_repository import DatasetSqlRepository
+    from app.modules.datasets.adapter.repositories.dataset_sql_repository import (
+        DatasetSqlRepository,
+    )
 
     n = 5
     df = pl.DataFrame(
@@ -470,6 +483,8 @@ async def test_build_plot_points_response_rejects_missing_geometry() -> None:
     svc = ScPlotPointsService(
         repository=mock_repo,  # type: ignore
         storage_factory=mock_storage_factory,  # type: ignore
+        upstream_reader=AsyncMock(),
+        source_batch_rows=100,
     )
 
     with pytest.raises(ScPlotPointsRejectedError, match="dataset_meta.geometry"):
@@ -487,7 +502,9 @@ async def test_build_plot_points_response_rejects_incomplete_geometry() -> None:
 
     from app.modules.storage.adapter.factory import DatasetStorageFactory
     from app.shared.api.schemas import Dataset, DatasetStorageMode
-    from app.modules.datasets.adapter.repositories.dataset_sql_repository import DatasetSqlRepository
+    from app.modules.datasets.adapter.repositories.dataset_sql_repository import (
+        DatasetSqlRepository,
+    )
 
     df = pl.DataFrame(
         {
@@ -534,6 +551,8 @@ async def test_build_plot_points_response_rejects_incomplete_geometry() -> None:
     svc = ScPlotPointsService(
         repository=mock_repo,  # type: ignore
         storage_factory=mock_storage_factory,  # type: ignore
+        upstream_reader=AsyncMock(),
+        source_batch_rows=100,
     )
 
     with pytest.raises(ScPlotPointsRejectedError, match="missing keys"):

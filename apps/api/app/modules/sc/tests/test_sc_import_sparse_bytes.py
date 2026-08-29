@@ -1,7 +1,7 @@
 """SC sparse schema compatibility tests.
 
-New imports use the scalar-only v3 schema.  The v2 image struct remains a
-supported read contract for datasets imported before v3.
+New imports use the identity-only v4 schema. The v2/v3 contracts remain
+supported for compatibility identity projection.
 """
 
 from __future__ import annotations
@@ -18,8 +18,10 @@ from app.modules.sc.schema import (
     SC_SOURCE_SCHEMA_VERSION,
     SC_SPARSE_SHARD_SCHEMA_V2,
     SC_SPARSE_SHARD_SCHEMA_V3,
+    SC_SPARSE_SHARD_SCHEMA_V4,
     _build_v2_pyarrow_schema,
     _build_v3_pyarrow_schema,
+    _build_v4_pyarrow_schema,
     check_sc_v2_or_raise,
     find_images_by_role,
 )
@@ -71,17 +73,24 @@ def test_v2_schema_round_trips_existing_image_rows() -> None:
     assert find_images_by_role(restored["images"], "patch_template") == [image]
 
 
-def test_v3_schema_defines_only_the_guaranteed_core() -> None:
+def test_v3_schema_remains_available_for_compatibility() -> None:
     schema = _build_v3_pyarrow_schema()
 
-    assert SC_SOURCE_SCHEMA_VERSION == "v3"
     assert schema.names == [column["name"] for column in SC_SPARSE_SHARD_SCHEMA_V3]
     assert "images" not in schema.names
     assert "image_uris" not in schema.names
     assert "metadata" not in schema.names
 
 
-def test_transform_upstream_batch_preserves_arbitrary_upstream_columns() -> None:
+def test_v4_schema_is_identity_only() -> None:
+    schema = _build_v4_pyarrow_schema()
+
+    assert SC_SOURCE_SCHEMA_VERSION == "v4_identity"
+    assert schema.names == [column["name"] for column in SC_SPARSE_SHARD_SCHEMA_V4]
+    assert schema.names == ["sample_id", "defect_id"]
+
+
+def test_transform_upstream_batch_persists_only_identity_columns() -> None:
     batch = pa.RecordBatch.from_pylist(
         [
             {
@@ -108,35 +117,11 @@ def test_transform_upstream_batch_preserves_arbitrary_upstream_columns() -> None
         wafer_key=1,
     )
 
-    assert "images" in table.column_names
-    assert "future_metric" in table.column_names
-    assert "cluster" in table.column_names
-    assert "cluster_id" in table.column_names
-    assert table.to_pylist() == [
-        {
-            "sample_id": "42",
-            "defect_id": "42",
-            "inspection_time": "2026-05-26T08:00:00+00:00",
-            "wafer_key": 1,
-            "wafer_x": 100,
-            "wafer_y": 200,
-            "die_x": 1,
-            "die_y": 2,
-            "rough_bin": 3,
-            "class_number": 4,
-            "test_id": 5,
-            "lot_id": "LOT-1",
-            "index_x": 17,
-            "cluster": 9,
-            "images": 6,
-            "future_metric": 12.5,
-            "cluster_id": 9,
-            "has_review": 0,
-        }
-    ]
+    assert table.column_names == ["sample_id", "defect_id"]
+    assert table.to_pylist() == [{"sample_id": "42", "defect_id": "42"}]
 
 
-def test_transform_upstream_batch_rejects_schema_drift() -> None:
+def test_transform_upstream_batch_ignores_compatible_extra_field_changes() -> None:
     first = pa.RecordBatch.from_pylist(
         [
             {
@@ -169,13 +154,14 @@ def test_transform_upstream_batch_rejects_schema_drift() -> None:
         ]
     )
 
-    with pytest.raises(ValueError, match="schema changed during import"):
-        _transform_upstream_batch(
-            changed,
-            inspection_time=datetime(2026, 5, 26, 8, 0, tzinfo=timezone.utc),
-            wafer_key=1,
-            schema=first_table.schema,
-        )
+    table = _transform_upstream_batch(
+        changed,
+        inspection_time=datetime(2026, 5, 26, 8, 0, tzinfo=timezone.utc),
+        wafer_key=1,
+        schema=first_table.schema,
+    )
+
+    assert table.to_pylist() == [{"sample_id": "2", "defect_id": "2"}]
 
 
 def test_find_images_by_role_remains_available_for_v2_readers() -> None:

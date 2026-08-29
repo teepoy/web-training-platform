@@ -175,17 +175,20 @@ Redis Pub/Sub handle when the response expires or the client disconnects.
 
 ## Object cache and cleanup
 
-Final SQL results are never cached. The cache contains only normalized immutable
-Parquet objects:
+Final SQL results are never cached. The cache contains only normalized,
+rebuildable Parquet objects:
 
-- inspection base samples at revision 0;
-- inspection review-image rows at revision 0;
+- inspection base samples keyed by the inspection freshness timestamp;
+- inspection review-image rows keyed by the same freshness timestamp;
 - a dataset annotation/prediction overlay at its dataset revision.
 
-Dataset `samples` is a query-time join of the immutable inspection base and the
-current overlay. A cache object ID is the SHA-256 of its logical key plus
-revision. Redis stores object metadata and access order; the file itself stays
-in the configured cache directory.
+Dataset and Collection bases are built by semi-joining their persisted identity
+membership with the latest inspection rows. Stored source extras from v2/v3
+shards are ignored. Dataset `samples` is then a query-time join of that current
+source projection and the platform overlay. A cache object ID is the SHA-256 of
+its logical key, source freshness, and platform revision. Redis stores object
+metadata and access order; the file itself stays in the configured cache
+directory.
 
 ### Build and publication
 

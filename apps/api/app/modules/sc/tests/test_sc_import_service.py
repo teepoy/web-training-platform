@@ -155,10 +155,14 @@ class _MockUpstream:
         self.stream_sample_calls: list[tuple] = []
 
     async def list_inspections(
-        self, start_time, end_time,
-        lot_id=None, wafer_id=None, layer_id=None, device=None,
+        self,
+        start_time,
+        end_time,
+        lot_id=None,
+        wafer_id=None,
+        layer_id=None,
+        device=None,
     ):
-
         return pl.LazyFrame([])
 
     async def get_inspection(self, inspection_time, wafer_key):
@@ -180,8 +184,12 @@ class _MockUpstream:
         on_progress=None,
     ):
         del projection
-        self.stream_sample_calls.append((inspection_time, wafer_key, offset, count, batch_rows))
-        stop = self._row_count if count is None else min(offset + count, self._row_count)
+        self.stream_sample_calls.append(
+            (inspection_time, wafer_key, offset, count, batch_rows)
+        )
+        stop = (
+            self._row_count if count is None else min(offset + count, self._row_count)
+        )
         loaded = 0
         for start in range(offset, stop, batch_rows):
             end = min(start + batch_rows, stop)
@@ -222,7 +230,6 @@ class _MockUpstream:
         reticle_offset_y=0,
         on_progress=None,
     ):
-
         self.list_samples_calls.append((inspection_time, wafer_key, offset, count))
 
         if offset < 0:
@@ -230,7 +237,9 @@ class _MockUpstream:
 
         if count == 1:
             # Pre-check mode
-            return pl.DataFrame({"defect_id": [1] if self._row_count > 0 else []}).lazy()
+            return pl.DataFrame(
+                {"defect_id": [1] if self._row_count > 0 else []}
+            ).lazy()
 
         # Full mode (count=None)
         rows = []
@@ -253,7 +262,6 @@ class _MockUpstream:
         return pl.DataFrame(rows).lazy()
 
     async def list_review_images(self, inspection_time, wafer_key):
-
         return pl.LazyFrame([])
 
 
@@ -407,9 +415,17 @@ async def test_direct_import_persists_geometry_metadata() -> None:
     geometry = repo.updated_meta["geometry"]
 
     expected_keys = {
-        "center_x", "center_y", "origin_x", "origin_y",
-        "die_size_x", "die_size_y", "origin_index_x", "origin_index_y",
-        "wafer_id", "lot_id", "device",
+        "center_x",
+        "center_y",
+        "origin_x",
+        "origin_y",
+        "die_size_x",
+        "die_size_y",
+        "origin_index_x",
+        "origin_index_y",
+        "wafer_id",
+        "lot_id",
+        "device",
     }
     assert set(geometry.keys()) == expected_keys, (
         f"Expected {expected_keys}, got {set(geometry.keys())}"
@@ -474,19 +490,20 @@ async def test_direct_import_uses_shuffled_ids() -> None:
     assert payload_store.manifest is not None
     assert payload_store.manifest.total_rows == 50
     assert payload_store.manifest.manifest_version == "v3"
-    assert payload_store.manifest.schema_version == "v3"
-    assert "images" not in {
-        column.name for column in payload_store.manifest.schema_columns
+    assert payload_store.manifest.schema_version == "v4_identity"
+    assert {column.name for column in payload_store.manifest.schema_columns} == {
+        "sample_id",
+        "defect_id",
     }
-    assert {"index_x", "future_metric"} <= {
-        column.name for column in payload_store.manifest.schema_columns
-    }
+    assert {"index_x", "future_metric"}.isdisjoint(
+        {column.name for column in payload_store.manifest.schema_columns}
+    )
     assert payload_store.manifest.sample_index == {}
     assert payload_store.manifest.index is not None
     assert payload_store.shards
     parquet = pq.ParquetFile(io.BytesIO(payload_store.shards[0]))
-    assert parquet.schema_arrow.metadata == {b"schema_version": b"v3"}
-    assert {"index_x", "future_metric"} <= set(parquet.schema_arrow.names)
+    assert parquet.schema_arrow.metadata == {b"schema_version": b"v4_identity"}
+    assert parquet.schema_arrow.names == ["sample_id", "defect_id"]
 
 
 @pytest.mark.asyncio

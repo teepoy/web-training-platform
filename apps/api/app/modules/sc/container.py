@@ -118,6 +118,8 @@ def init_sc(
     plot_points_service = ScPlotPointsService(
         repository=repository,
         storage_factory=storage_factory,
+        upstream_reader=upstream_reader,
+        source_batch_rows=shared.config.sc.pipeline.materialization_batch_rows,
     )
     sc_inspection_materializer = ScInspectionMaterializer(
         image_stream_factory=training_image_stream_factory,
@@ -132,6 +134,8 @@ def init_sc(
         artifact_storage=shared.artifact_storage,
         image_stream_factory=export_image_stream_factory,
         image_batch_rows=shared.config.sc.pipeline.prediction_input_batch_rows,
+        upstream_reader=upstream_reader,
+        source_batch_rows=shared.config.sc.pipeline.materialization_batch_rows,
     )
 
     return ScContext(

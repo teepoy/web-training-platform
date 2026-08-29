@@ -18,6 +18,7 @@ from app.modules.dataset_collections.domain.models import DatasetCollectionRevis
 from app.modules.dataset_collections.port.local import (
     DatasetCollectionRevisionReaderPort,
 )
+from app.modules.sc.app.services.latest_source import resolve_latest_sc_source
 from app.modules.sc.data_provider.cache import CachedDataObject, ScDataObjectCache
 from app.modules.sc.data_provider.scope import ScDataScope
 from app.modules.sc.domain.models import _coerce_naive_to_upstream_tz
@@ -72,7 +73,7 @@ _WORKBENCH_OWNED_SOURCE_COLUMNS = (
     "final_class",
 )
 # Bump whenever the physical workbench identity contract changes.
-_SAMPLES_BASE_FORMAT_VERSION = "v6-repeater-id"
+_SAMPLES_BASE_FORMAT_VERSION = "v7-latest-source"
 _REVIEW_IMAGES_FORMAT_VERSION = "v2-row-key"
 
 
@@ -164,9 +165,13 @@ class ScDataMaterializer:
             name=f"sc-review-images-{wafer_key}",
         )
         base_key = f"inspection:{inspection_time}/{wafer_key}"
+        freshness = inspection.latest_update
         samples, review_images = await asyncio.gather(
             self._cache.get_or_build_file(
-                logical_key=f"{base_key}:samples-base:{_SAMPLES_BASE_FORMAT_VERSION}",
+                logical_key=(
+                    f"{base_key}:samples-base:{_SAMPLES_BASE_FORMAT_VERSION}:"
+                    f"source-{freshness}"
+                ),
                 scope=scope.cache_name,
                 revision=0,
                 revision_tracked=False,
@@ -180,7 +185,8 @@ class ScDataMaterializer:
             ),
             self._cache.get_or_build(
                 logical_key=(
-                    f"{base_key}:review-images:{_REVIEW_IMAGES_FORMAT_VERSION}"
+                    f"{base_key}:review-images:{_REVIEW_IMAGES_FORMAT_VERSION}:"
+                    f"source-{freshness}"
                 ),
                 scope=scope.cache_name,
                 revision=0,
@@ -229,7 +235,29 @@ class ScDataMaterializer:
             return await sparse_task
 
         parsed_time = _parse_inspection_time(inspection_time)
+        inspection = await self._upstream_reader.get_inspection(parsed_time, wafer_key)
+        if inspection is None:
+            raise ValueError(f"Inspection not found: {inspection_time}/{wafer_key}")
+        freshness = inspection.latest_update
         review_task: asyncio.Task[pl.DataFrame] | None = None
+        source_task: asyncio.Task[pl.LazyFrame] | None = None
+
+        async def load_latest_source() -> pl.LazyFrame:
+            nonlocal source_task
+            if source_task is None:
+
+                async def load() -> pl.LazyFrame:
+                    return await self._resolve_latest_source(
+                        parsed_time,
+                        wafer_key,
+                        await load_sparse_lazyframe(),
+                        dataset_id=scope.identity,
+                    )
+
+                source_task = asyncio.create_task(
+                    load(), name=f"sc-dataset-source-{scope.identity}"
+                )
+            return await source_task
 
         async def load_review_images() -> pl.DataFrame:
             nonlocal review_task
@@ -256,11 +284,11 @@ class ScDataMaterializer:
             ).to_arrow()
 
         async def build_samples_base(path: Path) -> None:
-            sparse_lf = await load_sparse_lazyframe()
+            source_lf = await load_latest_source()
             review_df = await load_review_images()
             await _sink_lazyframe(
                 _normalize_dataset_base_lazyframe(
-                    sparse_lf,
+                    source_lf,
                     review_df,
                     dataset_id=scope.identity,
                 ),
@@ -271,7 +299,7 @@ class ScDataMaterializer:
             self._cache.get_or_build(
                 logical_key=(
                     f"inspection:{inspection_time}/{wafer_key}:review-images:"
-                    f"{_REVIEW_IMAGES_FORMAT_VERSION}"
+                    f"{_REVIEW_IMAGES_FORMAT_VERSION}:source-{freshness}"
                 ),
                 scope=scope.cache_name,
                 revision=0,
@@ -281,7 +309,7 @@ class ScDataMaterializer:
             self._cache.get_or_build_file(
                 logical_key=(
                     f"dataset:{scope.org_id}/{scope.identity}:samples-base:"
-                    f"{_SAMPLES_BASE_FORMAT_VERSION}"
+                    f"{_SAMPLES_BASE_FORMAT_VERSION}:source-{freshness}"
                 ),
                 scope=scope.cache_name,
                 revision=0,
@@ -352,8 +380,27 @@ class ScDataMaterializer:
                 strict=True,
             )
         )
+        source_scopes: dict[str, tuple[str, int]] = {}
+        source_freshness: list[str] = []
+        for dataset_id in source_dataset_ids:
+            dataset = await storages[dataset_id].get_dataset_metadata()
+            inspection_time, wafer_key = _dataset_source_scope(dataset, dataset_id)
+            inspection = await self._upstream_reader.get_inspection(
+                _parse_inspection_time(inspection_time), wafer_key
+            )
+            if inspection is None:
+                raise ValueError(
+                    f"Inspection not found for SC Dataset {dataset_id}: "
+                    f"{inspection_time}/{wafer_key}"
+                )
+            source_scopes[dataset_id] = (inspection_time, wafer_key)
+            source_freshness.append(f"{dataset_id}:{inspection.latest_update}")
+        freshness_key = hashlib.sha256(
+            "\n".join(source_freshness).encode("utf-8")
+        ).hexdigest()[:16]
         artifact_task: asyncio.Task[Path] | None = None
         observed_source_task: asyncio.Task[pl.LazyFrame] | None = None
+        materialized_source_task: asyncio.Task[pl.LazyFrame] | None = None
         reviews_task: asyncio.Task[pl.DataFrame] | None = None
         observed_resolution = collection_revision.source_resolution == "observed"
 
@@ -394,6 +441,13 @@ class ScDataMaterializer:
                                     with_predictions=False,
                                 ),
                             )
+                            inspection_time, wafer_key = source_scopes[dataset_id]
+                            rows = await self._resolve_latest_source(
+                                _parse_inspection_time(inspection_time),
+                                wafer_key,
+                                rows,
+                                dataset_id=dataset_id,
+                            )
                             return _observed_collection_member_lazyframe(
                                 rows,
                                 dataset_id=dataset_id,
@@ -418,6 +472,40 @@ class ScDataMaterializer:
                     )
                 return await observed_source_task
 
+            async def load_materialized_source() -> pl.LazyFrame:
+                nonlocal materialized_source_task
+                if materialized_source_task is None:
+
+                    async def load() -> pl.LazyFrame:
+                        membership = pl.scan_parquet(await load_artifact_path())
+
+                        async def load_member(dataset_id: str) -> pl.LazyFrame:
+                            inspection_time, wafer_key = source_scopes[dataset_id]
+                            return await self._resolve_latest_source(
+                                _parse_inspection_time(inspection_time),
+                                wafer_key,
+                                membership.filter(
+                                    pl.col("source_dataset_id") == dataset_id
+                                ),
+                                dataset_id=dataset_id,
+                            )
+
+                        return pl.concat(
+                            await asyncio.gather(
+                                *(
+                                    load_member(dataset_id)
+                                    for dataset_id in source_dataset_ids
+                                )
+                            ),
+                            how="diagonal_relaxed",
+                        )
+
+                    materialized_source_task = asyncio.create_task(
+                        load(),
+                        name=f"sc-collection-materialized-source-{revision_id}",
+                    )
+                return await materialized_source_task
+
             async def load_reviews() -> pl.DataFrame:
                 nonlocal reviews_task
                 if reviews_task is None:
@@ -425,10 +513,7 @@ class ScDataMaterializer:
                     async def load() -> pl.DataFrame:
                         frames: list[pl.DataFrame] = []
                         for dataset_id in source_dataset_ids:
-                            dataset = await storages[dataset_id].get_dataset_metadata()
-                            inspection_time, wafer_key = _dataset_source_scope(
-                                dataset, dataset_id
-                            )
+                            inspection_time, wafer_key = source_scopes[dataset_id]
                             frame = await self._load_review_images(
                                 _parse_inspection_time(inspection_time), wafer_key
                             )
@@ -449,7 +534,7 @@ class ScDataMaterializer:
                 source = (
                     await load_observed_source()
                     if observed_resolution
-                    else pl.scan_parquet(await load_artifact_path())
+                    else await load_materialized_source()
                 )
                 reviews = await load_reviews()
                 await _sink_lazyframe(
@@ -465,7 +550,7 @@ class ScDataMaterializer:
                 source = (
                     await load_observed_source()
                     if observed_resolution
-                    else pl.scan_parquet(await load_artifact_path())
+                    else await load_materialized_source()
                 )
                 identities = source.select(
                     pl.col("source_dataset_id").cast(pl.Utf8),
@@ -484,7 +569,7 @@ class ScDataMaterializer:
                 self._cache.get_or_build_file(
                     logical_key=(
                         f"collection:{scope.org_id}/{scope.identity}:samples-base:"
-                        f"{_SAMPLES_BASE_FORMAT_VERSION}"
+                        f"{_SAMPLES_BASE_FORMAT_VERSION}:source-{freshness_key}"
                     ),
                     scope=scope.cache_name,
                     revision=revision if observed_resolution else 0,
@@ -494,7 +579,7 @@ class ScDataMaterializer:
                 self._cache.get_or_build(
                     logical_key=(
                         f"collection:{scope.org_id}/{scope.identity}:review-images:"
-                        f"{_REVIEW_IMAGES_FORMAT_VERSION}"
+                        f"{_REVIEW_IMAGES_FORMAT_VERSION}:source-{freshness_key}"
                     ),
                     scope=scope.cache_name,
                     revision=revision if observed_resolution else 0,
@@ -596,6 +681,23 @@ class ScDataMaterializer:
         return review_df.with_columns(
             pl.col("defect_id").cast(pl.Int32, strict=False),
             pl.col("image_id").cast(pl.Int64, strict=False),
+        )
+
+    async def _resolve_latest_source(
+        self,
+        inspection_time: datetime,
+        wafer_key: int,
+        membership: pl.LazyFrame,
+        *,
+        dataset_id: str,
+    ) -> pl.LazyFrame:
+        return await resolve_latest_sc_source(
+            upstream_reader=self._upstream_reader,
+            membership=membership,
+            inspection_time=inspection_time,
+            wafer_key=wafer_key,
+            dataset_id=dataset_id,
+            batch_rows=self._batch_rows,
         )
 
     async def _write_inspection_samples(

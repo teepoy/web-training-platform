@@ -2,11 +2,14 @@
 
 ## Progress
 
-- **Overall status:** Planned; implementation has not started.
-- **Completed intermediate slice:** recorded the current authority conflicts,
-  identity contract, live-source semantics, and no-backfill migration approach.
-- **Next milestone:** implement the bulk live-source resolution boundary before
-  changing physical Dataset storage or Sample table reads.
+- **Overall status:** In progress; the storage and authoritative read boundary
+  are implemented and covered by focused tests.
+- **Completed intermediate slice:** new imports write schema
+  `v4_identity` (`sample_id`, `defect_id`); Dataset/Collection workbench,
+  map/filter, runtime, and prediction-export paths rehydrate current source
+  rows; v2/v3 extras are ignored; cache keys include inspection freshness.
+- **Next milestone:** remove the unused direct Sample table endpoints/client,
+  verify the generic sparse-export surface, and complete broad/E2E checks.
 - **Done when:** every acceptance criterion below is verified.
 
 This document records the proposal to give the SC Sample table one explicit
@@ -15,9 +18,8 @@ only sample membership and the stable keys needed to resolve the source row,
 instead of copying the complete upstream record into S3 and later mixing that
 copy with live upstream data.
 
-This is an audit and design todo only. No importer, storage schema, data-provider,
-runtime, API, or UI behavior should change until the work is split into reviewed
-implementation slices.
+Implementation is proceeding in reviewable checkpoints. The findings below
+describe the pre-refactor state and remain as the migration rationale.
 
 This todo complements
 `docs/todos/stateful-upstream-simulator-and-source-automation.md`: the simulator
@@ -84,7 +86,7 @@ Calling both layers “materialization” hides which one is durable Dataset sta
 and which one is a rebuildable query cache. Their ownership and lifecycle must
 be named separately in code and documentation.
 
-### The persistent SC Dataset currently copies the complete upstream row
+### The persistent SC Dataset copied the complete upstream row
 
 `_transform_upstream_batch()` requires a small core but otherwise retains the
 upstream batch's complete column set. The first batch establishes the concrete
@@ -102,7 +104,7 @@ The existing tests explicitly require future/dynamic upstream columns such as
 This is the opposite of the proposed identity-only model and will require a new
 source schema version rather than an in-place reinterpretation of v3.
 
-### The Sample table changes its base source by scope
+### The Sample table changed its base source by scope
 
 `ScDataMaterializer` currently constructs the DuckDB `samples` view differently:
 
@@ -159,7 +161,7 @@ provider. It should be removed after verifying there is no remaining registered
 consumer, rather than becoming a fallback when the data provider or upstream is
 unavailable.
 
-### Existing consumers assume full source columns are in Dataset storage
+### Existing consumers assumed full source columns were in Dataset storage
 
 Reducing persistent shards to keys is not isolated to the visual table. The
 following paths currently read source attributes through
