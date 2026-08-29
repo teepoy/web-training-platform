@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.modules.datasets.port.http.deps import get_artifact_storage
-from app.shared.infrastructure.storage.memory import InMemoryArtifactStorage
+from tests.support.artifact_storage import InMemoryArtifactStorage
 from tests.conftest import TRAINER_ID
 
 
@@ -16,14 +16,21 @@ def _create_job(c: TestClient) -> str:
     """Create a dataset and training job; return the job_id."""
     ds = c.post(
         "/api/v1/datasets",
-        json={"name": "artifact-ds", "task_spec": {"task_type": "classification", "label_space": ["a", "b"]}},
+        json={
+            "name": "artifact-ds",
+            "task_spec": {"task_type": "classification", "label_space": ["a", "b"]},
+        },
     )
     assert ds.status_code == 200
     dataset_id = ds.json()["id"]
 
     job = c.post(
         "/api/v1/training-jobs",
-        json={"dataset_id": dataset_id, "trainer_id": TRAINER_ID, "created_by": "test-user"},
+        json={
+            "dataset_id": dataset_id,
+            "trainer_id": TRAINER_ID,
+            "created_by": "test-user",
+        },
     )
     assert job.status_code == 200
     return job.json()["id"]
@@ -51,7 +58,9 @@ def test_download_artifact_after_job_completion() -> None:
         assert job_body["status"] == "completed"
 
         artifact_refs = job_body["artifact_refs"]
-        assert len(artifact_refs) > 0, "Expected at least one artifact_ref after job completion"
+        assert len(artifact_refs) > 0, (
+            "Expected at least one artifact_ref after job completion"
+        )
 
         artifact_id = artifact_refs[0]["id"]
         r = c.get(f"/api/v1/artifacts/{artifact_id}/download")
@@ -72,9 +81,7 @@ def test_download_artifact_not_found() -> None:
 def test_export_download_streams_full_object_with_range_metadata() -> None:
     storage = InMemoryArtifactStorage()
     payload = b"0123456789" * 200_000
-    uri = asyncio.run(
-        storage.put_bytes("exports/dataset-1/large.zip", payload)
-    )
+    uri = asyncio.run(storage.put_bytes("exports/dataset-1/large.zip", payload))
     app.dependency_overrides[get_artifact_storage] = lambda: storage
     try:
         with TestClient(app) as c:

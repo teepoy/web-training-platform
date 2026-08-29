@@ -26,7 +26,7 @@ from app.modules.runtime.domain.events import (
     collect_runtime_events,
 )
 from app.shared.api.schemas import ArtifactRef
-from app.shared.infrastructure.storage.memory import InMemoryArtifactStorage
+from tests.support.artifact_storage import InMemoryArtifactStorage
 
 
 def test_runtime_deployments_are_declared_directly() -> None:

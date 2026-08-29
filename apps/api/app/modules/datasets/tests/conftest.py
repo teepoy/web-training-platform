@@ -33,8 +33,10 @@ from app.shared.api.schemas import (
 )
 from app.shared.db.registry import Base, OrganizationORM
 from app.shared.db.session import create_session_factory
-from app.modules.datasets.adapter.repositories.dataset_sql_repository import DatasetSqlRepository
-from app.shared.infrastructure.storage.memory import InMemoryArtifactStorage
+from app.modules.datasets.adapter.repositories.dataset_sql_repository import (
+    DatasetSqlRepository,
+)
+from tests.support.artifact_storage import InMemoryArtifactStorage
 from app.modules.storage.domain.sparse import (
     DatasetManifest,
     DatasetPayloadStore,
@@ -52,13 +54,15 @@ def _utcnow() -> datetime:
 
 def _make_parquet_shard_bytes(sample_ids: list[str]) -> bytes:
     """Create an in-memory parquet shard with sample_id + images columns."""
-    table = pa.table({
-        "sample_id": pa.array(sample_ids, type=pa.string()),
-        "images": pa.array(
-            [f"fake_image_content_for_{sid}".encode() for sid in sample_ids],
-            type=pa.binary(),
-        ),
-    })
+    table = pa.table(
+        {
+            "sample_id": pa.array(sample_ids, type=pa.string()),
+            "images": pa.array(
+                [f"fake_image_content_for_{sid}".encode() for sid in sample_ids],
+                type=pa.binary(),
+            ),
+        }
+    )
     buf = _io.BytesIO()
     pq.write_table(table, buf)
     return buf.getvalue()

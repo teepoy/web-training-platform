@@ -9,9 +9,11 @@ from app.modules.training.adapter.clients.kubeflow_client import KubeflowClient
 from app.modules.dataset_collections.port.local import (
     DatasetCollectionRevisionReaderPort,
 )
-from app.modules.training.adapter.engines.local_kubeflow import (
+from app.modules.training.adapter.engines.kubeflow_engine import (
     KubeflowTrainingOperatorEngine,
-    LocalProcessEngine,
+)
+from app.modules.training.adapter.engines.registry import (
+    build_registered_training_engine,
 )
 from app.modules.training.adapter.engines.prefect_engine import (
     PrefectWorkPoolEngine,
@@ -84,7 +86,7 @@ def _build_training_engine(
     """
     engine = str(cfg.execution.engine)
     if engine == "local":
-        return LocalProcessEngine(storage=artifact_storage)
+        return build_registered_training_engine(engine, artifact_storage)
     if engine == "kubeflow":
         return KubeflowTrainingOperatorEngine(
             kubeflow_client=kubeflow_client,

@@ -18,10 +18,12 @@ import pytest_asyncio  # type: ignore[import-untyped]
 from app.modules.storage.adapter.db_full.storage import DbFullDatasetStorage
 from app.modules.storage.domain.columnar_schemas import DB_FULL_MATERIALIZED_SCHEMA
 from app.modules.datasets.domain.sample_row import PredictionResult, SampleRow
-from app.modules.datasets.adapter.repositories.dataset_sql_repository import DatasetSqlRepository
+from app.modules.datasets.adapter.repositories.dataset_sql_repository import (
+    DatasetSqlRepository,
+)
 from app.shared.api.schemas import Annotation, Dataset, DatasetStorageMode, TaskSpec
 from app.shared.db.registry import PredictionJobORM
-from app.shared.infrastructure.storage.memory import InMemoryArtifactStorage
+from tests.support.artifact_storage import InMemoryArtifactStorage
 
 pytestmark = pytest.mark.integration
 
@@ -116,7 +118,9 @@ async def _create_fresh_dataset(
     from app.shared.api.schemas import Sample
 
     samples = [
-        Sample(id=sid, dataset_id=dataset_id, image_uris=[f"https://example.com/{sid}.png"])
+        Sample(
+            id=sid, dataset_id=dataset_id, image_uris=[f"https://example.com/{sid}.png"]
+        )
         for sid in sample_ids
     ]
     await repo.create_samples(samples)
@@ -142,7 +146,9 @@ class TestDbFullDatasetStorage:
     # ── 1. constructor ───────────────────────────────────────────────────
 
     @pytest.mark.asyncio
-    async def test_constructor(self, storage: DbFullDatasetStorage, db_full_fixture: tuple[str, str]) -> None:
+    async def test_constructor(
+        self, storage: DbFullDatasetStorage, db_full_fixture: tuple[str, str]
+    ) -> None:
         """Create DbFullDatasetStorage and verify its dataset identity and mode."""
         dataset_id, _ = db_full_fixture
         assert storage.dataset_id == dataset_id
@@ -151,7 +157,9 @@ class TestDbFullDatasetStorage:
     # ── 2. get_dataset_metadata ──────────────────────────────────────────
 
     @pytest.mark.asyncio
-    async def test_get_dataset_metadata_returns_dataset(self, storage: DbFullDatasetStorage) -> None:
+    async def test_get_dataset_metadata_returns_dataset(
+        self, storage: DbFullDatasetStorage
+    ) -> None:
         """get_dataset_metadata returns a Dataset with expected fields."""
         ds = await storage.get_dataset_metadata()
         assert ds is not None
@@ -177,7 +185,9 @@ class TestDbFullDatasetStorage:
     # ── 3. list_samples with labels ─────────────────────────────────────
 
     @pytest.mark.asyncio
-    async def test_list_samples_with_labels(self, storage: DbFullDatasetStorage) -> None:
+    async def test_list_samples_with_labels(
+        self, storage: DbFullDatasetStorage
+    ) -> None:
         """Fixture has 3 labels; list(with_labels=True) includes latest_label."""
         rows, total = await storage.list_samples(offset=0, limit=5, with_labels=True)
         assert total == 5
@@ -211,9 +221,13 @@ class TestDbFullDatasetStorage:
     # ── 4. list_samples label_filter ────────────────────────────────────
 
     @pytest.mark.asyncio
-    async def test_list_samples_label_filter(self, storage: DbFullDatasetStorage) -> None:
+    async def test_list_samples_label_filter(
+        self, storage: DbFullDatasetStorage
+    ) -> None:
         """Filter '__unlabeled__' returns 2, filter 'cat' returns 2."""
-        rows_unlab, total_unlab = await storage.list_samples(label_filter="__unlabeled__")
+        rows_unlab, total_unlab = await storage.list_samples(
+            label_filter="__unlabeled__"
+        )
         assert total_unlab == 2
         assert len(rows_unlab) == 2
         for r in rows_unlab:
@@ -278,7 +292,9 @@ class TestDbFullDatasetStorage:
         )
 
         rows2, _ = await storage.list_samples(
-            limit=5, with_predictions=True, sample_ids=sample_ids,
+            limit=5,
+            with_predictions=True,
+            sample_ids=sample_ids,
         )
         predicted = [r for r in rows2 if r.latest_prediction is not None]
         assert len(predicted) == 2
@@ -289,7 +305,9 @@ class TestDbFullDatasetStorage:
     # ── 6. list_samples random_seed reproducibility ─────────────────────
 
     @pytest.mark.asyncio
-    async def test_list_samples_random_seed(self, storage: DbFullDatasetStorage) -> None:
+    async def test_list_samples_random_seed(
+        self, storage: DbFullDatasetStorage
+    ) -> None:
         """Random seed is accepted and returns all samples (SQLite random() is non-deterministic)."""
         rows1, total1 = await storage.list_samples(limit=5, random_seed=42)
         rows2, total2 = await storage.list_samples(limit=5, random_seed=42)
@@ -459,7 +477,9 @@ class TestDbFullDatasetStorage:
 
         # Verify via list_samples with predictions
         rows2, _ = await storage.list_samples(
-            limit=5, with_predictions=True, sample_ids=sample_ids,
+            limit=5,
+            with_predictions=True,
+            sample_ids=sample_ids,
         )
         predicted = [r for r in rows2 if r.latest_prediction is not None]
         assert len(predicted) == 3
@@ -540,7 +560,9 @@ class TestDbFullDatasetStorage:
 
         # Query nearest to first embedding — the first sample itself should be closest
         # But exclude_id removes it, so we get other samples
-        results = await storage.similarity_search([1.0, 0.0, 0.0], k=2, exclude_id=rows[0].sample_id)
+        results = await storage.similarity_search(
+            [1.0, 0.0, 0.0], k=2, exclude_id=rows[0].sample_id
+        )
         assert len(results) >= 1
         for entry in results:
             assert "sample_id" in entry
@@ -597,7 +619,11 @@ class TestDbFullDatasetStorage:
 
         # Create a fresh storage instance with its own dataset
         fresh = await _create_fresh_dataset(
-            repo, session_factory, artifact_storage, org_id, sample_count=3,
+            repo,
+            session_factory,
+            artifact_storage,
+            org_id,
+            sample_count=3,
         )
         dataset_id = fresh.dataset_id
 
@@ -639,7 +665,9 @@ class TestDbFullDatasetStorage:
         )
 
         # Add sample features
-        await fresh.upsert_sample_feature(sample_ids[0], [0.0, 0.0, 0.0], "cascade-embed")
+        await fresh.upsert_sample_feature(
+            sample_ids[0], [0.0, 0.0, 0.0], "cascade-embed"
+        )
 
         # Verify data exists before delete
         assert (await fresh.get_sample(sample_ids[0])) is not None

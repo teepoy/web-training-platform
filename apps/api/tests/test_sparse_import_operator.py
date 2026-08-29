@@ -8,7 +8,7 @@ import pytest
 from app.modules.storage.adapter.sparse.import_operator import (
     SparseImportOperator,
 )
-from app.shared.infrastructure.storage.memory import InMemoryArtifactStorage
+from tests.support.artifact_storage import InMemoryArtifactStorage
 from app.modules.storage.domain.sparse.models import SampleLocator
 from app.modules.storage.domain.sparse.store import DatasetPayloadStore
 
@@ -38,11 +38,13 @@ def org_id() -> str:
 
 @pytest.fixture
 def pyarrow_schema() -> pa.Schema:
-    return pa.schema([
-        ("defect_id", pa.string()),
-        ("image_uris", pa.string()),
-        ("label", pa.string()),
-    ])
+    return pa.schema(
+        [
+            ("defect_id", pa.string()),
+            ("image_uris", pa.string()),
+            ("label", pa.string()),
+        ]
+    )
 
 
 @pytest.fixture
@@ -69,7 +71,11 @@ async def test_flush_shard(
 ) -> None:
     """Flush 5 rows → verify ShardEntry metadata and locators."""
     rows = [
-        {"defect_id": f"d-{i:03d}", "image_uris": f"memory://img/{i}.png", "label": "cat"}
+        {
+            "defect_id": f"d-{i:03d}",
+            "image_uris": f"memory://img/{i}.png",
+            "label": "cat",
+        }
         for i in range(5)
     ]
 
@@ -110,10 +116,12 @@ async def test_flush_shard_custom_row_id_key(
         org_id=org_id,
         payload_store=payload_store,
     )
-    schema = pa.schema([
-        ("sample_id", pa.string()),
-        ("value", pa.int64()),
-    ])
+    schema = pa.schema(
+        [
+            ("sample_id", pa.string()),
+            ("value", pa.int64()),
+        ]
+    )
     rows = [
         {"sample_id": "abc-001", "value": 42},
         {"sample_id": "abc-002", "value": 99},

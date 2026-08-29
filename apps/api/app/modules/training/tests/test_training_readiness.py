@@ -10,7 +10,7 @@ from app.modules.sc.app.services.training_images import normalize_sc_training_ro
 from app.modules.storage.port.local import DatasetStorageFactoryPort
 from app.modules.training.app.services.readiness import TrainingReadinessService
 from app.shared.api.schemas import Dataset, TaskSpec
-from app.shared.infrastructure.storage import InMemoryArtifactStorage
+from tests.support.artifact_storage import InMemoryArtifactStorage
 
 
 class _Storage:
@@ -64,10 +64,7 @@ def _classification_dataset() -> Dataset:
 
 def _row(index: int, label: str, *, with_images: bool = True) -> dict[str, Any]:
     sample = build_patch_sample(index)
-    shard_images = [
-        image.model_dump(mode="json")
-        for image in sample.shard_images
-    ]
+    shard_images = [image.model_dump(mode="json") for image in sample.shard_images]
     return {
         "id": f"sample-{index}",
         "image_uris": (
@@ -147,8 +144,7 @@ async def test_class_readiness_rejects_one_active_label() -> None:
 @pytest.mark.asyncio
 async def test_readiness_scans_multiple_bounded_batches() -> None:
     rows = [
-        _row(index, "Scratch" if index % 2 == 0 else "Particle")
-        for index in range(65)
+        _row(index, "Scratch" if index % 2 == 0 else "Particle") for index in range(65)
     ]
     service = TrainingReadinessService(
         storage_factory=_factory(rows),

@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from app.shared.api.schemas import TrainingEvent, TrainingJob
+from tests.support.local_training_engine import LocalProcessEngine
 
 
 def _make_job(job_id: str = "test-job-001") -> TrainingJob:
@@ -47,10 +48,6 @@ class TestLocalProcessEngineMetricsEmission:
     @pytest.mark.skip(reason="Pre-existing failure - see errors.md")
     def test_epoch_and_metric_events_in_run_events(self) -> None:
         """After training completes, run events include level=epoch and level=metric."""
-        from app.modules.training.adapter.engines.local_kubeflow import (
-            LocalProcessEngine,
-        )
-
         engine = LocalProcessEngine()
 
         with patch(
@@ -67,16 +64,16 @@ class TestLocalProcessEngineMetricsEmission:
         epoch_events = [e for e in events if e.level == "epoch"]
         metric_events = [e for e in events if e.level == "metric"]
 
-        assert len(epoch_events) >= 1, f"Expected >=1 epoch event, got {len(epoch_events)}"
-        assert len(metric_events) >= 1, f"Expected >=1 metric event, got {len(metric_events)}"
+        assert len(epoch_events) >= 1, (
+            f"Expected >=1 epoch event, got {len(epoch_events)}"
+        )
+        assert len(metric_events) >= 1, (
+            f"Expected >=1 metric event, got {len(metric_events)}"
+        )
 
     @pytest.mark.skip(reason="Pre-existing failure - see errors.md")
     def test_epoch_event_count_matches_epochs(self) -> None:
         """Number of epoch events equals the epochs count in metrics."""
-        from app.modules.training.adapter.engines.local_kubeflow import (
-            LocalProcessEngine,
-        )
-
         engine = LocalProcessEngine()
 
         with patch(
@@ -97,10 +94,6 @@ class TestLocalProcessEngineMetricsEmission:
     @pytest.mark.skip(reason="Pre-existing failure - see errors.md")
     def test_metric_event_contains_expected_keys(self) -> None:
         """Metric event payload contains val/loss, val/acc, val/f1."""
-        from app.modules.training.adapter.engines.local_kubeflow import (
-            LocalProcessEngine,
-        )
-
         engine = LocalProcessEngine()
 
         with patch(
@@ -122,10 +115,6 @@ class TestLocalProcessEngineMetricsEmission:
 
     def test_failed_job_does_not_emit_epoch_or_metric_events(self) -> None:
         """Failed training should NOT emit epoch+metric events, only failure event."""
-        from app.modules.training.adapter.engines.local_kubeflow import (
-            LocalProcessEngine,
-        )
-
         engine = LocalProcessEngine()
 
         with patch(
@@ -147,10 +136,6 @@ class TestLocalProcessEngineMetricsEmission:
 
     def test_empty_metrics_do_not_emit_events(self) -> None:
         """Training result with empty metrics should not emit epoch/metric events."""
-        from app.modules.training.adapter.engines.local_kubeflow import (
-            LocalProcessEngine,
-        )
-
         engine = LocalProcessEngine()
         result_no_metrics = dict(_MOCK_TRAINING_RESULT, metrics={})
 
@@ -170,10 +155,6 @@ class TestLocalProcessEngineMetricsEmission:
 
     def test_result_is_not_dict_graceful(self) -> None:
         """If submit_flow_run_and_wait returns non-dict, no epoch/metric events emitted."""
-        from app.modules.training.adapter.engines.local_kubeflow import (
-            LocalProcessEngine,
-        )
-
         engine = LocalProcessEngine()
 
         with patch(

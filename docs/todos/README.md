@@ -15,14 +15,14 @@ criteria are satisfied.
 
 ## Current Goals
 
-| Goal                                                                                | Status      | Latest completed slice                                              | Next milestone                                                  |
-| ----------------------------------------------------------------------------------- | ----------- | ------------------------------------------------------------------- | --------------------------------------------------------------- |
-| [Legacy configuration and code cleanup](legacy-configuration-and-code-cleanup.md)   | In progress | API configuration ownership and Make target consistency             | Continue the subsystem inventory and unnecessary-prefix cleanup |
-| [Mock, seed, and demo package separation](mock-seed-code-package-separation.md)     | In progress | Root `devtools/` boundary for seeds, simulator, and fake benchmarks | Remove mock implementations from production package paths       |
-| [Visual reuse and resource parity](visual-component-reuse-and-resource-parity.md)   | In progress | Removed the duplicate Dataset list surface                          | Share model search and standardize reusable table filters       |
-| [Internationalization](internationalization-and-localization.md)                    | In progress | Localized navigation, authentication, settings, and shell surfaces  | Migrate shared feedback and core resource/job workflows         |
-| [Stateful upstream simulator](stateful-upstream-simulator-and-source-automation.md) | In progress | PostgreSQL control API plus gRPC/Flight latest-value reads          | Route seed records/assets through the simulator API             |
-| [SC identity-only materialization](sc-sample-identity-only-materialization.md)      | In progress | Identity-only writes and latest-source reads across core SC flows   | Verify generic sparse export and broad/E2E behavior             |
+| Goal                                                                                | Status      | Latest completed slice                                             | Next milestone                                                  |
+| ----------------------------------------------------------------------------------- | ----------- | ------------------------------------------------------------------ | --------------------------------------------------------------- |
+| [Legacy configuration and code cleanup](legacy-configuration-and-code-cleanup.md)   | In progress | API configuration ownership and Make target consistency            | Continue the subsystem inventory and unnecessary-prefix cleanup |
+| [Mock, seed, and demo package separation](mock-seed-code-package-separation.md)     | In progress | Removed SC, storage, and training mocks from production packages   | Finish simulator seed behavior and review web demo providers    |
+| [Visual reuse and resource parity](visual-component-reuse-and-resource-parity.md)   | In progress | Removed the duplicate Dataset list surface                         | Share model search and standardize reusable table filters       |
+| [Internationalization](internationalization-and-localization.md)                    | In progress | Localized navigation, authentication, settings, and shell surfaces | Migrate shared feedback and core resource/job workflows         |
+| [Stateful upstream simulator](stateful-upstream-simulator-and-source-automation.md) | In progress | PostgreSQL control API plus gRPC/Flight latest-value reads         | Route seed records/assets through the simulator API             |
+| [SC identity-only materialization](sc-sample-identity-only-materialization.md)      | In progress | Identity-only writes and latest-source reads across core SC flows  | Verify generic sparse export and broad/E2E behavior             |
 
 The Prefect GPU worker release task is tracked separately in
 `prefect-gpu-worker-release-activation.md`; it is not one of these six

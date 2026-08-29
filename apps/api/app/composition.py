@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, TypeAlias, TypeVar, cast
+from typing import Any, TypeVar, cast
 
 from injector import Binder, Injector, Module, provider, singleton
 
@@ -17,8 +17,6 @@ from app.modules.dataset_collections.container import (
 )
 from app.modules.datasets.container import DatasetsContext, DatasetsModule
 from app.modules.jobs.container import JobsContext, JobsModule
-from app.shared.infrastructure.storage.memory import InMemoryArtifactStorage
-from app.shared.infrastructure.storage.minio import MinioArtifactStorage
 from app.modules.models.container import ModelsContext, ModelsModule
 from app.modules.prediction.container import PredictionContext, PredictionModule
 from app.modules.sc.container import ScContext, ScModule
@@ -38,7 +36,6 @@ from app.shared.infrastructure.surface_store import SurfaceStore
 from app.shared.context import AppContext, SharedInfra, build_shared_infra
 from app.shared.db.session import AppDatabaseSessionFactory
 
-ArtifactStorage: TypeAlias = InMemoryArtifactStorage | MinioArtifactStorage
 T = TypeVar("T")
 
 

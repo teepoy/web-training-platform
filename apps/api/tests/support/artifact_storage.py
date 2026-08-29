@@ -6,6 +6,8 @@ from pathlib import Path
 
 
 class InMemoryArtifactStorage:
+    """Process-local object storage for tests; never wired by production code."""
+
     def __init__(self) -> None:
         self._objects: dict[str, bytes] = {}
 
@@ -15,15 +17,12 @@ class InMemoryArtifactStorage:
         data: bytes,
         content_type: str = "application/octet-stream",
     ) -> str:
+        del content_type
         self._objects[object_name] = data
         return f"memory://{object_name}"
 
     async def get_bytes(self, uri: str) -> bytes:
-        # uri format: memory://{object_name}
-        prefix = "memory://"
-        if not uri.startswith(prefix):
-            raise FileNotFoundError(f"Unknown URI scheme: {uri!r}")
-        object_name = uri[len(prefix) :]
+        object_name = self._object_name(uri)
         if object_name not in self._objects:
             raise FileNotFoundError(f"Object not found in memory storage: {uri!r}")
         return self._objects[object_name]
@@ -39,8 +38,9 @@ class InMemoryArtifactStorage:
         return f"memory://{object_name}"
 
     async def get_file(self, uri: str, destination: str) -> None:
-        data = await self.get_bytes(uri)
-        await asyncio.to_thread(Path(destination).write_bytes, data)
+        await asyncio.to_thread(
+            Path(destination).write_bytes, await self.get_bytes(uri)
+        )
 
     async def get_size(self, uri: str) -> int:
         return len(await self.get_bytes(uri))
@@ -65,13 +65,17 @@ class InMemoryArtifactStorage:
             yield data[position : min(position + chunk_size, end)]
 
     async def delete(self, uri: str) -> None:
-        prefix = "memory://"
-        if not uri.startswith(prefix):
-            raise FileNotFoundError(f"Unknown URI scheme: {uri!r}")
-        object_name = uri[len(prefix) :]
+        object_name = self._object_name(uri)
         if object_name not in self._objects:
             raise FileNotFoundError(f"Object not found in memory storage: {uri!r}")
         del self._objects[object_name]
 
     async def list_prefix(self, prefix: str) -> list[str]:
         return [f"memory://{name}" for name in self._objects if name.startswith(prefix)]
+
+    @staticmethod
+    def _object_name(uri: str) -> str:
+        prefix = "memory://"
+        if not uri.startswith(prefix):
+            raise FileNotFoundError(f"Unknown URI scheme: {uri!r}")
+        return uri[len(prefix) :]

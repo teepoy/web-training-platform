@@ -16,7 +16,7 @@ from app.shared.db.registry import (
     TrainingJobORM,
 )
 from app.shared.db.session import create_engine, create_session_factory
-from app.shared.infrastructure.storage.memory import InMemoryArtifactStorage
+from tests.support.artifact_storage import InMemoryArtifactStorage
 from seedmaker.dev_activity import (
     MODEL_IDS,
     PREDICTION_JOB_IDS,
@@ -55,17 +55,27 @@ async def test_seed_dev_activity_is_repeatable_without_external_runs() -> None:
 
     async with session_factory() as session:
         training_jobs = (
-            await session.execute(
-                select(TrainingJobORM).where(TrainingJobORM.id.in_(TRAINING_JOB_IDS))
-            )
-        ).scalars().all()
-        prediction_jobs = (
-            await session.execute(
-                select(PredictionJobORM).where(
-                    PredictionJobORM.id.in_(PREDICTION_JOB_IDS)
+            (
+                await session.execute(
+                    select(TrainingJobORM).where(
+                        TrainingJobORM.id.in_(TRAINING_JOB_IDS)
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
+        prediction_jobs = (
+            (
+                await session.execute(
+                    select(PredictionJobORM).where(
+                        PredictionJobORM.id.in_(PREDICTION_JOB_IDS)
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
         model_count = int(
             await session.scalar(
                 select(func.count())

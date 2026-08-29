@@ -23,6 +23,18 @@ os.environ.setdefault("IMAGE_PARSER_GRPC_ADDR", "localhost:9092")
 os.environ.setdefault("SC_DATA_PROVIDER_CACHE_DIR", "/tmp/sc-data-provider-tests")
 os.environ.setdefault("SC_DATA_PROVIDER_CACHE_NAMESPACE", "sc-data-provider-tests")
 
+from app.shared.infrastructure.storage.factory import (  # noqa: E402
+    register_artifact_storage_factory,
+)
+from tests.support.artifact_storage import InMemoryArtifactStorage  # noqa: E402
+from app.modules.training.adapter.engines.registry import (  # noqa: E402
+    register_training_engine_factory,
+)
+from tests.support.local_training_engine import LocalProcessEngine  # noqa: E402
+
+register_artifact_storage_factory("memory", lambda _cfg: InMemoryArtifactStorage())
+register_training_engine_factory("local", lambda storage: LocalProcessEngine(storage))
+
 _OPEN_CONTAINERS = []
 
 _INTEGRATION_TEST_PATH_PREFIXES = (

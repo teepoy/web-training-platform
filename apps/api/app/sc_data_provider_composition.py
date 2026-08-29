@@ -40,25 +40,9 @@ class ScDataProviderAppContext:
 
 
 def _build_artifact_storage(cfg: AppConfig) -> ArtifactStorage:
-    from app.shared.infrastructure.storage.memory import InMemoryArtifactStorage
-    from app.shared.infrastructure.storage.minio import (
-        MinioArtifactStorage,
-        build_minio_export_lifecycle,
-    )
+    from app.shared.infrastructure.storage.factory import build_artifact_storage
 
-    storage_kind = str(cfg.storage.kind)
-    if storage_kind == "memory":
-        return InMemoryArtifactStorage()
-    if storage_kind == "minio":
-        return MinioArtifactStorage(
-            endpoint=str(cfg.storage.minio.endpoint),
-            access_key=str(cfg.storage.minio.access_key),
-            secret_key=str(cfg.storage.minio.secret_key),
-            bucket=str(cfg.storage.minio.bucket),
-            secure=bool(cfg.storage.minio.secure),
-            export_lifecycle=build_minio_export_lifecycle(cfg),
-        )
-    raise RuntimeError(f"Unsupported storage.kind: {storage_kind}")
+    return build_artifact_storage(cfg)
 
 
 def _build_dataset_storage_factory(

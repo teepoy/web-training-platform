@@ -7,9 +7,12 @@
   established the root `devtools/` boundary; moved seedmaker, synthetic SC
   artifacts, the legacy SQLite fixture CLI, fake-kernel benchmarks, and the SC
   simulator beneath it; retired the unused duplicate; and removed the obsolete
-  demo request prefix.
-- **Next milestone:** move mock SC database implementations, API storage test
-  doubles, and the local training engine out of production package paths.
+  demo request prefix. The production SC service is now transport-only, while
+  its legacy SQLite adapter/schema live under `devtools/seedmaker`. The API
+  in-memory artifact store and local training engine now live under
+  `tests/support` and are installed only by pytest's composition root.
+- **Next milestone:** finish simulator-owned seed behavior, then review web demo
+  pages and Storybook-only providers.
 - **Done when:** every acceptance criterion below is verified. The artifact
   generator move alone does not satisfy the upstream simulator goal.
 
@@ -73,12 +76,10 @@ Proposed ownership:
 - Add a separately named production adapter/entrypoint and make deployable
   profiles fail when it is not configured.
 
-Blocker before moving:
-
-There is no separate production upstream adapter in the repository today. A
-straight move would break the only working SC upstream service. The real
-upstream database/provider contract and production adapter must be identified
-or implemented first; a mock must not remain the implicit production fallback.
+Completed: the deployable service package retains only production transport
+contracts. Development reads are served by the separately named PostgreSQL
+simulator; the legacy SQLite adapter and schema are isolated under
+`devtools/seedmaker` and are not imported by production composition.
 
 ### P0: API in-memory test doubles are imported by production composition
 
@@ -104,6 +105,11 @@ Proposed ownership:
 - Keep the production `ArtifactStorage` Protocol and MinIO/S3 adapter in `app/`.
 - Remove duplicated storage factory paths while changing the composition.
 
+Completed: the implementation moved to `apps/api/tests/support`; pytest
+registers the `memory` adapter through a typed factory hook before application
+construction. Production composition imports neither the class nor test code,
+and an unregistered non-MinIO storage kind fails explicitly.
+
 ### P0: Local execution test engine is wired into production training code
 
 Files and features:
@@ -127,6 +133,10 @@ Proposed ownership:
 - Split `KubeflowTrainingOperatorEngine` into a production-named module if it is
   still a supported engine; do not leave production code in a file named
   `local_kubeflow.py`.
+
+Completed: the local engine moved to `apps/api/tests/support`, pytest registers
+it through the execution-engine factory, and the production implementation now
+lives in `kubeflow_engine.py` without importing the test adapter.
 
 ### P1: Platform settings endpoint is backed only by an in-memory scaffold
 

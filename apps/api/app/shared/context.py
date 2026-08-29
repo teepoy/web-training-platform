@@ -21,11 +21,7 @@ from app.shared.domain.protocols import (
 from app.shared.infrastructure.label_studio.client import LabelStudioClient
 from app.shared.infrastructure.prefect.client import PrefectClient
 from app.shared.infrastructure.redis.event_publisher import RedisEventPublisher
-from app.shared.infrastructure.storage.memory import InMemoryArtifactStorage
-from app.shared.infrastructure.storage.minio import (
-    MinioArtifactStorage,
-    build_minio_export_lifecycle,
-)
+from app.shared.infrastructure.storage.factory import build_artifact_storage
 from app.shared.infrastructure.surface_store import SurfaceStore
 
 if TYPE_CHECKING:
@@ -104,21 +100,7 @@ def build_shared_infra(cfg: AppConfig) -> SharedInfra:
     )
     session_factory = AppDatabaseSessionFactory(create_session_factory(db_engine))
 
-    # Inline _build_artifact_storage logic (composition.py:117-129)
-    kind = str(cfg.storage.kind)
-    if kind == "memory":
-        artifact_storage: ArtifactStorage = InMemoryArtifactStorage()
-    elif kind == "minio":
-        artifact_storage = MinioArtifactStorage(
-            endpoint=str(cfg.storage.minio.endpoint),
-            access_key=str(cfg.storage.minio.access_key),
-            secret_key=str(cfg.storage.minio.secret_key),
-            bucket=str(cfg.storage.minio.bucket),
-            secure=bool(cfg.storage.minio.secure),
-            export_lifecycle=build_minio_export_lifecycle(cfg),
-        )
-    else:
-        raise RuntimeError(f"Unsupported storage.kind: {kind}")
+    artifact_storage: ArtifactStorage = build_artifact_storage(cfg)
 
     prefect_client = PrefectClient(prefect_api_url=str(cfg.prefect.api_url))
     notification_sink = WebhookNotificationSink(
