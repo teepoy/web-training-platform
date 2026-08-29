@@ -548,7 +548,7 @@ function rowIsSelected(id: string): boolean {
 }
 
 function emitSelection(): void {
-  const ids = Array.from(selectionDeltaIds.value).sort();
+  const ids = Array.from(selectionDeltaIds.value);
   emit(
     "selection-change",
     allMatchingRowsSelected.value ? { kind: "all", excludedIds: ids } : { kind: "ids", ids },

@@ -156,7 +156,7 @@ export class ScMapElement extends HTMLElement {
   #dataBounds: ScMapBounds | null = null;
   #geometry: ScMapGeometry = { ...DEFAULT_GEOMETRY };
   #highlights: ScMapHighlight[] = [];
-  #highlightDefectIds: number[] = [];
+  #highlightMapIds: number[] = [];
   #highlightResolutionRevision = 0;
   #highlightResolutionScheduled = false;
   #selectionIds: number[] = [];
@@ -363,12 +363,12 @@ export class ScMapElement extends HTMLElement {
     this.#scheduleRender();
     this.#scheduleProjection();
   }
-  set highlightDefectIds(value: number[]) {
-    this.#highlightDefectIds = [...new Set(value.filter(Number.isFinite))];
+  set highlightMapIds(value: number[]) {
+    this.#highlightMapIds = [...new Set(value.filter(Number.isFinite))];
     this.#scheduleHighlightResolution();
   }
-  set selectionDefectIds(value: number[]) {
-    const next = [...new Set(value.filter(Number.isFinite))].sort((left, right) => left - right);
+  set selectionMapIds(value: number[]) {
+    const next = [...new Set(value.filter(Number.isFinite))];
     if (
       next.length === this.#selectionIds.length &&
       next.every((id, index) => id === this.#selectionIds[index])
@@ -379,6 +379,12 @@ export class ScMapElement extends HTMLElement {
     void this.#replaceSelectionIds().catch((error: unknown) => {
       this.#reportError("Hydrating map selection", error);
     });
+  }
+  set highlightDefectIds(value: number[]) {
+    this.highlightMapIds = value;
+  }
+  set selectionDefectIds(value: number[]) {
+    this.selectionMapIds = value;
   }
   set dataBounds(value: ScMapBounds | null) {
     this.#dataBounds = value ? { ...value } : null;
@@ -814,12 +820,12 @@ export class ScMapElement extends HTMLElement {
       this.#drawOverlay();
       return;
     }
-    const ids = [...this.#highlightDefectIds];
+    const ids = [...this.#highlightMapIds];
     try {
       const resolved = await dataset.resolveHighlights(ids);
       if (dataset !== this.#arrowDataset || revision !== this.#highlightResolutionRevision) return;
-      const highlightIds = new Set(this.#highlightDefectIds);
-      this.#highlights = resolved.filter((item) => highlightIds.has(item.defectId));
+      const highlightIds = new Set(this.#highlightMapIds);
+      this.#highlights = resolved.filter((item) => highlightIds.has(item.mapId));
       this.#drawOverlay();
     } catch (error) {
       if (dataset !== this.#arrowDataset || revision !== this.#highlightResolutionRevision) return;

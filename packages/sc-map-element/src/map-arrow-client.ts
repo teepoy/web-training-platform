@@ -11,7 +11,7 @@ export interface MapProjectionSpec {
 }
 
 export interface MapResolvedHighlight {
-  defectId: number;
+  mapId: number;
   waferX: number;
   waferY: number;
   dieX: number;
@@ -29,7 +29,7 @@ export interface MapProjectionResult {
 export type MapSelectionConstraint =
   | { kind: "all" }
   | { kind: "ids"; ids: readonly number[] }
-  | { kind: "legend"; key: string }
+  | { kind: "legend"; keys: readonly string[] }
   | { kind: "rectangle"; mode: MapProjectionMode; region: ScMapRegion }
   | {
       kind: "polygon";
@@ -58,7 +58,7 @@ export interface MapArrowDataset {
     command: MapSelectionCommand,
     projection: MapProjectionSpec,
   ): Promise<MapSelectionResult>;
-  resolveHighlights(defectIds: readonly number[]): Promise<MapResolvedHighlight[]>;
+  resolveHighlights(mapIds: readonly number[]): Promise<MapResolvedHighlight[]>;
   dispose(): void;
 }
 
@@ -225,22 +225,24 @@ export async function createMapArrowDataset(
           hiddenLegendKeys: [...command.hiddenLegendKeys],
           ...(command.constraint?.kind === "ids"
             ? { constraint: { ...command.constraint, ids: [...command.constraint.ids] } }
-            : command.constraint?.kind === "polygon"
-              ? {
-                  constraint: {
-                    ...command.constraint,
-                    points: command.constraint.points.map((point) => ({ ...point })),
-                    region: { ...command.constraint.region },
-                  },
-                }
-              : command.constraint?.kind === "rectangle"
+            : command.constraint?.kind === "legend"
+              ? { constraint: { ...command.constraint, keys: [...command.constraint.keys] } }
+              : command.constraint?.kind === "polygon"
                 ? {
                     constraint: {
                       ...command.constraint,
+                      points: command.constraint.points.map((point) => ({ ...point })),
                       region: { ...command.constraint.region },
                     },
                   }
-                : {}),
+                : command.constraint?.kind === "rectangle"
+                  ? {
+                      constraint: {
+                        ...command.constraint,
+                        region: { ...command.constraint.region },
+                      },
+                    }
+                  : {}),
         },
         projection: {
           ...projection,
@@ -252,17 +254,17 @@ export async function createMapArrowDataset(
         ? result
         : { ids: new Int32Array(), points: new Float32Array() };
     },
-    async resolveHighlights(defectIds) {
-      if (defectIds.length === 0) return [];
+    async resolveHighlights(mapIds) {
+      if (mapIds.length === 0) return [];
       const result = await request({
         type: "resolve-highlights",
-        defectIds: [...defectIds],
+        mapIds: [...mapIds],
       });
       if (!(result instanceof Float64Array)) return [];
       const highlights: MapResolvedHighlight[] = [];
       for (let offset = 0; offset < result.length; offset += 7) {
         highlights.push({
-          defectId: result[offset],
+          mapId: result[offset],
           waferX: result[offset + 1],
           waferY: result[offset + 2],
           dieX: result[offset + 3],

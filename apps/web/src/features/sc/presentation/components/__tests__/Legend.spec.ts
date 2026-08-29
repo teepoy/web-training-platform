@@ -96,6 +96,22 @@ describe("Legend", () => {
     expect(emits![0][0]).toEqual(null);
   });
 
+  it("adds and removes labels from a multi-selection", async () => {
+    const { wrapper } = await mountWithProviders(Legend, {
+      props: {
+        points: MIXED_CLASS_POINTS,
+        selectedClassNumbers: [1],
+      },
+    });
+
+    await wrapper.find('[data-testid="sc-legend-class-2"]').trigger("click");
+    expect(wrapper.emitted("select-classes")?.[0]).toEqual([[1, 2]]);
+
+    await wrapper.setProps({ selectedClassNumbers: [1, 2] });
+    await wrapper.find('[data-testid="sc-legend-class-1"]').trigger("click");
+    expect(wrapper.emitted("select-classes")?.[1]).toEqual([[2]]);
+  });
+
   it("renders and selects string annotation labels", async () => {
     const { wrapper } = await mountWithProviders(Legend, {
       props: {

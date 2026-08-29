@@ -214,6 +214,13 @@ schema 和 canonical label space 组成的数据 contract；成员兼容性由 D
   Backfill 固定 rule version、connector、Import profile、IANA timezone 与 UTC `[start,end)`
   范围，使用独立 cursor，不推进 live watermark；内部 execution window 不暴露为产品
   Partition。Partial success 可发布成功成员，失败 Source record 单独 Retry。
+- SC source-routing automation 可把一个精确的 `(Source connector, layer_id,
+device)` 或 `(Source connector, layer_id, recipe_id)` 组合分配给 Collection；它是
+  Collection-bound membership recipe，不是恢复 generic Sensor 产品。一个 Collection
+  可拥有多个组合，但同一 Org + connector 下的精确组合只能分配给一个 Collection，且由
+  数据库唯一约束和事务同时保证。分配生成普通 exact membership rule，沿用五分钟 discovery、
+  新成员 Snapshot 与 incremental prediction；不自动 Backfill。分配后可更新 Import profile，
+  但不可通过 rule version 改写 connector 或 partition 条件。
 - Collection 可固定 exact default Model version。新 admission 发布 Snapshot 后只预测新
   Dataset，不全量重跑；Model 变更不自动重跑既有成员。Coverage 必须区分 Current、Model
   mismatch、Data outdated 与 Not predicted，并支持选择性 reconciliation。自动训练只在
@@ -222,6 +229,14 @@ schema 和 canonical label space 组成的数据 contract；成员兼容性由 D
   标记 candidate training dirty。
 
 Dataset view samples 必须通过 dataset registry / dataset class / adapter 动态投影。不能为每个 view 新增 hardcoded route 作为主要集成方式。
+
+SC workbench 的 map interaction identity 是 immutable materialization 内唯一的 `map_id`；
+table、gallery 与 annotation identity 是物理 `row_key`，Collection row key 由 Dataset ID 与
+平台 `Sample.id` 组成。上游 `defect_id` 仅为可展示/筛选的 SC domain 字段，不可作为跨
+Inspection/Collection selection identity。大 selection query 可使用 gzip request body，
+compressed/decompressed 上限必须由 tracked YAML 明确配置。Collection multi-inspection
+classify 沿用同一 workbench；其浏览器总行数上限同样来自 tracked YAML，并由 UI gate 与
+data-provider materialization 双重拒绝，不能截断。
 
 Dataset operator/storage 层拥有 `db_full`、`file_shard_sparse`、Parquet shard、manifest、locator 等持久化细节。SC import 这类 domain ingest 只负责 upstream/domain model 到通用 dataset sample/import stream 的转换，不直接拥有 sparse shard 或 Parquet 写入逻辑。
 

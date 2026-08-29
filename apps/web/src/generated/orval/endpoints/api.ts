@@ -55,6 +55,7 @@ import type {
   CreateOrgRequest,
   CreateReviewActionRequest,
   CreateSampleRequest,
+  CreateScAutomationPartitionRequest,
   CreateScheduleRequest,
   CreateSourceConnectorRequest,
   CreateTokenRequest,
@@ -162,6 +163,7 @@ import type {
   Sample,
   SaveReviewAnnotationsRequest,
   SaveReviewAnnotationsResponse,
+  ScAutomationPartitionResponse,
   ScBoxFilterRequest,
   ScBoxFilterResponse,
   ScBulkAnnotationRequest,
@@ -11908,6 +11910,147 @@ export function useListMembershipRulesApiV1DatasetCollectionsCollectionIdMembers
   ): UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getListMembershipRulesApiV1DatasetCollectionsCollectionIdMembershipRulesGetQueryOptions(collectionId,options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = unref(queryOptions).queryKey as DataTag<QueryKey, TData, TError>;
+
+  return query;
+}
+
+
+
+
+/**
+ * @summary Create Sc Automation Partition
+ */
+export const getCreateScAutomationPartitionApiV1DatasetCollectionsCollectionIdScAutomationPartitionsPostUrl = (collectionId: string,) => {
+
+
+  return `/api/v1/dataset-collections/${collectionId}/sc-automation-partitions`
+}
+
+export const createScAutomationPartitionApiV1DatasetCollectionsCollectionIdScAutomationPartitionsPost = async (collectionId: string,
+    createScAutomationPartitionRequest: CreateScAutomationPartitionRequest, options?: RequestInit): Promise<ScAutomationPartitionResponse> => {
+
+  return orvalFetcher<ScAutomationPartitionResponse>(getCreateScAutomationPartitionApiV1DatasetCollectionsCollectionIdScAutomationPartitionsPostUrl(collectionId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      createScAutomationPartitionRequest,)
+  }
+);}
+
+
+
+
+export const getCreateScAutomationPartitionApiV1DatasetCollectionsCollectionIdScAutomationPartitionsPostMutationOptions = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createScAutomationPartitionApiV1DatasetCollectionsCollectionIdScAutomationPartitionsPost>>, TError,{collectionId: string;data: BodyType<CreateScAutomationPartitionRequest>}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+): UseMutationOptions<Awaited<ReturnType<typeof createScAutomationPartitionApiV1DatasetCollectionsCollectionIdScAutomationPartitionsPost>>, TError,{collectionId: string;data: BodyType<CreateScAutomationPartitionRequest>}, TContext> => {
+
+const mutationKey = ['createScAutomationPartitionApiV1DatasetCollectionsCollectionIdScAutomationPartitionsPost'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createScAutomationPartitionApiV1DatasetCollectionsCollectionIdScAutomationPartitionsPost>>, {collectionId: string;data: BodyType<CreateScAutomationPartitionRequest>}> = (props) => {
+          const {collectionId,data} = props ?? {};
+
+          return  createScAutomationPartitionApiV1DatasetCollectionsCollectionIdScAutomationPartitionsPost(collectionId,data,requestOptions)
+        }
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateScAutomationPartitionApiV1DatasetCollectionsCollectionIdScAutomationPartitionsPostMutationResult = NonNullable<Awaited<ReturnType<typeof createScAutomationPartitionApiV1DatasetCollectionsCollectionIdScAutomationPartitionsPost>>>
+    export type CreateScAutomationPartitionApiV1DatasetCollectionsCollectionIdScAutomationPartitionsPostMutationBody = BodyType<CreateScAutomationPartitionRequest>
+    export type CreateScAutomationPartitionApiV1DatasetCollectionsCollectionIdScAutomationPartitionsPostMutationError = ErrorType<HTTPValidationError>
+
+    /**
+ * @summary Create Sc Automation Partition
+ */
+export const useCreateScAutomationPartitionApiV1DatasetCollectionsCollectionIdScAutomationPartitionsPost = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createScAutomationPartitionApiV1DatasetCollectionsCollectionIdScAutomationPartitionsPost>>, TError,{collectionId: string;data: BodyType<CreateScAutomationPartitionRequest>}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+): UseMutationReturnType<
+        Awaited<ReturnType<typeof createScAutomationPartitionApiV1DatasetCollectionsCollectionIdScAutomationPartitionsPost>>,
+        TError,
+        {collectionId: string;data: BodyType<CreateScAutomationPartitionRequest>},
+        TContext
+      > => {
+
+      const mutationOptions = getCreateScAutomationPartitionApiV1DatasetCollectionsCollectionIdScAutomationPartitionsPostMutationOptions(options);
+
+      return useMutation(mutationOptions);
+    }
+
+/**
+ * @summary List Sc Automation Partitions
+ */
+export const getListScAutomationPartitionsApiV1DatasetCollectionsCollectionIdScAutomationPartitionsGetUrl = (collectionId: string,) => {
+
+
+  return `/api/v1/dataset-collections/${collectionId}/sc-automation-partitions`
+}
+
+export const listScAutomationPartitionsApiV1DatasetCollectionsCollectionIdScAutomationPartitionsGet = async (collectionId: string, options?: RequestInit): Promise<ScAutomationPartitionResponse[]> => {
+
+  return orvalFetcher<ScAutomationPartitionResponse[]>(getListScAutomationPartitionsApiV1DatasetCollectionsCollectionIdScAutomationPartitionsGetUrl(collectionId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getListScAutomationPartitionsApiV1DatasetCollectionsCollectionIdScAutomationPartitionsGetQueryKey = (collectionId: MaybeRef<string>,) => {
+    return ['api','v1','dataset-collections',collectionId,'sc-automation-partitions'] as const;
+    }
+
+
+export const getListScAutomationPartitionsApiV1DatasetCollectionsCollectionIdScAutomationPartitionsGetQueryOptions = <TData = Awaited<ReturnType<typeof listScAutomationPartitionsApiV1DatasetCollectionsCollectionIdScAutomationPartitionsGet>>, TError = ErrorType<HTTPValidationError>>(collectionId: MaybeRef<string>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listScAutomationPartitionsApiV1DatasetCollectionsCollectionIdScAutomationPartitionsGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  getListScAutomationPartitionsApiV1DatasetCollectionsCollectionIdScAutomationPartitionsGetQueryKey(collectionId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listScAutomationPartitionsApiV1DatasetCollectionsCollectionIdScAutomationPartitionsGet>>> = ({ signal }) => listScAutomationPartitionsApiV1DatasetCollectionsCollectionIdScAutomationPartitionsGet(unref(collectionId), { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: computed(() => !!(unref(collectionId))), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listScAutomationPartitionsApiV1DatasetCollectionsCollectionIdScAutomationPartitionsGet>>, TError, TData>
+}
+
+export type ListScAutomationPartitionsApiV1DatasetCollectionsCollectionIdScAutomationPartitionsGetQueryResult = NonNullable<Awaited<ReturnType<typeof listScAutomationPartitionsApiV1DatasetCollectionsCollectionIdScAutomationPartitionsGet>>>
+export type ListScAutomationPartitionsApiV1DatasetCollectionsCollectionIdScAutomationPartitionsGetQueryError = ErrorType<HTTPValidationError>
+
+
+/**
+ * @summary List Sc Automation Partitions
+ */
+
+export function useListScAutomationPartitionsApiV1DatasetCollectionsCollectionIdScAutomationPartitionsGet<TData = Awaited<ReturnType<typeof listScAutomationPartitionsApiV1DatasetCollectionsCollectionIdScAutomationPartitionsGet>>, TError = ErrorType<HTTPValidationError>>(
+ collectionId: MaybeRef<string>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listScAutomationPartitionsApiV1DatasetCollectionsCollectionIdScAutomationPartitionsGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+
+  ): UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListScAutomationPartitionsApiV1DatasetCollectionsCollectionIdScAutomationPartitionsGetQueryOptions(collectionId,options)
 
   const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

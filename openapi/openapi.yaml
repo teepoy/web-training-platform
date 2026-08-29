@@ -5852,6 +5852,67 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HTTPValidationError"
+  /api/v1/dataset-collections/{collection_id}/sc-automation-partitions:
+    post:
+      tags:
+        - source-discovery
+      summary: Create Sc Automation Partition
+      operationId: create_sc_automation_partition_api_v1_dataset_collections__collection_id__sc_automation_partitions_post
+      parameters:
+        - name: collection_id
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Collection Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateScAutomationPartitionRequest"
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScAutomationPartitionResponse"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+    get:
+      tags:
+        - source-discovery
+      summary: List Sc Automation Partitions
+      operationId: list_sc_automation_partitions_api_v1_dataset_collections__collection_id__sc_automation_partitions_get
+      parameters:
+        - name: collection_id
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Collection Id
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ScAutomationPartitionResponse"
+                title: Response List Sc Automation Partitions Api V1 Dataset Collections  Collection
+                  Id  Sc Automation Partitions Get
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
   /api/v1/dataset-collections/{collection_id}/membership-rules/{rule_id}/versions:
     post:
       tags:
@@ -7181,6 +7242,48 @@ components:
           title: Metadata
       type: object
       title: CreateSampleRequest
+    CreateScAutomationPartitionRequest:
+      properties:
+        name:
+          type: string
+          maxLength: 255
+          minLength: 1
+          title: Name
+        connector_id:
+          type: string
+          maxLength: 64
+          minLength: 1
+          title: Connector Id
+        import_profile_version_id:
+          type: string
+          maxLength: 64
+          minLength: 1
+          title: Import Profile Version Id
+        layer_id:
+          type: string
+          maxLength: 255
+          minLength: 1
+          title: Layer Id
+        dimension:
+          type: string
+          enum:
+            - device
+            - recipe_id
+          title: Dimension
+        dimension_value:
+          type: string
+          maxLength: 255
+          minLength: 1
+          title: Dimension Value
+      type: object
+      required:
+        - name
+        - connector_id
+        - import_profile_version_id
+        - layer_id
+        - dimension
+        - dimension_value
+      title: CreateScAutomationPartitionRequest
     CreateScheduleRequest:
       properties:
         name:
@@ -9767,6 +9870,55 @@ components:
       required:
         - label
       title: ScAnnotationItem
+    ScAutomationPartitionResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        org_id:
+          type: string
+          title: Org Id
+        collection_id:
+          type: string
+          title: Collection Id
+        rule_id:
+          type: string
+          title: Rule Id
+        connector_id:
+          type: string
+          title: Connector Id
+        layer_id:
+          type: string
+          title: Layer Id
+        dimension:
+          type: string
+          enum:
+            - device
+            - recipe_id
+          title: Dimension
+        dimension_value:
+          type: string
+          title: Dimension Value
+        created_by:
+          type: string
+          title: Created By
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
+      required:
+        - id
+        - org_id
+        - collection_id
+        - rule_id
+        - connector_id
+        - layer_id
+        - dimension
+        - dimension_value
+        - created_by
+        - created_at
+      title: ScAutomationPartitionResponse
     ScBoxFilterRequest:
       properties:
         mode:

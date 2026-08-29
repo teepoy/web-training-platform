@@ -26,6 +26,7 @@ import {
 } from "naive-ui";
 import {
   createRevisionApiV1DatasetCollectionsCollectionIdRevisionsPost,
+  createScAutomationPartitionApiV1DatasetCollectionsCollectionIdScAutomationPartitionsPost,
   createMembershipRuleApiV1DatasetCollectionsCollectionIdMembershipRulesPost,
   getCollectionApiV1DatasetCollectionsCollectionIdGet,
   getModelApiV1ModelsModelIdGet,
@@ -37,6 +38,7 @@ import {
   listImportProfilesApiV1SourceConnectorsConnectorIdImportProfilesGet,
   listMembersApiV1DatasetCollectionsCollectionIdMembersGet,
   listRevisionsApiV1DatasetCollectionsCollectionIdRevisionsGet,
+  listScAutomationPartitionsApiV1DatasetCollectionsCollectionIdScAutomationPartitionsGet,
   unlinkMemberApiV1DatasetCollectionsCollectionIdMembersMemberIdDelete,
   runMembershipDiscoveryApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdRunsPost,
 } from "@/generated/orval/endpoints/api";
@@ -46,8 +48,10 @@ import type {
   DatasetCollectionMemberResponse,
   DatasetCollectionRevisionResponse,
   CreateMembershipRuleRequest,
+  CreateScAutomationPartitionRequestDimension,
   FilterOperator,
   MembershipRuleResponse,
+  ScAutomationPartitionResponse,
   SourceConnectorResponse,
   SourceProviderDescriptorResponse,
 } from "@/generated/orval/models";
@@ -67,6 +71,7 @@ import {
 } from "@/features/dataset-collections/api/collectionSnapshotUpdates";
 import CollectionSnapshotUpdateAlert from "@/features/dataset-collections/presentation/components/CollectionSnapshotUpdateAlert.vue";
 import PredictionExportPlugin from "@/features/sc/presentation/components/PredictionExportPlugin.vue";
+import { getScClassifyLimits } from "@/features/sc/api/classifyLimits";
 import { supportsScPredictionExport } from "@/features/sc/domain/predictionExportCapability";
 import { useAuthStore } from "@/features/auth/application/store";
 import { useOrgStore } from "@/features/auth/application/org";
@@ -97,6 +102,13 @@ const ruleProfileId = ref<string | null>(null);
 const ruleField = ref<string | null>(null);
 const ruleOperator = ref<FilterOperator | null>(null);
 const ruleValue = ref("");
+const partitionVisible = ref(false);
+const partitionName = ref("");
+const partitionConnectorId = ref<string | null>(null);
+const partitionProfileId = ref<string | null>(null);
+const partitionLayerId = ref("");
+const partitionDimension = ref<CreateScAutomationPartitionRequestDimension>("device");
+const partitionDimensionValue = ref("");
 
 async function loadAllDatasets(): Promise<Dataset[]> {
   const datasets: Dataset[] = [];
@@ -188,6 +200,20 @@ const profilesQuery = useQuery({
     ),
   enabled: computed(() => !!orgStore.currentOrgId && !!ruleConnectorId.value),
 });
+const partitionProfilesQuery = useQuery({
+  queryKey: computed(() =>
+    orgScopedQueryKey(orgStore.currentOrgId, [
+      "source-connectors",
+      partitionConnectorId.value ?? "none",
+      "import-profiles",
+    ]),
+  ),
+  queryFn: () =>
+    listImportProfilesApiV1SourceConnectorsConnectorIdImportProfilesGet(
+      String(partitionConnectorId.value),
+    ),
+  enabled: computed(() => !!orgStore.currentOrgId && !!partitionConnectorId.value),
+});
 const collection = computed(
   () =>
     collectionQuery.data.value as
@@ -202,6 +228,25 @@ const isScCollection = computed(() => {
     targetViewId === "sc:patch-image@v1" ||
     targetContract?.startsWith("sc.patch-image") === true
   );
+});
+const partitionsQuery = useQuery({
+  queryKey: computed(() =>
+    orgScopedQueryKey(orgStore.currentOrgId, [
+      "dataset-collections",
+      collectionId.value,
+      "sc-automation-partitions",
+    ]),
+  ),
+  queryFn: () =>
+    listScAutomationPartitionsApiV1DatasetCollectionsCollectionIdScAutomationPartitionsGet(
+      collectionId.value,
+    ),
+  enabled: computed(() => !!orgStore.currentOrgId && !!collectionId.value && isScCollection.value),
+});
+const classifyLimitsQuery = useQuery({
+  queryKey: ["sc", "classify-limits"],
+  queryFn: getScClassifyLimits,
+  enabled: isScCollection,
 });
 const canModify = computed(
   () => !!collection.value && collection.value.created_by === authStore.user?.id,
@@ -237,6 +282,11 @@ const latestReadyRevision = computed(
       .filter((revision) => revision.status === "ready")
       .sort((a, b) => b.revision_number - a.revision_number)[0],
 );
+const classifyExceedsLimit = computed(() => {
+  const rows = latestReadyRevision.value?.row_count;
+  const maximum = classifyLimitsQuery.data.value?.max_rows;
+  return rows !== null && rows !== undefined && maximum !== undefined && rows > maximum;
+});
 const coverageQuery = useQuery({
   queryKey: computed(() =>
     orgScopedQueryKey(orgStore.currentOrgId, [
@@ -537,6 +587,15 @@ function openStack(): void {
   const revision = latestReadyRevision.value;
   const firstSource = revision?.source_snapshot[0]?.source_dataset_id;
   if (!revision || typeof firstSource !== "string" || !firstSource) return;
+  if (classifyExceedsLimit.value) {
+    message.warning(
+      t("collectionDetail.classifyTooLarge", {
+        rows: formatNumber(revision.row_count ?? 0),
+        maximum: formatNumber(classifyLimitsQuery.data.value?.max_rows ?? 0),
+      }),
+    );
+    return;
+  }
   void router.push({
     path: `/dataset-collections/${collectionId.value}/classify/${firstSource}`,
     query: { revisionId: revision.id },
@@ -672,6 +731,21 @@ const connectorOptions = computed(() =>
     value: connector.id,
   })),
 );
+const scConnectorOptions = computed(() =>
+  (connectorsQuery.data.value ?? [])
+    .filter((connector) => connector.provider_id === "sc" && connector.enabled)
+    .map((connector) => ({ label: connector.name, value: connector.id })),
+);
+const partitionProfileOptions = computed(() =>
+  (partitionProfilesQuery.data.value ?? []).map((profile) => ({
+    label: `${profile.name} · v${profile.version}`,
+    value: profile.id,
+  })),
+);
+const partitionDimensionOptions = computed(() => [
+  { label: t("collectionDetail.partitionDevice"), value: "device" },
+  { label: t("collectionDetail.partitionRecipe"), value: "recipe_id" },
+]);
 const profileOptions = computed(() =>
   (profilesQuery.data.value ?? []).map((profile) => ({
     label: `${profile.name} · v${profile.version}`,
@@ -856,6 +930,78 @@ const ruleColumns: DataTableColumns<MembershipRuleResponse> = [
   },
 ];
 
+const canCreatePartition = computed(
+  () =>
+    canManageAutomation.value &&
+    !!partitionName.value.trim() &&
+    !!partitionConnectorId.value &&
+    !!partitionProfileId.value &&
+    !!partitionLayerId.value.trim() &&
+    !!partitionDimensionValue.value.trim(),
+);
+
+function resetPartitionForm(): void {
+  partitionVisible.value = false;
+  partitionName.value = "";
+  partitionConnectorId.value = null;
+  partitionProfileId.value = null;
+  partitionLayerId.value = "";
+  partitionDimension.value = "device";
+  partitionDimensionValue.value = "";
+}
+
+const createPartitionMutation = useMutation({
+  mutationFn: () =>
+    createScAutomationPartitionApiV1DatasetCollectionsCollectionIdScAutomationPartitionsPost(
+      collectionId.value,
+      {
+        name: partitionName.value.trim(),
+        connector_id: String(partitionConnectorId.value),
+        import_profile_version_id: String(partitionProfileId.value),
+        layer_id: partitionLayerId.value.trim(),
+        dimension: partitionDimension.value,
+        dimension_value: partitionDimensionValue.value.trim(),
+      },
+    ),
+  onSuccess: async () => {
+    await Promise.all([partitionsQuery.refetch(), rulesQuery.refetch()]);
+    message.success(t("collectionDetail.partitionCreated"));
+    resetPartitionForm();
+  },
+  onError: (error) =>
+    message.error(toUserMessage(error, t("collectionDetail.partitionCreateFailed"))),
+});
+
+const partitionColumns: DataTableColumns<ScAutomationPartitionResponse> = [
+  {
+    title: t("collectionDetail.source"),
+    key: "connector_id",
+    minWidth: 160,
+    render: (partition) => connectorName(partition.connector_id),
+  },
+  { title: t("collectionDetail.partitionLayer"), key: "layer_id", minWidth: 130 },
+  {
+    title: t("collectionDetail.partitionDimension"),
+    key: "dimension",
+    minWidth: 130,
+    render: (partition) =>
+      partition.dimension === "device"
+        ? t("collectionDetail.partitionDevice")
+        : t("collectionDetail.partitionRecipe"),
+  },
+  {
+    title: t("collectionDetail.partitionValue"),
+    key: "dimension_value",
+    minWidth: 160,
+  },
+  {
+    title: t("collectionDetail.created"),
+    key: "created_at",
+    width: 180,
+    render: (partition) => formatDateTime(partition.created_at),
+  },
+];
+
 const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
   {
     title: t("collectionDetail.snapshot"),
@@ -936,7 +1082,7 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
         </NButton>
         <NButton
           :type="revisionOutdated ? 'default' : 'primary'"
-          :disabled="!latestReadyRevision"
+          :disabled="!latestReadyRevision || classifyExceedsLimit"
           @click="openStack"
         >
           {{
@@ -1027,17 +1173,58 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
             </div>
           </NCard>
         </NTabPane>
-        <NTabPane v-if="isScCollection" name="classify" :disabled="!latestReadyRevision">
+        <NTabPane
+          v-if="isScCollection"
+          name="classify"
+          :disabled="!latestReadyRevision || classifyExceedsLimit"
+        >
           <template #tab>
-            <NTooltip :disabled="!!latestReadyRevision">
+            <NTooltip :disabled="!!latestReadyRevision && !classifyExceedsLimit">
               <template #trigger>
                 <span>{{ t("collectionDetail.classify") }}</span>
               </template>
-              {{ t("collectionDetail.classifyNeedsSnapshot") }}
+              {{
+                classifyExceedsLimit
+                  ? t("collectionDetail.classifyTooLarge", {
+                      rows: formatNumber(latestReadyRevision?.row_count ?? 0),
+                      maximum: formatNumber(classifyLimitsQuery.data.value?.max_rows ?? 0),
+                    })
+                  : t("collectionDetail.classifyNeedsSnapshot")
+              }}
             </NTooltip>
           </template>
         </NTabPane>
         <NTabPane name="data" :tab="t('collectionDetail.dataRules')">
+          <NCard
+            v-if="isScCollection"
+            :title="t('collectionDetail.automationPartitions')"
+            class="dynamic-membership-card"
+          >
+            <template #header-extra>
+              <NButton
+                type="primary"
+                size="small"
+                :disabled="!canManageAutomation"
+                @click="partitionVisible = true"
+              >
+                {{ t("collectionDetail.assignPartition") }}
+              </NButton>
+            </template>
+            <NAlert type="info" :show-icon="false" class="dynamic-membership-explainer">
+              {{ t("collectionDetail.automationPartitionsHelp") }}
+            </NAlert>
+            <NDataTable
+              v-if="(partitionsQuery.data.value ?? []).length > 0"
+              :columns="partitionColumns"
+              :data="partitionsQuery.data.value ?? []"
+              :loading="partitionsQuery.isLoading.value"
+              :row-key="(row: ScAutomationPartitionResponse) => row.id"
+              :scroll-x="760"
+              size="small"
+            />
+            <NEmpty v-else :description="t('collectionDetail.noAutomationPartitions')" />
+          </NCard>
+
           <NCard :title="t('collectionDetail.dynamicMembership')" class="dynamic-membership-card">
             <template #header-extra>
               <NButton
@@ -1305,6 +1492,75 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
             @click="createRuleMutation.mutate()"
           >
             {{ t("collectionDetail.createRule") }}
+          </NButton>
+        </NSpace>
+      </template>
+    </NModal>
+
+    <NModal
+      v-model:show="partitionVisible"
+      preset="card"
+      :title="t('collectionDetail.assignPartitionTitle')"
+      :style="{ width: 'min(680px, calc(100vw - 32px))' }"
+    >
+      <NAlert v-if="scConnectorOptions.length === 0" type="warning" :show-icon="false">
+        {{ t("collectionDetail.scConnectorRequired") }}
+      </NAlert>
+      <template v-else>
+        <NAlert type="info" :show-icon="false" class="rule-intro">
+          {{ t("collectionDetail.partitionExclusiveHelp") }}
+        </NAlert>
+        <NFormItem :label="t('collectionDetail.ruleName')" required>
+          <NInput
+            v-model:value="partitionName"
+            :placeholder="t('collectionDetail.partitionNameExample')"
+          />
+        </NFormItem>
+        <NFormItem :label="t('collectionDetail.source')" required>
+          <NSelect
+            v-model:value="partitionConnectorId"
+            :options="scConnectorOptions"
+            :placeholder="t('collectionDetail.chooseSource')"
+            @update:value="partitionProfileId = null"
+          />
+        </NFormItem>
+        <NFormItem :label="t('collectionDetail.importProfile')" required>
+          <NSelect
+            v-model:value="partitionProfileId"
+            :options="partitionProfileOptions"
+            :loading="partitionProfilesQuery.isLoading.value"
+            :disabled="!partitionConnectorId || partitionProfileOptions.length === 0"
+            :placeholder="t('collectionDetail.chooseProfile')"
+          />
+        </NFormItem>
+        <NFormItem :label="t('collectionDetail.partitionLayer')" required>
+          <NInput
+            v-model:value="partitionLayerId"
+            :placeholder="t('collectionDetail.partitionLayerExample')"
+          />
+        </NFormItem>
+        <div class="rule-condition-row">
+          <NFormItem :label="t('collectionDetail.partitionDimension')" required>
+            <NSelect v-model:value="partitionDimension" :options="partitionDimensionOptions" />
+          </NFormItem>
+          <NFormItem :label="t('collectionDetail.partitionValue')" required>
+            <NInput
+              v-model:value="partitionDimensionValue"
+              :placeholder="t('collectionDetail.partitionValueExample')"
+            />
+          </NFormItem>
+        </div>
+      </template>
+      <template #footer>
+        <NSpace justify="end">
+          <NButton @click="resetPartitionForm">{{ t("common.cancel") }}</NButton>
+          <NButton
+            type="primary"
+            :disabled="!canCreatePartition"
+            :loading="createPartitionMutation.isPending.value"
+            @click="createPartitionMutation.mutate()"
+          >
+            {{ t("collectionDetail.assignPartition") }}
           </NButton>
         </NSpace>
       </template>

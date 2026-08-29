@@ -33,12 +33,12 @@ interface IdSelectionState {
 
 export type ScSamplingCandidateOptions = ScSamplingFilterOptions;
 
-function sortedUniqueIds(ids: readonly number[]): number[] {
-  return [...new Set(ids.filter(Number.isFinite))].sort((left, right) => left - right);
+function uniqueIds(ids: readonly number[]): number[] {
+  return [...new Set(ids.filter(Number.isFinite))];
 }
 
-function sortedUniqueKeys(ids: readonly string[]): string[] {
-  return [...new Set(ids.filter((id) => id.length > 0))].sort();
+function uniqueKeys(ids: readonly string[]): string[] {
+  return [...new Set(ids.filter((id) => id.length > 0))];
 }
 
 function legendColumn(source: ScLegendSource | null | undefined): string {
@@ -71,7 +71,7 @@ export function useSqlInspectionModel(args: {
   const legendGroups = ref<Record<string, DefectList> | null>(null);
   const mapSelection = ref<IdSelectionState>({ ids: [] });
   const tableSelection = ref<ScTableSelectionConstraint>({ kind: "ids", ids: [] });
-  const mapSelectedDefectIds = computed(() => mapSelection.value.ids);
+  const mapSelectedIds = computed(() => mapSelection.value.ids);
   const reviewMode = ref(false);
   const invalidationRevision = ref(0);
   let mapLoadSequence = 0;
@@ -288,7 +288,7 @@ export function useSqlInspectionModel(args: {
   }
 
   function updateMapSelection(ids: readonly number[]): number[] {
-    const next = sortedUniqueIds(ids);
+    const next = uniqueIds(ids);
     mapSelection.value = { ids: next };
     return next;
   }
@@ -304,8 +304,8 @@ export function useSqlInspectionModel(args: {
   function setTableSelection(selection: ScTableSelectionConstraint): void {
     tableSelection.value =
       selection.kind === "all"
-        ? { kind: "all", excludedIds: sortedUniqueKeys(selection.excludedIds) }
-        : { kind: "ids", ids: sortedUniqueKeys(selection.ids) };
+        ? { kind: "all", excludedIds: uniqueKeys(selection.excludedIds) }
+        : { kind: "ids", ids: uniqueKeys(selection.ids) };
   }
 
   function setReviewMode(value: boolean): void {
@@ -325,7 +325,8 @@ export function useSqlInspectionModel(args: {
     mapProgressMessage,
     mapProgressPercent,
     retryMap: loadMap,
-    mapSelectedDefectIds,
+    mapSelectedIds,
+    mapSelectedDefectIds: mapSelectedIds,
     reviewMode,
     tableSelection,
     loadGlobalDistinctValues,

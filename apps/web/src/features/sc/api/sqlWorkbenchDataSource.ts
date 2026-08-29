@@ -52,6 +52,7 @@ export type ScSqlWorkbenchScope =
 
 const QUERY_TIMEOUT_MS = 35_000;
 const QUERY_MAX_ATTEMPTS = 2;
+const QUERY_GZIP_MIN_BYTES = 4_096;
 const SAMPLE_TABLE_DESCRIPTOR_VERSION = "sc.sample-table.v1";
 const SAMPLE_TABLE_DESCRIPTOR_URL = `${API_BASE}/sc/data/sample-table-descriptor`;
 const RETRYABLE_QUERY_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
@@ -99,6 +100,28 @@ const DEFAULT_ALLOWED_COLUMNS = new Set<string>([
 interface CompiledWhere {
   sql: string;
   parameters: ScDataParameter[];
+}
+
+async function encodeQueryBody(payload: object): Promise<{
+  body: BodyInit;
+  headers?: HeadersInit;
+}> {
+  const json = JSON.stringify(payload);
+  if (new TextEncoder().encode(json).byteLength < QUERY_GZIP_MIN_BYTES) {
+    return { body: json };
+  }
+  if (typeof CompressionStream === "undefined") {
+    return { body: json };
+  }
+  const compressed = await new Response(
+    new Blob([json], { type: "application/json" })
+      .stream()
+      .pipeThrough(new CompressionStream("gzip")),
+  ).arrayBuffer();
+  return {
+    body: compressed,
+    headers: { "Content-Encoding": "gzip" },
+  };
 }
 
 interface ScSampleTableDescriptorResponse {
@@ -478,12 +501,8 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
       await this.query(
         "sc-workbench.map",
         `SELECT ${[...new Set(columns)]
-          .map((field) =>
-            field === "map_id"
-              ? `${selectColumn(field, query.reticle, allowedColumns)} AS "defect_id"`
-              : selectColumn(field, query.reticle, allowedColumns),
-          )
-          .join(", ")} ` + `FROM samples${compiled.sql} ORDER BY "defect_id"`,
+          .map((field) => selectColumn(field, query.reticle, allowedColumns))
+          .join(", ")} ` + `FROM samples${compiled.sql} ORDER BY "map_id"`,
         compiled.parameters,
       )
     ).ipc;
@@ -722,11 +741,11 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
       const compiled = compileScWhere(filters, query.reticle, allowedColumns);
       const result = await this.query(
         "sc-workbench.selection.random",
-        `SELECT "map_id" AS "defect_id" FROM samples${compiled.sql} ORDER BY HASH("map_id", ?) LIMIT ?`,
+        `SELECT "map_id" FROM samples${compiled.sql} ORDER BY HASH("map_id", ?) LIMIT ?`,
         [...compiled.parameters, constraint.seed, constraint.limit],
       );
       return Array.from({ length: result.table.numRows }, (_, index) =>
-        numeric(result.table.getChild("defect_id")?.get(index)),
+        numeric(result.table.getChild("map_id")?.get(index)),
       );
     }
     if (constraint.kind === "sampling-program") {
@@ -745,7 +764,7 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
         compiled.sampling,
       );
       return Array.from({ length: result.table.numRows }, (_, index) =>
-        numeric(result.table.getChild("defect_id")?.get(index)),
+        numeric(result.table.getChild("map_id")?.get(index)),
       );
     }
     if (constraint.kind === "legend") {
@@ -766,8 +785,8 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
     const compiled = compileScWhere(filters, query.reticle, allowedColumns);
     const columns =
       constraint.kind === "polygon"
-        ? `"map_id" AS "defect_id", ${selectColumn(`${constraint.mode}_x`, query.reticle, allowedColumns)}, ${selectColumn(`${constraint.mode}_y`, query.reticle, allowedColumns)}`
-        : '"map_id" AS "defect_id"';
+        ? `"map_id", ${selectColumn(`${constraint.mode}_x`, query.reticle, allowedColumns)}, ${selectColumn(`${constraint.mode}_y`, query.reticle, allowedColumns)}`
+        : '"map_id"';
     const result = await this.query(
       `sc-workbench.selection.${constraint.kind}`,
       `SELECT ${columns} FROM samples${compiled.sql} ORDER BY "map_id"`,
@@ -782,7 +801,7 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
         };
         if (!pointInPolygon(point, constraint.selection.points)) continue;
       }
-      ids.push(numeric(result.table.getChild("defect_id")?.get(index)));
+      ids.push(numeric(result.table.getChild("map_id")?.get(index)));
     }
     return ids;
   }
@@ -837,16 +856,17 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
     try {
       for (let attempt = 1; attempt <= QUERY_MAX_ATTEMPTS; attempt += 1) {
         try {
+          const encoded = await encodeQueryBody({
+            description,
+            sql,
+            parameters,
+            ...(sampling ? { sampling } : {}),
+          });
           const response = await requestRaw(
             this.queryUrl,
             {
               method: "POST",
-              body: JSON.stringify({
-                description,
-                sql,
-                parameters,
-                ...(sampling ? { sampling } : {}),
-              }),
+              ...encoded,
               signal: controller.signal,
             },
             QUERY_TIMEOUT_MS,

@@ -28,12 +28,12 @@ export interface ScSamplingFilterOptions {
   extraFilter: ScGlobalFilter;
 }
 
-function sortedUniqueNumericIds(ids: readonly (number | string)[]): number[] {
-  return [...new Set(ids.map(Number).filter(Number.isFinite))].sort((left, right) => left - right);
+function uniqueNumericIds(ids: readonly (number | string)[]): number[] {
+  return [...new Set(ids.map(Number).filter(Number.isFinite))];
 }
 
-function sortedUniqueRowKeys(ids: readonly string[]): string[] {
-  return [...new Set(ids.map(String).filter((id) => id.length > 0))].sort();
+function uniqueRowKeys(ids: readonly string[]): string[] {
+  return [...new Set(ids.map(String).filter((id) => id.length > 0))];
 }
 
 export function applyMapSelectionToGlobalFilter(
@@ -41,7 +41,7 @@ export function applyMapSelectionToGlobalFilter(
   selectedIds: readonly number[],
   mode: ScMapSelectionMode,
 ): ScGlobalFilter {
-  const selected = sortedUniqueNumericIds(selectedIds);
+  const selected = uniqueNumericIds(selectedIds);
   if (selected.length === 0) throw new Error("Current map selection is empty");
   const next = cloneScGlobalFilter(filter);
   const committedItem = createScGlobalFilterItem({
@@ -77,8 +77,8 @@ export function buildInspectionFilterPlan(args: {
   samplingIds: ReadonlySet<string> | undefined;
 }): ScInspectionFilterPlan {
   const globalFilters = buildScGlobalDataFilters(args.globalFilter);
-  const mapSelectionIds = sortedUniqueNumericIds(args.mapSelectionIds);
-  const samplingIds = sortedUniqueNumericIds([...(args.samplingIds ?? [])]);
+  const mapSelectionIds = uniqueNumericIds(args.mapSelectionIds);
+  const samplingIds = uniqueNumericIds([...(args.samplingIds ?? [])]);
   const transientFilters: ScDataFilterExpression[] = [
     ...(mapSelectionIds.length > 0 ? ([["map_id", "in", mapSelectionIds]] as ScDataFilter[]) : []),
     ...(samplingIds.length > 0 ? ([["map_id", "in", samplingIds]] as ScDataFilter[]) : []),
@@ -105,14 +105,14 @@ export function buildSamplingCandidateFilters(args: {
   tableSelection: ScTableSelectionConstraint;
   options: ScSamplingFilterOptions;
 }): ScDataFilterExpression[] {
-  const mapSelectionIds = sortedUniqueNumericIds(args.mapSelectionIds);
+  const mapSelectionIds = uniqueNumericIds(args.mapSelectionIds);
   if (args.options.scope === "map" && mapSelectionIds.length === 0) {
     throw new Error("Current map selection is empty");
   }
   const tableSelectionIds =
     args.tableSelection.kind === "ids"
-      ? sortedUniqueRowKeys([...args.tableSelection.ids])
-      : sortedUniqueRowKeys([...args.tableSelection.excludedIds]);
+      ? uniqueRowKeys([...args.tableSelection.ids])
+      : uniqueRowKeys([...args.tableSelection.excludedIds]);
   if (
     args.options.scope === "table" &&
     args.tableSelection.kind === "ids" &&

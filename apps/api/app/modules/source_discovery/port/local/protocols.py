@@ -11,6 +11,7 @@ from app.modules.source_discovery.domain.models import (
     MembershipRule,
     MembershipRuleVersion,
     MembershipSuppression,
+    ScAutomationPartition,
     SourceConnector,
     SourceEstimate,
     SourceProviderDescriptor,
@@ -68,6 +69,24 @@ class SourceDiscoveryManagementPort(Protocol):
         import_profile_version_id: str,
         condition: FilterGroup,
     ) -> tuple[MembershipRule, MembershipRuleVersion]: ...
+
+    async def create_sc_partition(
+        self,
+        *,
+        collection_id: str,
+        org_id: str,
+        actor_id: str,
+        name: str,
+        connector_id: str,
+        import_profile_version_id: str,
+        layer_id: str,
+        dimension: str,
+        dimension_value: str,
+    ) -> tuple[MembershipRule, MembershipRuleVersion, ScAutomationPartition]: ...
+
+    async def list_sc_partitions(
+        self, collection_id: str, org_id: str
+    ) -> list[ScAutomationPartition]: ...
 
     async def create_rule_version(
         self,

@@ -81,14 +81,14 @@ describe("useSqlInspectionModel", () => {
     model.applyMapSelection([9, 2, 7, 9]);
     model.setTableSelection({ kind: "ids", ids: ["sample-8", "sample-3", "sample-8"] });
 
-    expect(model.mapSelectedDefectIds.value).toEqual([2, 7, 9]);
+    expect(model.mapSelectedDefectIds.value).toEqual([9, 2, 7]);
     expect(model.tableSelection.value).toEqual({
       kind: "ids",
-      ids: ["sample-3", "sample-8"],
+      ids: ["sample-8", "sample-3"],
     });
     expect(model.galleryQuery.value.tableSelection).toEqual({
       kind: "ids",
-      ids: ["sample-3", "sample-8"],
+      ids: ["sample-8", "sample-3"],
     });
     expect(source.resolveSelection).not.toHaveBeenCalled();
   });
@@ -105,11 +105,11 @@ describe("useSqlInspectionModel", () => {
 
     expect(model.tableSelection.value).toEqual({
       kind: "all",
-      excludedIds: ["sample-3", "sample-9"],
+      excludedIds: ["sample-9", "sample-3"],
     });
     expect(model.galleryQuery.value.tableSelection).toEqual({
       kind: "all",
-      excludedIds: ["sample-3", "sample-9"],
+      excludedIds: ["sample-9", "sample-3"],
     });
   });
 
@@ -119,9 +119,9 @@ describe("useSqlInspectionModel", () => {
     if (!model) throw new Error("model was not created");
 
     model.applyMapSelection([9, 3, 9]);
-    expect(model.galleryQuery.value.filters).toEqual([["map_id", "in", [3, 9]]]);
+    expect(model.galleryQuery.value.filters).toEqual([["map_id", "in", [9, 3]]]);
     expect(model.sampleTableDataSource.value?.scopeKey).toContain(
-      JSON.stringify([["map_id", "in", [3, 9]]]),
+      JSON.stringify([["map_id", "in", [9, 3]]]),
     );
 
     model.applyMapSelection([3, 7, 9]);
@@ -152,7 +152,7 @@ describe("useSqlInspectionModel", () => {
 
     expect(model.galleryQuery.value.filters).toEqual([
       { combinator: "and", items: [["rough_bin", "in", [4]]] },
-      ["map_id", "in", [3, 9]],
+      ["map_id", "in", [9, 3]],
     ]);
   });
 
@@ -302,7 +302,7 @@ describe("useSqlInspectionModel", () => {
 
     samplingIds.value = new Set(["11", "7"]);
 
-    expect(model.galleryQuery.value.filters).toEqual([["map_id", "in", [7, 11]]]);
+    expect(model.galleryQuery.value.filters).toEqual([["map_id", "in", [11, 7]]]);
     await Promise.resolve();
     expect(source.loadMap).toHaveBeenCalledTimes(1);
     expect(source.loadAggregates).toHaveBeenCalledTimes(1);
@@ -325,7 +325,7 @@ describe("useSqlInspectionModel", () => {
 
     expect(source.resolveSelection).toHaveBeenCalledWith(
       expect.objectContaining({
-        filters: [["map_id", "in", [3, 7]]],
+        filters: [["map_id", "in", [7, 3]]],
         constraint: { kind: "sampling-program", program, seed: 1234 },
       }),
     );

@@ -22,10 +22,14 @@ from app.modules.source_discovery.domain.models import (
     MembershipRule,
     MembershipRuleVersion,
     MembershipSuppression,
+    ScAutomationPartition,
     SourceConnector,
     SourceMembership,
 )
-from app.modules.source_discovery.domain.errors import ActiveDiscoveryRunExistsError
+from app.modules.source_discovery.domain.errors import (
+    ActiveDiscoveryRunExistsError,
+    SourceDiscoveryConflictError,
+)
 from app.shared.db.models.source_discovery import (
     CollectionDiscoveryReceiptORM,
     CollectionDiscoveryRunItemORM,
@@ -35,6 +39,7 @@ from app.shared.db.models.source_discovery import (
     CollectionMembershipRuleVersionORM,
     CollectionMembershipSuppressionORM,
     CollectionSourceMembershipORM,
+    ScAutomationPartitionORM,
     SourceConnectorORM,
     SourceImportProfileVersionORM,
 )
@@ -101,6 +106,22 @@ def _rule_version(row: CollectionMembershipRuleVersionORM) -> MembershipRuleVers
         connector_id=row.connector_id,
         import_profile_version_id=row.import_profile_version_id,
         condition=condition,
+        created_by=row.created_by,
+        created_at=_db_utc(row.created_at),
+    )
+
+
+def _partition(row: ScAutomationPartitionORM) -> ScAutomationPartition:
+    return ScAutomationPartition(
+        id=row.id,
+        org_id=row.org_id,
+        collection_id=row.collection_id,
+        rule_id=row.rule_id,
+        connector_id=row.connector_id,
+        layer_id=row.layer_id,
+        dimension=row.dimension,
+        dimension_value=row.dimension_value,
+        partition_key=row.partition_key,
         created_by=row.created_by,
         created_at=_db_utc(row.created_at),
     )
@@ -297,6 +318,77 @@ class SourceDiscoverySqlRepository:
             session.add_all([rule_row, version_row])
             await session.commit()
             return _rule(rule_row), _rule_version(version_row)
+
+    async def create_partition_rule(
+        self,
+        rule: MembershipRule,
+        version: MembershipRuleVersion,
+        partition: ScAutomationPartition,
+    ) -> tuple[MembershipRule, MembershipRuleVersion, ScAutomationPartition]:
+        async with self._session_factory() as session:
+            rule_row = CollectionMembershipRuleORM(**asdict(rule))
+            version_row = CollectionMembershipRuleVersionORM(
+                id=version.id,
+                rule_id=version.rule_id,
+                version=version.version,
+                connector_id=version.connector_id,
+                import_profile_version_id=version.import_profile_version_id,
+                condition=condition_to_json(version.condition),
+                created_by=version.created_by,
+                created_at=version.created_at,
+            )
+            partition_row = ScAutomationPartitionORM(**asdict(partition))
+            session.add_all([rule_row, version_row, partition_row])
+            try:
+                await session.commit()
+            except IntegrityError as exc:
+                await session.rollback()
+                raise SourceDiscoveryConflictError(
+                    "partition_assigned",
+                    "This SC automation partition was assigned concurrently",
+                ) from exc
+            return (
+                _rule(rule_row),
+                _rule_version(version_row),
+                _partition(partition_row),
+            )
+
+    async def list_partitions(
+        self, collection_id: str, org_id: str
+    ) -> list[ScAutomationPartition]:
+        async with self._session_factory() as session:
+            rows = (
+                await session.scalars(
+                    select(ScAutomationPartitionORM)
+                    .where(ScAutomationPartitionORM.collection_id == collection_id)
+                    .where(ScAutomationPartitionORM.org_id == org_id)
+                    .order_by(ScAutomationPartitionORM.created_at)
+                )
+            ).all()
+            return [_partition(row) for row in rows]
+
+    async def find_partition(
+        self, org_id: str, connector_id: str, partition_key: str
+    ) -> ScAutomationPartition | None:
+        async with self._session_factory() as session:
+            row = await session.scalar(
+                select(ScAutomationPartitionORM)
+                .where(ScAutomationPartitionORM.org_id == org_id)
+                .where(ScAutomationPartitionORM.connector_id == connector_id)
+                .where(ScAutomationPartitionORM.partition_key == partition_key)
+            )
+            return _partition(row) if row is not None else None
+
+    async def get_partition_for_rule(
+        self, rule_id: str, org_id: str
+    ) -> ScAutomationPartition | None:
+        async with self._session_factory() as session:
+            row = await session.scalar(
+                select(ScAutomationPartitionORM)
+                .where(ScAutomationPartitionORM.rule_id == rule_id)
+                .where(ScAutomationPartitionORM.org_id == org_id)
+            )
+            return _partition(row) if row is not None else None
 
     async def create_rule_version(
         self,

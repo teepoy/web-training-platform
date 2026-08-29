@@ -122,6 +122,21 @@ class MembershipRuleVersion:
 
 
 @dataclass(frozen=True, slots=True)
+class ScAutomationPartition:
+    id: str
+    org_id: str
+    collection_id: str
+    rule_id: str
+    connector_id: str
+    layer_id: str
+    dimension: str
+    dimension_value: str
+    partition_key: str
+    created_by: str
+    created_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
 class SourceRecord:
     record_key: str
     source_version: str | None

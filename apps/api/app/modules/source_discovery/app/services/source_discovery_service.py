@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from uuid import uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -25,12 +26,16 @@ from app.modules.source_discovery.domain.models import (
     DiscoveryExecution,
     DiscoveryRun,
     DiscoveryRunItem,
+    FilterCombinator,
     FilterGroup,
+    FilterOperator,
+    FilterPredicate,
     ImportProfileVersion,
     ImportReceipt,
     MembershipRule,
     MembershipRuleVersion,
     MembershipSuppression,
+    ScAutomationPartition,
     SourceConnector,
     SourceEstimate,
     SourceMembership,
@@ -179,6 +184,116 @@ class SourceDiscoveryService:
         )
         return await self._repository.create_rule(rule, version)
 
+    async def create_sc_partition(
+        self,
+        *,
+        collection_id: str,
+        org_id: str,
+        actor_id: str,
+        name: str,
+        connector_id: str,
+        import_profile_version_id: str,
+        layer_id: str,
+        dimension: str,
+        dimension_value: str,
+    ) -> tuple[MembershipRule, MembershipRuleVersion, ScAutomationPartition]:
+        await self._collections.get_collection(collection_id, org_id)
+        connector, profile = await self._rule_dependencies(
+            connector_id, import_profile_version_id, org_id
+        )
+        if connector.provider_id != "sc":
+            raise SourceDiscoveryValidationError(
+                "partition_provider_invalid",
+                "SC automation partitions require an SC source connector",
+            )
+        if dimension not in {"device", "recipe_id"}:
+            raise SourceDiscoveryValidationError(
+                "partition_dimension_invalid",
+                "SC automation partition dimension must be device or recipe_id",
+            )
+        normalized_layer = layer_id.strip()
+        normalized_value = dimension_value.strip()
+        if not normalized_layer or not normalized_value:
+            raise SourceDiscoveryValidationError(
+                "partition_value_required",
+                "SC automation partition layer and dimension value are required",
+            )
+        partition_key = json.dumps(
+            [normalized_layer, dimension, normalized_value],
+            ensure_ascii=True,
+            separators=(",", ":"),
+        )
+        existing = await self._repository.find_partition(
+            org_id, connector.id, partition_key
+        )
+        if existing is not None:
+            raise SourceDiscoveryConflictError(
+                "partition_assigned",
+                "SC automation partition is already assigned to Collection "
+                f"{existing.collection_id}",
+            )
+        now = _utcnow()
+        rule_id = str(uuid4())
+        version_id = str(uuid4())
+        condition = FilterGroup(
+            combinator=FilterCombinator.ALL,
+            children=(
+                FilterPredicate(
+                    field="layer_id",
+                    operator=FilterOperator.EQ,
+                    value=normalized_layer,
+                ),
+                FilterPredicate(
+                    field=dimension,
+                    operator=FilterOperator.EQ,
+                    value=normalized_value,
+                ),
+            ),
+        )
+        rule = MembershipRule(
+            id=rule_id,
+            org_id=org_id,
+            collection_id=collection_id,
+            name=name.strip(),
+            status="active",
+            active_version_id=version_id,
+            activated_at=now,
+            live_cursor=None,
+            created_by=actor_id,
+            created_at=now,
+            updated_at=now,
+        )
+        version = MembershipRuleVersion(
+            id=version_id,
+            rule_id=rule_id,
+            version=1,
+            connector_id=connector.id,
+            import_profile_version_id=profile.id,
+            condition=condition,
+            created_by=actor_id,
+            created_at=now,
+        )
+        partition = ScAutomationPartition(
+            id=str(uuid4()),
+            org_id=org_id,
+            collection_id=collection_id,
+            rule_id=rule_id,
+            connector_id=connector.id,
+            layer_id=normalized_layer,
+            dimension=dimension,
+            dimension_value=normalized_value,
+            partition_key=partition_key,
+            created_by=actor_id,
+            created_at=now,
+        )
+        return await self._repository.create_partition_rule(rule, version, partition)
+
+    async def list_sc_partitions(
+        self, collection_id: str, org_id: str
+    ) -> list[ScAutomationPartition]:
+        await self._collections.get_collection(collection_id, org_id)
+        return await self._repository.list_partitions(collection_id, org_id)
+
     async def create_rule_version(
         self,
         *,
@@ -195,6 +310,18 @@ class SourceDiscoveryService:
             connector_id, import_profile_version_id, org_id
         )
         self._validate_condition(condition, connector.provider_id)
+        partition = await self._repository.get_partition_for_rule(rule.id, org_id)
+        if partition is not None:
+            expected_condition = self._sc_partition_condition(partition)
+            if (
+                connector.id != partition.connector_id
+                or condition != expected_condition
+            ):
+                raise SourceDiscoveryConflictError(
+                    "partition_rule_immutable",
+                    "SC automation partition rules cannot change their source or "
+                    "partition condition",
+                )
         now = _utcnow()
         version = MembershipRuleVersion(
             id=str(uuid4()),
@@ -208,6 +335,24 @@ class SourceDiscoveryService:
         )
         return await self._repository.create_rule_version(
             version, org_id=org_id, activated_at=now
+        )
+
+    @staticmethod
+    def _sc_partition_condition(partition: ScAutomationPartition) -> FilterGroup:
+        return FilterGroup(
+            combinator=FilterCombinator.ALL,
+            children=(
+                FilterPredicate(
+                    field="layer_id",
+                    operator=FilterOperator.EQ,
+                    value=partition.layer_id,
+                ),
+                FilterPredicate(
+                    field=partition.dimension,
+                    operator=FilterOperator.EQ,
+                    value=partition.dimension_value,
+                ),
+            ),
         )
 
     async def list_rules(

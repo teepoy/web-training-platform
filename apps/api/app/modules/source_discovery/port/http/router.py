@@ -23,12 +23,14 @@ from app.modules.source_discovery.port.http.schemas import (
     CreateImportProfileRequest,
     CreateMembershipRuleRequest,
     CreateMembershipRuleVersionRequest,
+    CreateScAutomationPartitionRequest,
     CreateSourceConnectorRequest,
     DiscoveryRunResponse,
     ImportProfileVersionResponse,
     MembershipRuleResponse,
     MembershipSuppressionResponse,
     RunLiveDiscoveryRequest,
+    ScAutomationPartitionResponse,
     SourceConnectorResponse,
     SourceProviderDescriptorResponse,
     SuppressSourceMemberRequest,
@@ -194,6 +196,52 @@ async def list_membership_rules(
     return [
         MembershipRuleResponse.from_domain(rule, version) for rule, version in rules
     ]
+
+
+@collections_router.post(
+    "/{collection_id}/sc-automation-partitions",
+    response_model=ScAutomationPartitionResponse,
+)
+async def create_sc_automation_partition(
+    collection_id: str,
+    payload: CreateScAutomationPartitionRequest,
+    service: SourceDiscoveryServiceDep,
+    current_user: Annotated[User, Depends(get_current_user)],
+    org: Annotated[Organization, Depends(get_current_org)],
+) -> ScAutomationPartitionResponse:
+    try:
+        _, _, partition = await service.create_sc_partition(
+            collection_id=collection_id,
+            org_id=org.id,
+            actor_id=current_user.id,
+            name=payload.name,
+            connector_id=payload.connector_id,
+            import_profile_version_id=payload.import_profile_version_id,
+            layer_id=payload.layer_id,
+            dimension=payload.dimension,
+            dimension_value=payload.dimension_value,
+        )
+    except SourceDiscoveryError as exc:
+        raise _http_error(exc) from exc
+    return ScAutomationPartitionResponse.from_domain(partition)
+
+
+@collections_router.get(
+    "/{collection_id}/sc-automation-partitions",
+    response_model=list[ScAutomationPartitionResponse],
+)
+async def list_sc_automation_partitions(
+    collection_id: str,
+    service: SourceDiscoveryServiceDep,
+    current_user: Annotated[User, Depends(get_current_user)],
+    org: Annotated[Organization, Depends(get_current_org)],
+) -> list[ScAutomationPartitionResponse]:
+    del current_user
+    try:
+        partitions = await service.list_sc_partitions(collection_id, org.id)
+    except SourceDiscoveryError as exc:
+        raise _http_error(exc) from exc
+    return [ScAutomationPartitionResponse.from_domain(item) for item in partitions]
 
 
 @collections_router.post(

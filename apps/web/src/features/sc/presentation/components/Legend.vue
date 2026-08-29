@@ -27,6 +27,7 @@ const props = defineProps<{
   points?: number[];
   fullPoints?: number[];
   selectedClassNumber?: LegendKey | null;
+  selectedClassNumbers?: LegendKey[];
   legendSource?: LegendSource;
   classNumbers?: Record<string, DefectList>;
   roughBins?: Record<string, DefectList>;
@@ -39,6 +40,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: "select-class", key: LegendKey | null): void;
+  (e: "select-classes", keys: LegendKey[]): void;
   (e: "update:colorMap", colorMap: Record<string, string>): void;
   (e: "update:hiddenKeys", hiddenKeys: string[]): void;
 }>();
@@ -118,12 +120,21 @@ const legendData = computed(() => {
     .sort((a, b) => a.key - b.key);
 });
 
+const selectedKeySet = computed(
+  () =>
+    new Set(
+      props.selectedClassNumbers ??
+        (props.selectedClassNumber == null ? [] : [props.selectedClassNumber]),
+    ),
+);
+
 const handleSelect = (key: LegendKey) => {
-  if (props.selectedClassNumber === key) {
-    emit("select-class", null);
-  } else {
-    emit("select-class", key);
-  }
+  const next = new Set(selectedKeySet.value);
+  if (next.has(key)) next.delete(key);
+  else next.add(key);
+  const keys = [...next];
+  emit("select-classes", keys);
+  emit("select-class", keys.length === 1 ? keys[0] : null);
 };
 
 const handleColorUpdate = (key: string, color: string) => {
@@ -167,9 +178,9 @@ const handleVisibleToggle = (rawKey: string) => {
         v-for="item in legendData"
         :key="item.key"
         class="sc-legend-item"
-        :class="{ '--selected': props.selectedClassNumber === item.key }"
+        :class="{ '--selected': selectedKeySet.has(item.key) }"
         :style="
-          props.selectedClassNumber === item.key
+          selectedKeySet.has(item.key)
             ? { borderLeft: `3px solid ${item.color}` }
             : { borderLeft: '3px solid transparent' }
         "

@@ -53,8 +53,8 @@ describe("SC inspection filter policy", () => {
     expect(plan.aggregateFilters).toEqual(plan.mapFilters);
     expect(plan.tableFilters).toEqual([
       globalExpression,
-      ["map_id", "in", [3, 9]],
-      ["map_id", "in", [7, 11]],
+      ["map_id", "in", [9, 3]],
+      ["map_id", "in", [11, 7]],
       ["images", ">", 0],
     ]);
     expect(plan.galleryBaseFilters).toEqual(plan.tableFilters);
@@ -69,11 +69,11 @@ describe("SC inspection filter policy", () => {
     expect(second.items.map((item) => ({ field: item.field, condition: item.condition }))).toEqual([
       {
         field: "map_id",
-        condition: { filterType: "set", values: [3, 9], exclude: true },
+        condition: { filterType: "set", values: [9, 3], exclude: true },
       },
       {
         field: "map_id",
-        condition: { filterType: "set", values: [3, 7], exclude: true },
+        condition: { filterType: "set", values: [7, 3], exclude: true },
       },
     ]);
   });

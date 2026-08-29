@@ -82,6 +82,8 @@ const props = withDefaults(
     /** IDs resolved against the Arrow snapshot already retained by <sc-map>. */
     highlightDefectIds?: number[];
     selectionDefectIds?: number[];
+    highlightMapIds?: number[];
+    selectionMapIds?: number[];
     selectionResetVersion?: number;
   }>(),
   {
@@ -96,7 +98,7 @@ const emit = defineEmits<{
     e: "update:reticleOptions",
     v: { xDieCount: number; yDieCount: number; xDieShift: number; yDieShift: number },
   ): void;
-  (e: "legend-select", key: LegendKey | null): void;
+  (e: "legend-select", keys: LegendKey[]): void;
   (e: "zoom-in", vp: { x: number; y: number; w: number; h: number } | null): void;
   (e: "retry"): void;
   (e: "clear-selection"): void;
@@ -148,11 +150,11 @@ watch(
 const handleTabChange = (value: string | number) => {
   const tab = value as MapTab;
   internalTab.value = tab;
-  selectedClassNumber.value = null;
+  selectedClassNumbers.value = [];
   emit("update:activeMapTab", tab);
 };
 
-const selectedClassNumber = ref<LegendKey | null>(null);
+const selectedClassNumbers = ref<LegendKey[]>([]);
 const legendSource = ref<LegendSource>(props.legendGroupBy ?? "class");
 function emptyHiddenLegendKeysBySource(): Record<LegendSource, string[]> {
   return { class: [], bin: [], annotation: [], prediction: [], final_class: [] };
@@ -249,7 +251,7 @@ function savePersistedState(key: string, value: boolean): void {
 
 watch(legendSource, (newSource) => {
   emit("legend-group-change", newSource || null);
-  selectedClassNumber.value = null;
+  selectedClassNumbers.value = [];
 });
 
 watch(drawerVisible, (val) => {
@@ -585,7 +587,7 @@ const effectiveMapProgressMessage = computed(
 watch(
   () => props.selectionResetVersion,
   () => {
-    selectedClassNumber.value = null;
+    selectedClassNumbers.value = [];
   },
 );
 
@@ -603,7 +605,7 @@ async function updateMapSelection(command: ScMapSelectionCommand): Promise<numbe
 
 function clearMapSelection(): void {
   nativeMapElement.value?.clearSelection();
-  selectedClassNumber.value = null;
+  selectedClassNumbers.value = [];
 }
 
 defineExpose({ updateMapSelection, clearMapSelection });
@@ -612,9 +614,9 @@ function onBoxSelect(region: BoxSelectionRegion): void {
   emit("box-select", region);
 }
 
-const handleLegendSelect = (key: LegendKey | null) => {
-  selectedClassNumber.value = key;
-  emit("legend-select", key);
+const handleLegendSelect = (keys: LegendKey[]) => {
+  selectedClassNumbers.value = [...keys];
+  emit("legend-select", keys);
 };
 
 function handleHiddenLegendKeysUpdate(keys: string[]): void {
@@ -754,8 +756,8 @@ function handleHiddenLegendKeysUpdate(keys: string[]): void {
             :interactionMode.prop="mapMode[internalTab]"
             :zoom.prop="zoom ?? null"
             :geometry.prop="nativeGeometry"
-            :highlightDefectIds.prop="highlightDefectIds ?? []"
-            :selectionDefectIds.prop="selectionDefectIds ?? []"
+            :highlightMapIds.prop="highlightMapIds ?? highlightDefectIds ?? []"
+            :selectionMapIds.prop="selectionMapIds ?? selectionDefectIds ?? []"
             @zoom-in="onNativeZoom"
             @box-select="onNativeBoxSelect"
             @lasso-select="onNativeLassoSelect"
@@ -828,10 +830,10 @@ function handleHiddenLegendKeysUpdate(keys: string[]): void {
                   :predictions="predictionGroups"
                   :final-class="finalClassGroups"
                   :color-map="colorMap"
-                  :selectedClassNumber="selectedClassNumber"
+                  :selectedClassNumbers="selectedClassNumbers"
                   :legendSource="legendSource"
                   :hidden-keys="activeHiddenLegendKeys"
-                  @select-class="handleLegendSelect"
+                  @select-classes="handleLegendSelect"
                   @update:color-map="handleColorMapUpdate"
                   @update:hidden-keys="handleHiddenLegendKeysUpdate"
                 />

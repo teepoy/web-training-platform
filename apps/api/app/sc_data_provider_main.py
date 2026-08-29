@@ -22,6 +22,7 @@ from app.modules.dataset_collections.port.local import (
 from app.modules.sc.data_provider.cache import ScDataObjectCache
 from app.modules.sc.data_provider.engine import DuckDbQueryExecutor
 from app.modules.sc.data_provider.materializer import ScDataMaterializer
+from app.modules.sc.data_provider.request_compression import ScGzipRequestMiddleware
 from app.modules.sc.data_provider.revision import ScDataRevisionStore
 from app.modules.sc.data_provider.router import (
     ScDataProviderRedis,
@@ -47,6 +48,9 @@ def _validate_data_provider_config(config: ScDataProviderConfig) -> None:
             "SC_DATA_PROVIDER_IMPLEMENTATION=duckdb; automatic fallback is forbidden"
         )
     positive_fields = (
+        "classify_max_rows",
+        "max_compressed_request_bytes",
+        "max_decompressed_request_bytes",
         "max_rss_mb",
         "duckdb_threads",
         "connection_recycle_rss_mb",
@@ -172,6 +176,7 @@ async def lifespan(data_app: FastAPI):
         artifact_storage=context.injector.get(ArtifactStorage),
         cache=cache,
         batch_rows=provider_config.arrow_batch_rows,
+        classify_max_rows=provider_config.classify_max_rows,
     )
     executor = DuckDbQueryExecutor(config=provider_config)
     data_app.state.sc_data_provider = ScDataProviderRuntime(
@@ -204,6 +209,7 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+app.add_middleware(ScGzipRequestMiddleware)
 app.include_router(router)
 
 

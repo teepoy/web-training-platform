@@ -11,6 +11,7 @@ from app.modules.source_discovery.domain.models import (
     MembershipRule,
     MembershipRuleVersion,
     MembershipSuppression,
+    ScAutomationPartition,
     SourceConnector,
     SourceMembership,
 )
@@ -42,6 +43,25 @@ class SourceDiscoveryRepository(Protocol):
     async def create_rule(
         self, rule: MembershipRule, version: MembershipRuleVersion
     ) -> tuple[MembershipRule, MembershipRuleVersion]: ...
+
+    async def create_partition_rule(
+        self,
+        rule: MembershipRule,
+        version: MembershipRuleVersion,
+        partition: ScAutomationPartition,
+    ) -> tuple[MembershipRule, MembershipRuleVersion, ScAutomationPartition]: ...
+
+    async def list_partitions(
+        self, collection_id: str, org_id: str
+    ) -> list[ScAutomationPartition]: ...
+
+    async def find_partition(
+        self, org_id: str, connector_id: str, partition_key: str
+    ) -> ScAutomationPartition | None: ...
+
+    async def get_partition_for_rule(
+        self, rule_id: str, org_id: str
+    ) -> ScAutomationPartition | None: ...
 
     async def create_rule_version(
         self,

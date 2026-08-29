@@ -43,7 +43,10 @@ from app.modules.source_discovery.domain.models import (
     SourceProviderDescriptor,
     SourceRecord,
 )
-from app.modules.source_discovery.domain.errors import SourceDiscoveryValidationError
+from app.modules.source_discovery.domain.errors import (
+    SourceDiscoveryConflictError,
+    SourceDiscoveryValidationError,
+)
 from app.modules.source_discovery.domain.provider import SourceProviderCatalog
 from app.shared.db.base import Base
 from app.shared.db.session import create_engine, create_session_factory
@@ -376,6 +379,103 @@ async def test_import_profiles_can_be_listed_for_rule_setup() -> None:
         listed = await service.list_import_profiles(connector.id, "org")
 
         assert [item.id for item in listed] == [profile.id]
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_sc_partition_creates_exact_rule_and_rejects_duplicate_assignment() -> None:
+    provider = _Provider(())
+    provider.descriptor = replace(
+        provider.descriptor,
+        provider_id="sc",
+        fields=(
+            SourceFilterField(
+                key="layer_id",
+                label="Layer",
+                field_type=SourceFieldType.STRING,
+                operators=(FilterOperator.EQ,),
+            ),
+            SourceFilterField(
+                key="device",
+                label="Device",
+                field_type=SourceFieldType.STRING,
+                operators=(FilterOperator.EQ,),
+            ),
+        ),
+    )
+    service, _, engine = await _service(provider, _Collections("collection", "org"))
+    try:
+        connector = await service.create_connector(
+            org_id="org",
+            actor_id="actor",
+            provider_id="sc",
+            name="SC source",
+            config={},
+        )
+        profile = await service.create_import_profile(
+            org_id="org",
+            actor_id="actor",
+            connector_id=connector.id,
+            name="Bounded import",
+            settings={},
+            max_records_per_run=10,
+            max_rows_per_dataset=100,
+        )
+
+        rule, version, partition = await service.create_sc_partition(
+            collection_id="collection",
+            org_id="org",
+            actor_id="actor",
+            name="M1 device A",
+            connector_id=connector.id,
+            import_profile_version_id=profile.id,
+            layer_id="M1",
+            dimension="device",
+            dimension_value="DEVICE-A",
+        )
+
+        assert partition.rule_id == rule.id == version.rule_id
+        assert version.condition == FilterGroup(
+            combinator=FilterCombinator.ALL,
+            children=(
+                FilterPredicate("layer_id", FilterOperator.EQ, "M1"),
+                FilterPredicate("device", FilterOperator.EQ, "DEVICE-A"),
+            ),
+        )
+        assert await service.list_sc_partitions("collection", "org") == [partition]
+
+        with pytest.raises(
+            SourceDiscoveryConflictError, match="cannot change their source"
+        ):
+            await service.create_rule_version(
+                collection_id="collection",
+                rule_id=rule.id,
+                org_id="org",
+                actor_id="actor",
+                connector_id=connector.id,
+                import_profile_version_id=profile.id,
+                condition=FilterGroup(
+                    combinator=FilterCombinator.ALL,
+                    children=(
+                        FilterPredicate("layer_id", FilterOperator.EQ, "M1"),
+                        FilterPredicate("device", FilterOperator.EQ, "DEVICE-B"),
+                    ),
+                ),
+            )
+
+        with pytest.raises(SourceDiscoveryConflictError, match="already assigned"):
+            await service.create_sc_partition(
+                collection_id="collection",
+                org_id="org",
+                actor_id="actor",
+                name="duplicate",
+                connector_id=connector.id,
+                import_profile_version_id=profile.id,
+                layer_id="M1",
+                dimension="device",
+                dimension_value="DEVICE-A",
+            )
     finally:
         await engine.dispose()
 

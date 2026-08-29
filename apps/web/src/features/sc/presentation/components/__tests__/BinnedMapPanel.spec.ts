@@ -80,12 +80,12 @@ describe("BinnedMapPanel unified map", () => {
     });
     const legend = wrapper.findComponent(Legend);
 
-    legend.vm.$emit("select-class", 2);
+    legend.vm.$emit("select-classes", [2]);
     await wrapper.vm.$nextTick();
-    expect(legend.props("selectedClassNumber")).toBe(2);
+    expect(legend.props("selectedClassNumbers")).toEqual([2]);
 
     await wrapper.setProps({ selectionResetVersion: 1 });
-    expect(legend.props("selectedClassNumber")).toBeNull();
+    expect(legend.props("selectedClassNumbers")).toEqual([]);
   });
 
   it("groups map interactions into one compact dropdown", async () => {
@@ -232,7 +232,7 @@ describe("BinnedMapPanel unified map", () => {
     expect(element.legendColumn).toBe("rough_bin");
     expect(element.showImageMarkers).toBe(true);
     expect(element.defectSize).toBe(2);
-    expect(element.selectionDefectIds).toEqual([3, 7]);
+    expect(element.selectionMapIds).toEqual([3, 7]);
     expect(element.interactionMode).toBe("select");
     wrapper.findComponent(NDropdown).vm.$emit("select", "zoomin");
     await wrapper.vm.$nextTick();
@@ -242,7 +242,7 @@ describe("BinnedMapPanel unified map", () => {
     expect(element.interactionMode).toBe("lasso");
     map.element.dispatchEvent(new CustomEvent("zoom-in", { detail: { x: 1, y: 2, w: 3, h: 4 } }));
     await wrapper.vm.$nextTick();
-    expect(element.selectionDefectIds).toEqual([3, 7]);
+    expect(element.selectionMapIds).toEqual([3, 7]);
   });
 
   it("keeps custom colors separate by legend source and restores them by scope", async () => {

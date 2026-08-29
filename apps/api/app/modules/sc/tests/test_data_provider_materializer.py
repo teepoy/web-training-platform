@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import shutil
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -17,7 +18,10 @@ from app.modules.dataset_collections.port.local import (
     DatasetCollectionRevisionReaderPort,
 )
 from app.modules.sc.data_provider.cache import CachedDataObject, ScDataObjectCache
-from app.modules.sc.data_provider.materializer import ScDataMaterializer
+from app.modules.sc.data_provider.materializer import (
+    ScCollectionTooLargeError,
+    ScDataMaterializer,
+)
 from app.modules.sc.data_provider.scope import ScDataScope
 from app.modules.sc.domain.upstream_reader import ScUpstreamReader
 from app.modules.sc.domain.models import ScInspectionRecord
@@ -74,6 +78,33 @@ def _inspection(wafer_key: int, *, latest_update: int = 1) -> ScInspectionRecord
 
 
 @pytest.mark.asyncio
+async def test_collection_materialization_rejects_browser_unsafe_row_count() -> None:
+    revision_reader = AsyncMock(spec=DatasetCollectionRevisionReaderPort)
+    revision_reader.get_revision.return_value = replace(
+        _ready_revision("memory://revision"), row_count=300_001
+    )
+    materializer = ScDataMaterializer(
+        upstream_reader=AsyncMock(spec=ScUpstreamReader),
+        storage_factory=AsyncMock(spec=DatasetStorageFactoryPort),
+        collection_revision_reader=revision_reader,
+        artifact_storage=AsyncMock(spec=ArtifactStorage),
+        cache=AsyncMock(spec=ScDataObjectCache),
+        batch_rows=50_000,
+        classify_max_rows=300_000,
+    )
+
+    with pytest.raises(ScCollectionTooLargeError, match="300001 rows"):
+        await materializer.materialize(
+            ScDataScope.collection(
+                collection_id="collection-1",
+                revision_id="revision-1",
+                org_id="org-1",
+            ),
+            revision=1,
+        )
+
+
+@pytest.mark.asyncio
 async def test_dataset_cache_hits_use_dataset_metadata_without_scanning_samples(
     tmp_path: Path,
 ) -> None:
@@ -102,6 +133,7 @@ async def test_dataset_cache_hits_use_dataset_metadata_without_scanning_samples(
         artifact_storage=AsyncMock(spec=ArtifactStorage),
         cache=cache,
         batch_rows=50_000,
+        classify_max_rows=300_000,
     )
 
     result = await materializer.materialize(
@@ -163,6 +195,7 @@ async def test_dataset_overlays_track_the_monotonic_scope_revision(
         artifact_storage=AsyncMock(spec=ArtifactStorage),
         cache=cache,
         batch_rows=50_000,
+        classify_max_rows=300_000,
     )
 
     await materializer.materialize(
@@ -248,6 +281,7 @@ async def test_dataset_materialization_projects_membership_and_reads_latest_sour
         artifact_storage=AsyncMock(spec=ArtifactStorage),
         cache=cache,
         batch_rows=50_000,
+        classify_max_rows=300_000,
     )
 
     result = await materializer.materialize(
@@ -373,6 +407,7 @@ async def test_collection_revision_materializes_combined_rows_and_overlays(
         artifact_storage=artifact_storage,
         cache=cache,
         batch_rows=50_000,
+        classify_max_rows=300_000,
     )
 
     result = await materializer.materialize(

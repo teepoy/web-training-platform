@@ -164,6 +164,9 @@ class AuthConfig(ConfigSection):
 
 class ScDataProviderConfig(ConfigSection):
     implementation: Literal["duckdb"]
+    classify_max_rows: int = Field(gt=0)
+    max_compressed_request_bytes: int = Field(gt=0)
+    max_decompressed_request_bytes: int = Field(gt=0)
     max_rss_mb: int
     cache_dir: str = ""
     cache_namespace: str = ""

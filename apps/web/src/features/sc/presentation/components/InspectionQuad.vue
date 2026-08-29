@@ -665,9 +665,9 @@ function handleLassoSelect(selection: ScMapLassoSelection): void {
     region: selection.region,
   });
 }
-function handleLegendSelection(key: string | number | null): void {
+function handleLegendSelection(keys: Array<string | number>): void {
   selectedBarChartKey.value = null;
-  mapSelectionQueue.replace("legend", key);
+  mapSelectionQueue.replaceLegend(keys);
 }
 function handleClearMapSelection(): void {
   selectedBarChartKey.value = null;
@@ -793,11 +793,32 @@ function useMapSelectionQueue() {
       const ids = await updateSelection({
         operation: "replace",
         hiddenLegendKeys,
-        constraint: { kind: "legend", key: String(key) },
+        constraint: { kind: "legend", keys: [String(key)] },
       });
       if (version !== replacementVersion) return;
       model.applyMapSelection(ids);
     }, `${source} selection failed`);
+  }
+
+  function replaceLegend(keys: Array<string | number>): void {
+    const version = ++replacementVersion;
+    const hiddenLegendKeys = [...activeHiddenLegendKeys.value];
+    queue = Promise.resolve();
+    enqueue(async () => {
+      if (version !== replacementVersion) return;
+      if (keys.length === 0) {
+        mapPanel.value?.clearMapSelection();
+        model.applyMapSelection([]);
+        return;
+      }
+      const ids = await updateSelection({
+        operation: "replace",
+        hiddenLegendKeys,
+        constraint: { kind: "legend", keys: keys.map(String) },
+      });
+      if (version !== replacementVersion) return;
+      model.applyMapSelection(ids);
+    }, "legend selection failed");
   }
 
   function prune(hiddenLegendKeys: readonly string[]): void {
@@ -881,7 +902,16 @@ function useMapSelectionQueue() {
     return true;
   }
 
-  return { append, replace, prune, invert, clear, dispose, prepareContextAction };
+  return {
+    append,
+    replace,
+    replaceLegend,
+    prune,
+    invert,
+    clear,
+    dispose,
+    prepareContextAction,
+  };
 }
 </script>
 
@@ -971,8 +1001,8 @@ function useMapSelectionQueue() {
           :color-map-scope-key="mapColorMapScopeKey"
           :zoom="zoom"
           :map-selection-count="model.mapSelectedDefectIds.value.length"
-          :highlight-defect-ids="galleryHighlightDefectIds"
-          :selection-defect-ids="model.mapSelectedDefectIds.value"
+          :highlight-map-ids="galleryHighlightDefectIds"
+          :selection-map-ids="model.mapSelectedDefectIds.value"
           :selection-reset-version="mapSelectionResetVersion"
           :map-loading="model.activeMapLoading.value || !dataReady"
           :map-error="userFacingMapError"

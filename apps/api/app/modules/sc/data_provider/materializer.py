@@ -110,6 +110,16 @@ class _MutableOverlayStorage(Protocol):
     async def prediction_overlay_lazyframe(self) -> tuple[Any | None, str]: ...
 
 
+class ScCollectionTooLargeError(ValueError):
+    def __init__(self, *, row_count: int, max_rows: int) -> None:
+        super().__init__(
+            f"Collection revision has {row_count} rows; browser classify limit is "
+            f"{max_rows} rows"
+        )
+        self.row_count = row_count
+        self.max_rows = max_rows
+
+
 class ScDataMaterializer:
     def __init__(
         self,
@@ -120,15 +130,19 @@ class ScDataMaterializer:
         artifact_storage: ArtifactStorage,
         cache: ScDataObjectCache,
         batch_rows: int,
+        classify_max_rows: int,
     ) -> None:
         if batch_rows <= 0:
             raise ValueError("batch_rows must be greater than zero")
+        if classify_max_rows <= 0:
+            raise ValueError("classify_max_rows must be greater than zero")
         self._upstream_reader = upstream_reader
         self._storage_factory = storage_factory
         self._collection_revision_reader = collection_revision_reader
         self._artifact_storage = artifact_storage
         self._cache = cache
         self._batch_rows = batch_rows
+        self._classify_max_rows = classify_max_rows
 
     async def materialize(
         self, scope: ScDataScope, *, revision: int
@@ -366,6 +380,14 @@ class ScDataMaterializer:
         ):
             raise ValueError(
                 f"Collection revision is not ready: {collection_id}/{revision_id}"
+            )
+        if (
+            collection_revision.row_count is not None
+            and collection_revision.row_count > self._classify_max_rows
+        ):
+            raise ScCollectionTooLargeError(
+                row_count=collection_revision.row_count,
+                max_rows=self._classify_max_rows,
             )
         source_dataset_ids = _collection_source_dataset_ids(collection_revision)
         storages = dict(

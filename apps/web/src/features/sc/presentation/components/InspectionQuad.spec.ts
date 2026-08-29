@@ -59,6 +59,8 @@ vi.mock("./BinnedMapPanel.vue", () => ({
       "waferGeometry",
       "highlightDefectIds",
       "selectionDefectIds",
+      "highlightMapIds",
+      "selectionMapIds",
       "selectionResetVersion",
       "mapError",
     ],
@@ -526,7 +528,7 @@ describe("InspectionQuad state ownership", () => {
     await wrapper.vm.$nextTick();
 
     expect([...gallery.props("selectedDefectIds")]).toEqual(["103", "274"]);
-    expect(wrapper.findComponent({ name: "BinnedMapPanel" }).props("highlightDefectIds")).toEqual([
+    expect(wrapper.findComponent({ name: "BinnedMapPanel" }).props("highlightMapIds")).toEqual([
       103, 274,
     ]);
     expect(wrapper.emitted("selection-change")).toBeUndefined();
@@ -558,13 +560,13 @@ describe("InspectionQuad state ownership", () => {
       },
     });
 
-    wrapper.findComponent({ name: "BinnedMapPanel" }).vm.$emit("legend-select", 7);
+    wrapper.findComponent({ name: "BinnedMapPanel" }).vm.$emit("legend-select", [7, 9]);
 
     await vi.waitFor(() => {
       expect(mapPanelHarness.updateSelection).toHaveBeenCalledWith({
         operation: "replace",
         hiddenLegendKeys: [],
-        constraint: { kind: "legend", key: "7" },
+        constraint: { kind: "legend", keys: ["7", "9"] },
       });
       expect(model.applyMapSelection).toHaveBeenCalledWith([]);
     });
@@ -704,12 +706,12 @@ describe("InspectionQuad state ownership", () => {
 
     map.vm.$emit("legend-hidden-change", { source: "class", hiddenKeys: ["7"] });
     await vi.waitFor(() => expect(mapPanelHarness.updateSelection).toHaveBeenCalledTimes(1));
-    map.vm.$emit("legend-select", 8);
+    map.vm.$emit("legend-select", [8]);
     await vi.waitFor(() => {
       expect(mapPanelHarness.updateSelection).toHaveBeenNthCalledWith(2, {
         operation: "replace",
         hiddenLegendKeys: ["7"],
-        constraint: { kind: "legend", key: "8" },
+        constraint: { kind: "legend", keys: ["8"] },
       });
       expect(model.mapSelectedDefectIds.value).toEqual([936]);
     });

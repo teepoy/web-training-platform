@@ -141,6 +141,49 @@ class CollectionMembershipRuleVersionORM(Base):
     )
 
 
+class ScAutomationPartitionORM(Base):
+    __tablename__ = "sc_automation_partitions"
+    __table_args__ = (
+        UniqueConstraint("rule_id", name="uq_sc_automation_partitions_rule"),
+        UniqueConstraint(
+            "org_id",
+            "connector_id",
+            "partition_key",
+            name="uq_sc_automation_partition_assignment",
+        ),
+        CheckConstraint(
+            "dimension IN ('device', 'recipe_id')",
+            name="ck_sc_automation_partition_dimension",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    org_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("organizations.id", ondelete="CASCADE"), index=True
+    )
+    collection_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("dataset_collections.id", ondelete="CASCADE"),
+        index=True,
+    )
+    rule_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("collection_membership_rules.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    connector_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("source_connectors.id", ondelete="RESTRICT")
+    )
+    layer_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    dimension: Mapped[str] = mapped_column(String(32), nullable=False)
+    dimension_value: Mapped[str] = mapped_column(String(255), nullable=False)
+    partition_key: Mapped[str] = mapped_column(String(640), nullable=False)
+    created_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
 class CollectionDiscoveryRunORM(Base):
     __tablename__ = "collection_discovery_runs"
     __table_args__ = (

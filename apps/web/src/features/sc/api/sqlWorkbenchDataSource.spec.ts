@@ -239,7 +239,7 @@ describe("SQL workbench data source", () => {
     expect(attempts).toBe(1);
   });
 
-  it("includes ordered defect IDs in the Arrow map snapshot", async () => {
+  it("includes ordered map IDs in the Arrow map snapshot", async () => {
     let requestBody: { description: string; sql: string; parameters: unknown[] } | null = null;
     server.use(
       http.post(QUERY_URL, async ({ request }) => {
@@ -254,7 +254,7 @@ describe("SQL workbench data source", () => {
 
     expect(requestBody).toEqual({
       description: "sc-workbench.map",
-      sql: 'SELECT "map_id" AS "defect_id", "wafer_x", "wafer_y", "die_x", "die_y", "reticle_x", "reticle_y", "class_number", "images" FROM samples ORDER BY "defect_id"',
+      sql: 'SELECT "map_id", "wafer_x", "wafer_y", "die_x", "die_y", "reticle_x", "reticle_y", "class_number", "images" FROM samples ORDER BY "map_id"',
       parameters: [],
     });
   });
@@ -748,7 +748,7 @@ describe("SQL workbench data source", () => {
     await expect(query).rejects.toThrow("aborted");
   });
 
-  it("resolves select-all using only defect IDs", async () => {
+  it("resolves select-all using only map IDs", async () => {
     let sql = "";
     let description = "";
     server.use(
@@ -756,7 +756,7 @@ describe("SQL workbench data source", () => {
         const body = (await request.json()) as { description: string; sql: string };
         description = body.description;
         sql = body.sql;
-        return arrowResponse({ defect_id: Int32Array.from([3, 9]) }, 1);
+        return arrowResponse({ map_id: Int32Array.from([3, 9]) }, 1);
       }),
     );
     const source = new SqlWorkbenchDataSource({ kind: "dataset", datasetId: "ds-1" });
@@ -768,9 +768,7 @@ describe("SQL workbench data source", () => {
         constraint: { kind: "all" },
       }),
     ).resolves.toEqual([3, 9]);
-    expect(sql).toBe(
-      'SELECT "map_id" AS "defect_id" FROM samples WHERE "rough_bin" = ? ORDER BY "map_id"',
-    );
+    expect(sql).toBe('SELECT "map_id" FROM samples WHERE "rough_bin" = ? ORDER BY "map_id"');
     expect(description).toBe("sc-workbench.selection.all");
   });
 
@@ -779,7 +777,7 @@ describe("SQL workbench data source", () => {
     server.use(
       http.post(QUERY_URL, async ({ request }) => {
         requestBody = (await request.json()) as typeof requestBody;
-        return arrowResponse({ defect_id: Int32Array.from([9, 3]) }, 1);
+        return arrowResponse({ map_id: Int32Array.from([9, 3]) }, 1);
       }),
     );
     const source = new SqlWorkbenchDataSource({ kind: "dataset", datasetId: "ds-1" });
@@ -793,7 +791,7 @@ describe("SQL workbench data source", () => {
     ).resolves.toEqual([9, 3]);
     expect(requestBody).toEqual({
       description: "sc-workbench.selection.random",
-      sql: 'SELECT "map_id" AS "defect_id" FROM samples WHERE "images" > ? ORDER BY HASH("map_id", ?) LIMIT ?',
+      sql: 'SELECT "map_id" FROM samples WHERE "images" > ? ORDER BY HASH("map_id", ?) LIMIT ?',
       parameters: [0, 42, 2],
     });
   });
@@ -808,7 +806,7 @@ describe("SQL workbench data source", () => {
     server.use(
       http.post(QUERY_URL, async ({ request }) => {
         requestBody = (await request.json()) as typeof requestBody;
-        return arrowResponse({ defect_id: Int32Array.from([8, 2, 5]) }, 1);
+        return arrowResponse({ map_id: Int32Array.from([8, 2, 5]) }, 1);
       }),
     );
     const source = new SqlWorkbenchDataSource({ kind: "dataset", datasetId: "ds-1" });
@@ -837,6 +835,26 @@ describe("SQL workbench data source", () => {
         rules: program.rules,
       },
     });
+  });
+
+  it("gzip-compresses large map ID requests", async () => {
+    let requestBody: { parameters: unknown[] } | null = null;
+    server.use(
+      http.post(QUERY_URL, async ({ request }) => {
+        expect(request.headers.get("Content-Encoding")).toBe("gzip");
+        const decoded = request.body?.pipeThrough(new DecompressionStream("gzip"));
+        requestBody = JSON.parse(await new Response(decoded).text()) as typeof requestBody;
+        return arrowResponse({ map_id: Int32Array.from([1, 2]) }, 1);
+      }),
+    );
+    const source = new SqlWorkbenchDataSource({ kind: "dataset", datasetId: "ds-1" });
+    sources.push(source);
+    const mapIds = Array.from({ length: 4_000 }, (_, index) => index);
+
+    await expect(
+      source.resolveSelection({ constraint: { kind: "ids", ids: mapIds } }),
+    ).resolves.toEqual([1, 2]);
+    expect(requestBody?.parameters).toEqual([mapIds]);
   });
 
   it("keeps percentage semantics in the structured backend program", () => {

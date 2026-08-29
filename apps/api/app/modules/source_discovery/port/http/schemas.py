@@ -17,6 +17,7 @@ from app.modules.source_discovery.domain.models import (
     MembershipRule,
     MembershipRuleVersion,
     MembershipSuppression,
+    ScAutomationPartition,
     SourceConnector,
     SourceEstimate,
     SourceFilterField,
@@ -179,6 +180,15 @@ class CreateMembershipRuleVersionRequest(BaseModel):
     condition: FilterGroupRequest
 
 
+class CreateScAutomationPartitionRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    connector_id: str = Field(min_length=1, max_length=64)
+    import_profile_version_id: str = Field(min_length=1, max_length=64)
+    layer_id: str = Field(min_length=1, max_length=255)
+    dimension: Literal["device", "recipe_id"]
+    dimension_value: str = Field(min_length=1, max_length=255)
+
+
 class MembershipRuleVersionResponse(BaseModel):
     id: str
     rule_id: str
@@ -232,6 +242,37 @@ class MembershipRuleResponse(BaseModel):
             created_at=rule.created_at,
             updated_at=rule.updated_at,
             active_version=MembershipRuleVersionResponse.from_domain(version),
+        )
+
+
+class ScAutomationPartitionResponse(BaseModel):
+    id: str
+    org_id: str
+    collection_id: str
+    rule_id: str
+    connector_id: str
+    layer_id: str
+    dimension: Literal["device", "recipe_id"]
+    dimension_value: str
+    created_by: str
+    created_at: datetime
+
+    @classmethod
+    def from_domain(
+        cls,
+        partition: ScAutomationPartition,
+    ) -> ScAutomationPartitionResponse:
+        return cls(
+            id=partition.id,
+            org_id=partition.org_id,
+            collection_id=partition.collection_id,
+            rule_id=partition.rule_id,
+            connector_id=partition.connector_id,
+            layer_id=partition.layer_id,
+            dimension=cast(Literal["device", "recipe_id"], partition.dimension),
+            dimension_value=partition.dimension_value,
+            created_by=partition.created_by,
+            created_at=partition.created_at,
         )
 
 

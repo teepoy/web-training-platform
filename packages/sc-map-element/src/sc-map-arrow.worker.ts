@@ -32,7 +32,7 @@ interface ProjectMessage {
 interface ResolveHighlightsMessage {
   id: number;
   type: "resolve-highlights";
-  defectIds: number[];
+  mapIds: number[];
 }
 
 interface UpdateSelectionMessage {
@@ -80,7 +80,7 @@ function load(message: LoadMessage): void {
     );
     const decoded = tableFromIPC(new Uint8Array(chunk));
     for (const name of [
-      "defect_id",
+      "map_id",
       "wafer_x",
       "wafer_y",
       "die_x",
@@ -105,13 +105,16 @@ function rowMatchesConstraint(
   rowIndex: number,
   constraint: MapSelectionConstraint,
   requestedIds: ReadonlySet<number> | null,
+  requestedLegendKeys: ReadonlySet<string> | null,
 ): boolean {
   if (constraint.kind === "all") return true;
-  const defectId = Number(requireColumn(table, "defect_id").get(rowIndex));
-  if (constraint.kind === "ids") return requestedIds?.has(defectId) ?? false;
+  const mapId = Number(requireColumn(table, "map_id").get(rowIndex));
+  if (constraint.kind === "ids") return requestedIds?.has(mapId) ?? false;
   if (constraint.kind === "legend") {
     const legend = requireColumn(table, legendColumnName);
-    return normalizeLegendKey(legendColumnName, legend.get(rowIndex)) === constraint.key;
+    return (
+      requestedLegendKeys?.has(normalizeLegendKey(legendColumnName, legend.get(rowIndex))) ?? false
+    );
   }
   const [xName, yName] = COORDINATE_COLUMNS[constraint.mode];
   const x = Number(requireColumn(table, xName).get(rowIndex));
@@ -131,16 +134,19 @@ function visibleSelectionIds(
   const hidden = new Set(hiddenLegendKeys);
   const requestedIds =
     constraint.kind === "ids" ? new Set(constraint.ids.filter(Number.isFinite).map(Number)) : null;
+  const requestedLegendKeys = constraint.kind === "legend" ? new Set(constraint.keys) : null;
   const matches = new Set<number>();
   for (const table of tables) {
-    const defectIds = requireColumn(table, "defect_id");
+    const mapIds = requireColumn(table, "map_id");
     const legend = requireColumn(table, legendColumnName);
     for (let rowIndex = 0; rowIndex < table.numRows; rowIndex += 1) {
       const legendKey = normalizeLegendKey(legendColumnName, legend.get(rowIndex));
       if (hidden.has(legendKey)) continue;
-      if (!rowMatchesConstraint(table, rowIndex, constraint, requestedIds)) continue;
-      const defectId = Number(defectIds.get(rowIndex));
-      if (Number.isFinite(defectId)) matches.add(defectId);
+      if (!rowMatchesConstraint(table, rowIndex, constraint, requestedIds, requestedLegendKeys)) {
+        continue;
+      }
+      const mapId = Number(mapIds.get(rowIndex));
+      if (Number.isFinite(mapId)) matches.add(mapId);
     }
   }
   return matches;
@@ -156,13 +162,13 @@ function projectSelectionPoints(spec: MapProjectionSpec): Float32Array {
   const coordinates: number[] = [];
   const occupiedBins = new Set<string>();
   for (const table of tables) {
-    const defectIds = requireColumn(table, "defect_id");
+    const mapIds = requireColumn(table, "map_id");
     const xColumn = requireColumn(table, xName);
     const yColumn = requireColumn(table, yName);
     const legend = requireColumn(table, legendColumnName);
     for (let rowIndex = 0; rowIndex < table.numRows; rowIndex += 1) {
-      const defectId = Number(defectIds.get(rowIndex));
-      if (!selectedIds.has(defectId)) continue;
+      const mapId = Number(mapIds.get(rowIndex));
+      if (!selectedIds.has(mapId)) continue;
       const legendKey = normalizeLegendKey(legendColumnName, legend.get(rowIndex));
       if (hidden.has(legendKey)) continue;
       const x = Number(xColumn.get(rowIndex));
@@ -201,7 +207,9 @@ function updateSelection(message: UpdateSelectionMessage): void {
   }
   selectedIds = combineMapSelectionIds(selectedIds, candidates, command.operation);
 
-  const selectionIds = Int32Array.from([...selectedIds].sort((left, right) => left - right));
+  // selectedIds is already unique, and consumers use it as an unordered filter.
+  // Retain Set iteration order instead of sorting the full selection after every action.
+  const selectionIds = Int32Array.from(selectedIds);
   const selectionPoints = projectSelectionPoints(message.projection);
   self.postMessage(
     {
@@ -214,24 +222,24 @@ function updateSelection(message: UpdateSelectionMessage): void {
   );
 }
 
-function findDefectRow(defectIds: Vector, defectId: number): number {
+function findMapRow(mapIds: Vector, mapId: number): number {
   let low = 0;
-  let high = defectIds.length - 1;
+  let high = mapIds.length - 1;
   while (low <= high) {
     const middle = (low + high) >>> 1;
-    const current = Number(defectIds.get(middle));
-    if (current === defectId) return middle;
-    if (current < defectId) low = middle + 1;
+    const current = Number(mapIds.get(middle));
+    if (current === mapId) return middle;
+    if (current < mapId) low = middle + 1;
     else high = middle - 1;
   }
   return -1;
 }
 
 function resolveHighlights(message: ResolveHighlightsMessage): void {
-  const requestedIds = [...new Set(message.defectIds.filter(Number.isFinite))];
+  const requestedIds = [...new Set(message.mapIds.filter(Number.isFinite))];
   const resolved = new Float64Array(requestedIds.length * 7);
   const searchableTables = tables.map((table) => ({
-    defectIds: requireColumn(table, "defect_id"),
+    mapIds: requireColumn(table, "map_id"),
     waferX: requireColumn(table, "wafer_x"),
     waferY: requireColumn(table, "wafer_y"),
     dieX: requireColumn(table, "die_x"),
@@ -241,14 +249,14 @@ function resolveHighlights(message: ResolveHighlightsMessage): void {
   }));
   let resolvedCount = 0;
 
-  for (const defectId of requestedIds) {
+  for (const mapId of requestedIds) {
     for (const table of searchableTables) {
-      // The map SQL contract orders each Arrow snapshot by defect_id, allowing
+      // The map SQL contract orders each Arrow snapshot by map_id, allowing
       // selected coordinates to be resolved without a 300k-entry JS Map.
-      const rowIndex = findDefectRow(table.defectIds, defectId);
+      const rowIndex = findMapRow(table.mapIds, mapId);
       if (rowIndex < 0) continue;
       const offset = resolvedCount * 7;
-      resolved[offset] = defectId;
+      resolved[offset] = mapId;
       resolved[offset + 1] = Number(table.waferX.get(rowIndex));
       resolved[offset + 2] = Number(table.waferY.get(rowIndex));
       resolved[offset + 3] = Number(table.dieX.get(rowIndex));
@@ -289,7 +297,7 @@ function project(message: ProjectMessage): void {
   for (const table of tables) {
     const xColumn = requireColumn(table, xName);
     const yColumn = requireColumn(table, yName);
-    const defectIds = requireColumn(table, "defect_id");
+    const mapIds = requireColumn(table, "map_id");
     const legendColumn = requireColumn(table, legendColumnName);
     const imagesColumn = table.getChild("images");
 
@@ -314,8 +322,8 @@ function project(message: ProjectMessage): void {
       const gx = Math.floor(x / message.binSize);
       const gy = Math.floor(y / message.binSize);
       const key = `${gx}:${gy}`;
-      const defectId = Number(defectIds.get(rowIndex));
-      if (selectedIds.has(defectId) && !selectionBins.has(key)) {
+      const mapId = Number(mapIds.get(rowIndex));
+      if (selectedIds.has(mapId) && !selectionBins.has(key)) {
         selectionBins.add(key);
         const selectionOffset = selectionRows * 2;
         selectionDisplay[selectionOffset] = gx * message.binSize + message.binSize / 2;
