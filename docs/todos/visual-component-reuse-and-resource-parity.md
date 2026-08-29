@@ -6,9 +6,11 @@
 - **Completed intermediate slices:** removed the duplicate shared Dataset list
   surface; model management and Dataset/Collection model selection now use one
   model-search surface; Dataset, Collection, and Library list filters now share
-  one responsive filter bar and remote-list state contract.
-- **Next milestone:** standardize remote list loading/error/empty presentation,
-  then expose Dataset/Collection target parity in training and prediction.
+  one responsive filter bar and remote-list state contract; job histories and
+  Collection lists share status/list presentation; training and prediction can
+  select either resource kind and pin the latest ready Collection revision.
+- **Next milestone:** extract the SC-specific filter controller and retire or
+  alias misleading Dataset/SC-prefixed shared component names.
 - **Done when:** every acceptance criterion below is verified.
 
 This document records repeated visual/list behavior and dataset-versus-collection
@@ -229,6 +231,15 @@ Proposed direction:
 - Replace load-all selection only after the backend search and compatibility
   requirements for a remote resource picker are confirmed.
 
+Completed for presentation/state parity: Dataset and Collection filtering now
+has one controlled/standalone contract; Collection and job tables use the
+shared `RemoteListTableShell` for load errors, true empty states, filtered
+no-results states, and pagination presentation. The existing Dataset page shell
+continues to preserve its established full-page loading behavior while its
+filter, pagination, sorting, and selection resets use the same shared state.
+Replacing the Collection creation flow's load-all picker remains intentionally
+separate because it changes query/product behavior rather than list visuals.
+
 ### P1: Training and prediction target selectors are dataset-only
 
 Files and contracts:
@@ -256,6 +267,13 @@ Proposed direction:
   inconsistent.
 - Keep this parity change separate from the visual extraction so API/product
   decisions are reviewable independently.
+
+Completed: training and prediction now consume one typed resource-target
+selector. Dataset requests contain only `dataset_id`; Collection requests
+contain `collection_id` plus the latest ready `collection_revision_id`, and the
+UI states explicitly which snapshot will be pinned. Both histories render a
+shared linked target label and semantic status badge. Focused tests cover latest
+ready revision selection and mutually exclusive request fields.
 
 ### P1: SC filter controls share components but duplicate orchestration
 

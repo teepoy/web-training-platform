@@ -6,7 +6,6 @@ import {
   NButton,
   NAlert,
   NCard,
-  NDataTable,
   NEmpty,
   NFormItem,
   NInput,
@@ -36,6 +35,7 @@ import { useAuthStore } from "@/features/auth/application/store";
 import { orgScopedQueryKey, toUserMessage } from "@/shared/api";
 import { useRemoteListState } from "@/shared/composables/useRemoteListState";
 import BulkSelectionToolbar from "@/shared/components/bulk-selection-toolbar/BulkSelectionToolbar.vue";
+import RemoteListTableShell from "@/shared/components/remote-list-table-shell";
 import ResourceFilterBar from "@/shared/components/resource-filter-bar";
 import { runBatchAction } from "@/shared/utils/runBatchAction";
 
@@ -170,14 +170,6 @@ function clearFilters(): void {
   localSearch.value = "";
   localCreatorScope.value = "all";
 }
-
-const emptyDescription = computed(() =>
-  debouncedSearch.value.trim()
-    ? "No dataset collections match this search"
-    : creatorFilter.value
-      ? "You have not created any dataset collections yet"
-      : "No dataset collections have been created yet",
-);
 
 const targetViewOptions = computed(() => {
   const selected = selectedDatasets.value;
@@ -417,17 +409,22 @@ const columns = computed<DataTableColumns<DatasetCollectionResponse>>(() => [
           Delete selected
         </NButton>
       </BulkSelectionToolbar>
-      <NAlert v-if="collectionsQuery.isError.value" type="error" style="margin-bottom: 12px">
-        {{ toUserMessage(collectionsQuery.error.value, "Failed to load dataset collections") }}
-      </NAlert>
       <template v-if="!orgStore.currentOrgId">
         <NEmpty description="Select or join an organization to manage dataset collections" />
       </template>
-      <NDataTable
-        v-else-if="!collectionsQuery.isError.value"
+      <RemoteListTableShell
+        v-else
         :columns="columns"
         :data="collections"
         :loading="collectionsQuery.isLoading.value || !creatorFilterReady"
+        :error="
+          collectionsQuery.isError.value
+            ? toUserMessage(collectionsQuery.error.value, 'Failed to load dataset collections')
+            : null
+        "
+        :active-filter-count="activeFilterCount"
+        empty-description="No dataset collections have been created yet"
+        no-results-description="No dataset collections match these filters"
         :pagination="tablePagination"
         :row-key="(row: DatasetCollectionResponse) => row.id"
         :row-props="collectionRowProps"
@@ -437,14 +434,10 @@ const columns = computed<DataTableColumns<DatasetCollectionResponse>>(() => [
         @update:checked-row-keys="checkedCollectionIds = $event"
         @update:sorter="handleSorterChange"
       >
-        <template #empty>
-          <NEmpty :description="emptyDescription">
-            <template #extra>
-              <NButton @click="openCreate">Create a collection</NButton>
-            </template>
-          </NEmpty>
+        <template #empty-extra>
+          <NButton @click="openCreate">Create a collection</NButton>
         </template>
-      </NDataTable>
+      </RemoteListTableShell>
       <NText v-if="collections.length > 0" class="mobile-table-hint" depth="3">
         Tap a row to open it. Swipe sideways for more columns.
       </NText>

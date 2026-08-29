@@ -18,49 +18,46 @@
         </div>
         <n-button type="primary" @click="showModal = true">Start Prediction</n-button>
       </div>
-      <div class="history-filters">
-        <n-input v-model:value="jobSearch" clearable size="small" placeholder="Search jobs" />
-        <n-select
-          v-model:value="statusFilter"
-          clearable
-          size="small"
-          :options="statusOptions"
-          placeholder="All statuses"
-        />
-        <CreatorScopeSelect
-          v-model="creatorScope"
-          :creators="[]"
-          resource-label="prediction jobs"
-          class="history-creator-filter"
-        />
-        <n-button v-if="activeFilterCount > 0" size="small" quaternary @click="clearFilters">
-          Clear filters ({{ activeFilterCount }})
-        </n-button>
-      </div>
-      <n-spin :show="isLoading">
-        <n-data-table
-          :columns="columns"
-          :data="visibleJobs"
-          :bordered="true"
-          :striped="true"
-          :loading="isLoading"
-          :pagination="jobsPagination"
-          :row-key="predictionJobRowKey"
-          :scroll-x="props.embedded ? 640 : 760"
-          remote
-          @update:sorter="handleSorterChange"
-        >
-          <template #empty>
-            <n-empty
-              :description="
-                props.datasetId
-                  ? 'No prediction runs for this dataset yet'
-                  : 'No prediction runs yet'
-              "
-            />
-          </template>
-        </n-data-table>
-      </n-spin>
+      <ResourceFilterBar
+        :keyword="jobSearch"
+        keyword-placeholder="Search jobs"
+        :creator-scope="creatorScope"
+        :creators="[]"
+        :active-filter-count="activeFilterCount"
+        resource-label="prediction jobs"
+        @update:keyword="jobSearch = $event"
+        @update:creator-scope="creatorScope = $event"
+        @clear="clearFilters"
+      >
+        <template #filters>
+          <n-select
+            v-model:value="statusFilter"
+            clearable
+            size="small"
+            :options="statusOptions"
+            placeholder="All statuses"
+            class="history-status-filter"
+          />
+        </template>
+      </ResourceFilterBar>
+      <RemoteListTableShell
+        :columns="columns"
+        :data="visibleJobs"
+        :bordered="true"
+        :striped="true"
+        :loading="isLoading"
+        :error="jobsErrorMessage"
+        :active-filter-count="activeFilterCount"
+        :pagination="jobsPagination"
+        :row-key="predictionJobRowKey"
+        :empty-description="
+          props.datasetId ? 'No prediction runs for this dataset yet' : 'No prediction runs yet'
+        "
+        no-results-description="No prediction runs match these filters"
+        :scroll-x="props.embedded ? 640 : 760"
+        remote
+        @update:sorter="handleSorterChange"
+      />
     </template>
 
     <n-modal
@@ -81,14 +78,8 @@
         label-width="auto"
       >
         <template v-if="orgStore.currentOrgId">
-          <n-form-item v-if="!props.datasetId" label="Dataset" path="dataset_id">
-            <n-select
-              v-model:value="formModel.dataset_id"
-              :options="datasetOptions"
-              :loading="datasetsLoading"
-              placeholder="Select a dataset"
-              filterable
-            />
+          <n-form-item v-if="!props.datasetId" label="Target" path="target">
+            <ResourceTargetSelect v-model="formModel.target" :active="showModal" />
           </n-form-item>
           <n-form-item label="Model" path="model_id" label-placement="top">
             <RemoteModelPicker
@@ -116,7 +107,7 @@
             <n-button @click="onCancel">Cancel</n-button>
             <n-button
               type="primary"
-              :disabled="!formModel.model_id || !formModel.dataset_id"
+              :disabled="!formModel.model_id || (!props.datasetId && !formModel.target)"
               :loading="runMutation.isPending.value"
               @click="onSubmit"
             >
@@ -132,25 +123,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, h, provide, reactive, watch } from "vue";
-import { refDebounced } from "@vueuse/core";
-import { useQuery, useQueryClient } from "@tanstack/vue-query";
-import type {
-  DataTableColumns,
-  DataTableSortState,
-  FormInst,
-  FormRules,
-  PaginationProps,
-  SelectOption,
-} from "naive-ui";
-import { useMessage, NButton, NTag, NText } from "naive-ui";
+import { ref, computed, h, provide, watch } from "vue";
+import { useQueryClient } from "@tanstack/vue-query";
+import type { DataTableColumns, FormInst, FormRules } from "naive-ui";
+import { useMessage, NButton, NText } from "naive-ui";
 import { useOrgStore } from "@/features/auth/application/org";
 import { useAuthStore } from "@/features/auth/application/store";
 import {
   useListPredictionJobsApiV1PredictionJobsGet,
   useRunPredictionsApiV1PredictionsRunPost,
 } from "@/generated/orval/endpoints/api";
-import { listDatasets } from "@/shared/api/datasets";
 import { orgScopedQueryKey, toUserMessage } from "@/shared/api";
 import TaskInsightModal, { TASK_INSIGHT_ORG_ID_KEY } from "@/shared/components/task-insight-modal";
 import type {
@@ -162,7 +144,15 @@ import type {
 } from "@/generated/orval/models";
 import type { RunPredictionRequest } from "@/generated/orval/models";
 import RemoteModelPicker from "@/features/models/presentation/components/RemoteModelPicker.vue";
-import CreatorScopeSelect from "@/shared/components/creator-scope-select";
+import RemoteListTableShell from "@/shared/components/remote-list-table-shell";
+import ResourceFilterBar from "@/shared/components/resource-filter-bar";
+import ResourceTargetLink from "@/shared/components/resource-target-link";
+import ResourceTargetSelect, {
+  resourceTargetRequestFields,
+  type ResourceTargetSelection,
+} from "@/shared/components/resource-target-select";
+import StatusBadge from "@/shared/components/status-badge";
+import { useRemoteListState } from "@/shared/composables/useRemoteListState";
 
 const props = withDefaults(
   defineProps<{
@@ -180,7 +170,7 @@ const authStore = useAuthStore();
 const showModal = ref(false);
 const formRef = ref<FormInst | null>(null);
 const formModel = ref({
-  dataset_id: props.datasetId ?? null,
+  target: null as ResourceTargetSelection | null,
   model_id: null as string | null,
 });
 provide(
@@ -188,29 +178,21 @@ provide(
   computed(() => orgStore.currentOrgId),
 );
 
-const jobsPaginationState = reactive<PaginationProps>({
-  page: 1,
-  pageSize: 20,
-  itemCount: 0,
-  showSizePicker: true,
-  pageSizes: [10, 20, 50, 100],
-  onUpdatePage: (page: number) => {
-    jobsPaginationState.page = page;
-  },
-  onUpdatePageSize: (pageSize: number) => {
-    jobsPaginationState.pageSize = pageSize;
-    jobsPaginationState.page = 1;
-  },
-});
 const jobSearch = ref("");
-const debouncedJobSearch = refDebounced(jobSearch, 250);
 const statusFilter = ref<JobStatus | null>(null);
 const creatorScope = ref("me");
-const jobSorter = ref<DataTableSortState | null>({
-  columnKey: "created_at",
-  order: "descend",
-  sorter: true,
+const jobsTotal = ref(0);
+const listState = useRemoteListState({
+  keyword: jobSearch,
+  filters: [statusFilter, creatorScope],
+  total: jobsTotal,
+  initialSorter: { columnKey: "created_at", order: "descend", sorter: true },
 });
+const {
+  debouncedKeyword: debouncedJobSearch,
+  pagination: jobsPagination,
+  sorter: jobSorter,
+} = listState;
 const jobCreatorId = computed(() =>
   creatorScope.value === "all" ? undefined : authStore.user?.id,
 );
@@ -226,8 +208,8 @@ const jobsParams = computed<ListPredictionJobsApiV1PredictionJobsGetParams>(() =
       ? jobSorter.value.columnKey
       : "created_at",
   sort_order: jobSorter.value?.order === "ascend" ? "asc" : "desc",
-  offset: ((jobsPaginationState.page ?? 1) - 1) * (jobsPaginationState.pageSize ?? 20),
-  limit: jobsPaginationState.pageSize ?? 20,
+  offset: ((jobsPagination.page ?? 1) - 1) * (jobsPagination.pageSize ?? 20),
+  limit: jobsPagination.pageSize ?? 20,
 }));
 const jobsQuery = useListPredictionJobsApiV1PredictionJobsGet(jobsParams, {
   query: {
@@ -240,18 +222,19 @@ const jobsQuery = useListPredictionJobsApiV1PredictionJobsGet(jobsParams, {
 });
 const isLoading = computed(() => jobsQuery.isLoading.value);
 const visibleJobs = computed<PredictionJob[]>(() => jobsQuery.data.value?.items ?? []);
-const jobsPagination = computed(() => jobsPaginationState);
+const jobsErrorMessage = computed(() =>
+  jobsQuery.error.value
+    ? toUserMessage(jobsQuery.error.value, "Failed to load prediction runs")
+    : null,
+);
 
 watch(
   () => jobsQuery.data.value?.total ?? 0,
   (total) => {
-    jobsPaginationState.itemCount = total;
+    jobsTotal.value = total;
   },
   { immediate: true },
 );
-watch([debouncedJobSearch, statusFilter, creatorScope], () => {
-  jobsPaginationState.page = 1;
-});
 
 const statusOptions = ["queued", "running", "completed", "failed", "cancelled"].map((status) => ({
   label: status.replace(/^./, (value) => value.toUpperCase()),
@@ -270,31 +253,11 @@ function clearFilters(): void {
   creatorScope.value = "all";
 }
 
-function handleSorterChange(value: DataTableSortState | DataTableSortState[] | null): void {
-  jobSorter.value = Array.isArray(value) ? (value[0] ?? null) : value;
-  jobsPaginationState.page = 1;
-}
-
-const { data: datasets, isLoading: datasetsLoading } = useQuery({
-  queryKey: computed(() =>
-    orgScopedQueryKey(orgStore.currentOrgId, ["datasets", "prediction-launcher"]),
-  ),
-  queryFn: listDatasets,
-  enabled: computed(() => !!orgStore.currentOrgId && !props.datasetId),
-});
-const datasetOptions = computed<SelectOption[]>(() =>
-  (datasets.value ?? []).map((dataset) => ({
-    label: dataset.name,
-    value: dataset.id,
-  })),
-);
+const handleSorterChange = listState.handleSorterChange;
 
 const selectedDatasetViewTypes = computed(() => {
   if (props.datasetId) return props.compatibleViewTypes;
-  return (
-    (datasets.value ?? []).find((dataset) => dataset.id === formModel.value.dataset_id)
-      ?.view_types ?? []
-  );
+  return formModel.value.target?.viewTypes ?? [];
 });
 
 function predictionJobRowKey(row: PredictionJob): string {
@@ -306,21 +269,6 @@ const selectedModel = computed(() => selectedModelRecord.value);
 
 function modelDisplayName(model: ModelResponse): string {
   return model.name?.trim() || model.id.slice(0, 8);
-}
-
-type TagType = "default" | "info" | "success" | "error" | "warning";
-
-function statusType(status: string): TagType {
-  const normalized = status.toLowerCase();
-  if (normalized === "running") return "info";
-  if (normalized === "completed") return "success";
-  if (normalized === "failed") return "error";
-  if (normalized === "cancelled") return "warning";
-  return "default";
-}
-
-function statusLabel(status: string): string {
-  return status.replace(/_/g, " ").replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
 const columns = computed<DataTableColumns<PredictionJob>>(() => {
@@ -337,25 +285,18 @@ const columns = computed<DataTableColumns<PredictionJob>>(() => {
       width: 130,
       sorter: true,
       sortOrder: jobSorter.value?.columnKey === "status" ? jobSorter.value.order : false,
-      render: (row) =>
-        h(
-          NTag,
-          { type: statusType(row.status), size: "small", round: true },
-          { default: () => statusLabel(row.status) },
-        ),
+      render: (row) => h(StatusBadge, { status: row.status }),
     },
     {
-      title: "Dataset ID",
+      title: "Target",
       key: "dataset_id",
       ellipsis: { tooltip: true },
       render: (row) =>
-        row.dataset_id
-          ? h(
-              NText,
-              { title: row.dataset_id },
-              { default: () => `${row.dataset_id?.slice(0, 8)}…` },
-            )
-          : "Deleted dataset",
+        h(ResourceTargetLink, {
+          datasetId: row.dataset_id,
+          collectionId: row.collection_id,
+          collectionRevisionId: row.collection_revision_id,
+        }),
     },
     {
       title: "Model ID",
@@ -410,15 +351,8 @@ const columns = computed<DataTableColumns<PredictionJob>>(() => {
 const insightVisible = ref(false);
 const selectedTask = ref<TaskTrackerSummary | null>(null);
 
-watch(
-  () => props.datasetId,
-  (datasetId) => {
-    formModel.value.dataset_id = datasetId ?? null;
-  },
-);
-
 const formRules: FormRules = {
-  dataset_id: [{ required: true, message: "Please select a dataset", trigger: ["change"] }],
+  target: [{ required: true, message: "Please select a target", trigger: ["change"] }],
   model_id: [{ required: true, message: "Please select a model", trigger: ["blur", "change"] }],
 };
 
@@ -441,11 +375,16 @@ const runMutation = useRunPredictionsApiV1PredictionsRunPost({
 function onSubmit() {
   formRef.value?.validate((errors) => {
     if (errors) return;
-    if (!formModel.value.model_id || !formModel.value.dataset_id) return;
+    if (!formModel.value.model_id || (!props.datasetId && !formModel.value.target)) return;
+    const target = formModel.value.target;
 
     const request: RunPredictionRequest = {
       model_id: formModel.value.model_id,
-      dataset_id: formModel.value.dataset_id,
+      ...(props.datasetId
+        ? { dataset_id: props.datasetId }
+        : target
+          ? resourceTargetRequestFields(target)
+          : {}),
     };
 
     runMutation.mutate({ data: request });
@@ -459,7 +398,7 @@ function onCancel() {
 }
 
 function resetForm() {
-  formModel.value = { dataset_id: props.datasetId ?? null, model_id: null };
+  formModel.value = { target: null, model_id: null };
   selectedModelRecord.value = null;
   formRef.value?.restoreValidation();
 }
@@ -517,15 +456,8 @@ function predictionTaskSummary(row: PredictionJob): TaskTrackerSummary {
   margin: 0 0 2px;
 }
 
-.history-filters {
-  display: grid;
-  grid-template-columns: minmax(220px, 1fr) 170px 210px auto;
-  gap: 8px;
-  align-items: center;
-}
-
-.history-creator-filter {
-  min-width: 0;
+.history-status-filter {
+  width: min(180px, 100%);
 }
 
 @media (max-width: 640px) {
@@ -536,10 +468,6 @@ function predictionTaskSummary(row: PredictionJob): TaskTrackerSummary {
 
   .embedded-section-header :deep(.n-button) {
     width: 100%;
-  }
-
-  .history-filters {
-    grid-template-columns: 1fr;
   }
 }
 </style>
