@@ -30,8 +30,8 @@ import {
   ScanOutline,
   SearchOutline,
 } from "@vicons/ionicons5";
-import ScLegend from "./ScLegend.vue";
-import ScReticleMapOptionsButton from "./ScReticleMapOptionsButton.vue";
+import Legend from "./Legend.vue";
+import ReticleMapOptionsButton from "./ReticleMapOptionsButton.vue";
 import { legendColor } from "./scMapUtils";
 import type { DefectList } from "../../generated/proto/sc/v1/sample_pb";
 import type { ScMapSelectionMode } from "@/features/sc/domain/workbenchInteraction";
@@ -708,7 +708,7 @@ function handleHiddenLegendKeysUpdate(keys: string[]): void {
               <NIcon><ContractOutline /></NIcon>
             </template>
           </NButton>
-          <ScReticleMapOptionsButton
+          <ReticleMapOptionsButton
             :modelValue="effectiveReticleOptions"
             :show-image-markers="showImageMarkers"
             :defect-size="defectSize"
@@ -817,7 +817,7 @@ function handleHiddenLegendKeysUpdate(keys: string[]): void {
               </div>
 
               <div style="flex: 1; min-height: 0; overflow-y: auto">
-                <ScLegend
+                <Legend
                   :points="[]"
                   :fullPoints="[]"
                   :class-numbers="

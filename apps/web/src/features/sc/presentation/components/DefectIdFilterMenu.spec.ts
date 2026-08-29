@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { mountWithProviders } from "@/testing";
-import ScTextFilterMenu from "./ScTextFilterMenu.vue";
+import DefectIdFilterMenu from "./DefectIdFilterMenu.vue";
 
-describe("ScTextFilterMenu", () => {
+describe("DefectIdFilterMenu", () => {
   it("loads IDs from a file into the draft and applies them", async () => {
-    const { wrapper } = await mountWithProviders(ScTextFilterMenu, {
+    const { wrapper } = await mountWithProviders(DefectIdFilterMenu, {
       props: { appliedValues: [] },
     });
     const input = wrapper.get<HTMLInputElement>('input[type="file"]');
@@ -23,7 +23,7 @@ describe("ScTextFilterMenu", () => {
   });
 
   it("keeps the filter open when a file has no valid IDs", async () => {
-    const { wrapper } = await mountWithProviders(ScTextFilterMenu, {
+    const { wrapper } = await mountWithProviders(DefectIdFilterMenu, {
       props: { appliedValues: [] },
     });
     const input = wrapper.get<HTMLInputElement>('input[type="file"]');
@@ -39,7 +39,7 @@ describe("ScTextFilterMenu", () => {
 
   it("imports and applies a large ID file without truncation", async () => {
     const values = Array.from({ length: 20_000 }, (_, index) => index + 1);
-    const { wrapper } = await mountWithProviders(ScTextFilterMenu, {
+    const { wrapper } = await mountWithProviders(DefectIdFilterMenu, {
       props: { appliedValues: [] },
     });
     const input = wrapper.get<HTMLInputElement>('input[type="file"]');
@@ -60,7 +60,7 @@ describe("ScTextFilterMenu", () => {
   });
 
   it("preserves exclude mode when editing an applied Global Filter", async () => {
-    const { wrapper } = await mountWithProviders(ScTextFilterMenu, {
+    const { wrapper } = await mountWithProviders(DefectIdFilterMenu, {
       props: { appliedValues: [42, 87], exclude: true },
     });
 
@@ -73,7 +73,7 @@ describe("ScTextFilterMenu", () => {
   });
 
   it("clears only the draft and cancels without applying", async () => {
-    const { wrapper } = await mountWithProviders(ScTextFilterMenu, {
+    const { wrapper } = await mountWithProviders(DefectIdFilterMenu, {
       props: { appliedValues: [42], exclude: true },
     });
 

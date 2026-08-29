@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { ScWorkbenchDataSource } from "@/features/sc/domain/workbenchDataSource";
 import { mountWithProviders } from "@/testing";
 import { mockTanstackVirtual } from "@/testing/mocks/tanstack-virtual";
-import ScBlinkVirtualTable from "./ScBlinkVirtualTable.vue";
+import BlinkVirtualTable from "./BlinkVirtualTable.vue";
 
 mockTanstackVirtual();
 
@@ -32,9 +32,9 @@ vi.mock("./scInspectionImageProfile", async () => {
   };
 });
 
-describe("ScBlinkVirtualTable gallery settings", () => {
+describe("BlinkVirtualTable gallery settings", () => {
   it("keeps Gallery and Colors as separate tabs and adapts to all patch instances", async () => {
-    const { wrapper } = await mountWithProviders(ScBlinkVirtualTable, {
+    const { wrapper } = await mountWithProviders(BlinkVirtualTable, {
       props: {
         inspectionTime: "2026-08-21T00:00:00Z",
         waferKey: 1,
@@ -71,7 +71,7 @@ describe("ScBlinkVirtualTable gallery settings", () => {
       subscribeInvalidations: vi.fn(() => () => undefined),
       close: vi.fn(),
     };
-    const { wrapper } = await mountWithProviders(ScBlinkVirtualTable, {
+    const { wrapper } = await mountWithProviders(BlinkVirtualTable, {
       props: {
         inspectionTime: "2026-08-21T00:00:00Z",
         waferKey: 1,

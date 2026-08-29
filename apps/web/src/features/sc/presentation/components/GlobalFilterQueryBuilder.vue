@@ -22,9 +22,9 @@ import {
 import { scMissingFilterOption } from "@/features/sc/domain/missingFilterValue";
 import type { ScDataColumn } from "@/features/sc/domain/workbenchDataSource";
 import { scGlobalFilterColumns, type ScFilterColumnDefinition } from "./scSampleTableColumns";
-import ScRangeFilterMenu from "./ScRangeFilterMenu.vue";
-import ScSetFilterMenu from "./ScSetFilterMenu.vue";
-import ScTextFilterMenu from "./ScTextFilterMenu.vue";
+import RangeFilterMenu from "@/shared/components/table-filter/RangeFilterMenu.vue";
+import SetFilterMenu from "@/shared/components/table-filter/SetFilterMenu.vue";
+import DefectIdFilterMenu from "./DefectIdFilterMenu.vue";
 
 interface ScQueryRuleValue {
   field: string | null;
@@ -399,14 +399,14 @@ watch(
             v-if="rule.value.field && (!rule.value.condition || editingRuleId === rule.id)"
             class="sc-filter-rule__editor"
           >
-            <ScTextFilterMenu
+            <DefectIdFilterMenu
               v-if="rule.value.field === 'defect_id'"
               :applied-values="setFilterValues(rule)"
               :exclude="setFilterExcluded(rule)"
               @apply="(values, exclude) => applySetFilter(rule, update, remove, values, exclude)"
               @close="editingRuleId = null"
             />
-            <ScSetFilterMenu
+            <SetFilterMenu
               v-else-if="definitionFor(rule.value.field)?.filter === 'set'"
               :search="searchByRule[rule.id] ?? ''"
               :applied-values="setFilterValues(rule)"
@@ -418,7 +418,7 @@ watch(
               @apply="applySetFilter(rule, update, remove, $event)"
               @close="editingRuleId = null"
             />
-            <ScRangeFilterMenu
+            <RangeFilterMenu
               v-else
               :min="getRangeDraft(rule).min"
               :max="getRangeDraft(rule).max"

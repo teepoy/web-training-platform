@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { NButton, NSpace } from "naive-ui";
+import { useI18n } from "vue-i18n";
 
 withDefaults(
   defineProps<{
@@ -14,16 +15,17 @@ const emit = defineEmits<{
   (event: "cancel"): void;
   (event: "apply"): void;
 }>();
+const { t } = useI18n();
 </script>
 
 <template>
   <div class="sst-filter-popover" :class="`sst-filter-popover--${variant}`">
     <slot />
     <NSpace :size="4">
-      <NButton size="tiny" quaternary @click="emit('clear')">Clear</NButton>
-      <NButton size="tiny" quaternary @click="emit('cancel')">Cancel</NButton>
+      <NButton size="tiny" quaternary @click="emit('clear')">{{ t("common.clear") }}</NButton>
+      <NButton size="tiny" quaternary @click="emit('cancel')">{{ t("common.cancel") }}</NButton>
       <NButton size="tiny" type="primary" :disabled="applyDisabled" @click="emit('apply')">
-        Apply
+        {{ t("common.apply") }}
       </NButton>
     </NSpace>
   </div>

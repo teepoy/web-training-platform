@@ -10,7 +10,7 @@ import {
   useMessage,
   useThemeVars,
 } from "naive-ui";
-import ScSummaryTab from "@/features/sc/presentation/components/ScSummaryTab.vue";
+import SummaryTab from "@/features/sc/presentation/components/SummaryTab.vue";
 import { useRouter } from "vue-router";
 import { FullScreenLayout } from "@/shared/components/full-screen-layout";
 import { usePreviewPage } from "@/features/sc/application/usePreviewPage";
@@ -143,7 +143,7 @@ async function buildCollection(): Promise<void> {
         </div>
 
         <div class="sc-preview-tab-content">
-          <ScSummaryTab
+          <SummaryTab
             :date-range="page.dateRange.value"
             :summaries-loading="page.summariesLoading.value"
             :summaries-error="page.summariesError.value"

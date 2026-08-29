@@ -33,7 +33,7 @@ import {
   usePagedDataGallery,
 } from "@/features/sc/presentation/composables/usePagedDataGallery";
 import { cssBackgroundImageUrl } from "@/features/sc/presentation/components/scSpriteStyle";
-import ScGalleryColorSettings from "@/features/sc/presentation/components/ScGalleryColorSettings.vue";
+import GalleryColorSettings from "@/features/sc/presentation/components/GalleryColorSettings.vue";
 import {
   submitScGalleryImageDownload,
   type ScGalleryDownloadPayload,
@@ -1765,7 +1765,7 @@ defineExpose({ scrollRef });
             <n-tab-pane name="colors" tab="Colors">
               <n-tabs v-model:value="colorSettingsGroup" type="segment" size="small">
                 <n-tab-pane name="defective-reference" tab="D / R">
-                  <sc-gallery-color-settings
+                  <GalleryColorSettings
                     compact
                     adaptive-scope="defective-reference"
                     v-model:enabled="defectiveReferenceMappingEnabled"
@@ -1778,7 +1778,7 @@ defineExpose({ scrollRef });
                   />
                 </n-tab-pane>
                 <n-tab-pane name="difference" tab="Difference">
-                  <sc-gallery-color-settings
+                  <GalleryColorSettings
                     compact
                     adaptive-scope="image"
                     v-model:enabled="differenceMappingEnabled"

@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { NCheckbox, NInput } from "naive-ui";
 import { mountWithProviders } from "@/testing";
-import ScSetFilterMenu from "./ScSetFilterMenu.vue";
+import SetFilterMenu from "./SetFilterMenu.vue";
 
-describe("ScSetFilterMenu", () => {
+describe("SetFilterMenu", () => {
   it("selects and clears every currently visible option", async () => {
-    const { wrapper } = await mountWithProviders(ScSetFilterMenu, {
+    const { wrapper } = await mountWithProviders(SetFilterMenu, {
       props: {
         search: "ap",
         appliedValues: [],
@@ -29,7 +29,7 @@ describe("ScSetFilterMenu", () => {
   });
 
   it("shows an indeterminate select-all state for a partial selection", async () => {
-    const { wrapper } = await mountWithProviders(ScSetFilterMenu, {
+    const { wrapper } = await mountWithProviders(SetFilterMenu, {
       props: {
         search: "",
         appliedValues: [],
@@ -45,7 +45,7 @@ describe("ScSetFilterMenu", () => {
   });
 
   it("requests remote search and retains values selected on an earlier result page", async () => {
-    const { wrapper } = await mountWithProviders(ScSetFilterMenu, {
+    const { wrapper } = await mountWithProviders(SetFilterMenu, {
       props: {
         search: "",
         appliedValues: [],
@@ -72,7 +72,7 @@ describe("ScSetFilterMenu", () => {
   });
 
   it("clears only the draft and cancels without applying", async () => {
-    const { wrapper } = await mountWithProviders(ScSetFilterMenu, {
+    const { wrapper } = await mountWithProviders(SetFilterMenu, {
       props: {
         search: "",
         appliedValues: [1],

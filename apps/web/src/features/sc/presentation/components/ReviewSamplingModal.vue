@@ -40,7 +40,7 @@ import {
   type ScSamplingRuleEditorDescriptor,
 } from "./sampling-rules/samplingRuleEditors";
 import type { ScSamplingRuleEditorContext } from "./sampling-rules/types";
-import ScGlobalFilterBar from "./ScGlobalFilterBar.vue";
+import GlobalFilterBar from "./GlobalFilterBar.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -496,7 +496,7 @@ watch(draft, (program) => emit("update:program", cloneScSamplingProgram(program)
               {{ draft.extraFilterEnabled ? "Enabled" : "Disabled" }}
             </NButton>
           </div>
-          <ScGlobalFilterBar
+          <GlobalFilterBar
             class="extra-filter-editor"
             :filter="extraFilter"
             :distinct-values="extraFilterDistinctValues"

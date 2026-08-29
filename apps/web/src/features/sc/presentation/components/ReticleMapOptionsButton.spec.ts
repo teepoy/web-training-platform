@@ -1,7 +1,7 @@
 import { NButton, NInputNumber } from "naive-ui";
 import { describe, expect, it } from "vitest";
 import { mountWithProviders } from "@/testing";
-import ScReticleMapOptionsButton from "./ScReticleMapOptionsButton.vue";
+import ReticleMapOptionsButton from "./ReticleMapOptionsButton.vue";
 
 const modelValue = {
   xDieCount: 3,
@@ -11,7 +11,7 @@ const modelValue = {
 };
 
 async function openSettings() {
-  const mounted = await mountWithProviders(ScReticleMapOptionsButton, {
+  const mounted = await mountWithProviders(ReticleMapOptionsButton, {
     props: {
       modelValue,
       showImageMarkers: true,
@@ -30,7 +30,7 @@ function applyButton(wrapper: Awaited<ReturnType<typeof openSettings>>) {
   return button;
 }
 
-describe("ScReticleMapOptionsButton", () => {
+describe("ReticleMapOptionsButton", () => {
   it("does not emit configuration updates when nothing changed", async () => {
     const wrapper = await openSettings();
 

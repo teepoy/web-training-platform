@@ -1,11 +1,11 @@
 import { NRadioGroup, NSelect, NSlider, NSwitch } from "naive-ui";
 import { describe, expect, it } from "vitest";
 import { mountWithProviders } from "@/testing";
-import ScGalleryColorSettings from "./ScGalleryColorSettings.vue";
+import GalleryColorSettings from "./GalleryColorSettings.vue";
 
-describe("ScGalleryColorSettings", () => {
+describe("GalleryColorSettings", () => {
   it("renders a color bar and the active native bit-depth window", async () => {
-    const { wrapper } = await mountWithProviders(ScGalleryColorSettings, {
+    const { wrapper } = await mountWithProviders(GalleryColorSettings, {
       props: {
         enabled: true,
         mode: "global",
@@ -28,7 +28,7 @@ describe("ScGalleryColorSettings", () => {
     { bitDepth: 8 as const, nativeWindow: "32–223" },
     { bitDepth: 16 as const, nativeWindow: "8,192–57,343" },
   ])("renders the $bitDepth-bit Colorbar domain", async ({ bitDepth, nativeWindow }) => {
-    const { wrapper } = await mountWithProviders(ScGalleryColorSettings, {
+    const { wrapper } = await mountWithProviders(GalleryColorSettings, {
       props: {
         enabled: true,
         mode: "global",
@@ -45,7 +45,7 @@ describe("ScGalleryColorSettings", () => {
   });
 
   it("emits direct control changes and constrains the normalized window", async () => {
-    const { wrapper } = await mountWithProviders(ScGalleryColorSettings, {
+    const { wrapper } = await mountWithProviders(GalleryColorSettings, {
       props: {
         enabled: false,
         mode: "global",
@@ -76,7 +76,7 @@ describe("ScGalleryColorSettings", () => {
   });
 
   it("uses a per-defect adaptive mode and disables the global window slider", async () => {
-    const { wrapper } = await mountWithProviders(ScGalleryColorSettings, {
+    const { wrapper } = await mountWithProviders(GalleryColorSettings, {
       props: {
         enabled: true,
         mode: "adaptive",
@@ -93,7 +93,7 @@ describe("ScGalleryColorSettings", () => {
   });
 
   it("describes Difference adaptive mapping as an independent image range", async () => {
-    const { wrapper } = await mountWithProviders(ScGalleryColorSettings, {
+    const { wrapper } = await mountWithProviders(GalleryColorSettings, {
       props: {
         enabled: true,
         mode: "adaptive",

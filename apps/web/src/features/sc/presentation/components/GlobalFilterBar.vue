@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { ScGlobalFilter } from "@/features/sc/domain/globalFilter";
 import type { ScDataColumn } from "@/features/sc/domain/workbenchDataSource";
-import ScGlobalFilterQueryBuilder from "./ScGlobalFilterQueryBuilder.vue";
+import GlobalFilterQueryBuilder from "./GlobalFilterQueryBuilder.vue";
 
 withDefaults(
   defineProps<{
@@ -29,7 +29,7 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <ScGlobalFilterQueryBuilder
+  <GlobalFilterQueryBuilder
     v-bind="$props"
     @update:filter="emit('update:filter', $event)"
     @search-options="emit('search-options', $event)"

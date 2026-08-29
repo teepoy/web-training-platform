@@ -6,7 +6,7 @@ import {
   emptyScGlobalFilter,
   type ScGlobalFilter,
 } from "@/features/sc/domain/globalFilter";
-import ScGlobalFilterModal from "./ScGlobalFilterModal.vue";
+import GlobalFilterModal from "./GlobalFilterModal.vue";
 
 const optionSource: Record<string, Array<string | number>> = {
   test_id: ["TEST-001", "TEST-002", "TEST-ALPHA"],
@@ -59,7 +59,7 @@ const reclassifyFilter: ScGlobalFilter = {
 
 const meta = {
   title: "Features/SC/GlobalFilterModal",
-  component: ScGlobalFilterModal,
+  component: GlobalFilterModal,
   parameters: {
     layout: "fullscreen",
   },
@@ -77,7 +77,7 @@ const meta = {
       NSpace,
       NTag,
       NText,
-      ScGlobalFilterModal,
+      GlobalFilterModal,
     },
     setup() {
       const show = ref(args.show);
@@ -124,7 +124,7 @@ const meta = {
           </NSpace>
         </NCard>
 
-        <ScGlobalFilterModal
+        <GlobalFilterModal
           v-model:show="show"
           :filter="filter"
           :distinct-values="distinctValues"
@@ -135,7 +135,7 @@ const meta = {
       </div>
     `,
   }),
-} satisfies Meta<typeof ScGlobalFilterModal>;
+} satisfies Meta<typeof GlobalFilterModal>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;

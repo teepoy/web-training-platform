@@ -7,7 +7,7 @@ import {
   type ScGlobalFilter,
 } from "@/features/sc/domain/globalFilter";
 import type { ScDataColumn } from "@/features/sc/domain/workbenchDataSource";
-import ScGlobalFilterBar from "./ScGlobalFilterBar.vue";
+import GlobalFilterBar from "./GlobalFilterBar.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -95,7 +95,7 @@ watch(
       </div>
     </template>
 
-    <ScGlobalFilterBar
+    <GlobalFilterBar
       class="sc-global-filter-editor"
       :filter="draftFilter"
       :columns="columns"

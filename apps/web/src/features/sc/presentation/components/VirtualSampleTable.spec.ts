@@ -5,7 +5,7 @@ import type { ScSampleTableDisplayRow } from "@/features/sc/domain/workbenchInte
 import type { ScSampleTableDataSource } from "@/features/sc/domain/workbenchInteraction";
 import type { ScDataColumn } from "@/features/sc/domain/workbenchDataSource";
 import { mountWithProviders } from "@/testing";
-import ScSampleTableTanStack from "./ScSampleTableTanStack.vue";
+import VirtualSampleTable from "./VirtualSampleTable.vue";
 
 vi.mock("@tanstack/vue-virtual", () => ({
   useVirtualizer: (options: {
@@ -100,10 +100,10 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("ScSampleTableTanStack", () => {
+describe("VirtualSampleTable", () => {
   it("keeps row hover backgrounds compatible with the Chrome 108 target", () => {
     const source = readFileSync(
-      resolve(process.cwd(), "src/features/sc/presentation/components/ScSampleTableTanStack.vue"),
+      resolve(process.cwd(), "src/features/sc/presentation/components/VirtualSampleTable.vue"),
       "utf8",
     );
 
@@ -127,7 +127,7 @@ describe("ScSampleTableTanStack", () => {
       loadColumns: async () => defaultColumns,
       loadRows,
     };
-    const { wrapper } = await mountWithProviders(ScSampleTableTanStack, {
+    const { wrapper } = await mountWithProviders(VirtualSampleTable, {
       props: { dataSource, enableSelection: true },
     });
 
@@ -151,7 +151,7 @@ describe("ScSampleTableTanStack", () => {
       loadColumns: async () => defaultColumns,
       loadRows,
     };
-    const { wrapper } = await mountWithProviders(ScSampleTableTanStack, {
+    const { wrapper } = await mountWithProviders(VirtualSampleTable, {
       props: { dataSource, enableSelection: true },
     });
 
@@ -188,7 +188,7 @@ describe("ScSampleTableTanStack", () => {
       },
     };
 
-    const { wrapper } = await mountWithProviders(ScSampleTableTanStack, {
+    const { wrapper } = await mountWithProviders(VirtualSampleTable, {
       props: {
         dataSource,
         exportFileName: "inspection:export sample data",
@@ -226,7 +226,7 @@ describe("ScSampleTableTanStack", () => {
       loadColumns: async () => defaultColumns,
       loadRows,
     };
-    const { wrapper } = await mountWithProviders(ScSampleTableTanStack, {
+    const { wrapper } = await mountWithProviders(VirtualSampleTable, {
       props: { dataSource, enableSelection: true },
     });
 
@@ -252,7 +252,7 @@ describe("ScSampleTableTanStack", () => {
       loadColumns: async () => defaultColumns,
       loadRows,
     };
-    const { wrapper } = await mountWithProviders(ScSampleTableTanStack, {
+    const { wrapper } = await mountWithProviders(VirtualSampleTable, {
       props: { dataSource },
     });
 
@@ -284,7 +284,7 @@ describe("ScSampleTableTanStack", () => {
       ],
       loadRows,
     };
-    const { wrapper } = await mountWithProviders(ScSampleTableTanStack, {
+    const { wrapper } = await mountWithProviders(VirtualSampleTable, {
       props: { dataSource },
     });
 
@@ -312,7 +312,7 @@ describe("ScSampleTableTanStack", () => {
       loadColumns,
       loadRows,
     };
-    const { wrapper } = await mountWithProviders(ScSampleTableTanStack, {
+    const { wrapper } = await mountWithProviders(VirtualSampleTable, {
       props: { dataSource: firstDataSource, enableSelection: true },
     });
 
@@ -346,7 +346,7 @@ describe("ScSampleTableTanStack", () => {
       ],
       loadRows,
     };
-    const { wrapper } = await mountWithProviders(ScSampleTableTanStack, {
+    const { wrapper } = await mountWithProviders(VirtualSampleTable, {
       props: { dataSource },
     });
 

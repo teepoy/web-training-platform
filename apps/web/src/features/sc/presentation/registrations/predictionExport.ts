@@ -7,5 +7,5 @@ export const scPredictionExporter = defineExporter({
   description: "Export current SC predictions as KLARF, Parquet, or a ZIP package.",
   icon: "⇩",
   surfaces: ["prediction"],
-  component: defineAsyncComponent(() => import("../components/ScPredictionExportPlugin.vue")),
+  component: defineAsyncComponent(() => import("../components/PredictionExportPlugin.vue")),
 });

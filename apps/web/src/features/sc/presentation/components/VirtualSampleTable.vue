@@ -19,9 +19,9 @@ import type {
 } from "@/features/sc/domain/workbenchDataSource";
 import type { ScSampleTableDataSource } from "@/features/sc/domain/workbenchInteraction";
 import { SC_SCROLL_QUERY_DEBOUNCE_MS } from "../composables/scrollQueryDebounce";
-import ScRangeFilterMenu from "./ScRangeFilterMenu.vue";
-import ScSetFilterMenu from "./ScSetFilterMenu.vue";
-import ScTextFilterMenu from "./ScTextFilterMenu.vue";
+import RangeFilterMenu from "@/shared/components/table-filter/RangeFilterMenu.vue";
+import SetFilterMenu from "@/shared/components/table-filter/SetFilterMenu.vue";
+import DefectIdFilterMenu from "./DefectIdFilterMenu.vue";
 import {
   normalizeSampleTableFilterValue,
   renderSampleTableCell,
@@ -879,7 +879,7 @@ defineExpose({
                     ></template>
                   </NButton>
                 </template>
-                <ScTextFilterMenu
+                <DefectIdFilterMenu
                   :applied-values="getSetFilterValues('defect_id')"
                   @apply="applySetFilter('defect_id', $event)"
                   @close="closeFilterPopover"
@@ -956,7 +956,7 @@ defineExpose({
                       ></template>
                     </NButton>
                   </template>
-                  <ScSetFilterMenu
+                  <SetFilterMenu
                     v-if="
                       definitionForColumn(scrollColumns[virtualColumn.index]?.id ?? '')?.filter ===
                       'set'
@@ -985,7 +985,7 @@ defineExpose({
                     @apply="applySetFilter(scrollColumns[virtualColumn.index]?.id ?? '', $event)"
                     @close="closeFilterPopover"
                   />
-                  <ScRangeFilterMenu
+                  <RangeFilterMenu
                     v-else
                     :min="getFilterState(scrollColumns[virtualColumn.index]?.id ?? '').min"
                     :max="getFilterState(scrollColumns[virtualColumn.index]?.id ?? '').max"

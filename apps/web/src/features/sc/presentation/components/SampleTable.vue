@@ -2,7 +2,7 @@
 import { ref } from "vue";
 import type { ScSampleTableDataSource } from "@/features/sc/domain/workbenchInteraction";
 import type { ScSampleTableBaseProps, ScSampleTableEmits } from "./scSampleTableContract";
-import ScSampleTableTanStack from "./ScSampleTableTanStack.vue";
+import VirtualSampleTable from "./VirtualSampleTable.vue";
 
 interface ScSampleTableRendererProps extends ScSampleTableBaseProps {
   dataSource: ScSampleTableDataSource;
@@ -36,7 +36,7 @@ defineExpose({
 </script>
 
 <template>
-  <ScSampleTableTanStack
+  <VirtualSampleTable
     ref="rendererRef"
     :data-source="dataSource"
     :defect-ids="defectIds"

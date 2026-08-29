@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { mountWithProviders } from "@/testing";
-import ScRangeFilterMenu from "./ScRangeFilterMenu.vue";
+import RangeFilterMenu from "./RangeFilterMenu.vue";
 
-describe("ScRangeFilterMenu", () => {
+describe("RangeFilterMenu", () => {
   it("clears only the draft and cancels without applying", async () => {
-    const { wrapper } = await mountWithProviders(ScRangeFilterMenu, {
+    const { wrapper } = await mountWithProviders(RangeFilterMenu, {
       props: { min: 10, max: 20 },
     });
 
@@ -25,10 +25,10 @@ describe("ScRangeFilterMenu", () => {
   });
 
   it("does not apply a partial or inverted range", async () => {
-    const partial = await mountWithProviders(ScRangeFilterMenu, {
+    const partial = await mountWithProviders(RangeFilterMenu, {
       props: { min: 10, max: null },
     });
-    const inverted = await mountWithProviders(ScRangeFilterMenu, {
+    const inverted = await mountWithProviders(RangeFilterMenu, {
       props: { min: 20, max: 10 },
     });
 

@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { mountWithProviders } from "@/testing";
-import ScGlobalFilterModal from "./ScGlobalFilterModal.vue";
+import GlobalFilterModal from "./GlobalFilterModal.vue";
 
-describe("ScGlobalFilterModal", () => {
+describe("GlobalFilterModal", () => {
   it("keeps QueryBuilder changes local until the user applies them", async () => {
-    const { wrapper } = await mountWithProviders(ScGlobalFilterModal, {
+    const { wrapper } = await mountWithProviders(GlobalFilterModal, {
       props: {
         show: true,
         filter: { combinator: "and", items: [] },
@@ -19,8 +19,8 @@ describe("ScGlobalFilterModal", () => {
             emits: ["update:show"],
             template: '<section><slot name="header" /><slot /><slot name="footer" /></section>',
           },
-          ScGlobalFilterBar: {
-            name: "ScGlobalFilterBar",
+          GlobalFilterBar: {
+            name: "GlobalFilterBar",
             props: [
               "filter",
               "distinctValues",
@@ -35,7 +35,7 @@ describe("ScGlobalFilterModal", () => {
       },
     });
 
-    const editor = wrapper.findComponent({ name: "ScGlobalFilterBar" });
+    const editor = wrapper.findComponent({ name: "GlobalFilterBar" });
     expect(editor.props("showReclassifyColumns")).toBe(true);
     const filter = {
       combinator: "and",
@@ -85,7 +85,7 @@ describe("ScGlobalFilterModal", () => {
         },
       ],
     };
-    const { wrapper } = await mountWithProviders(ScGlobalFilterModal, {
+    const { wrapper } = await mountWithProviders(GlobalFilterModal, {
       props: {
         show: true,
         filter: appliedFilter,
@@ -99,8 +99,8 @@ describe("ScGlobalFilterModal", () => {
             emits: ["update:show"],
             template: '<section><slot name="header" /><slot /><slot name="footer" /></section>',
           },
-          ScGlobalFilterBar: {
-            name: "ScGlobalFilterBar",
+          GlobalFilterBar: {
+            name: "GlobalFilterBar",
             props: ["filter"],
             emits: ["update:filter", "search-options", "request-range"],
             template: "<div />",
@@ -108,7 +108,7 @@ describe("ScGlobalFilterModal", () => {
         },
       },
     });
-    const editor = wrapper.findComponent({ name: "ScGlobalFilterBar" });
+    const editor = wrapper.findComponent({ name: "GlobalFilterBar" });
 
     editor.vm.$emit("update:filter", draftFilter);
     await wrapper.vm.$nextTick();
@@ -135,7 +135,7 @@ describe("ScGlobalFilterModal", () => {
         },
       ],
     };
-    const { wrapper } = await mountWithProviders(ScGlobalFilterModal, {
+    const { wrapper } = await mountWithProviders(GlobalFilterModal, {
       props: {
         show: true,
         filter: appliedFilter,
@@ -149,8 +149,8 @@ describe("ScGlobalFilterModal", () => {
             emits: ["update:show"],
             template: '<section><slot name="header" /><slot /><slot name="footer" /></section>',
           },
-          ScGlobalFilterBar: {
-            name: "ScGlobalFilterBar",
+          GlobalFilterBar: {
+            name: "GlobalFilterBar",
             props: ["filter"],
             emits: ["update:filter", "search-options", "request-range"],
             template: "<div />",
@@ -158,7 +158,7 @@ describe("ScGlobalFilterModal", () => {
         },
       },
     });
-    const editor = wrapper.findComponent({ name: "ScGlobalFilterBar" });
+    const editor = wrapper.findComponent({ name: "GlobalFilterBar" });
 
     editor.vm.$emit("update:filter", draftFilter);
     await wrapper.vm.$nextTick();

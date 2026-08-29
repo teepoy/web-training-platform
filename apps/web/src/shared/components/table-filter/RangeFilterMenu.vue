@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { NInputNumber, NText } from "naive-ui";
-import ScFilterPopover from "./ScFilterPopover.vue";
+import { useI18n } from "vue-i18n";
+import TableFilterPopover from "./TableFilterPopover.vue";
 
 const props = defineProps<{
   min: number | null;
@@ -9,6 +10,7 @@ const props = defineProps<{
   loading?: boolean;
   rangeUnavailable?: boolean;
 }>();
+const { t } = useI18n();
 
 const canApply = computed(
   () =>
@@ -40,23 +42,25 @@ function cancel(): void {
 </script>
 
 <template>
-  <ScFilterPopover
+  <TableFilterPopover
     variant="range"
     :apply-disabled="loading || !canApply"
     @clear="clear"
     @cancel="cancel"
     @apply="apply"
   >
-    <NText v-if="loading" depth="3" class="sst-range-status">Querying field range…</NText>
+    <NText v-if="loading" depth="3" class="sst-range-status">
+      {{ t("tableFilters.queryingRange") }}
+    </NText>
     <NText v-else-if="rangeUnavailable" type="error" class="sst-range-status">
-      Could not load field range. You can still enter values manually.
+      {{ t("tableFilters.rangeUnavailable") }}
     </NText>
     <div class="sst-range-fields">
       <label class="sst-range-field">
-        <NText depth="3" class="sst-range-label">Min</NText>
+        <NText depth="3" class="sst-range-label">{{ t("common.min") }}</NText>
         <NInputNumber
           :value="min"
-          placeholder="Min"
+          :placeholder="t('common.min')"
           size="small"
           class="sst-range-input"
           :disabled="loading"
@@ -64,10 +68,10 @@ function cancel(): void {
         />
       </label>
       <label class="sst-range-field">
-        <NText depth="3" class="sst-range-label">Max</NText>
+        <NText depth="3" class="sst-range-label">{{ t("common.max") }}</NText>
         <NInputNumber
           :value="max"
-          placeholder="Max"
+          :placeholder="t('common.max')"
           size="small"
           class="sst-range-input"
           :disabled="loading"
@@ -75,7 +79,7 @@ function cancel(): void {
         />
       </label>
     </div>
-  </ScFilterPopover>
+  </TableFilterPopover>
 </template>
 
 <style scoped>

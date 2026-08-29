@@ -1,11 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { mountWithProviders } from "@/testing";
-import ScLegend from "../ScLegend.vue";
+import Legend from "../Legend.vue";
 import { MIXED_CLASS_POINTS, EMPTY_POINTS } from "./scMapFixtures";
 
-describe("ScLegend", () => {
+describe("Legend", () => {
   it("renders empty state when points are empty", async () => {
-    const { wrapper } = await mountWithProviders(ScLegend, {
+    const { wrapper } = await mountWithProviders(Legend, {
       props: {
         points: EMPTY_POINTS,
       },
@@ -16,7 +16,7 @@ describe("ScLegend", () => {
   });
 
   it("renders legend items for mixed classes in ascending order", async () => {
-    const { wrapper } = await mountWithProviders(ScLegend, {
+    const { wrapper } = await mountWithProviders(Legend, {
       props: {
         points: MIXED_CLASS_POINTS,
       },
@@ -42,7 +42,7 @@ describe("ScLegend", () => {
   });
 
   it("emits hidden legend keys from the visible button", async () => {
-    const { wrapper } = await mountWithProviders(ScLegend, {
+    const { wrapper } = await mountWithProviders(Legend, {
       props: {
         points: MIXED_CLASS_POINTS,
       },
@@ -54,7 +54,7 @@ describe("ScLegend", () => {
   });
 
   it("clicking class 1 emits select-class with class number 1", async () => {
-    const { wrapper } = await mountWithProviders(ScLegend, {
+    const { wrapper } = await mountWithProviders(Legend, {
       props: {
         points: MIXED_CLASS_POINTS,
       },
@@ -68,7 +68,7 @@ describe("ScLegend", () => {
   });
 
   it("clicking class 0 emits select-class with class number 0", async () => {
-    const { wrapper } = await mountWithProviders(ScLegend, {
+    const { wrapper } = await mountWithProviders(Legend, {
       props: {
         points: MIXED_CLASS_POINTS,
       },
@@ -82,7 +82,7 @@ describe("ScLegend", () => {
   });
 
   it("clicking the already selected class emits select-class with null", async () => {
-    const { wrapper } = await mountWithProviders(ScLegend, {
+    const { wrapper } = await mountWithProviders(Legend, {
       props: {
         points: MIXED_CLASS_POINTS,
         selectedClassNumber: 1,
@@ -97,7 +97,7 @@ describe("ScLegend", () => {
   });
 
   it("renders and selects string annotation labels", async () => {
-    const { wrapper } = await mountWithProviders(ScLegend, {
+    const { wrapper } = await mountWithProviders(Legend, {
       props: {
         legendSource: "annotation",
         annotations: {
@@ -119,7 +119,7 @@ describe("ScLegend", () => {
   });
 
   it("hides the synthetic unlabeled group from Annotation", async () => {
-    const { wrapper } = await mountWithProviders(ScLegend, {
+    const { wrapper } = await mountWithProviders(Legend, {
       props: {
         legendSource: "annotation",
         annotations: {
@@ -137,7 +137,7 @@ describe("ScLegend", () => {
   });
 
   it("emits color map updates from the color picker", async () => {
-    const { wrapper } = await mountWithProviders(ScLegend, {
+    const { wrapper } = await mountWithProviders(Legend, {
       props: {
         points: MIXED_CLASS_POINTS,
         colorMap: { "1": "#ff0000" },
@@ -151,7 +151,7 @@ describe("ScLegend", () => {
   });
 
   it("uses the numeric annotation class as the color-map key", async () => {
-    const { wrapper } = await mountWithProviders(ScLegend, {
+    const { wrapper } = await mountWithProviders(Legend, {
       props: {
         legendSource: "annotation",
         annotations: {

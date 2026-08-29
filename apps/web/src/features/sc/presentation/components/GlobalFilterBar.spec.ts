@@ -3,7 +3,7 @@ import { NSelect } from "naive-ui";
 import { mountWithProviders } from "@/testing";
 import type { ScGlobalFilter } from "@/features/sc/domain/globalFilter";
 import type { ScDataColumn } from "@/features/sc/domain/workbenchDataSource";
-import ScGlobalFilterBar from "./ScGlobalFilterBar.vue";
+import GlobalFilterBar from "./GlobalFilterBar.vue";
 
 const filterColumns: ScDataColumn[] = [
   ["defect_id", "Defect ID", "set", "default"],
@@ -33,9 +33,9 @@ function globalFilter(items: ScGlobalFilter["items"] = []): ScGlobalFilter {
   return { combinator: "and", items };
 }
 
-describe("ScGlobalFilterBar", () => {
+describe("GlobalFilterBar", () => {
   it("starts an incomplete draft without changing the effective filter", async () => {
-    const { wrapper } = await mountWithProviders(ScGlobalFilterBar, {
+    const { wrapper } = await mountWithProviders(GlobalFilterBar, {
       props: { filter: globalFilter(), columns: filterColumns, distinctValues: {} },
     });
 
@@ -52,7 +52,7 @@ describe("ScGlobalFilterBar", () => {
   });
 
   it("drops incomplete editor drafts when the workbench scope changes", async () => {
-    const { wrapper } = await mountWithProviders(ScGlobalFilterBar, {
+    const { wrapper } = await mountWithProviders(GlobalFilterBar, {
       props: {
         filter: globalFilter(),
         columns: filterColumns,
@@ -71,7 +71,7 @@ describe("ScGlobalFilterBar", () => {
   });
 
   it("offers reclassify properties when enabled", async () => {
-    const { wrapper } = await mountWithProviders(ScGlobalFilterBar, {
+    const { wrapper } = await mountWithProviders(GlobalFilterBar, {
       props: {
         filter: globalFilter(),
         columns: filterColumns,
@@ -90,7 +90,7 @@ describe("ScGlobalFilterBar", () => {
   });
 
   it("promotes a configured draft to one complete item", async () => {
-    const { wrapper } = await mountWithProviders(ScGlobalFilterBar, {
+    const { wrapper } = await mountWithProviders(GlobalFilterBar, {
       props: {
         filter: globalFilter(),
         columns: filterColumns,
@@ -103,7 +103,7 @@ describe("ScGlobalFilterBar", () => {
     await wrapper.vm.$nextTick();
     expect(wrapper.text()).not.toContain("Configure");
     expect(wrapper.find(".sc-filter-rule__editor").exists()).toBe(true);
-    wrapper.findComponent({ name: "ScSetFilterMenu" }).vm.$emit("apply", [2]);
+    wrapper.findComponent({ name: "SetFilterMenu" }).vm.$emit("apply", [2]);
 
     const emitted = wrapper.emitted("update:filter")?.at(-1)?.[0] as ScGlobalFilter;
     expect(emitted.combinator).toBe("and");
@@ -131,7 +131,7 @@ describe("ScGlobalFilterBar", () => {
         source: { kind: "map-selection", action: "exclude-selected" },
       },
     ]);
-    const { wrapper } = await mountWithProviders(ScGlobalFilterBar, {
+    const { wrapper } = await mountWithProviders(GlobalFilterBar, {
       props: { filter, columns: filterColumns, distinctValues: {} },
     });
 
@@ -164,7 +164,7 @@ describe("ScGlobalFilterBar", () => {
         source: { kind: "manual" },
       },
     ]);
-    const { wrapper } = await mountWithProviders(ScGlobalFilterBar, {
+    const { wrapper } = await mountWithProviders(GlobalFilterBar, {
       props: { filter, columns: filterColumns, distinctValues: {} },
     });
 
@@ -172,7 +172,7 @@ describe("ScGlobalFilterBar", () => {
       .findAll("button")
       .find((button) => button.text() === "Edit")
       ?.trigger("click");
-    const menu = wrapper.findComponent({ name: "ScTextFilterMenu" });
+    const menu = wrapper.findComponent({ name: "DefectIdFilterMenu" });
     expect(menu.props("exclude")).toBe(true);
     menu.vm.$emit("apply", [274, 500], true);
 
@@ -196,7 +196,7 @@ describe("ScGlobalFilterBar", () => {
         source: { kind: "manual" },
       },
     ]);
-    const { wrapper } = await mountWithProviders(ScGlobalFilterBar, {
+    const { wrapper } = await mountWithProviders(GlobalFilterBar, {
       props: {
         filter,
         columns: filterColumns,
@@ -211,7 +211,7 @@ describe("ScGlobalFilterBar", () => {
       ?.trigger("click");
 
     expect(wrapper.emitted("request-range")).toEqual([[{ field: "area", itemId: "area-filter" }]]);
-    const rangeMenu = wrapper.findComponent({ name: "ScRangeFilterMenu" });
+    const rangeMenu = wrapper.findComponent({ name: "RangeFilterMenu" });
     expect(rangeMenu.props("min")).toBe(10);
     expect(rangeMenu.props("max")).toBe(20);
   });
@@ -231,7 +231,7 @@ describe("ScGlobalFilterBar", () => {
         source: { kind: "manual" },
       },
     ]);
-    const { wrapper } = await mountWithProviders(ScGlobalFilterBar, {
+    const { wrapper } = await mountWithProviders(GlobalFilterBar, {
       props: { filter, columns: filterColumns, distinctValues: {} },
     });
     const rows = wrapper.findAll("[data-query-builder-node-id]");

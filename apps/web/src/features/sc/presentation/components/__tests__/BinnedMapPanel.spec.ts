@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { NDropdown } from "naive-ui";
 import { mountWithProviders } from "@/testing";
-import ScMapPanelBinned from "../ScMapPanelBinned.vue";
-import ScLegend from "../ScLegend.vue";
+import BinnedMapPanel from "../BinnedMapPanel.vue";
+import Legend from "../Legend.vue";
 
-describe("ScMapPanelBinned unified map", () => {
+describe("BinnedMapPanel unified map", () => {
   it("keeps one native map element while switching modes", async () => {
-    const { wrapper } = await mountWithProviders(ScMapPanelBinned, {
+    const { wrapper } = await mountWithProviders(BinnedMapPanel, {
       props: {
         activeMapTab: "wafer",
         arrowData: new ArrayBuffer(8),
@@ -21,7 +21,7 @@ describe("ScMapPanelBinned unified map", () => {
   });
 
   it("forwards native zoom and box-selection events", async () => {
-    const { wrapper } = await mountWithProviders(ScMapPanelBinned);
+    const { wrapper } = await mountWithProviders(BinnedMapPanel);
     const map = wrapper.find('[data-testid="sc-unified-map"]');
     const zoom = { x: 1, y: 2, w: 3, h: 4 };
     map.element.dispatchEvent(new CustomEvent("zoom-in", { detail: zoom }));
@@ -33,7 +33,7 @@ describe("ScMapPanelBinned unified map", () => {
   });
 
   it("keeps native map error context visible", async () => {
-    const { wrapper } = await mountWithProviders(ScMapPanelBinned);
+    const { wrapper } = await mountWithProviders(BinnedMapPanel);
     wrapper.find('[data-testid="sc-unified-map"]').element.dispatchEvent(
       new CustomEvent("map-error", {
         detail: {
@@ -51,7 +51,7 @@ describe("ScMapPanelBinned unified map", () => {
   });
 
   it("forwards lasso selection and always clears selection on the native clear event", async () => {
-    const { wrapper } = await mountWithProviders(ScMapPanelBinned);
+    const { wrapper } = await mountWithProviders(BinnedMapPanel);
     const map = wrapper.find('[data-testid="sc-unified-map"]');
     const selection = {
       points: [
@@ -75,10 +75,10 @@ describe("ScMapPanelBinned unified map", () => {
     const groups = {
       "2": { $typeName: "sc.v1.DefectList", count: 1, defectIds: [2] },
     };
-    const { wrapper } = await mountWithProviders(ScMapPanelBinned, {
+    const { wrapper } = await mountWithProviders(BinnedMapPanel, {
       props: { legendGroups: groups, selectionResetVersion: 0 },
     });
-    const legend = wrapper.findComponent(ScLegend);
+    const legend = wrapper.findComponent(Legend);
 
     legend.vm.$emit("select-class", 2);
     await wrapper.vm.$nextTick();
@@ -89,7 +89,7 @@ describe("ScMapPanelBinned unified map", () => {
   });
 
   it("groups map interactions into one compact dropdown", async () => {
-    const { wrapper } = await mountWithProviders(ScMapPanelBinned);
+    const { wrapper } = await mountWithProviders(BinnedMapPanel);
     const dropdown = wrapper.findComponent(NDropdown);
     const labels = (dropdown.props("options") as Array<{ label?: string }>).map(
       (option) => option.label,
@@ -108,7 +108,7 @@ describe("ScMapPanelBinned unified map", () => {
   });
 
   it("lets the user include or exclude selected defects from the map context menu", async () => {
-    const { wrapper } = await mountWithProviders(ScMapPanelBinned, {
+    const { wrapper } = await mountWithProviders(BinnedMapPanel, {
       props: { mapSelectionCount: 2 },
     });
     const map = wrapper.find('[data-testid="sc-unified-map"]');
@@ -158,7 +158,7 @@ describe("ScMapPanelBinned unified map", () => {
   });
 
   it("closes the map context menu on a left pointer down", async () => {
-    const { wrapper } = await mountWithProviders(ScMapPanelBinned, {
+    const { wrapper } = await mountWithProviders(BinnedMapPanel, {
       props: { mapSelectionCount: 2 },
     });
     const map = wrapper.find('[data-testid="sc-unified-map"]');
@@ -178,7 +178,7 @@ describe("ScMapPanelBinned unified map", () => {
   });
 
   it("offers one-step zoom in and zoom out controls", async () => {
-    const { wrapper } = await mountWithProviders(ScMapPanelBinned, {
+    const { wrapper } = await mountWithProviders(BinnedMapPanel, {
       props: {
         waferRadiusNm: 100,
         waferGeometry: {
@@ -213,7 +213,7 @@ describe("ScMapPanelBinned unified map", () => {
 
   it("assigns camel-case custom-element properties and switches dropdown interaction mode", async () => {
     const arrowData = [new ArrayBuffer(8), new ArrayBuffer(16)];
-    const { wrapper } = await mountWithProviders(ScMapPanelBinned, {
+    const { wrapper } = await mountWithProviders(BinnedMapPanel, {
       props: { arrowData, mapLegendColumn: "rough_bin", selectionDefectIds: [3, 7] },
     });
     const map = wrapper.find('[data-testid="sc-unified-map"]');
@@ -249,7 +249,7 @@ describe("ScMapPanelBinned unified map", () => {
     const groups = {
       "2": { $typeName: "sc.v1.DefectList", count: 5, defectIds: [1, 2] },
     };
-    const { wrapper } = await mountWithProviders(ScMapPanelBinned, {
+    const { wrapper } = await mountWithProviders(BinnedMapPanel, {
       props: {
         legendGroupBy: "class",
         legendGroups: groups,
@@ -257,7 +257,7 @@ describe("ScMapPanelBinned unified map", () => {
       },
     });
 
-    wrapper.findComponent(ScLegend).vm.$emit("update:colorMap", { "2": "#ff00ff" });
+    wrapper.findComponent(Legend).vm.$emit("update:colorMap", { "2": "#ff00ff" });
     await wrapper.vm.$nextTick();
     expect(
       (
@@ -273,7 +273,7 @@ describe("ScMapPanelBinned unified map", () => {
         Scratch: { $typeName: "sc.v1.DefectList", count: 2, defectIds: [3, 4] },
       },
     });
-    wrapper.findComponent(ScLegend).vm.$emit("update:colorMap", { Scratch: "#00ff00" });
+    wrapper.findComponent(Legend).vm.$emit("update:colorMap", { Scratch: "#00ff00" });
     await wrapper.vm.$nextTick();
 
     await wrapper.setProps({ legendGroupBy: "class", legendGroups: groups });
@@ -291,7 +291,7 @@ describe("ScMapPanelBinned unified map", () => {
   });
 
   it("keeps the current map visible while a pan redraw is pending", async () => {
-    const { wrapper } = await mountWithProviders(ScMapPanelBinned, {
+    const { wrapper } = await mountWithProviders(BinnedMapPanel, {
       props: { mapLoading: true },
     });
     expect(wrapper.find(".map-loading-overlay").exists()).toBe(true);

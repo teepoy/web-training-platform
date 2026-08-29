@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { ref, watchEffect } from "vue";
 import { NButton, NInput, NRadioButton, NRadioGroup, NText } from "naive-ui";
+import { useI18n } from "vue-i18n";
 import { parseDefectIds } from "./defectIdImport";
-import ScFilterPopover from "./ScFilterPopover.vue";
+import TableFilterPopover from "@/shared/components/table-filter/TableFilterPopover.vue";
+import { formatNumber } from "@/shared/i18n/format";
 
 const props = defineProps<{
   appliedValues: Array<string | number>;
   exclude?: boolean;
 }>();
+const { t } = useI18n();
 
 const emit = defineEmits<{
   (e: "apply", value: Array<string | number>, exclude: boolean): void;
@@ -28,7 +31,7 @@ watchEffect(() => {
 function apply(): void {
   const parsed = parseDefectIds(text.value);
   if (parsed.values.length === 0 && text.value.trim()) {
-    validationError.value = "No valid integer Defect IDs found.";
+    validationError.value = t("tableFilters.noValidIds");
     return;
   }
   validationError.value = "";
@@ -60,30 +63,41 @@ async function importFile(event: Event): Promise<void> {
     const parsed = parseDefectIds(await file.text());
     if (parsed.values.length === 0) {
       importStatus.value = "";
-      validationError.value = `${file.name} contains no valid integer Defect IDs.`;
+      validationError.value = t("tableFilters.fileNoValidIds", { file: file.name });
       return;
     }
     text.value = parsed.values.join(", ");
     validationError.value = "";
-    importStatus.value = `Loaded ${parsed.values.length.toLocaleString()} unique ID${
-      parsed.values.length === 1 ? "" : "s"
-    } from ${file.name}${
-      parsed.invalidCount > 0 ? `; ignored ${parsed.invalidCount} invalid value(s)` : ""
-    }.`;
+    importStatus.value = t(
+      "tableFilters.fileLoaded",
+      {
+        count: parsed.values.length,
+        formattedCount: formatNumber(parsed.values.length),
+        file: file.name,
+      },
+      parsed.values.length,
+    );
+    if (parsed.invalidCount > 0) {
+      importStatus.value += ` ${t(
+        "tableFilters.ignoredInvalid",
+        { count: parsed.invalidCount, formattedCount: formatNumber(parsed.invalidCount) },
+        parsed.invalidCount,
+      )}`;
+    }
   } catch {
     importStatus.value = "";
-    validationError.value = `Could not read ${file.name}.`;
+    validationError.value = t("tableFilters.fileReadFailed", { file: file.name });
   }
 }
 </script>
 
 <template>
-  <ScFilterPopover variant="text" @clear="clear" @cancel="cancel" @apply="apply">
+  <TableFilterPopover variant="text" @clear="clear" @cancel="cancel" @apply="apply">
     <div class="sst-defect-filter-heading">
       <div>
-        <NText strong class="sst-defect-filter-title">Defect IDs</NText>
+        <NText strong class="sst-defect-filter-title">{{ t("tableFilters.defectIds") }}</NText>
         <NText depth="3" class="sst-defect-filter-hint">
-          Paste a list or import a TXT/CSV file.
+          {{ t("tableFilters.defectHint") }}
         </NText>
       </div>
       <input
@@ -91,23 +105,25 @@ async function importFile(event: Event): Promise<void> {
         class="sst-file-input"
         type="file"
         accept=".txt,.csv,text/plain,text/csv"
-        aria-label="Import defect IDs from file"
+        :aria-label="t('tableFilters.importDefectIds')"
         @change="importFile"
       />
-      <NButton size="tiny" secondary @click="chooseFile">Import file</NButton>
+      <NButton size="tiny" secondary @click="chooseFile">
+        {{ t("tableFilters.importFile") }}
+      </NButton>
     </div>
     <NInput
       :value="text"
       type="textarea"
-      placeholder="e.g. 1001, 1002, 1003"
+      :placeholder="t('tableFilters.defectExample')"
       size="small"
       clearable
       :autosize="{ minRows: 2, maxRows: 5 }"
       @update:value="text = $event"
     />
     <NRadioGroup v-model:value="mode" size="small">
-      <NRadioButton value="include">Include only</NRadioButton>
-      <NRadioButton value="exclude">Exclude</NRadioButton>
+      <NRadioButton value="include">{{ t("tableFilters.includeOnly") }}</NRadioButton>
+      <NRadioButton value="exclude">{{ t("tableFilters.exclude") }}</NRadioButton>
     </NRadioGroup>
     <NText v-if="importStatus" type="success" class="sst-defect-filter-status">
       {{ importStatus }}
@@ -115,7 +131,7 @@ async function importFile(event: Event): Promise<void> {
     <NText v-if="validationError" type="error" class="sst-defect-filter-status">
       {{ validationError }}
     </NText>
-  </ScFilterPopover>
+  </TableFilterPopover>
 </template>
 
 <style scoped>

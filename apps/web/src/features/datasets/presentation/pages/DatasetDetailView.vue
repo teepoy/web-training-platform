@@ -19,7 +19,7 @@ import DatasetTrainTab from "@/features/datasets/presentation/components/Dataset
 import DatasetPredictTab from "@/features/datasets/presentation/components/DatasetPredictTab.vue";
 import DatasetPredictionExportTab from "@/features/datasets/presentation/components/DatasetPredictionExportTab.vue";
 import DatasetViewPage from "@/features/datasets/presentation/pages/DatasetViewPage.vue";
-import ScDatasetGlobalFilterControl from "@/features/sc/presentation/components/ScDatasetGlobalFilterControl.vue";
+import GlobalFilterControl from "@/features/sc/presentation/components/GlobalFilterControl.vue";
 import { supportsScPredictionExport } from "@/features/sc/domain/predictionExportCapability";
 
 const route = useRoute();
@@ -216,7 +216,7 @@ function handleTabBeforeLeave(name: string | number): boolean {
         </n-space>
       </header>
 
-      <ScDatasetGlobalFilterControl v-if="isScDataset" :dataset-id="id" />
+      <GlobalFilterControl v-if="isScDataset" :dataset-id="id" />
 
       <n-tabs
         v-model:value="activeTab"

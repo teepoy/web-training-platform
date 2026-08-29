@@ -3,7 +3,7 @@ import { NMessageProvider } from "naive-ui";
 import { flushPromises } from "@vue/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { mountWithProviders } from "@/testing";
-import ScPredictionExportPlugin from "./ScPredictionExportPlugin.vue";
+import PredictionExportPlugin from "./PredictionExportPlugin.vue";
 
 const { streamApiSseMock, loadAggregatesMock } = vi.hoisted(() => ({
   streamApiSseMock: vi.fn(),
@@ -20,7 +20,7 @@ vi.mock("@/features/sc/api/sqlWorkbenchDataSource", () => ({
   },
 }));
 
-describe("ScPredictionExportPlugin", () => {
+describe("PredictionExportPlugin", () => {
   beforeEach(() => {
     streamApiSseMock.mockReset();
     loadAggregatesMock.mockReset();
@@ -39,7 +39,7 @@ describe("ScPredictionExportPlugin", () => {
     const { wrapper } = await mountWithProviders(NMessageProvider, {
       slots: {
         default: () =>
-          h(ScPredictionExportPlugin, {
+          h(PredictionExportPlugin, {
             datasetId: "dataset-1",
             onComplete: vi.fn(),
             onCancel: vi.fn(),
@@ -87,7 +87,7 @@ describe("ScPredictionExportPlugin", () => {
     const { wrapper } = await mountWithProviders(NMessageProvider, {
       slots: {
         default: () =>
-          h(ScPredictionExportPlugin, {
+          h(PredictionExportPlugin, {
             collectionId: "collection-1",
             memberIds: ["member-1", "member-2"],
             memberDatasetIds: ["dataset-1", "dataset-2"],
@@ -116,7 +116,7 @@ describe("ScPredictionExportPlugin", () => {
     const { wrapper } = await mountWithProviders(NMessageProvider, {
       slots: {
         default: () =>
-          h(ScPredictionExportPlugin, {
+          h(PredictionExportPlugin, {
             datasetId: "dataset-1",
             onComplete: vi.fn(),
             onCancel: vi.fn(),

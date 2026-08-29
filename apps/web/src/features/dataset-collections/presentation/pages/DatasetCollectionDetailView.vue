@@ -65,7 +65,7 @@ import {
   refreshCollectionSnapshot,
 } from "@/features/dataset-collections/api/collectionSnapshotUpdates";
 import CollectionSnapshotUpdateAlert from "@/features/dataset-collections/presentation/components/CollectionSnapshotUpdateAlert.vue";
-import ScPredictionExportPlugin from "@/features/sc/presentation/components/ScPredictionExportPlugin.vue";
+import PredictionExportPlugin from "@/features/sc/presentation/components/PredictionExportPlugin.vue";
 import { supportsScPredictionExport } from "@/features/sc/domain/predictionExportCapability";
 import { useAuthStore } from "@/features/auth/application/store";
 import { useOrgStore } from "@/features/auth/application/org";
@@ -1152,7 +1152,7 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
         }}
         selected. Parquet stays combined; KLARF creates one complete numbered file per inspection.
       </NAlert>
-      <ScPredictionExportPlugin
+      <PredictionExportPlugin
         :collection-id="collectionId"
         :member-ids="selectedCoverageMemberIds"
         :member-dataset-ids="selectedMemberDatasetIds"

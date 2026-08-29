@@ -9,10 +9,10 @@ import { CanvasRenderer } from "echarts/renderers";
 import type { EChartsOption } from "echarts";
 import type { ECElementEvent } from "echarts/core";
 import type { ScMapLassoSelection, ScMapSelectionCommand } from "@platform/sc-map-element";
-import ScMapPanelBinned from "@/features/sc/presentation/components/ScMapPanelBinned.vue";
-import ScGlobalFilterModal from "@/features/sc/presentation/components/ScGlobalFilterModal.vue";
-import ScSampleTable from "@/features/sc/presentation/components/ScSampleTable.vue";
-import ScBlinkVirtualTable from "@/features/sc/presentation/components/ScBlinkVirtualTable.vue";
+import BinnedMapPanel from "@/features/sc/presentation/components/BinnedMapPanel.vue";
+import GlobalFilterModal from "@/features/sc/presentation/components/GlobalFilterModal.vue";
+import SampleTable from "@/features/sc/presentation/components/SampleTable.vue";
+import BlinkVirtualTable from "@/features/sc/presentation/components/BlinkVirtualTable.vue";
 import type { ScSampleTableFilter, ScSampleTableSort } from "@/features/sc/domain/sampleTable";
 import {
   cloneScGlobalFilter,
@@ -83,7 +83,7 @@ const DEFAULT_RETICLE_DIE_SIZE = 100_000;
 type MapMode = "wafer" | "die" | "reticle";
 type MapViewport = { x: number; y: number; w: number; h: number };
 const quadEl = ref<HTMLElement | null>(null);
-const mapPanel = ref<InstanceType<typeof ScMapPanelBinned> | null>(null);
+const mapPanel = ref<InstanceType<typeof BinnedMapPanel> | null>(null);
 const leftPanelEl = ref<HTMLElement | null>(null);
 const rightPanelEl = ref<HTMLElement | null>(null);
 const columnPct = ref(DEFAULT_COLUMN_PCT);
@@ -897,7 +897,7 @@ function useMapSelectionQueue() {
     }"
     :style="quadStyle"
   >
-    <ScGlobalFilterModal
+    <GlobalFilterModal
       v-model:show="globalFilterModalVisible"
       :filter="globalFilterModel"
       :columns="sampleTableColumns"
@@ -955,7 +955,7 @@ function useMapSelectionQueue() {
         </div>
       </Teleport>
       <div class="iq-wafer">
-        <ScMapPanelBinned
+        <BinnedMapPanel
           ref="mapPanel"
           :active-map-tab="activeMapTab"
           :arrow-data="model.mapArrowData.value"
@@ -1004,7 +1004,7 @@ function useMapSelectionQueue() {
         @pointerup="onRowResizeEnd"
         @pointercancel="onRowResizeEnd"
       />
-      <ScSampleTable
+      <SampleTable
         v-if="model.sampleTableDataSource.value"
         :data-source="model.sampleTableDataSource.value"
         :loading="!dataReady"
@@ -1035,7 +1035,7 @@ function useMapSelectionQueue() {
       :style="rightPanelStyle"
     >
       <div class="iq-blink-pane">
-        <ScBlinkVirtualTable
+        <BlinkVirtualTable
           :data-source="workbench.dataSource.value"
           :gallery-query="model.galleryQuery.value"
           :loading="model.galleryLoading.value"

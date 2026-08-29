@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 import { NCheckbox, NInput, NText } from "naive-ui";
-import ScFilterPopover from "./ScFilterPopover.vue";
+import { useI18n } from "vue-i18n";
+import TableFilterPopover from "./TableFilterPopover.vue";
 
 const props = defineProps<{
   search: string;
@@ -9,6 +10,7 @@ const props = defineProps<{
   draftValues: string[];
   options: Array<{ label: string; value: string | number }>;
 }>();
+const { t } = useI18n();
 
 const emit = defineEmits<{
   (e: "update:search", value: string): void;
@@ -98,11 +100,11 @@ function applyDraft(): void {
 </script>
 
 <template>
-  <ScFilterPopover variant="set" @clear="clearDraft" @cancel="cancel" @apply="applyDraft">
+  <TableFilterPopover variant="set" @clear="clearDraft" @cancel="cancel" @apply="applyDraft">
     <div class="sst-filter-search-row">
       <NInput
         :value="search"
-        placeholder="Search"
+        :placeholder="t('common.search')"
         size="small"
         clearable
         @update:value="updateSearch"
@@ -115,7 +117,7 @@ function applyDraft(): void {
       :indeterminate="someVisibleSelected"
       @update:checked="updateAllVisible"
     >
-      Select all ({{ visibleOptions.length }})
+      {{ t("common.selectAll", { count: visibleOptions.length }) }}
     </NCheckbox>
     <div class="sst-set-filter-options">
       <template v-if="visibleOptions.length > 0">
@@ -129,16 +131,18 @@ function applyDraft(): void {
           {{ option.label }}
         </NCheckbox>
       </template>
-      <NText v-else-if="isSearching" depth="3" class="sst-set-filter-empty">No matches</NText>
+      <NText v-else-if="isSearching" depth="3" class="sst-set-filter-empty">
+        {{ t("common.noMatches") }}
+      </NText>
       <NText
         v-else-if="appliedKeys.size === 0 && visibleOptions.length === 0"
         depth="3"
         class="sst-set-filter-empty"
       >
-        Loading...
+        {{ t("common.loading") }}
       </NText>
     </div>
-  </ScFilterPopover>
+  </TableFilterPopover>
 </template>
 
 <style scoped>

@@ -13,7 +13,7 @@ import {
 import type { ScDataColumn } from "@/features/sc/domain/workbenchDataSource";
 import { useScDataWorkbench } from "@/features/sc/presentation/composables/useScDataWorkbench";
 import { useScFilterLookupController } from "@/features/sc/presentation/composables/useScFilterLookupController";
-import ScGlobalFilterModal from "./ScGlobalFilterModal.vue";
+import GlobalFilterModal from "./GlobalFilterModal.vue";
 
 const props = defineProps<{
   datasetId: string;
@@ -226,7 +226,7 @@ onScopeDispose(() => {
       </template>
     </div>
 
-    <ScGlobalFilterModal
+    <GlobalFilterModal
       v-model:show="modalVisible"
       :filter="globalFilter"
       :columns="columns"

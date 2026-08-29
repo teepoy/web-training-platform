@@ -47,9 +47,9 @@ const model = vi.hoisted(() => ({
 vi.mock("vue-echarts", () => ({
   default: { name: "VChart", template: "<div />" },
 }));
-vi.mock("./ScMapPanelBinned.vue", () => ({
+vi.mock("./BinnedMapPanel.vue", () => ({
   default: {
-    name: "ScMapPanelBinned",
+    name: "BinnedMapPanel",
     props: [
       "activeMapTab",
       "zoom",
@@ -86,25 +86,25 @@ vi.mock("./ScMapPanelBinned.vue", () => ({
     template: "<div />",
   },
 }));
-vi.mock("./ScGlobalFilterModal.vue", () => ({
+vi.mock("./GlobalFilterModal.vue", () => ({
   default: {
-    name: "ScGlobalFilterModal",
+    name: "GlobalFilterModal",
     props: ["show", "filter", "distinctValues", "numericRanges", "numericRangeLoading", "resetKey"],
     emits: ["update:show", "update:filter", "search-options", "request-range"],
     template: "<div />",
   },
 }));
-vi.mock("./ScSampleTable.vue", () => ({
+vi.mock("./SampleTable.vue", () => ({
   default: {
-    name: "ScSampleTable",
+    name: "SampleTable",
     props: ["filter", "sort", "selection"],
     emits: ["filter-change", "sort-change", "selection-change"],
     template: "<div />",
   },
 }));
-vi.mock("./ScBlinkVirtualTable.vue", () => ({
+vi.mock("./BlinkVirtualTable.vue", () => ({
   default: {
-    name: "ScBlinkVirtualTable",
+    name: "BlinkVirtualTable",
     props: ["selectedDefectIds"],
     emits: ["select-samples", "mode-change"],
     template: "<div />",
@@ -207,7 +207,7 @@ describe("InspectionQuad state ownership", () => {
     const { wrapper } = await mountWithProviders(InspectionQuad, {
       props: requiredProps,
     });
-    const filterModal = wrapper.findComponent({ name: "ScGlobalFilterModal" });
+    const filterModal = wrapper.findComponent({ name: "GlobalFilterModal" });
 
     filterModal.vm.$emit("search-options", { field: "test_id", search: "" });
     filterModal.vm.$emit("search-options", { field: "test_id", search: "936" });
@@ -226,7 +226,7 @@ describe("InspectionQuad state ownership", () => {
     const { wrapper } = await mountWithProviders(InspectionQuad, {
       props: requiredProps,
     });
-    const filterModal = wrapper.findComponent({ name: "ScGlobalFilterModal" });
+    const filterModal = wrapper.findComponent({ name: "GlobalFilterModal" });
 
     filterModal.vm.$emit("request-range", { field: "area", itemId: "area-item" });
 
@@ -255,7 +255,7 @@ describe("InspectionQuad state ownership", () => {
       ],
     };
 
-    const filterModal = wrapper.findComponent({ name: "ScGlobalFilterModal" });
+    const filterModal = wrapper.findComponent({ name: "GlobalFilterModal" });
     expect(filterModal.props("show")).toBe(false);
     await wrapper.get("button").trigger("click");
     expect(filterModal.props("show")).toBe(true);
@@ -303,7 +303,7 @@ describe("InspectionQuad state ownership", () => {
     });
 
     expect(harness.options?.globalFilter.value).toEqual(initialFilter);
-    wrapper.findComponent({ name: "ScGlobalFilterModal" }).vm.$emit("update:filter", updatedFilter);
+    wrapper.findComponent({ name: "GlobalFilterModal" }).vm.$emit("update:filter", updatedFilter);
     await wrapper.vm.$nextTick();
 
     expect(wrapper.emitted("update:globalFilter")?.[0]?.[0]).toEqual(updatedFilter);
@@ -321,7 +321,7 @@ describe("InspectionQuad state ownership", () => {
       props: requiredProps,
     });
 
-    wrapper.findComponent({ name: "ScGlobalFilterModal" }).vm.$emit("update:filter", {
+    wrapper.findComponent({ name: "GlobalFilterModal" }).vm.$emit("update:filter", {
       combinator: "and",
       items: [
         {
@@ -357,7 +357,7 @@ describe("InspectionQuad state ownership", () => {
       props: requiredProps,
     });
 
-    wrapper.findComponent({ name: "ScMapPanelBinned" }).vm.$emit("retry");
+    wrapper.findComponent({ name: "BinnedMapPanel" }).vm.$emit("retry");
     await wrapper.vm.$nextTick();
 
     expect(model.retryMap).toHaveBeenCalledOnce();
@@ -369,7 +369,7 @@ describe("InspectionQuad state ownership", () => {
       props: requiredProps,
     });
 
-    expect(wrapper.findComponent({ name: "ScMapPanelBinned" }).props("mapError")).toBe(
+    expect(wrapper.findComponent({ name: "BinnedMapPanel" }).props("mapError")).toBe(
       model.mapError.value,
     );
   });
@@ -378,7 +378,7 @@ describe("InspectionQuad state ownership", () => {
     const { wrapper } = await mountWithProviders(InspectionQuad, {
       props: requiredProps,
     });
-    wrapper.findComponent({ name: "ScGlobalFilterModal" }).vm.$emit("update:filter", {
+    wrapper.findComponent({ name: "GlobalFilterModal" }).vm.$emit("update:filter", {
       combinator: "and",
       items: [
         {
@@ -406,7 +406,7 @@ describe("InspectionQuad state ownership", () => {
         collectionRevisionId: "revision-1",
       },
     });
-    wrapper.findComponent({ name: "ScGlobalFilterModal" }).vm.$emit("update:filter", {
+    wrapper.findComponent({ name: "GlobalFilterModal" }).vm.$emit("update:filter", {
       combinator: "and",
       items: [
         {
@@ -438,7 +438,7 @@ describe("InspectionQuad state ownership", () => {
         galleryRandomSamplingDefectIds: new Set(["103", "274", "936"]),
       },
     });
-    wrapper.findComponent({ name: "ScSampleTable" }).vm.$emit("filter-change", {
+    wrapper.findComponent({ name: "SampleTable" }).vm.$emit("filter-change", {
       rough_bin: { filterType: "set", values: [7] },
     });
     await wrapper.vm.$nextTick();
@@ -464,8 +464,8 @@ describe("InspectionQuad state ownership", () => {
     const { wrapper } = await mountWithProviders(InspectionQuad, {
       props: requiredProps,
     });
-    const map = wrapper.findComponent({ name: "ScMapPanelBinned" });
-    const table = wrapper.findComponent({ name: "ScSampleTable" });
+    const map = wrapper.findComponent({ name: "BinnedMapPanel" });
+    const table = wrapper.findComponent({ name: "SampleTable" });
     const viewport = { x: 1, y: 2, w: 3, h: 4 };
     const nextReticle = { xDieCount: 4, yDieCount: 6, xDieShift: 1, yDieShift: -1 };
     const filter: ScSampleTableFilter = {
@@ -502,7 +502,7 @@ describe("InspectionQuad state ownership", () => {
       props: { ...requiredProps, variant: "reclassify", selectedDefectIds: [] },
     });
 
-    wrapper.findComponent({ name: "ScSampleTable" }).vm.$emit("selection-change", {
+    wrapper.findComponent({ name: "SampleTable" }).vm.$emit("selection-change", {
       kind: "all",
       excludedIds: [],
     });
@@ -515,7 +515,7 @@ describe("InspectionQuad state ownership", () => {
     const { wrapper } = await mountWithProviders(InspectionQuad, {
       props: requiredProps,
     });
-    const gallery = wrapper.findComponent({ name: "ScBlinkVirtualTable" });
+    const gallery = wrapper.findComponent({ name: "BlinkVirtualTable" });
 
     gallery.vm.$emit("select-samples", ["103", "274"], {
       shift: true,
@@ -526,9 +526,9 @@ describe("InspectionQuad state ownership", () => {
     await wrapper.vm.$nextTick();
 
     expect([...gallery.props("selectedDefectIds")]).toEqual(["103", "274"]);
-    expect(wrapper.findComponent({ name: "ScMapPanelBinned" }).props("highlightDefectIds")).toEqual(
-      [103, 274],
-    );
+    expect(wrapper.findComponent({ name: "BinnedMapPanel" }).props("highlightDefectIds")).toEqual([
+      103, 274,
+    ]);
     expect(wrapper.emitted("selection-change")).toBeUndefined();
   });
 
@@ -537,7 +537,7 @@ describe("InspectionQuad state ownership", () => {
       props: { ...requiredProps, variant: "reclassify", selectedDefectIds: [] },
     });
 
-    wrapper.findComponent({ name: "ScBlinkVirtualTable" }).vm.$emit("select-samples", ["103"], {
+    wrapper.findComponent({ name: "BlinkVirtualTable" }).vm.$emit("select-samples", ["103"], {
       shift: false,
       ctrl: true,
       meta: false,
@@ -558,7 +558,7 @@ describe("InspectionQuad state ownership", () => {
       },
     });
 
-    wrapper.findComponent({ name: "ScMapPanelBinned" }).vm.$emit("legend-select", 7);
+    wrapper.findComponent({ name: "BinnedMapPanel" }).vm.$emit("legend-select", 7);
 
     await vi.waitFor(() => {
       expect(mapPanelHarness.updateSelection).toHaveBeenCalledWith({
@@ -573,7 +573,7 @@ describe("InspectionQuad state ownership", () => {
 
   it("ignores unchanged legend visibility during map bootstrap", async () => {
     const { wrapper } = await mountWithProviders(InspectionQuad, { props: requiredProps });
-    const map = wrapper.findComponent({ name: "ScMapPanelBinned" });
+    const map = wrapper.findComponent({ name: "BinnedMapPanel" });
 
     map.vm.$emit("legend-hidden-change", { source: "class", hiddenKeys: [] });
     await wrapper.vm.$nextTick();
@@ -588,7 +588,7 @@ describe("InspectionQuad state ownership", () => {
     model.mapSelectedDefectIds.value = [103, 274];
     mapPanelHarness.updateSelection.mockResolvedValueOnce([103]);
     const { wrapper } = await mountWithProviders(InspectionQuad, { props: requiredProps });
-    const map = wrapper.findComponent({ name: "ScMapPanelBinned" });
+    const map = wrapper.findComponent({ name: "BinnedMapPanel" });
     const initialSelectionResetVersion = map.props("selectionResetVersion");
 
     map.vm.$emit("legend-hidden-change", { source: "class", hiddenKeys: ["7"] });
@@ -619,7 +619,7 @@ describe("InspectionQuad state ownership", () => {
         model.mapSelectedDefectIds.value = [...ids];
       });
     const { wrapper } = await mountWithProviders(InspectionQuad, { props: requiredProps });
-    const map = wrapper.findComponent({ name: "ScMapPanelBinned" });
+    const map = wrapper.findComponent({ name: "BinnedMapPanel" });
 
     map.vm.$emit("legend-hidden-change", { source: "class", hiddenKeys: ["7"] });
     await vi.waitFor(() => {
@@ -663,7 +663,7 @@ describe("InspectionQuad state ownership", () => {
         model.mapSelectedDefectIds.value = [...ids];
       });
     const { wrapper } = await mountWithProviders(InspectionQuad, { props: requiredProps });
-    const map = wrapper.findComponent({ name: "ScMapPanelBinned" });
+    const map = wrapper.findComponent({ name: "BinnedMapPanel" });
 
     map.vm.$emit("legend-hidden-change", { source: "class", hiddenKeys: ["7"] });
     await vi.waitFor(() => expect(mapPanelHarness.updateSelection).toHaveBeenCalledTimes(1));
@@ -700,7 +700,7 @@ describe("InspectionQuad state ownership", () => {
       model.mapSelectedDefectIds.value = [...ids];
     });
     const { wrapper } = await mountWithProviders(InspectionQuad, { props: requiredProps });
-    const map = wrapper.findComponent({ name: "ScMapPanelBinned" });
+    const map = wrapper.findComponent({ name: "BinnedMapPanel" });
 
     map.vm.$emit("legend-hidden-change", { source: "class", hiddenKeys: ["7"] });
     await vi.waitFor(() => expect(mapPanelHarness.updateSelection).toHaveBeenCalledTimes(1));
@@ -727,7 +727,7 @@ describe("InspectionQuad state ownership", () => {
       () => new Promise<number[]>((resolve) => (resolveHiddenPrune = resolve)),
     );
     const { wrapper } = await mountWithProviders(InspectionQuad, { props: requiredProps });
-    const map = wrapper.findComponent({ name: "ScMapPanelBinned" });
+    const map = wrapper.findComponent({ name: "BinnedMapPanel" });
 
     map.vm.$emit("legend-hidden-change", { source: "class", hiddenKeys: ["7"] });
     await vi.waitFor(() => expect(mapPanelHarness.updateSelection).toHaveBeenCalledTimes(1));
@@ -746,7 +746,7 @@ describe("InspectionQuad state ownership", () => {
       () => new Promise<number[]>((resolve) => (resolveHiddenPrune = resolve)),
     );
     const { wrapper } = await mountWithProviders(InspectionQuad, { props: requiredProps });
-    const map = wrapper.findComponent({ name: "ScMapPanelBinned" });
+    const map = wrapper.findComponent({ name: "BinnedMapPanel" });
 
     map.vm.$emit("legend-hidden-change", { source: "class", hiddenKeys: ["7"] });
     await vi.waitFor(() => expect(mapPanelHarness.updateSelection).toHaveBeenCalledTimes(1));
@@ -767,7 +767,7 @@ describe("InspectionQuad state ownership", () => {
       },
     });
 
-    const map = wrapper.findComponent({ name: "ScMapPanelBinned" });
+    const map = wrapper.findComponent({ name: "BinnedMapPanel" });
     const initialSelectionResetVersion = map.props("selectionResetVersion");
     map.vm.$emit("commit-map-selection-filter", "exclude");
     await vi.waitFor(() => {
@@ -807,7 +807,7 @@ describe("InspectionQuad state ownership", () => {
     const { wrapper } = await mountWithProviders(InspectionQuad, {
       props: requiredProps,
     });
-    const map = wrapper.findComponent({ name: "ScMapPanelBinned" });
+    const map = wrapper.findComponent({ name: "BinnedMapPanel" });
 
     map.vm.$emit("box-select", { x: 0, y: 0, w: 10, h: 10 });
     await vi.waitFor(() => {
@@ -840,7 +840,7 @@ describe("InspectionQuad state ownership", () => {
     mapPanelHarness.updateSelection.mockResolvedValue([1, 9]);
     const { wrapper } = await mountWithProviders(InspectionQuad, { props: requiredProps });
 
-    wrapper.findComponent({ name: "ScMapPanelBinned" }).vm.$emit("invert-map-selection-mode");
+    wrapper.findComponent({ name: "BinnedMapPanel" }).vm.$emit("invert-map-selection-mode");
 
     await vi.waitFor(() => expect(model.applyMapSelection).toHaveBeenCalledWith([1, 9]));
     expect(mapPanelHarness.updateSelection).toHaveBeenCalledWith({
@@ -861,7 +861,7 @@ describe("InspectionQuad state ownership", () => {
       props: requiredProps,
     });
 
-    wrapper.findComponent({ name: "ScMapPanelBinned" }).vm.$emit("copy-selected-defect-ids");
+    wrapper.findComponent({ name: "BinnedMapPanel" }).vm.$emit("copy-selected-defect-ids");
 
     await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith("103\n274"));
   });
@@ -874,7 +874,7 @@ describe("InspectionQuad state ownership", () => {
       },
     });
 
-    wrapper.findComponent({ name: "ScBlinkVirtualTable" }).vm.$emit("mode-change", "review");
+    wrapper.findComponent({ name: "BlinkVirtualTable" }).vm.$emit("mode-change", "review");
 
     expect(model.setReviewMode).toHaveBeenCalledWith(true);
     expect(wrapper.emitted("clear-gallery-random-sampling")).toBeUndefined();
