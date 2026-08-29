@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
+import { useI18n } from "vue-i18n";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { useMessage } from "naive-ui";
 import { NForm, NFormItem, NInput, NDynamicTags, NButton, NSpace, NAlert } from "naive-ui";
@@ -15,6 +16,7 @@ import type { ImporterProps } from "@/shared/widgets/sdk";
 const props = defineProps<ImporterProps>();
 
 const message = useMessage();
+const { t } = useI18n();
 const qc = useQueryClient();
 const orgStore = useOrgStore();
 
@@ -42,14 +44,14 @@ const importDataset = useMutation({
     return dataset;
   },
   onSuccess: () => {
-    message.success("Dataset imported");
+    message.success(t("datasetFlows.datasetImported"));
     qc.invalidateQueries({
       queryKey: orgScopedQueryKey(orgStore.currentOrgId, ["api", "v1", "datasets"]),
     });
     props.onComplete({ imported: importItems.value.length, failed: 0 });
   },
   onError: (error) => {
-    message.error(toUserMessage(error, "Failed to import dataset"));
+    message.error(toUserMessage(error, t("datasetFlows.importFailed")));
   },
 });
 
@@ -65,7 +67,7 @@ async function handleFileChange(event: Event) {
     const text = await file.text();
     const parsed = JSON.parse(text);
     if (!Array.isArray(parsed)) {
-      throw new Error("Import file must be a JSON array of sample items");
+      throw new Error(t("datasetFlows.jsonArrayRequired"));
     }
     importItems.value = parsed.map((item: Record<string, unknown>) => ({
       image_uris: Array.isArray(item?.image_uris) ? (item.image_uris as string[]) : [],
@@ -79,21 +81,21 @@ async function handleFileChange(event: Event) {
   } catch (err: unknown) {
     importItems.value = [];
     importFileName.value = "";
-    message.error((err as Error).message ?? "Failed to parse import file");
+    message.error((err as Error).message ?? t("datasetFlows.parseFailed"));
   }
 }
 
 function onSubmit() {
   if (!name.value) {
-    message.error("Dataset name is required");
+    message.error(t("datasetFlows.nameRequired"));
     return;
   }
   if (labelSpace.value.length === 0) {
-    message.error("Label space is required for image classification datasets");
+    message.error(t("datasetFlows.labelsRequired"));
     return;
   }
   if (importItems.value.length === 0) {
-    message.error("Select a JSON file with samples to import");
+    message.error(t("datasetFlows.jsonRequired"));
     return;
   }
   importDataset.mutate({
@@ -106,19 +108,19 @@ function onSubmit() {
 
 <template>
   <NForm label-placement="left" label-width="110px">
-    <NFormItem label="Name">
+    <NFormItem :label="t('common.name')">
       <NInput v-model:value="name" placeholder="e.g. imported-dataset" clearable />
     </NFormItem>
 
-    <NFormItem label="Task Type">
+    <NFormItem :label="t('datasetFlows.taskType')">
       <NInput value="classification" disabled />
     </NFormItem>
 
-    <NFormItem label="Label Space">
+    <NFormItem :label="t('datasetFlows.labelSpace')">
       <NDynamicTags v-model:value="labelSpace" />
     </NFormItem>
 
-    <NFormItem label="Samples JSON">
+    <NFormItem :label="t('datasetFlows.samplesJson')">
       <input type="file" accept="application/json" @change="handleFileChange" />
     </NFormItem>
 
@@ -127,7 +129,7 @@ function onSubmit() {
     </NAlert>
 
     <NSpace justify="end" style="margin-top: 16px">
-      <NButton @click="props.onCancel">Cancel</NButton>
+      <NButton @click="props.onCancel">{{ t("common.cancel") }}</NButton>
       <NButton type="primary" :loading="importDataset.isPending.value" @click="onSubmit">
         Import
       </NButton>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
+import { useI18n } from "vue-i18n";
 import { useMessage } from "naive-ui";
 import type { ImporterProps } from "@/shared/widgets/sdk";
 import { importParquetApiV1PluginsImportParquetImportPost } from "@/generated/orval/endpoints/api";
@@ -7,6 +8,7 @@ import { toUserMessage } from "@/shared/api";
 
 const props = defineProps<ImporterProps>();
 const message = useMessage();
+const { t } = useI18n();
 
 const file = ref<File | null>(null);
 const loading = ref(false);
@@ -20,7 +22,7 @@ function onFileChange(e: Event) {
 
 async function submit() {
   if (!file.value) {
-    message.error("Select a Parquet file to import");
+    message.error(t("datasetFlows.parquetRequired"));
     return;
   }
 
@@ -41,10 +43,10 @@ async function submit() {
       failed: data.failed,
       message: data.errors?.length
         ? `Imported with warnings: ${data.errors.join("; ")}`
-        : "Parquet import complete",
+        : t("datasetFlows.parquetImportComplete"),
     });
   } catch (error) {
-    message.error(toUserMessage(error, "Parquet import failed"));
+    message.error(toUserMessage(error, t("datasetFlows.parquetImportFailed")));
   } finally {
     loading.value = false;
   }
@@ -54,7 +56,7 @@ async function submit() {
 <template>
   <div>
     <n-space vertical>
-      <n-form-item label="Parquet File">
+      <n-form-item :label="t('datasetFlows.parquetFile')">
         <input type="file" accept=".parquet,application/octet-stream" @change="onFileChange" />
       </n-form-item>
 
@@ -74,7 +76,7 @@ async function submit() {
       </n-alert>
 
       <n-space justify="end">
-        <n-button @click="props.onCancel()">Cancel</n-button>
+        <n-button @click="props.onCancel()">{{ t("common.cancel") }}</n-button>
         <n-button type="primary" :loading="loading" :disabled="!file" @click="submit">
           Import
         </n-button>

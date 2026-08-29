@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
+import { useI18n } from "vue-i18n";
 import { useMessage } from "naive-ui";
 import type { ExporterProps } from "@/shared/widgets/sdk";
 import { buildExportDownloadUrl } from "@/shared/api/datasets";
@@ -8,6 +9,7 @@ import { toUserMessage } from "@/shared/api";
 
 const props = defineProps<ExporterProps>();
 const message = useMessage();
+const { t } = useI18n();
 
 const loading = ref(false);
 const uri = ref<string | null>(null);
@@ -16,7 +18,7 @@ const statusMessage = ref("");
 
 async function runExport() {
   loading.value = true;
-  statusMessage.value = "Starting Parquet export...";
+  statusMessage.value = t("datasetFlows.startingParquet");
   try {
     const event = await streamApiSse(
       `/plugins/export-parquet/export/stream?dataset_id=${encodeURIComponent(props.datasetId)}`,
@@ -24,20 +26,20 @@ async function runExport() {
         method: "POST",
         onEvent: (item) => {
           if (item.event_type === "progress") {
-            statusMessage.value = item.message || item.status || "Exporting...";
+            statusMessage.value = item.message || item.status || t("datasetFlows.exporting");
           }
         },
       },
     );
     const payload = event?.payload ?? {};
     const resultUri = typeof payload.uri === "string" ? payload.uri : null;
-    if (!resultUri) throw new Error("Parquet export stream returned no URI");
+    if (!resultUri) throw new Error(t("datasetFlows.missingParquetUri"));
     uri.value = resultUri;
     rowCount.value = typeof payload.rows === "number" ? payload.rows : null;
-    statusMessage.value = "Parquet export complete";
+    statusMessage.value = t("datasetFlows.parquetComplete");
     message.success(`Parquet export complete: ${rowCount.value ?? "?"} rows`);
   } catch (error) {
-    message.error(toUserMessage(error, "Parquet export failed"));
+    message.error(toUserMessage(error, t("datasetFlows.parquetFailed")));
   } finally {
     loading.value = false;
   }
@@ -55,7 +57,9 @@ function done() {
 <template>
   <div>
     <n-space vertical>
-      <n-button type="primary" :loading="loading" @click="runExport"> Export as Parquet </n-button>
+      <n-button type="primary" :loading="loading" @click="runExport">
+        {{ t("datasetFlows.exportParquet") }}
+      </n-button>
       <n-text v-if="statusMessage" depth="3">{{ statusMessage }}</n-text>
 
       <n-space v-if="uri" vertical :size="4">
@@ -69,8 +73,8 @@ function done() {
       </n-space>
 
       <n-space justify="end">
-        <n-button @click="props.onCancel()">Close</n-button>
-        <n-button type="success" :disabled="!uri" @click="done">Done</n-button>
+        <n-button @click="props.onCancel()">{{ t("datasetFlows.close") }}</n-button>
+        <n-button type="success" :disabled="!uri" @click="done">{{ t("common.done") }}</n-button>
       </n-space>
     </n-space>
   </div>

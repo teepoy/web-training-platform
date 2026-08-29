@@ -1,16 +1,20 @@
 <script setup lang="ts">
 import { computed, h } from "vue";
+import { useI18n } from "vue-i18n";
 import { NDataTable, NTag, type DataTableColumns } from "naive-ui";
 import type { SparseSummaryResponse } from "@/generated/orval/models";
+import { formatDateTime, formatFileSize, formatNumber } from "@/shared/i18n/format";
+
+const { t } = useI18n();
 
 const schemaColumns: DataTableColumns<{ name: string; type: string }> = [
   {
-    title: "Column",
+    title: t("datasetFlows.column"),
     key: "name",
     render: (row) => h("code", { style: "font-size: 12px" }, row.name),
   },
   {
-    title: "Type",
+    title: t("datasetFlows.type"),
     key: "type",
     render: (row) => h("span", { style: "font-size: 12px" }, row.type),
   },
@@ -23,19 +27,28 @@ const shardColumns: DataTableColumns<{
   byte_size: number;
 }> = [
   {
-    title: "Shard #",
+    title: t("datasetFlows.shardNumber"),
     key: "shard_index",
     width: 90,
     render: (row) => h("span", {}, String(row.shard_index)),
   },
   {
-    title: "Rows",
+    title: t("datasetFlows.rows"),
     key: "row_count",
     width: 100,
-    render: (row) => h("span", {}, row.row_count.toLocaleString()),
+    render: (row) => h("span", {}, formatNumber(row.row_count)),
   },
-  { title: "Format", key: "format", width: 90, render: (row) => h("span", {}, row.format) },
-  { title: "Size", key: "byte_size", render: (row) => h("span", {}, formatBytes(row.byte_size)) },
+  {
+    title: t("datasetFlows.format"),
+    key: "format",
+    width: 90,
+    render: (row) => h("span", {}, row.format),
+  },
+  {
+    title: t("datasetFlows.size"),
+    key: "byte_size",
+    render: (row) => h("span", {}, formatFileSize(row.byte_size)),
+  },
 ];
 
 const props = defineProps<{
@@ -74,40 +87,33 @@ function handleSampleRowClick(row: Record<string, unknown>) {
   const sampleId = String(row.id ?? row.sample_id ?? "");
   if (sampleId) emit("select-sample", sampleId);
 }
-
-function formatBytes(bytes: number): string {
-  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${bytes} B`;
-}
 </script>
 
 <template>
   <section class="sparse-summary">
     <n-alert type="info" :bordered="false">
-      File-backed sparse storage keeps the dataset lightweight. Select a preview row to inspect its
-      sample details.
+      {{ t("datasetFlows.sparseHelp") }}
     </n-alert>
 
     <n-spin :show="isLoading">
       <template v-if="sparseSummary">
-        <n-card title="Storage summary" size="small">
+        <n-card :title="t('datasetFlows.storageSummary')" size="small">
           <div class="manifest-metrics">
             <div class="manifest-metric">
-              <n-text depth="3">Shards</n-text>
-              <strong>{{ sparseSummary.manifest.shard_count.toLocaleString() }}</strong>
+              <n-text depth="3">{{ t("datasetFlows.shards") }}</n-text>
+              <strong>{{ formatNumber(sparseSummary.manifest.shard_count) }}</strong>
             </div>
             <div class="manifest-metric">
-              <n-text depth="3">Rows</n-text>
-              <strong>{{ sparseSummary.manifest.total_rows.toLocaleString() }}</strong>
+              <n-text depth="3">{{ t("datasetFlows.rows") }}</n-text>
+              <strong>{{ formatNumber(sparseSummary.manifest.total_rows) }}</strong>
             </div>
             <div class="manifest-metric">
-              <n-text depth="3">Format</n-text>
+              <n-text depth="3">{{ t("datasetFlows.format") }}</n-text>
               <n-tag type="info" size="small">{{ sparseSummary.storage_mode }}</n-tag>
             </div>
             <div class="manifest-metric">
-              <n-text depth="3">Created</n-text>
-              <strong>{{ new Date(sparseSummary.manifest.created_at).toLocaleString() }}</strong>
+              <n-text depth="3">{{ t("datasetFlows.created") }}</n-text>
+              <strong>{{ formatDateTime(sparseSummary.manifest.created_at) }}</strong>
             </div>
           </div>
         </n-card>
@@ -115,7 +121,7 @@ function formatBytes(bytes: number): string {
         <div class="sparse-detail-grid">
           <n-card
             v-if="sparseSummary.manifest.schema_columns.length > 0"
-            title="Schema"
+            :title="t('datasetFlows.schema')"
             size="small"
           >
             <n-data-table
@@ -127,7 +133,11 @@ function formatBytes(bytes: number): string {
             />
           </n-card>
 
-          <n-card v-if="sparseSummary.shards.length > 0" title="Shards" size="small">
+          <n-card
+            v-if="sparseSummary.shards.length > 0"
+            :title="t('datasetFlows.shards')"
+            size="small"
+          >
             <n-data-table
               :columns="shardColumns"
               :data="sparseSummary.shards"
@@ -139,9 +149,13 @@ function formatBytes(bytes: number): string {
           </n-card>
         </div>
 
-        <n-card v-if="sparseSummary.sample_rows.length > 0" title="Preview rows" size="small">
+        <n-card
+          v-if="sparseSummary.sample_rows.length > 0"
+          :title="t('datasetFlows.previewRows')"
+          size="small"
+        >
           <template #header-extra>
-            <n-text depth="3">First shard</n-text>
+            <n-text depth="3">{{ t("datasetFlows.firstShard") }}</n-text>
           </template>
           <n-data-table
             :columns="sampleRowColumns"
@@ -161,7 +175,7 @@ function formatBytes(bytes: number): string {
         </n-card>
       </template>
 
-      <n-empty v-else-if="!isLoading" description="Unable to load sparse storage summary" />
+      <n-empty v-else-if="!isLoading" :description="t('datasetFlows.sparseLoadFailed')" />
     </n-spin>
   </section>
 </template>

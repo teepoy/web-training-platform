@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import { useI18n } from "vue-i18n";
 import { useMessage } from "naive-ui";
 import type { ExporterProps } from "@/shared/widgets/sdk";
 import { getExport } from "@/shared/api/datasets";
@@ -7,6 +8,7 @@ import { toUserMessage } from "@/shared/api";
 
 const props = defineProps<ExporterProps>();
 const message = useMessage();
+const { t } = useI18n();
 
 const loading = ref(false);
 const exportData = ref<Record<string, unknown> | null>(null);
@@ -21,35 +23,37 @@ async function runPreview() {
     const result = await getExport(props.datasetId);
     exportData.value = result as unknown as Record<string, unknown>;
   } catch (error) {
-    message.error(toUserMessage(error, "Export preview failed"));
+    message.error(toUserMessage(error, t("datasetFlows.previewFailed")));
   } finally {
     loading.value = false;
   }
 }
 
 function close() {
-  props.onComplete({ format: "preview", message: "Export preview complete" });
+  props.onComplete({ format: "preview", message: t("datasetFlows.previewComplete") });
 }
 </script>
 
 <template>
   <div>
     <div style="display: flex; justify-content: space-between; gap: 8px; margin-bottom: 12px">
-      <n-button type="primary" :loading="loading" @click="runPreview">Run Preview</n-button>
-      <n-button @click="props.onCancel()">Close</n-button>
+      <n-button type="primary" :loading="loading" @click="runPreview">
+        {{ t("datasetFlows.runPreview") }}
+      </n-button>
+      <n-button @click="props.onCancel()">{{ t("datasetFlows.close") }}</n-button>
     </div>
 
-    <n-card v-if="exportData" title="Export Preview" size="small">
+    <n-card v-if="exportData" :title="t('datasetFlows.exportPreview')" size="small">
       <n-scrollbar style="max-height: 420px">
         <pre style="margin: 0; font-size: 12px; white-space: pre-wrap; word-break: break-all">{{
           exportJson
         }}</pre>
       </n-scrollbar>
       <div style="display: flex; justify-content: flex-end; margin-top: 10px">
-        <n-button type="success" @click="close">Done</n-button>
+        <n-button type="success" @click="close">{{ t("common.done") }}</n-button>
       </div>
     </n-card>
 
-    <n-empty v-else description="Run preview to load export data." style="margin-top: 16px" />
+    <n-empty v-else :description="t('datasetFlows.previewEmpty')" style="margin-top: 16px" />
   </div>
 </template>

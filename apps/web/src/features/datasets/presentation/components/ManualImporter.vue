@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import { useMessage, type FormInst, type FormRules } from "naive-ui";
 import type { ImporterProps } from "@/shared/widgets/sdk";
 import {
@@ -10,6 +11,7 @@ import { toUserMessage } from "@/shared/api";
 
 const props = defineProps<ImporterProps>();
 const message = useMessage();
+const { t } = useI18n();
 
 const formRef = ref<FormInst | null>(null);
 const form = ref({ image_uris: "", metadata_raw: "" });
@@ -53,7 +55,7 @@ function submit() {
       try {
         metadata = JSON.parse(form.value.metadata_raw) as Record<string, unknown>;
       } catch {
-        message.error("Metadata must be valid JSON");
+        message.error(t("datasetFlows.metadataJsonInvalid"));
         return;
       }
     }
@@ -78,11 +80,11 @@ function submit() {
         );
       }
 
-      message.success("Sample created");
+      message.success(t("datasetFlows.sampleCreated"));
       resetLocalState();
-      props.onComplete({ imported: 1, failed: 0, message: "Manual import complete" });
+      props.onComplete({ imported: 1, failed: 0, message: t("datasetFlows.manualComplete") });
     } catch (error) {
-      message.error(toUserMessage(error, "Failed to create sample"));
+      message.error(toUserMessage(error, t("datasetFlows.sampleCreateFailed")));
     } finally {
       loading.value = false;
     }
@@ -99,14 +101,14 @@ watch(
 
 <template>
   <n-form ref="formRef" :model="form" :rules="rules" label-placement="top">
-    <n-form-item label="Image URIs (comma-separated, optional)" path="image_uris">
+    <n-form-item :label="t('datasetFlows.imageUris')" path="image_uris">
       <n-input
         v-model:value="form.image_uris"
         placeholder="e.g. s3://bucket/img1.jpg, s3://bucket/img2.jpg"
       />
     </n-form-item>
 
-    <n-form-item label="Upload Image (optional)">
+    <n-form-item :label="t('datasetFlows.uploadImage')">
       <div>
         <input
           ref="fileInputRef"
@@ -116,7 +118,7 @@ watch(
           @change="onFileChange"
         />
         <n-button @click="(fileInputRef as HTMLInputElement | null)?.click()">
-          Choose Image
+          {{ t("datasetFlows.chooseImage") }}
         </n-button>
         <n-image
           v-if="uploadPreviewUrl"
@@ -129,7 +131,7 @@ watch(
       </div>
     </n-form-item>
 
-    <n-form-item label="Metadata (JSON)" path="metadata_raw">
+    <n-form-item :label="t('datasetFlows.metadataJson')" path="metadata_raw">
       <n-input
         v-model:value="form.metadata_raw"
         type="textarea"
@@ -140,7 +142,7 @@ watch(
   </n-form>
 
   <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px">
-    <n-button @click="props.onCancel()">Cancel</n-button>
-    <n-button type="primary" :loading="loading" @click="submit">Create</n-button>
+    <n-button @click="props.onCancel()">{{ t("common.cancel") }}</n-button>
+    <n-button type="primary" :loading="loading" @click="submit">{{ t("common.create") }}</n-button>
   </div>
 </template>

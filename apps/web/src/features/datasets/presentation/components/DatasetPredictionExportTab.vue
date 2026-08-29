@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { widgetRegistry } from "@/app/registrations";
+import { useI18n } from "vue-i18n";
 
 const props = defineProps<{ datasetId: string }>();
+const { t } = useI18n();
 const exporter =
   widgetRegistry
     .getExporters("prediction")
@@ -14,15 +16,15 @@ function ignoreExportCompletion(): void {}
   <section class="prediction-export-tab" data-testid="dataset-prediction-export-tab">
     <header class="export-heading">
       <div>
-        <n-text depth="3" class="eyebrow">Export</n-text>
-        <n-h3>Export current results</n-h3>
+        <n-text depth="3" class="eyebrow">{{ t("common.export") }}</n-text>
+        <n-h3>{{ t("datasetFlows.exportResults") }}</n-h3>
         <n-text depth="3">
           Choose the class result, optional Review Sampling, and file format.
         </n-text>
       </div>
     </header>
 
-    <n-empty v-if="!exporter" description="No prediction result exporter is registered." />
+    <n-empty v-if="!exporter" :description="t('datasetFlows.noExporter')" />
     <component
       :is="exporter.component"
       v-else
