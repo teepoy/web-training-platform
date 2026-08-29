@@ -2,6 +2,7 @@
 import { computed, h, ref, watch } from "vue";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { useRouter } from "vue-router";
+import { useI18n } from "vue-i18n";
 import {
   NButton,
   NAlert,
@@ -38,8 +39,10 @@ import BulkSelectionToolbar from "@/shared/components/bulk-selection-toolbar/Bul
 import RemoteListTableShell from "@/shared/components/remote-list-table-shell";
 import ResourceFilterBar from "@/shared/components/resource-filter-bar";
 import { runBatchAction } from "@/shared/utils/runBatchAction";
+import { formatDateTime } from "@/shared/i18n/format";
 
 const router = useRouter();
+const { t } = useI18n();
 const queryClient = useQueryClient();
 const message = useMessage();
 const orgStore = useOrgStore();
@@ -214,14 +217,14 @@ const createMutation = useMutation({
       sourceDatasetIds: selectedDatasetIds.value,
     }),
   onSuccess: async (collection) => {
-    message.success("Dataset collection created");
+    message.success(t("collections.created"));
     createVisible.value = false;
     await queryClient.invalidateQueries({
       queryKey: orgScopedQueryKey(orgStore.currentOrgId, ["dataset-collections"]),
     });
     await router.push(`/dataset-collections/${collection.id}`);
   },
-  onError: (error) => message.error(toUserMessage(error, "Failed to create collection")),
+  onError: (error) => message.error(toUserMessage(error, t("collections.createFailed"))),
 });
 
 const canCreate = computed(
@@ -266,7 +269,7 @@ async function deleteSelectedCollections(): Promise<void> {
   if (selected.length === 0 || batchDeletePending.value) return;
   if (
     !window.confirm(
-      `Delete ${selected.length} selected collection${selected.length === 1 ? "" : "s"}? Their saved snapshots will also be removed; source datasets are not changed.`,
+      t("collections.confirmDeleteSelected", { count: selected.length }, selected.length),
     )
   ) {
     return;
@@ -285,15 +288,16 @@ async function deleteSelectedCollections(): Promise<void> {
     }
     if (result.failed.length === 0) {
       message.success(
-        `${result.succeeded.length} collection${result.succeeded.length === 1 ? "" : "s"} deleted`,
+        t("collections.deletedCount", { count: result.succeeded.length }, result.succeeded.length),
       );
     } else if (result.succeeded.length === 0) {
-      message.error(
-        toUserMessage(result.failed[0]?.error, "Failed to delete selected collections"),
-      );
+      message.error(toUserMessage(result.failed[0]?.error, t("collections.deleteSelectedFailed")));
     } else {
       message.warning(
-        `${result.succeeded.length} deleted; ${result.failed.length} could not be deleted and remain selected`,
+        t("collections.partialDelete", {
+          deleted: result.succeeded.length,
+          failed: result.failed.length,
+        }),
       );
     }
   } finally {
@@ -308,41 +312,41 @@ const columns = computed<DataTableColumns<DatasetCollectionResponse>>(() => [
     disabled: (row) => row.created_by !== authStore.user?.id,
   },
   {
-    title: "Name",
+    title: t("common.name"),
     key: "name",
     minWidth: 180,
     sorter: true,
     sortOrder: sorter.value?.columnKey === "name" ? sorter.value.order : false,
   },
-  { title: "Target view", key: "target_view_id", minWidth: 160 },
+  { title: t("collections.targetView"), key: "target_view_id", minWidth: 160 },
   {
-    title: "Definition",
+    title: t("collections.definition"),
     key: "definition_version",
     render: (row) => `v${row.definition_version}`,
   },
   {
-    title: "Creator",
+    title: t("jobs.creator"),
     key: "creator",
     minWidth: 130,
     sorter: true,
     sortOrder: sorter.value?.columnKey === "creator" ? sorter.value.order : false,
     render: (row) =>
       row.created_by === authStore.user?.id
-        ? authStore.user?.name || authStore.user?.email || "You"
+        ? authStore.user?.name || authStore.user?.email || t("user.you")
         : row.creator_name?.trim() || row.created_by,
   },
   {
-    title: "Policy",
+    title: t("collections.policy"),
     key: "duplicate_policy",
-    render: () => h(NTag, { size: "small" }, { default: () => "Keep all samples" }),
+    render: () => h(NTag, { size: "small" }, { default: () => t("collections.keepAll") }),
   },
   {
-    title: "Updated",
+    title: t("tasks.updated"),
     key: "updated_at",
     width: 180,
     sorter: true,
     sortOrder: sorter.value?.columnKey === "updated_at" ? sorter.value.order : false,
-    render: (row) => new Date(row.updated_at).toLocaleString(),
+    render: (row) => formatDateTime(row.updated_at),
   },
   {
     title: "",
@@ -359,7 +363,7 @@ const columns = computed<DataTableColumns<DatasetCollectionResponse>>(() => [
             void router.push(`/dataset-collections/${row.id}`);
           },
         },
-        { default: () => "Open" },
+        { default: () => t("collections.open") },
       ),
   },
 ]);
@@ -369,11 +373,11 @@ const columns = computed<DataTableColumns<DatasetCollectionResponse>>(() => [
   <div class="collection-list-page" :class="{ 'collection-list-page--embedded': props.embedded }">
     <div v-if="!props.embedded" class="collection-list-header">
       <div>
-        <h1>Dataset Collections</h1>
-        <NText depth="3">Dynamically compose existing datasets without changing them.</NText>
+        <h1>{{ t("collections.title") }}</h1>
+        <NText depth="3">{{ t("collections.description") }}</NText>
       </div>
       <NButton type="primary" :disabled="!orgStore.currentOrgId" @click="openCreate">
-        New collection
+        {{ t("collections.newCollection") }}
       </NButton>
     </div>
 
@@ -384,19 +388,19 @@ const columns = computed<DataTableColumns<DatasetCollectionResponse>>(() => [
       <ResourceFilterBar
         v-if="!props.embedded"
         :keyword="localSearch"
-        keyword-placeholder="Search collections"
+        :keyword-placeholder="t('collections.search')"
         :creator-scope="localCreatorScope"
         :creators="collectionCreators ?? []"
         :creators-loading="collectionCreatorsLoading"
         :active-filter-count="activeFilterCount"
-        resource-label="collections"
+        :resource-label="t('resources.collections')"
         @update:keyword="localSearch = $event"
         @update:creator-scope="localCreatorScope = $event"
         @clear="clearFilters"
       />
       <BulkSelectionToolbar
         :selected-count="selectedCollections.length"
-        item-label="collection"
+        :item-label="t('collections.item')"
         :loading="batchDeletePending"
         @clear="checkedCollectionIds = []"
       >
@@ -406,11 +410,11 @@ const columns = computed<DataTableColumns<DatasetCollectionResponse>>(() => [
           :loading="batchDeletePending"
           @click="deleteSelectedCollections"
         >
-          Delete selected
+          {{ t("datasets.deleteSelected") }}
         </NButton>
       </BulkSelectionToolbar>
       <template v-if="!orgStore.currentOrgId">
-        <NEmpty description="Select or join an organization to manage dataset collections" />
+        <NEmpty :description="t('collections.selectOrganization')" />
       </template>
       <RemoteListTableShell
         v-else
@@ -419,12 +423,12 @@ const columns = computed<DataTableColumns<DatasetCollectionResponse>>(() => [
         :loading="collectionsQuery.isLoading.value || !creatorFilterReady"
         :error="
           collectionsQuery.isError.value
-            ? toUserMessage(collectionsQuery.error.value, 'Failed to load dataset collections')
+            ? toUserMessage(collectionsQuery.error.value, t('collections.loadFailed'))
             : null
         "
         :active-filter-count="activeFilterCount"
-        empty-description="No dataset collections have been created yet"
-        no-results-description="No dataset collections match these filters"
+        :empty-description="t('collections.empty')"
+        :no-results-description="t('collections.noMatches')"
         :pagination="tablePagination"
         :row-key="(row: DatasetCollectionResponse) => row.id"
         :row-props="collectionRowProps"
@@ -435,28 +439,36 @@ const columns = computed<DataTableColumns<DatasetCollectionResponse>>(() => [
         @update:sorter="handleSorterChange"
       >
         <template #empty-extra>
-          <NButton @click="openCreate">Create a collection</NButton>
+          <NButton @click="openCreate">{{ t("collections.createOne") }}</NButton>
         </template>
       </RemoteListTableShell>
       <NText v-if="collections.length > 0" class="mobile-table-hint" depth="3">
-        Tap a row to open it. Swipe sideways for more columns.
+        {{ t("collections.mobileHint") }}
       </NText>
     </NCard>
 
     <NModal
       v-model:show="createVisible"
       preset="card"
-      title="Create dataset collection"
+      :title="t('collections.createTitle')"
       class="collection-modal"
       :style="{ width: 'min(620px, calc(100vw - 32px))' }"
     >
-      <NFormItem label="Name" required>
-        <NInput v-model:value="name" placeholder="Collection name" maxlength="255" />
+      <NFormItem :label="t('common.name')" required>
+        <NInput
+          v-model:value="name"
+          :placeholder="t('collections.namePlaceholder')"
+          maxlength="255"
+        />
       </NFormItem>
-      <NFormItem label="Description">
-        <NInput v-model:value="description" type="textarea" placeholder="Purpose and scope" />
+      <NFormItem :label="t('common.description')">
+        <NInput
+          v-model:value="description"
+          type="textarea"
+          :placeholder="t('collections.purposePlaceholder')"
+        />
       </NFormItem>
-      <NFormItem label="Existing datasets">
+      <NFormItem :label="t('collections.existingDatasets')">
         <NSelect
           v-model:value="selectedDatasetIds"
           multiple
@@ -464,37 +476,36 @@ const columns = computed<DataTableColumns<DatasetCollectionResponse>>(() => [
           clearable
           :options="datasetOptions"
           :loading="datasetsQuery.isLoading.value"
-          placeholder="Select datasets to link now, or leave empty"
+          :placeholder="t('collections.selectDatasets')"
         />
       </NFormItem>
       <NText class="field-help" depth="3">
-        Pick datasets first to narrow the target views to the ones they all support.
+        {{ t("collections.datasetsHelp") }}
       </NText>
       <NAlert v-if="!labelSpacesCompatible" type="error" :show-icon="false">
-        Selected datasets must use the same labels in the same order.
+        {{ t("collections.labelMismatch") }}
       </NAlert>
-      <NFormItem label="Target view" required>
+      <NFormItem :label="t('collections.targetView')" required>
         <NSelect
           v-model:value="targetViewId"
           :options="targetViewOptions"
           :disabled="targetViewOptions.length === 0"
-          placeholder="Choose a view supported by every selected dataset"
+          :placeholder="t('collections.chooseView')"
         />
       </NFormItem>
       <NText depth="3">
-        Linked datasets remain standalone. Save the current setup before using it for review,
-        training, or prediction; member data is read when each run starts.
+        {{ t("collections.linkedHelp") }}
       </NText>
       <template #footer>
         <NSpace justify="end">
-          <NButton @click="createVisible = false">Cancel</NButton>
+          <NButton @click="createVisible = false">{{ t("common.cancel") }}</NButton>
           <NButton
             type="primary"
             :disabled="!canCreate"
             :loading="createMutation.isPending.value"
             @click="createMutation.mutate()"
           >
-            Create
+            {{ t("common.create") }}
           </NButton>
         </NSpace>
       </template>

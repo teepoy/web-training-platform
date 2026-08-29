@@ -3,17 +3,17 @@
     <DatasetPageShell v-bind="surface.pageShellProps.value">
       <DatasetToolbar
         v-if="!props.embedded"
-        :title="activeDatasetType === 'image_sc' ? 'Patch Datasets' : 'Datasets'"
+        :title="activeDatasetType === 'image_sc' ? t('datasets.patchTitle') : t('datasets.title')"
       />
 
       <ResourceFilterBar
         v-if="!props.embedded"
         :keyword="localKeyword"
-        keyword-placeholder="Search datasets"
+        :keyword-placeholder="t('datasets.search')"
         :creator-scope="localCreatorScope"
         :creators="datasetCreators ?? []"
         :active-filter-count="activeFilterCount"
-        resource-label="datasets"
+        :resource-label="t('resources.datasets')"
         @update:keyword="localKeyword = $event"
         @update:creator-scope="localCreatorScope = $event"
         @clear="clearFilters"
@@ -21,7 +21,7 @@
 
       <BulkSelectionToolbar
         :selected-count="selectedDatasets.length"
-        item-label="dataset"
+        :item-label="t('datasets.item')"
         :loading="batchDeletePending"
         @clear="checkedDatasetIds = []"
       >
@@ -31,7 +31,7 @@
           :loading="batchDeletePending"
           @click="deleteSelectedDatasets"
         >
-          Delete selected
+          {{ t("datasets.deleteSelected") }}
         </NButton>
       </BulkSelectionToolbar>
 
@@ -56,16 +56,16 @@
     <n-modal
       v-model:show="renameVisible"
       preset="dialog"
-      title="Rename Dataset"
-      positive-text="Save"
-      negative-text="Cancel"
+      :title="t('datasets.renameTitle')"
+      :positive-text="t('common.save')"
+      :negative-text="t('common.cancel')"
       :loading="renameMutation.isPending.value"
       @positive-click="submitRename"
       @negative-click="renameVisible = false"
     >
       <n-input
         v-model:value="renameName"
-        placeholder="Enter new name"
+        :placeholder="t('datasets.newName')"
         maxlength="255"
         show-count
         @keyup.enter="submitRename"
@@ -86,6 +86,7 @@ import {
   type DataTableRowKey,
   type DataTableSortState,
 } from "naive-ui";
+import { useI18n } from "vue-i18n";
 import { DatasetPageShell, DatasetToolbar } from "@/shared";
 import {
   deleteDatasetApiV1DatasetsDatasetIdDelete,
@@ -112,6 +113,7 @@ import type { ListDatasetsApiV1DatasetsGetParams } from "@/generated/orval/model
 import type { DatasetListItem } from "@/shared/datasets/types";
 
 const router = useRouter();
+const { t } = useI18n();
 const message = useMessage();
 const qc = useQueryClient();
 const orgStore = useOrgStore();
@@ -235,7 +237,7 @@ const toggleDatasetPublicMut = useSetDatasetPublicApiV1DatasetsDatasetIdPublicPa
       qc.invalidateQueries({ queryKey: datasetListQueryPrefix.value });
     },
     onError: (error) => {
-      message.error(toUserMessage(error, "Failed to update visibility"));
+      message.error(toUserMessage(error, t("datasets.visibilityFailed")));
     },
   },
 });
@@ -243,11 +245,11 @@ const toggleDatasetPublicMut = useSetDatasetPublicApiV1DatasetsDatasetIdPublicPa
 const deleteDatasetMut = useDeleteDatasetApiV1DatasetsDatasetIdDelete({
   mutation: {
     onSuccess: () => {
-      message.success("Dataset deleted");
+      message.success(t("datasets.deleted"));
       qc.invalidateQueries({ queryKey: datasetListQueryPrefix.value });
     },
     onError: (error) => {
-      message.error(toUserMessage(error, "Failed to delete dataset"));
+      message.error(toUserMessage(error, t("datasets.deleteFailed")));
     },
   },
 });
@@ -259,14 +261,14 @@ const renameName = ref("");
 const renameMutation = useUpdateDatasetApiV1DatasetsDatasetIdPatch({
   mutation: {
     onSuccess: () => {
-      message.success("Dataset renamed");
+      message.success(t("datasets.renamed"));
       qc.invalidateQueries({ queryKey: datasetListQueryPrefix.value });
       renameVisible.value = false;
       renameTarget.value = null;
       renameName.value = "";
     },
     onError: (error) => {
-      message.error(toUserMessage(error, "Failed to rename dataset"));
+      message.error(toUserMessage(error, t("datasets.renameFailed")));
     },
   },
 });
@@ -284,14 +286,10 @@ function handleTogglePublic(payload: { id: string; isPublic: boolean }) {
 
 function handleDeleteDataset(row: DatasetListItem) {
   if (row.created_by !== authStore.user?.id) {
-    message.error("Only the dataset creator can delete this dataset");
+    message.error(t("datasets.creatorDeleteOnly"));
     return;
   }
-  if (
-    !window.confirm(
-      `Delete dataset '${row.name}'? This removes its local jobs, samples, models, and Label Studio project.`,
-    )
-  ) {
+  if (!window.confirm(t("datasets.confirmDelete", { name: row.name }))) {
     return;
   }
   deleteDatasetMut.mutate({ datasetId: row.id! });
@@ -299,7 +297,7 @@ function handleDeleteDataset(row: DatasetListItem) {
 
 function handleRenameDataset(row: DatasetListItem) {
   if (row.created_by !== authStore.user?.id) {
-    message.error("Only the dataset creator can rename this dataset");
+    message.error(t("datasets.creatorRenameOnly"));
     return;
   }
   renameTarget.value = { id: row.id, name: row.name };
@@ -339,7 +337,7 @@ async function deleteSelectedDatasets(): Promise<void> {
   if (selected.length === 0 || batchDeletePending.value) return;
   if (
     !window.confirm(
-      `Delete ${selected.length} selected dataset${selected.length === 1 ? "" : "s"}? This removes their local jobs, samples, models, and Label Studio projects.`,
+      t("datasets.confirmDeleteSelected", { count: selected.length }, selected.length),
     )
   ) {
     return;
@@ -356,13 +354,16 @@ async function deleteSelectedDatasets(): Promise<void> {
     }
     if (result.failed.length === 0) {
       message.success(
-        `${result.succeeded.length} dataset${result.succeeded.length === 1 ? "" : "s"} deleted`,
+        t("datasets.deletedCount", { count: result.succeeded.length }, result.succeeded.length),
       );
     } else if (result.succeeded.length === 0) {
-      message.error(toUserMessage(result.failed[0]?.error, "Failed to delete selected datasets"));
+      message.error(toUserMessage(result.failed[0]?.error, t("datasets.deleteSelectedFailed")));
     } else {
       message.warning(
-        `${result.succeeded.length} deleted; ${result.failed.length} could not be deleted and remain selected`,
+        t("datasets.partialDelete", {
+          deleted: result.succeeded.length,
+          failed: result.failed.length,
+        }),
       );
     }
   } finally {
