@@ -2,50 +2,65 @@
   <n-space vertical size="large">
     <template v-if="!orgStore.currentOrgId">
       <div style="padding: 48px; text-align: center">
-        <n-empty description="You are not a member of any organization. Contact an admin." />
+        <n-empty :description="t('user.noOrganization')" />
       </div>
     </template>
     <template v-else>
-      <n-page-header title="Dashboard" />
+      <n-page-header :title="t('dashboard.title')" />
 
-      <n-alert v-if="data && !data.prefect_connected" type="warning" title="Prefect not connected">
-        Work pool and schedule data may be unavailable. Check your Prefect API configuration.
+      <n-alert
+        v-if="data && !data.prefect_connected"
+        type="warning"
+        :title="t('dashboard.prefectDisconnected')"
+      >
+        {{ t("dashboard.prefectDisconnectedDetail") }}
       </n-alert>
 
       <n-spin :show="isLoading">
         <n-space vertical size="large">
-          <n-card title="Work Pool" size="small" data-testid="dashboard-work-pool-card">
+          <n-card
+            :title="t('dashboard.workPool')"
+            size="small"
+            data-testid="dashboard-work-pool-card"
+          >
             <template v-if="data?.work_pool">
               <n-space>
-                <n-statistic label="Pool Name" :value="data.work_pool.name" />
-                <n-statistic label="Type" :value="data.work_pool.type" />
-                <n-statistic label="Slots Used" :value="String(data.work_pool.slots_used)" />
+                <n-statistic :label="t('dashboard.poolName')" :value="data.work_pool.name" />
+                <n-statistic :label="t('dashboard.type')" :value="data.work_pool.type" />
                 <n-statistic
-                  label="Concurrency Limit"
+                  :label="t('dashboard.slotsUsed')"
+                  :value="formatOptionalNumber(data.work_pool.slots_used)"
+                />
+                <n-statistic
+                  :label="t('dashboard.concurrencyLimit')"
                   :value="
-                    data.work_pool.concurrency_limit !== null
-                      ? String(data.work_pool.concurrency_limit)
-                      : 'Unlimited'
+                    data.work_pool.concurrency_limit === null
+                      ? t('dashboard.unlimited')
+                      : formatOptionalNumber(data.work_pool.concurrency_limit)
                   "
                 />
               </n-space>
               <n-space style="margin-top: 12px" align="center">
-                <span class="stat-label">Status</span>
+                <span class="stat-label">{{ t("jobs.status") }}</span>
                 <n-tag :type="poolStatusType(data.work_pool.status ?? '')" size="small" round>
-                  {{ data.work_pool.status }}
+                  {{ statusLabel(data.work_pool.status ?? "") }}
                 </n-tag>
-                <span class="stat-label">Paused</span>
+                <span class="stat-label">{{ t("status.paused") }}</span>
                 <n-tag :type="data.work_pool.is_paused ? 'warning' : 'success'" size="small" round>
-                  {{ data.work_pool.is_paused ? "Yes" : "No" }}
+                  {{ data.work_pool.is_paused ? t("dashboard.yes") : t("dashboard.no") }}
                 </n-tag>
               </n-space>
             </template>
-            <n-alert v-else type="default" title="No work pool data">
-              Work pool information is unavailable.
+            <n-alert v-else type="default" :title="t('dashboard.noWorkPool')">
+              {{ t("dashboard.noWorkPoolDetail") }}
             </n-alert>
           </n-card>
 
-          <n-card title="Service Health" size="small" data-testid="dashboard-service-health-card">
+          <n-card
+            :title="t('dashboard.serviceHealth')"
+            size="small"
+            data-testid="dashboard-service-health-card"
+          >
             <n-data-table
               :columns="serviceColumns"
               :data="data?.services ?? []"
@@ -55,27 +70,50 @@
             />
           </n-card>
 
-          <n-card title="Job Queue" size="small" data-testid="dashboard-job-queue-card">
+          <n-card
+            :title="t('dashboard.jobQueue')"
+            size="small"
+            data-testid="dashboard-job-queue-card"
+          >
             <n-grid :cols="5" :x-gap="16" :y-gap="16">
               <n-gi>
-                <n-statistic label="Queued" :value="String(data?.job_queue?.queued ?? 0)" />
+                <n-statistic
+                  :label="t('status.queued')"
+                  :value="formatNumber(data?.job_queue?.queued ?? 0)"
+                />
               </n-gi>
               <n-gi>
-                <n-statistic label="Running" :value="String(data?.job_queue?.running ?? 0)" />
+                <n-statistic
+                  :label="t('status.running')"
+                  :value="formatNumber(data?.job_queue?.running ?? 0)"
+                />
               </n-gi>
               <n-gi>
-                <n-statistic label="Completed" :value="String(data?.job_queue?.completed ?? 0)" />
+                <n-statistic
+                  :label="t('status.completed')"
+                  :value="formatNumber(data?.job_queue?.completed ?? 0)"
+                />
               </n-gi>
               <n-gi>
-                <n-statistic label="Failed" :value="String(data?.job_queue?.failed ?? 0)" />
+                <n-statistic
+                  :label="t('status.failed')"
+                  :value="formatNumber(data?.job_queue?.failed ?? 0)"
+                />
               </n-gi>
               <n-gi>
-                <n-statistic label="Cancelled" :value="String(data?.job_queue?.cancelled ?? 0)" />
+                <n-statistic
+                  :label="t('status.cancelled')"
+                  :value="formatNumber(data?.job_queue?.cancelled ?? 0)"
+                />
               </n-gi>
             </n-grid>
           </n-card>
 
-          <n-card title="Recent Jobs" size="small" data-testid="dashboard-recent-jobs-card">
+          <n-card
+            :title="t('dashboard.recentJobs')"
+            size="small"
+            data-testid="dashboard-recent-jobs-card"
+          >
             <n-data-table
               :columns="columns"
               :data="data?.recent_jobs ?? []"
@@ -95,14 +133,26 @@
 import { computed, h } from "vue";
 import type { DataTableColumns } from "naive-ui";
 import { NTag } from "naive-ui";
+import { useI18n } from "vue-i18n";
 import { useGetDashboardApiV1DashboardGet } from "@/generated/orval/endpoints/api";
 import type { RecentJobSummary, ServiceStatus } from "@/generated/orval/models";
 import { useOrgStore } from "@/features/auth/application/org";
 import { orgScopedQueryKey } from "@/shared/api";
+import { formatDateTime, formatNumber } from "@/shared/i18n/format";
 
 type TagType = "default" | "info" | "success" | "error" | "warning";
 
 const orgStore = useOrgStore();
+const { t } = useI18n();
+
+function statusLabel(status: string): string {
+  const key = status === "not_ready" ? "status.notReady" : `status.${status}`;
+  return status ? t(key) : "—";
+}
+
+function formatOptionalNumber(value: number | null | undefined): string {
+  return value === null || value === undefined ? "—" : formatNumber(value);
+}
 
 const { data, isLoading } = useGetDashboardApiV1DashboardGet({
   query: {
@@ -144,34 +194,34 @@ function serviceStatusType(status: string): TagType {
 
 const serviceColumns = computed<DataTableColumns<ServiceStatus>>(() => [
   {
-    title: "Service",
+    title: t("dashboard.service"),
     key: "name",
     width: 160,
   },
   {
-    title: "Kind",
+    title: t("dashboard.kind"),
     key: "kind",
     width: 110,
   },
   {
-    title: "Status",
+    title: t("jobs.status"),
     key: "status",
     width: 120,
     render: (row) =>
       h(
         NTag,
         { type: serviceStatusType(row.status), size: "small", round: true },
-        { default: () => row.status },
+        { default: () => statusLabel(row.status) },
       ),
   },
   {
-    title: "Latency",
+    title: t("dashboard.latency"),
     key: "latency_ms",
     width: 110,
     render: (row) => (row.latency_ms !== null ? `${row.latency_ms} ms` : "-"),
   },
   {
-    title: "Detail",
+    title: t("dashboard.detail"),
     key: "detail",
     minWidth: 220,
   },
@@ -179,50 +229,50 @@ const serviceColumns = computed<DataTableColumns<ServiceStatus>>(() => [
 
 const columns = computed<DataTableColumns<RecentJobSummary>>(() => [
   {
-    title: "ID",
+    title: t("jobs.id"),
     key: "id",
     width: 110,
     render: (row) => row.id.slice(0, 8) + "…",
   },
   {
-    title: "Dataset",
+    title: t("resources.dataset"),
     key: "dataset_id",
     width: 110,
-    render: (row) => (row.dataset_id ? row.dataset_id.slice(0, 8) + "…" : "Deleted"),
+    render: (row) => (row.dataset_id ? row.dataset_id.slice(0, 8) + "…" : t("dashboard.deleted")),
   },
   {
-    title: "View",
+    title: t("jobs.view"),
     key: "trainer_id",
     width: 110,
     render: (row) => row.trainer_id.slice(0, 8) + "…",
   },
   {
-    title: "Status",
+    title: t("jobs.status"),
     key: "status",
     width: 120,
     render: (row) =>
       h(
         NTag,
         { type: statusType(row.status), size: "small", round: true },
-        { default: () => row.status },
+        { default: () => statusLabel(row.status) },
       ),
   },
   {
-    title: "Created By",
+    title: t("dashboard.createdBy"),
     key: "created_by",
     width: 120,
   },
   {
-    title: "Created At",
+    title: t("jobs.createdAt"),
     key: "created_at",
     width: 170,
-    render: (row) => new Date(row.created_at).toLocaleString(),
+    render: (row) => formatDateTime(row.created_at),
   },
   {
-    title: "Updated At",
+    title: t("dashboard.updatedAt"),
     key: "updated_at",
     width: 170,
-    render: (row) => new Date(row.updated_at).toLocaleString(),
+    render: (row) => formatDateTime(row.updated_at),
   },
 ]);
 </script>

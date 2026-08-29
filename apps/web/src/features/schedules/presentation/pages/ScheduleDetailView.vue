@@ -1,9 +1,12 @@
 <template>
   <n-space vertical size="large">
-    <n-page-header :title="schedule?.name ?? 'Schedule Detail'" @back="router.push('/schedules')">
+    <n-page-header
+      :title="schedule?.name ?? t('schedules.detail')"
+      @back="router.push('/schedules')"
+    >
       <template #subtitle>
         <n-tag :type="schedule?.is_schedule_active ? 'success' : 'warning'" size="small" round>
-          {{ schedule?.is_schedule_active ? "Active" : "Paused" }}
+          {{ schedule?.is_schedule_active ? t("status.active") : t("status.paused") }}
         </n-tag>
       </template>
       <template #extra>
@@ -14,16 +17,16 @@
             :loading="pauseMutation.isPending.value || resumeMutation.isPending.value"
             @click="onTogglePause"
           >
-            {{ schedule.is_schedule_active ? "Pause" : "Resume" }}
+            {{ schedule.is_schedule_active ? t("common.pause") : t("common.resume") }}
           </n-button>
-          <n-button size="small" @click="showEditModal = true">Edit</n-button>
+          <n-button size="small" @click="showEditModal = true">{{ t("common.edit") }}</n-button>
           <n-button
             size="small"
             type="primary"
             :loading="triggerMutation.isPending.value"
             @click="onTrigger"
           >
-            Trigger Now
+            {{ t("schedules.triggerNow") }}
           </n-button>
           <n-button
             size="small"
@@ -31,7 +34,7 @@
             :loading="deleteMutation.isPending.value"
             @click="onDelete"
           >
-            Delete
+            {{ t("common.delete") }}
           </n-button>
           <n-button
             v-if="schedule?.prefect_deployment_url"
@@ -40,7 +43,7 @@
             :href="schedule.prefect_deployment_url"
             target="_blank"
           >
-            View in Prefect ↗
+            {{ t("schedules.viewInPrefect") }}
           </n-button>
         </n-space>
       </template>
@@ -49,26 +52,32 @@
     <n-spin :show="scheduleLoading">
       <n-card v-if="schedule">
         <n-descriptions label-placement="left" :column="2" bordered>
-          <n-descriptions-item label="Flow Name">{{ schedule.flow_name }}</n-descriptions-item>
-          <n-descriptions-item label="Cron">{{ schedule.cron ?? "—" }}</n-descriptions-item>
-          <n-descriptions-item label="Timezone">{{ schedule.timezone }}</n-descriptions-item>
-          <n-descriptions-item label="Description">{{
+          <n-descriptions-item :label="t('schedules.flowName')">{{
+            schedule.flow_name
+          }}</n-descriptions-item>
+          <n-descriptions-item :label="t('schedules.cron')">{{
+            schedule.cron ?? "—"
+          }}</n-descriptions-item>
+          <n-descriptions-item :label="t('schedules.timezone')">{{
+            schedule.timezone
+          }}</n-descriptions-item>
+          <n-descriptions-item :label="t('common.description')">{{
             schedule.description || "—"
           }}</n-descriptions-item>
-          <n-descriptions-item label="Deployment ID">
+          <n-descriptions-item :label="t('schedules.deploymentId')">
             {{ schedule.prefect_deployment_id || "—" }}
           </n-descriptions-item>
-          <n-descriptions-item label="Created">
-            {{ schedule.created ? new Date(schedule.created).toLocaleString() : "—" }}
+          <n-descriptions-item :label="t('settings.created')">
+            {{ schedule.created ? formatDateTime(schedule.created) : "—" }}
           </n-descriptions-item>
-          <n-descriptions-item label="Updated">
-            {{ schedule.updated ? new Date(schedule.updated).toLocaleString() : "—" }}
+          <n-descriptions-item :label="t('tasks.updated')">
+            {{ schedule.updated ? formatDateTime(schedule.updated) : "—" }}
           </n-descriptions-item>
         </n-descriptions>
       </n-card>
     </n-spin>
 
-    <n-card title="Run History">
+    <n-card :title="t('schedules.runHistory')">
       <n-spin :show="runsLoading">
         <n-data-table
           :columns="runColumns"
@@ -88,21 +97,24 @@
   <n-modal
     v-model:show="showEditModal"
     preset="dialog"
-    title="Edit Schedule"
-    positive-text="Save"
-    negative-text="Cancel"
+    :title="t('schedules.edit')"
+    :positive-text="t('common.save')"
+    :negative-text="t('common.cancel')"
     :loading="updateMutation.isPending.value"
     @positive-click="onEditSubmit"
     @negative-click="showEditModal = false"
   >
     <n-form ref="editFormRef" :model="editForm" label-placement="left" label-width="auto">
-      <n-form-item label="Cron">
+      <n-form-item :label="t('schedules.cron')">
         <n-input v-model:value="editForm.cron" placeholder="*/5 * * * *" />
       </n-form-item>
-      <n-form-item label="Timezone">
-        <n-input v-model:value="editForm.timezone" placeholder="UTC or Asia/Shanghai" />
+      <n-form-item :label="t('schedules.timezone')">
+        <n-input
+          v-model:value="editForm.timezone"
+          :placeholder="t('schedules.timezonePlaceholder')"
+        />
       </n-form-item>
-      <n-form-item label="Parameters">
+      <n-form-item :label="t('schedules.parameters')">
         <n-input
           v-model:value="editForm.parameters"
           type="textarea"
@@ -110,8 +122,11 @@
           :autosize="{ minRows: 3, maxRows: 6 }"
         />
       </n-form-item>
-      <n-form-item label="Description">
-        <n-input v-model:value="editForm.description" placeholder="Optional description" />
+      <n-form-item :label="t('common.description')">
+        <n-input
+          v-model:value="editForm.description"
+          :placeholder="t('schedules.optionalDescription')"
+        />
       </n-form-item>
     </n-form>
   </n-modal>
@@ -120,6 +135,7 @@
 <script setup lang="ts">
 import { ref, computed, h, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { useI18n } from "vue-i18n";
 import { useQueryClient } from "@tanstack/vue-query";
 import type { DataTableColumns, FormInst } from "naive-ui";
 import {
@@ -155,8 +171,10 @@ import type {
   UpdateScheduleRequest,
 } from "@/generated/orval/models";
 import RunLogViewer from "@/shared/components/run-log-viewer/RunLogViewer.vue";
+import { formatDateTime, formatNumber } from "@/shared/i18n/format";
 
 const route = useRoute();
+const { t } = useI18n();
 const router = useRouter();
 const message = useMessage();
 const qc = useQueryClient();
@@ -203,10 +221,10 @@ const triggerMutation = useTriggerRunApiV1SchedulesScheduleIdRunPost({
   mutation: {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: scheduleRunsQueryKey.value });
-      message.success("Run triggered");
+      message.success(t("schedules.runTriggered"));
     },
     onError: (error) => {
-      message.error(toUserMessage(error, "Failed to trigger run"));
+      message.error(toUserMessage(error, t("schedules.triggerFailed")));
     },
   },
 });
@@ -215,10 +233,10 @@ const pauseMutation = usePauseScheduleApiV1SchedulesScheduleIdPausePost({
   mutation: {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: scheduleQueryKey.value });
-      message.success("Schedule paused");
+      message.success(t("schedules.paused"));
     },
     onError: (error) => {
-      message.error(toUserMessage(error, "Failed to pause schedule"));
+      message.error(toUserMessage(error, t("schedules.pauseFailed")));
     },
   },
 });
@@ -227,10 +245,10 @@ const resumeMutation = useResumeScheduleApiV1SchedulesScheduleIdResumePost({
   mutation: {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: scheduleQueryKey.value });
-      message.success("Schedule resumed");
+      message.success(t("schedules.resumed"));
     },
     onError: (error) => {
-      message.error(toUserMessage(error, "Failed to resume schedule"));
+      message.error(toUserMessage(error, t("schedules.resumeFailed")));
     },
   },
 });
@@ -238,11 +256,11 @@ const resumeMutation = useResumeScheduleApiV1SchedulesScheduleIdResumePost({
 const deleteMutation = useDeleteScheduleApiV1SchedulesScheduleIdDelete({
   mutation: {
     onSuccess: () => {
-      message.success("Schedule deleted");
+      message.success(t("schedules.deleted"));
       router.push("/schedules");
     },
     onError: (error) => {
-      message.error(toUserMessage(error, "Failed to delete schedule"));
+      message.error(toUserMessage(error, t("schedules.deleteFailed")));
     },
   },
 });
@@ -274,11 +292,11 @@ const updateMutation = useUpdateScheduleApiV1SchedulesScheduleIdPatch({
   mutation: {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: scheduleQueryKey.value });
-      message.success("Schedule updated");
+      message.success(t("schedules.updated"));
       showEditModal.value = false;
     },
     onError: (error) => {
-      message.error(toUserMessage(error, "Failed to update schedule"));
+      message.error(toUserMessage(error, t("schedules.updateFailed")));
     },
   },
 });
@@ -288,11 +306,11 @@ function onEditSubmit() {
   try {
     parsedParams = JSON.parse(editForm.value.parameters);
     if (typeof parsedParams !== "object" || Array.isArray(parsedParams) || parsedParams === null) {
-      message.error("Parameters must be a JSON object");
+      message.error(t("schedules.parametersObject"));
       return false;
     }
   } catch {
-    message.error("Parameters must be valid JSON");
+    message.error(t("schedules.parametersJson"));
     return false;
   }
 
@@ -360,8 +378,10 @@ function runStateType(stateType: string | null | undefined): TagType {
 
 function formatDuration(totalRunTime: number | null | undefined): string {
   if (totalRunTime === null || totalRunTime === undefined) return "—";
-  if (totalRunTime > 60) return ">1m";
-  return `${totalRunTime.toFixed(1)}s`;
+  if (totalRunTime > 60) return t("schedules.overOneMinute");
+  return t("schedules.seconds", {
+    value: formatNumber(totalRunTime, { minimumFractionDigits: 1, maximumFractionDigits: 1 }),
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -372,13 +392,13 @@ const selectedRunId = ref<string | null>(null);
 
 const runColumns = computed<DataTableColumns<ScheduleRun>>(() => [
   {
-    title: "Run Name",
+    title: t("schedules.runName"),
     key: "name",
     ellipsis: { tooltip: true },
     render: (row) => row.name ?? row.id.slice(0, 8) + "…",
   },
   {
-    title: "State",
+    title: t("schedules.state"),
     key: "state_type",
     width: 130,
     render: (row) =>
@@ -389,13 +409,13 @@ const runColumns = computed<DataTableColumns<ScheduleRun>>(() => [
       ),
   },
   {
-    title: "Start Time",
+    title: t("schedules.startTime"),
     key: "start_time",
     width: 180,
-    render: (row) => (row.start_time ? new Date(row.start_time).toLocaleString() : "—"),
+    render: (row) => (row.start_time ? formatDateTime(row.start_time) : "—"),
   },
   {
-    title: "Duration",
+    title: t("schedules.duration"),
     key: "total_run_time",
     width: 100,
     render: (row) => formatDuration(row.total_run_time),

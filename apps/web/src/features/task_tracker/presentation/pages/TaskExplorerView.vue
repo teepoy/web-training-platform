@@ -1,18 +1,20 @@
 <template>
   <n-space vertical size="large">
-    <n-page-header title="Task Explorer">
+    <n-page-header :title="t('tasks.title')">
       <template #extra>
-        <n-button size="small" :loading="isFetching" @click="handleRefresh"> Refresh </n-button>
+        <n-button size="small" :loading="isFetching" @click="handleRefresh">
+          {{ t("automations.refresh") }}
+        </n-button>
       </template>
     </n-page-header>
     <div class="task-filters">
-      <n-input v-model:value="search" clearable size="small" placeholder="Search tasks" />
+      <n-input v-model:value="search" clearable size="small" :placeholder="t('tasks.search')" />
       <n-select
         :value="taskKind"
         clearable
         size="small"
         :options="kindOptions"
-        placeholder="All task kinds"
+        :placeholder="t('tasks.allKinds')"
         @update:value="setTaskKind"
       />
       <n-select
@@ -20,16 +22,16 @@
         clearable
         size="small"
         :options="statusOptions"
-        placeholder="All statuses"
+        :placeholder="t('tasks.allStatuses')"
       />
       <CreatorScopeSelect
         v-model="creatorScope"
         :creators="[]"
-        resource-label="tasks"
+        :resource-label="t('tasks.resourceLabel')"
         class="task-creator-filter"
       />
       <n-button v-if="activeFilterCount > 0" size="small" quaternary @click="clearFilters">
-        Clear filters ({{ activeFilterCount }})
+        {{ t("common.clearFilters", { count: activeFilterCount }) }}
       </n-button>
     </div>
     <n-spin :show="isLoading">
@@ -55,6 +57,7 @@ import { refDebounced } from "@vueuse/core";
 import { useRoute, useRouter } from "vue-router";
 import type { DataTableColumns, DataTableSortState, PaginationProps } from "naive-ui";
 import { NButton, NTag } from "naive-ui";
+import { useI18n } from "vue-i18n";
 import { useOrgStore } from "@/features/auth/application/org";
 import { useAuthStore } from "@/features/auth/application/store";
 import { useTrackedTasksQuery } from "@/shared/api/hooks/task-tracker";
@@ -66,8 +69,10 @@ import type {
 } from "@/generated/orval/models";
 import CreatorScopeSelect from "@/shared/components/creator-scope-select";
 import { orgScopedQueryKey } from "@/shared/api";
+import { formatDateTime } from "@/shared/i18n/format";
 
 const route = useRoute();
+const { t } = useI18n();
 const router = useRouter();
 const orgStore = useOrgStore();
 const authStore = useAuthStore();
@@ -138,15 +143,17 @@ watch([debouncedSearch, statusFilter, creatorScope, taskKind], () => {
   paginationState.page = 1;
 });
 
-const kindOptions = [
-  { label: "Training", value: "training" },
-  { label: "Prediction", value: "prediction" },
-  { label: "Automation run", value: "schedule_run" },
-];
-const statusOptions = ["queued", "running", "completed", "failed", "cancelled"].map((status) => ({
-  label: status.replace(/^./, (value) => value.toUpperCase()),
-  value: status,
-}));
+const kindOptions = computed(() => [
+  { label: t("tasks.training"), value: "training" },
+  { label: t("tasks.prediction"), value: "prediction" },
+  { label: t("tasks.automationRun"), value: "schedule_run" },
+]);
+const statusOptions = computed(() =>
+  ["queued", "running", "completed", "failed", "cancelled"].map((status) => ({
+    label: t(`status.${status}`),
+    value: status,
+  })),
+);
 const activeFilterCount = computed(
   () =>
     Number(search.value.trim().length > 0) +
@@ -205,33 +212,33 @@ function openInsight(row: TaskTrackerSummary): void {
 }
 
 const columns = computed<DataTableColumns<TaskTrackerSummary>>(() => [
-  { title: "Task", key: "display_name", ellipsis: { tooltip: true } },
+  { title: t("tasks.task"), key: "display_name", ellipsis: { tooltip: true } },
   {
-    title: "Dataset",
+    title: t("resources.dataset"),
     key: "dataset_name",
     width: 220,
     ellipsis: { tooltip: true },
     render: (row) => row.dataset_name || (row.dataset_id ? `${row.dataset_id.slice(0, 8)}…` : "—"),
   },
   {
-    title: "Status",
+    title: t("jobs.status"),
     key: "display_status",
     width: 140,
     render: (row) => h(NTag, { size: "small" }, { default: () => row.display_status }),
   },
-  { title: "Stage", key: "stage", width: 140 },
-  { title: "Kind", key: "task_kind", width: 120 },
-  { title: "Queue", key: "queue_priority_label", width: 140 },
+  { title: t("tasks.stage"), key: "stage", width: 140 },
+  { title: t("tasks.kind"), key: "task_kind", width: 120 },
+  { title: t("tasks.queue"), key: "queue_priority_label", width: 140 },
   {
-    title: "Updated",
+    title: t("tasks.updated"),
     key: "updated_at",
     width: 180,
     sorter: true,
     sortOrder: sortOrder.value === "asc" ? "ascend" : "descend",
-    render: (row) => new Date(row.updated_at).toLocaleString(),
+    render: (row) => formatDateTime(row.updated_at),
   },
   {
-    title: "Actions",
+    title: t("common.actions"),
     key: "actions",
     width: 110,
     render: (row) =>
@@ -241,7 +248,7 @@ const columns = computed<DataTableColumns<TaskTrackerSummary>>(() => [
           size: "small",
           onClick: () => openInsight(row),
         },
-        { default: () => "Insight" },
+        { default: () => t("tasks.insight") },
       ),
   },
 ]);

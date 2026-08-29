@@ -2,16 +2,16 @@
   <n-space vertical size="large">
     <template v-if="!orgStore.currentOrgId">
       <div style="padding: 48px; text-align: center">
-        <n-empty description="You are not a member of any organization. Contact an admin." />
+        <n-empty :description="t('user.noOrganization')" />
       </div>
     </template>
     <template v-else>
-      <n-page-header title="Schedules">
+      <n-page-header :title="t('schedules.title')">
         <template #extra>
-          <n-button style="margin-right: 8px" @click="openTaskExplorer"
-            >Open Task Explorer</n-button
-          >
-          <n-button type="primary" @click="openCreateModal">Create Schedule</n-button>
+          <n-button style="margin-right: 8px" @click="openTaskExplorer">
+            {{ t("schedules.openTasks") }}
+          </n-button>
+          <n-button type="primary" @click="openCreateModal">{{ t("schedules.create") }}</n-button>
         </template>
       </n-page-header>
 
@@ -30,9 +30,9 @@
       <n-modal
         v-model:show="showModal"
         preset="dialog"
-        title="Create Schedule"
-        positive-text="Create"
-        negative-text="Cancel"
+        :title="t('schedules.create')"
+        :positive-text="t('common.create')"
+        :negative-text="t('common.cancel')"
         :loading="createMutation.isPending.value"
         @positive-click="onSubmit"
         @negative-click="onCancel"
@@ -44,23 +44,26 @@
           label-placement="left"
           label-width="auto"
         >
-          <n-form-item label="Name" path="name">
-            <n-input v-model:value="formModel.name" placeholder="my-schedule" />
+          <n-form-item :label="t('schedules.name')" path="name">
+            <n-input v-model:value="formModel.name" :placeholder="t('schedules.namePlaceholder')" />
           </n-form-item>
-          <n-form-item label="Flow" path="flow_name">
+          <n-form-item :label="t('schedules.flow')" path="flow_name">
             <n-select
               v-model:value="formModel.flow_name"
               :options="flowOptions"
-              placeholder="Select a flow"
+              :placeholder="t('schedules.selectFlow')"
             />
           </n-form-item>
-          <n-form-item label="Cron" path="cron">
+          <n-form-item :label="t('schedules.cron')" path="cron">
             <n-input v-model:value="formModel.cron" placeholder="*/5 * * * *" />
           </n-form-item>
-          <n-form-item label="Timezone" path="timezone">
-            <n-input v-model:value="formModel.timezone" placeholder="UTC or Asia/Shanghai" />
+          <n-form-item :label="t('schedules.timezone')" path="timezone">
+            <n-input
+              v-model:value="formModel.timezone"
+              :placeholder="t('schedules.timezonePlaceholder')"
+            />
           </n-form-item>
-          <n-form-item label="Parameters" path="parameters">
+          <n-form-item :label="t('schedules.parameters')" path="parameters">
             <n-input
               v-model:value="formModel.parameters"
               type="textarea"
@@ -68,8 +71,11 @@
               :autosize="{ minRows: 3, maxRows: 6 }"
             />
           </n-form-item>
-          <n-form-item label="Description" path="description">
-            <n-input v-model:value="formModel.description" placeholder="Optional description" />
+          <n-form-item :label="t('common.description')" path="description">
+            <n-input
+              v-model:value="formModel.description"
+              :placeholder="t('schedules.optionalDescription')"
+            />
           </n-form-item>
         </n-form>
       </n-modal>
@@ -83,6 +89,7 @@ import { useRoute, useRouter } from "vue-router";
 import { useQueryClient } from "@tanstack/vue-query";
 import type { DataTableColumns, FormInst, FormRules } from "naive-ui";
 import { useMessage, NTag, NButton, NPopconfirm, NSpace } from "naive-ui";
+import { useI18n } from "vue-i18n";
 import {
   useListSchedulesApiV1SchedulesGet,
   useListScheduleCapabilitiesApiV1SchedulesCapabilitiesGet,
@@ -96,6 +103,7 @@ import { useOrgStore } from "@/features/auth/application/org";
 import type { ScheduleResponse as Schedule } from "@/generated/orval/models";
 
 const router = useRouter();
+const { t } = useI18n();
 const route = useRoute();
 const message = useMessage();
 const qc = useQueryClient();
@@ -135,11 +143,11 @@ const createMutation = useCreateScheduleApiV1SchedulesPost({
   mutation: {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: schedulesQueryKey.value });
-      message.success("Schedule created");
+      message.success(t("schedules.created"));
       showModal.value = false;
       resetForm();
     },
-    onError: (error) => message.error(toUserMessage(error, "Failed to create schedule")),
+    onError: (error) => message.error(toUserMessage(error, t("schedules.createFailed"))),
   },
 });
 
@@ -147,9 +155,9 @@ const deleteMutation = useDeleteScheduleApiV1SchedulesScheduleIdDelete({
   mutation: {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: schedulesQueryKey.value });
-      message.success("Schedule deleted");
+      message.success(t("schedules.deleted"));
     },
-    onError: (error) => message.error(toUserMessage(error, "Failed to delete schedule")),
+    onError: (error) => message.error(toUserMessage(error, t("schedules.deleteFailed"))),
   },
 });
 
@@ -157,9 +165,9 @@ const pauseMutation = usePauseScheduleApiV1SchedulesScheduleIdPausePost({
   mutation: {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: schedulesQueryKey.value });
-      message.success("Schedule paused");
+      message.success(t("schedules.paused"));
     },
-    onError: (error) => message.error(toUserMessage(error, "Failed to pause schedule")),
+    onError: (error) => message.error(toUserMessage(error, t("schedules.pauseFailed"))),
   },
 });
 
@@ -167,9 +175,9 @@ const resumeMutation = useResumeScheduleApiV1SchedulesScheduleIdResumePost({
   mutation: {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: schedulesQueryKey.value });
-      message.success("Schedule resumed");
+      message.success(t("schedules.resumed"));
     },
-    onError: (error) => message.error(toUserMessage(error, "Failed to resume schedule")),
+    onError: (error) => message.error(toUserMessage(error, t("schedules.resumeFailed"))),
   },
 });
 
@@ -183,28 +191,28 @@ function openTaskExplorer() {
 
 const columns = computed<DataTableColumns<Schedule>>(() => [
   {
-    title: "Name",
+    title: t("schedules.name"),
     key: "name",
     ellipsis: { tooltip: true },
   },
   {
-    title: "Flow",
+    title: t("schedules.flow"),
     key: "flow_name",
     width: 160,
   },
   {
-    title: "Cron",
+    title: t("schedules.cron"),
     key: "cron",
     width: 160,
     render: (row) => row.cron ?? "—",
   },
   {
-    title: "Timezone",
+    title: t("schedules.timezone"),
     key: "timezone",
     width: 150,
   },
   {
-    title: "Status",
+    title: t("jobs.status"),
     key: "is_schedule_active",
     width: 110,
     render: (row) =>
@@ -215,11 +223,11 @@ const columns = computed<DataTableColumns<Schedule>>(() => [
           size: "small",
           round: true,
         },
-        { default: () => (row.is_schedule_active ? "active" : "paused") },
+        { default: () => (row.is_schedule_active ? t("status.active") : t("status.paused")) },
       ),
   },
   {
-    title: "Actions",
+    title: t("common.actions"),
     key: "actions",
     width: 240,
     render: (row) =>
@@ -237,7 +245,7 @@ const columns = computed<DataTableColumns<Schedule>>(() => [
                   router.push("/schedules/" + row.id);
                 },
               },
-              { default: () => "View" },
+              { default: () => t("jobs.view") },
             ),
             h(
               NButton,
@@ -256,7 +264,7 @@ const columns = computed<DataTableColumns<Schedule>>(() => [
                   }
                 },
               },
-              { default: () => (row.is_schedule_active ? "Pause" : "Resume") },
+              { default: () => (row.is_schedule_active ? t("common.pause") : t("common.resume")) },
             ),
             h(
               NPopconfirm,
@@ -276,9 +284,9 @@ const columns = computed<DataTableColumns<Schedule>>(() => [
                       loading: deleteMutation.isPending.value,
                       onClick: (e: Event) => e.stopPropagation(),
                     },
-                    { default: () => "Delete" },
+                    { default: () => t("common.delete") },
                   ),
-                default: () => "Are you sure you want to delete this schedule?",
+                default: () => t("schedules.confirmDelete"),
               },
             ),
           ],
@@ -319,18 +327,17 @@ const flowOptions = computed(() =>
 );
 
 const formRules: FormRules = {
-  name: [{ required: true, message: "Name is required", trigger: ["blur", "input"] }],
-  flow_name: [{ required: true, message: "Please select a flow", trigger: ["blur", "change"] }],
+  name: [{ required: true, message: t("schedules.nameRequired"), trigger: ["blur", "input"] }],
+  flow_name: [
+    { required: true, message: t("schedules.flowRequired"), trigger: ["blur", "change"] },
+  ],
   cron: [
-    { required: true, message: "Cron expression is required", trigger: ["blur", "input"] },
+    { required: true, message: t("schedules.cronRequired"), trigger: ["blur", "input"] },
     {
       validator: (_rule: unknown, value: string) => {
         if (!value) return true;
         const parts = value.trim().split(/\s+/);
-        return (
-          parts.length === 5 ||
-          new Error("Cron must have exactly 5 fields (min hour dom month dow)")
-        );
+        return parts.length === 5 || new Error(t("schedules.cronFields"));
       },
       trigger: ["blur"],
     },
@@ -338,7 +345,7 @@ const formRules: FormRules = {
   timezone: [
     {
       required: true,
-      message: "IANA timezone is required",
+      message: t("schedules.timezoneRequired"),
       trigger: ["blur", "input"],
     },
   ],
@@ -363,11 +370,11 @@ function onSubmit() {
         Array.isArray(parsedParams) ||
         parsedParams === null
       ) {
-        message.error("Parameters must be a JSON object");
+        message.error(t("schedules.parametersObject"));
         return;
       }
     } catch {
-      message.error("Parameters is not valid JSON");
+      message.error(t("schedules.parametersJson"));
       return;
     }
 

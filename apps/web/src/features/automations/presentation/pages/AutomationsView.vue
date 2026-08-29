@@ -6,15 +6,14 @@
   >
     <div class="automations-view" data-testid="automations-page">
       <div class="automation-toolbar">
-        <DatasetToolbar title="Automations" />
+        <DatasetToolbar :title="t('automations.title')" />
         <NButton size="small" :loading="runsQuery.isFetching.value" @click="runsQuery.refetch()">
-          Refresh
+          {{ t("automations.refresh") }}
         </NButton>
       </div>
 
       <NAlert type="info" :show-icon="false">
-        Monitor Collection data updates and predictions here. Open a Collection to configure or
-        recover its work.
+        {{ t("automations.description") }}
       </NAlert>
 
       <div class="automation-filters">
@@ -22,23 +21,23 @@
           v-model:value="search"
           clearable
           size="small"
-          placeholder="Search Collections or run IDs"
-          aria-label="Search automations"
+          :placeholder="t('automations.search')"
+          :aria-label="t('automations.searchLabel')"
         />
         <NSelect
           v-model:value="statusFilter"
           clearable
           size="small"
-          placeholder="All statuses"
-          aria-label="Automation status"
+          :placeholder="t('automations.allStatuses')"
+          :aria-label="t('automations.statusLabel')"
           :options="statusOptions"
         />
         <NSelect
           v-model:value="kindFilter"
           clearable
           size="small"
-          placeholder="All work types"
-          aria-label="Automation work type"
+          :placeholder="t('automations.allWorkTypes')"
+          :aria-label="t('automations.workTypeLabel')"
           :options="kindOptions"
         />
       </div>
@@ -55,7 +54,7 @@
         :scroll-x="980"
       >
         <template #empty>
-          <NEmpty description="No automation activity matches these filters" />
+          <NEmpty :description="t('automations.empty')" />
         </template>
       </NDataTable>
     </div>
@@ -67,6 +66,7 @@ import { computed, h, reactive, ref, watch } from "vue";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { refDebounced } from "@vueuse/core";
 import { useRouter } from "vue-router";
+import { useI18n } from "vue-i18n";
 import {
   NAlert,
   NButton,
@@ -90,8 +90,10 @@ import {
 } from "@/features/automations/api/automationOverview";
 import { orgScopedQueryKey, toUserMessage } from "@/shared/api";
 import { DatasetPageShell, DatasetToolbar } from "@/shared";
+import { formatDateTime } from "@/shared/i18n/format";
 
 const router = useRouter();
+const { t } = useI18n();
 const queryClient = useQueryClient();
 const message = useMessage();
 const orgStore = useOrgStore();
@@ -114,20 +116,20 @@ const pagination = reactive<PaginationProps>({
   },
 });
 
-const statusOptions = [
-  { label: "Needs attention", value: "needs_attention" },
-  { label: "Waiting", value: "pending" },
-  { label: "Running", value: "running" },
-  { label: "Completed", value: "completed" },
-  { label: "Failed", value: "failed" },
-  { label: "Partly completed", value: "partial" },
-];
-const kindOptions: Array<{ label: string; value: AutomationRecipeKind }> = [
-  { label: "Data updates", value: "discovery" },
-  { label: "Historical imports", value: "backfill" },
-  { label: "Retries", value: "retry" },
-  { label: "Predictions", value: "prediction" },
-];
+const statusOptions = computed(() => [
+  { label: t("automations.needsAttention"), value: "needs_attention" },
+  { label: t("automations.waiting"), value: "pending" },
+  { label: t("status.running"), value: "running" },
+  { label: t("status.completed"), value: "completed" },
+  { label: t("status.failed"), value: "failed" },
+  { label: t("automations.partlyCompleted"), value: "partial" },
+]);
+const kindOptions = computed<Array<{ label: string; value: AutomationRecipeKind }>>(() => [
+  { label: t("automations.dataUpdates"), value: "discovery" },
+  { label: t("automations.historicalImports"), value: "backfill" },
+  { label: t("automations.retries"), value: "retry" },
+  { label: t("automations.predictions"), value: "prediction" },
+]);
 
 const filters = computed(() => ({
   offset: ((pagination.page ?? 1) - 1) * (pagination.pageSize ?? 20),
@@ -164,20 +166,13 @@ watch([debouncedSearch, statusFilter, kindFilter], () => {
 const retryMutation = useMutation({
   mutationFn: retryAutomationRun,
   onSuccess: async () => {
-    message.success("Retry started for the unfinished work");
+    message.success(t("automations.retryStarted"));
     await queryClient.invalidateQueries({
       queryKey: orgScopedQueryKey(orgStore.currentOrgId, ["automations"]),
     });
   },
-  onError: (error) => message.error(toUserMessage(error, "Retry could not be started")),
+  onError: (error) => message.error(toUserMessage(error, t("automations.retryFailed"))),
 });
-
-const recipeLabels: Record<AutomationRecipeKind, string> = {
-  discovery: "Data update",
-  backfill: "Historical import",
-  retry: "Retry",
-  prediction: "Prediction",
-};
 
 function recipeLabel(value: string): string {
   if (
@@ -186,18 +181,18 @@ function recipeLabel(value: string): string {
     value === "retry" ||
     value === "prediction"
   ) {
-    return recipeLabels[value];
+    return t(
+      `automations.${value === "discovery" ? "dataUpdate" : value === "backfill" ? "historicalImport" : value}`,
+    );
   }
   return value;
 }
-const statusLabels: Record<string, string> = {
-  pending: "Waiting",
-  running: "Running",
-  completed: "Completed",
-  failed: "Failed",
-  partial: "Partly completed",
-  needs_attention: "Needs attention",
-};
+function statusLabel(status: string): string {
+  if (status === "pending") return t("automations.waiting");
+  if (status === "partial") return t("automations.partlyCompleted");
+  if (status === "needs_attention") return t("automations.needsAttention");
+  return t(`status.${status}`);
+}
 
 function statusType(status: string): "default" | "info" | "success" | "warning" | "error" {
   if (status === "completed") return "success";
@@ -208,11 +203,7 @@ function statusType(status: string): "default" | "info" | "success" | "warning" 
 }
 
 function formatDate(value: string | null): string {
-  if (!value) return "—";
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
+  return value ? formatDateTime(value) : "—";
 }
 
 function openTarget(row: AutomationRunOverview): void {
@@ -229,9 +220,9 @@ function rowProps(row: AutomationRunOverview): Record<string, unknown> {
   };
 }
 
-const columns: DataTableColumns<AutomationRunOverview> = [
+const columns = computed<DataTableColumns<AutomationRunOverview>>(() => [
   {
-    title: "Collection",
+    title: t("resources.collection"),
     key: "target_label",
     minWidth: 220,
     render: (row) =>
@@ -241,34 +232,39 @@ const columns: DataTableColumns<AutomationRunOverview> = [
       ]),
   },
   {
-    title: "Work",
+    title: t("automations.work"),
     key: "recipe_kind",
     width: 150,
     render: (row) => recipeLabel(row.recipe_kind),
   },
   {
-    title: "Status",
+    title: t("jobs.status"),
     key: "status",
     minWidth: 220,
     render: (row) =>
       h(NSpace, { vertical: true, size: 2 }, () => [
         h(NTag, { size: "small", type: statusType(row.status) }, () =>
-          row.needs_attention ? "Needs attention" : (statusLabels[row.status] ?? row.status),
+          row.needs_attention ? t("automations.needsAttention") : statusLabel(row.status),
         ),
         ...(row.needs_attention && row.detail
           ? [h(NText, { depth: 3, style: "font-size: 12px" }, () => row.detail)]
           : []),
       ]),
   },
-  { title: "Started", key: "started_at", width: 180, render: (row) => formatDate(row.started_at) },
   {
-    title: "Finished",
+    title: t("automations.started"),
+    key: "started_at",
+    width: 180,
+    render: (row) => formatDate(row.started_at),
+  },
+  {
+    title: t("automations.finished"),
     key: "completed_at",
     width: 180,
     render: (row) => formatDate(row.completed_at),
   },
   {
-    title: "Recovery",
+    title: t("automations.recovery"),
     key: "actions",
     width: 130,
     fixed: "right",
@@ -282,15 +278,13 @@ const columns: DataTableColumns<AutomationRunOverview> = [
               loading: retryMutation.isPending.value,
               onClick: () => retryMutation.mutate(row),
             },
-            () => "Retry",
+            () => t("automations.retry"),
           )
-        : h(
-            NButton,
-            { size: "small", text: true, onClick: () => openTarget(row) },
-            () => "Open Collection",
+        : h(NButton, { size: "small", text: true, onClick: () => openTarget(row) }, () =>
+            t("automations.openCollection"),
           ),
   },
-];
+]);
 </script>
 
 <style scoped>
