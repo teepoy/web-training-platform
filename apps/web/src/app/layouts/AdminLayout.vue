@@ -28,8 +28,10 @@
           justify-content: space-between;
         "
       >
-        <span style="font-weight: 600">Admin</span>
-        <n-button text type="primary" @click="router.push('/library')">← Back to App</n-button>
+        <span style="font-weight: 600">{{ t("admin.title") }}</span>
+        <n-button text type="primary" @click="router.push('/library')">
+          ← {{ t("common.backToApp") }}
+        </n-button>
       </n-layout-header>
       <n-layout-content style="padding: 24px; overflow-y: auto">
         <RouterView />
@@ -41,16 +43,18 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { RouterView, useRoute, useRouter } from "vue-router";
+import { useI18n } from "vue-i18n";
 
 const router = useRouter();
 const route = useRoute();
+const { t } = useI18n();
 
 const collapsed = ref(false);
 
-const menuOptions = [
-  { label: "Dashboard", key: "/admin/dashboard" },
-  { label: "Infrastructure", key: "/admin/infrastructure" },
-];
+const menuOptions = computed(() => [
+  { label: t("admin.dashboard"), key: "/admin/dashboard" },
+  { label: t("admin.infrastructure"), key: "/admin/infrastructure" },
+]);
 
 const activeRoute = computed(() => route.path);
 </script>

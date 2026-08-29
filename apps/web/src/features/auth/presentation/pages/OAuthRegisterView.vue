@@ -1,15 +1,15 @@
 <template>
   <div class="auth-page" :style="themeStyleVars">
-    <n-card class="auth-card" title="Complete Registration">
+    <n-card class="auth-card" :title="t('auth.completeRegistration')">
       <n-form ref="formRef" :model="formData" :rules="rules" @keyup.enter="handleSubmit">
-        <n-form-item label="Email" path="email">
+        <n-form-item :label="t('common.email')" path="email">
           <n-input :value="formData.email" type="text" disabled />
         </n-form-item>
-        <n-form-item label="Name" path="name">
+        <n-form-item :label="t('common.name')" path="name">
           <n-input
             v-model:value="formData.name"
             type="text"
-            placeholder="Your name"
+            :placeholder="t('auth.yourName')"
             :disabled="registerMutation.isPending.value"
           />
         </n-form-item>
@@ -19,12 +19,14 @@
           :loading="registerMutation.isPending.value"
           @click="handleSubmit"
         >
-          Complete Registration
+          {{ t("auth.completeRegistration") }}
         </n-button>
       </n-form>
       <n-result v-if="errorMessage" status="error" :title="errorMessage" size="small">
         <template #footer>
-          <n-button size="small" @click="router.push('/login')"> Back to Login </n-button>
+          <n-button size="small" @click="router.push('/login')">
+            {{ t("auth.backToLogin") }}
+          </n-button>
         </template>
       </n-result>
     </n-card>
@@ -38,13 +40,14 @@ import { useMessage, useThemeVars, type FormInst, type FormRules } from "naive-u
 import { useAuthStore } from "@/features/auth/application/store";
 import { useOrgStore } from "@/features/auth/application/org";
 import { useOauthRegisterApiV1AuthOauthRegisterPost } from "@/generated/orval/endpoints/api";
-import type { LoginResponse } from "@/generated/orval/models";
+import { useI18n } from "vue-i18n";
 
 const router = useRouter();
 const route = useRoute();
 const message = useMessage();
 const authStore = useAuthStore();
 const orgStore = useOrgStore();
+const { t } = useI18n();
 const themeVars = useThemeVars();
 const themeStyleVars = computed(() => ({
   "--auth-bg-start": themeVars.value.bodyColor,
@@ -72,13 +75,15 @@ const formData = ref({
   name: nameFromOAuth,
 });
 
-const rules: FormRules = {
-  name: [{ required: true, message: "Name is required", trigger: "blur" }],
-};
+const rules = computed<FormRules>(() => ({
+  name: [
+    { required: true, message: t("common.required", { field: t("common.name") }), trigger: "blur" },
+  ],
+}));
 
 onMounted(() => {
   if (!stateToken) {
-    errorMessage.value = "Missing registration token. Please start the login flow again.";
+    errorMessage.value = t("auth.missingRegistrationToken");
   }
 });
 
@@ -103,7 +108,7 @@ async function handleSubmit() {
     await orgStore.fetchOrganizations();
     router.replace("/library");
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "Registration failed";
+    const msg = err instanceof Error ? err.message : t("auth.registrationFailed");
     message.error(msg);
     errorMessage.value = msg;
   }

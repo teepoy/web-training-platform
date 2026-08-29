@@ -46,6 +46,10 @@ export const i18n = createI18n({
   locale: initialLocale,
   fallbackLocale: "en-US",
   messages,
+  datetimeFormats: {
+    "en-US": { short: { dateStyle: "medium" } },
+    "zh-CN": { short: { dateStyle: "medium" } },
+  },
 });
 
 function syncExternalLocale(locale: AppLocale): void {

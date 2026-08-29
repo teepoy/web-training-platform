@@ -5,9 +5,11 @@
 - **Overall status:** In progress; the goal is not complete.
 - **Completed intermediate slices:** installed the locale registry and browser
   persistence, connected English and Simplified Chinese providers, and made
-  Naive UI and VXE UI/Table follow the active locale.
-- **Next milestone:** migrate global navigation, authentication, and settings
-  copy before moving into resource workflows.
+  Naive UI and VXE UI/Table follow the active locale; migrated global
+  navigation, authentication/OAuth, settings/access-key, and admin/settings
+  shell copy and locale-aware access-key dates.
+- **Next milestone:** migrate shared feedback/formatting and core resource/job
+  workflows, then the SC workspace.
 - **Done when:** every acceptance criterion below is verified; this phase covers
   frontend-visible strings only.
 

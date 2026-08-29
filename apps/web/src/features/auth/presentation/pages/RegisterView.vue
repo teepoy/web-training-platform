@@ -1,17 +1,17 @@
 <template>
   <div class="auth-page" :style="themeStyleVars">
-    <n-card class="auth-card" title="Create Account" data-testid="register-form">
+    <n-card class="auth-card" :title="t('auth.createAccount')" data-testid="register-form">
       <n-form ref="formRef" :model="formData" :rules="rules" @keyup.enter="handleSubmit">
-        <n-form-item label="Name" path="name">
+        <n-form-item :label="t('common.name')" path="name">
           <n-input
             v-model:value="formData.name"
             type="text"
-            placeholder="Your name"
+            :placeholder="t('auth.yourName')"
             :disabled="loading"
             data-testid="register-name"
           />
         </n-form-item>
-        <n-form-item label="Email" path="email">
+        <n-form-item :label="t('common.email')" path="email">
           <n-input
             v-model:value="formData.email"
             type="text"
@@ -20,11 +20,11 @@
             data-testid="register-email"
           />
         </n-form-item>
-        <n-form-item label="Password" path="password">
+        <n-form-item :label="t('common.password')" path="password">
           <n-input
             v-model:value="formData.password"
             type="password"
-            placeholder="Password"
+            :placeholder="t('common.password')"
             show-password-on="click"
             :disabled="loading"
             data-testid="register-password"
@@ -37,12 +37,12 @@
           data-testid="register-submit"
           @click="handleSubmit"
         >
-          Create Account
+          {{ t("auth.createAccount") }}
         </n-button>
       </n-form>
       <div class="auth-link">
-        Already have an account?
-        <router-link to="/login">Login</router-link>
+        {{ t("auth.haveAccount") }}
+        <router-link to="/login">{{ t("auth.login") }}</router-link>
       </div>
     </n-card>
   </div>
@@ -53,10 +53,12 @@ import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
 import { useMessage, useThemeVars, type FormInst, type FormRules } from "naive-ui";
 import { useAuthStore } from "@/features/auth/application/store";
+import { useI18n } from "vue-i18n";
 
 const router = useRouter();
 const message = useMessage();
 const authStore = useAuthStore();
+const { t } = useI18n();
 const themeVars = useThemeVars();
 const themeStyleVars = computed(() => ({
   "--auth-bg-start": themeVars.value.bodyColor,
@@ -77,11 +79,25 @@ const formData = ref({
   password: "",
 });
 
-const rules: FormRules = {
-  name: [{ required: true, message: "Name is required", trigger: "blur" }],
-  email: [{ required: true, message: "Email is required", trigger: "blur" }],
-  password: [{ required: true, message: "Password is required", trigger: "blur" }],
-};
+const rules = computed<FormRules>(() => ({
+  name: [
+    { required: true, message: t("common.required", { field: t("common.name") }), trigger: "blur" },
+  ],
+  email: [
+    {
+      required: true,
+      message: t("common.required", { field: t("common.email") }),
+      trigger: "blur",
+    },
+  ],
+  password: [
+    {
+      required: true,
+      message: t("common.required", { field: t("common.password") }),
+      trigger: "blur",
+    },
+  ],
+}));
 
 async function handleSubmit() {
   try {
@@ -95,7 +111,7 @@ async function handleSubmit() {
     await orgStore.fetchOrganizations();
     router.push("/library");
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "Registration failed";
+    const msg = err instanceof Error ? err.message : t("auth.registrationFailed");
     message.error(msg);
   } finally {
     loading.value = false;

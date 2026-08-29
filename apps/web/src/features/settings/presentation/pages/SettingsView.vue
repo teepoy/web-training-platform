@@ -1,25 +1,29 @@
 <template>
   <n-space vertical size="large">
-    <h1>Settings</h1>
+    <h1>{{ t("settings.title") }}</h1>
 
     <div class="section-header">
-      <h2>Access Keys</h2>
-      <n-button type="primary" @click="openCreateModal">Create Access Key</n-button>
+      <h2>{{ t("settings.accessKeys") }}</h2>
+      <n-button type="primary" @click="openCreateModal">{{
+        t("settings.createAccessKey")
+      }}</n-button>
     </div>
 
-    <n-alert v-if="isError" type="error" title="Failed to load access keys">
-      {{ error?.message ?? "An unexpected error occurred." }}
+    <n-alert v-if="isError" type="error" :title="t('settings.failedToLoad')">
+      {{ error?.message ?? t("common.unexpectedError") }}
       <template #footer>
-        <n-button size="small" @click="refetch()">Retry</n-button>
+        <n-button size="small" @click="refetch()">{{ t("common.retry") }}</n-button>
       </template>
     </n-alert>
 
     <n-empty
       v-if="!isLoading && !isError && (tokens?.length ?? 0) === 0"
-      description="No access keys yet"
+      :description="t('settings.noKeys')"
     >
       <template #extra>
-        <n-button type="primary" @click="openCreateModal"> Create your first key </n-button>
+        <n-button type="primary" @click="openCreateModal">{{
+          t("settings.createFirstKey")
+        }}</n-button>
       </template>
     </n-empty>
 
@@ -35,9 +39,9 @@
     <n-modal
       v-model:show="showModal"
       preset="dialog"
-      :title="modalStep === 'form' ? 'Create Access Key' : 'Access Key Created'"
-      :positive-text="modalStep === 'form' ? 'Create' : 'Done'"
-      negative-text="Cancel"
+      :title="modalStep === 'form' ? t('settings.createAccessKey') : t('settings.accessKeyCreated')"
+      :positive-text="modalStep === 'form' ? t('common.create') : t('common.done')"
+      :negative-text="t('common.cancel')"
       :loading="modalStep === 'form' && createMutation.isPending.value"
       @positive-click="onModalPositive"
       @negative-click="onCancel"
@@ -50,7 +54,7 @@
           label-placement="left"
           label-width="auto"
         >
-          <n-form-item label="Name" path="name">
+          <n-form-item :label="t('common.name')" path="name">
             <n-input v-model:value="formModel.name" placeholder="my-access-key" :maxlength="100" />
           </n-form-item>
         </n-form>
@@ -58,12 +62,12 @@
 
       <template v-else>
         <div class="created-token-display">
-          <label class="created-token-label">Access Key</label>
+          <label class="created-token-label">{{ t("settings.accessKey") }}</label>
           <n-input :value="createdToken" readonly />
         </div>
-        <n-button @click="copyToken" class="copy-btn"> Copy </n-button>
+        <n-button class="copy-btn" @click="copyToken">{{ t("common.copy") }}</n-button>
         <n-alert type="warning">
-          Copy your access key now. You won't be able to see it again.
+          {{ t("settings.copyWarning") }}
         </n-alert>
       </template>
     </n-modal>
@@ -81,7 +85,8 @@ import {
   useDeleteTokenApiV1AuthTokensTokenIdDelete,
 } from "@/generated/orval/endpoints/api";
 import { toUserMessage } from "@/shared/api";
-import type { PersonalAccessToken, PersonalAccessTokenCreated } from "@/shared/api/types";
+import type { PersonalAccessToken } from "@/shared/api/types";
+import { useI18n } from "vue-i18n";
 
 const authKeys = {
   tokens: ["auth", "tokens"] as const,
@@ -89,6 +94,7 @@ const authKeys = {
 
 const message = useMessage();
 const qc = useQueryClient();
+const { d, t } = useI18n();
 
 const {
   data: tokens,
@@ -108,11 +114,11 @@ const createMutation = useCreateTokenApiV1AuthTokensPost({
   mutation: {
     onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: authKeys.tokens });
-      message.success("Access key created");
+      message.success(t("settings.createdSuccess"));
       createdToken.value = result.token;
       modalStep.value = "created";
     },
-    onError: (error) => message.error(toUserMessage(error, "Failed to save setting")),
+    onError: (error) => message.error(toUserMessage(error, t("settings.saveFailed"))),
   },
 });
 
@@ -120,29 +126,29 @@ const deleteMutation = useDeleteTokenApiV1AuthTokensTokenIdDelete({
   mutation: {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: authKeys.tokens });
-      message.success("Access key deleted");
+      message.success(t("settings.deletedSuccess"));
     },
-    onError: (error) => message.error(toUserMessage(error, "Failed to delete setting")),
+    onError: (error) => message.error(toUserMessage(error, t("settings.deleteFailed"))),
   },
 });
 
 const columns = computed<DataTableColumns<PersonalAccessToken>>(() => [
   {
-    title: "Name",
+    title: t("common.name"),
     key: "name",
     ellipsis: { tooltip: true },
   },
   {
-    title: "Prefix",
+    title: t("settings.prefix"),
     key: "token_prefix",
   },
   {
-    title: "Created",
+    title: t("settings.created"),
     key: "created_at",
-    render: (row) => new Date(row.created_at).toLocaleDateString(),
+    render: (row) => d(new Date(row.created_at), "short"),
   },
   {
-    title: "Actions",
+    title: t("common.actions"),
     key: "actions",
     width: 100,
     render: (row) =>
@@ -164,10 +170,9 @@ const columns = computed<DataTableColumns<PersonalAccessToken>>(() => [
                 loading: deleteMutation.isPending.value,
                 onClick: (e: Event) => e.stopPropagation(),
               },
-              { default: () => "Delete" },
+              { default: () => t("common.delete") },
             ),
-          default: () =>
-            "Are you sure you want to delete this access key? Any applications using it will lose access.",
+          default: () => t("settings.confirmDelete"),
         },
       ),
   },
@@ -181,12 +186,16 @@ const formModel = ref({
   name: "",
 });
 
-const formRules: FormRules = {
+const formRules = computed<FormRules>(() => ({
   name: [
-    { required: true, message: "Name is required", trigger: ["blur", "input"] },
-    { whitespace: true, message: "Name cannot be empty", trigger: ["blur"] },
+    {
+      required: true,
+      message: t("common.required", { field: t("common.name") }),
+      trigger: ["blur", "input"],
+    },
+    { whitespace: true, message: t("settings.nameEmpty"), trigger: ["blur"] },
   ],
-};
+}));
 
 function openCreateModal() {
   resetForm();
@@ -220,9 +229,9 @@ function resetForm() {
 async function copyToken() {
   try {
     await navigator.clipboard.writeText(createdToken.value);
-    message.success("Copied!");
+    message.success(t("common.copied"));
   } catch {
-    message.error("Failed to copy");
+    message.error(t("settings.copyFailed"));
   }
 }
 </script>

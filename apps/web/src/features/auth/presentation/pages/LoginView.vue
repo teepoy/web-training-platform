@@ -1,8 +1,8 @@
 <template>
   <div class="auth-page" :style="themeStyleVars">
-    <n-card class="auth-card" title="Sign In" data-testid="login-form">
+    <n-card class="auth-card" :title="t('auth.signIn')" data-testid="login-form">
       <n-form ref="formRef" :model="formData" :rules="rules" @keyup.enter="handleSubmit">
-        <n-form-item label="Email" path="email">
+        <n-form-item :label="t('common.email')" path="email">
           <n-input
             v-model:value="formData.email"
             type="text"
@@ -11,11 +11,11 @@
             data-testid="login-email"
           />
         </n-form-item>
-        <n-form-item label="Password" path="password">
+        <n-form-item :label="t('common.password')" path="password">
           <n-input
             v-model:value="formData.password"
             type="password"
-            placeholder="Password"
+            :placeholder="t('common.password')"
             show-password-on="click"
             :disabled="loading"
             data-testid="login-password"
@@ -28,22 +28,22 @@
           data-testid="login-submit"
           @click="handleSubmit"
         >
-          Sign In
+          {{ t("auth.signIn") }}
         </n-button>
       </n-form>
       <div v-if="(oauthProviders ?? []).length > 0" class="oauth-section">
         <div class="oauth-divider">
-          <span class="oauth-divider-text">or continue with</span>
+          <span class="oauth-divider-text">{{ t("auth.orContinueWith") }}</span>
         </div>
         <div v-for="prov in oauthProviders" :key="prov.id" class="oauth-button-wrapper">
           <n-button secondary block tag="a" :href="`${API_BASE}/auth/oauth/${prov.id}`">
-            Continue with {{ prov.display_name }}
+            {{ t("auth.continueWith", { provider: prov.display_name }) }}
           </n-button>
         </div>
       </div>
       <div class="auth-link">
-        Don't have an account?
-        <router-link to="/register">Register</router-link>
+        {{ t("auth.noAccount") }}
+        <router-link to="/register">{{ t("auth.register") }}</router-link>
       </div>
     </n-card>
   </div>
@@ -56,10 +56,12 @@ import { useMessage, useThemeVars, type FormInst, type FormRules } from "naive-u
 import { useAuthStore } from "@/features/auth/application/store";
 import { API_BASE } from "@/shared/api/client";
 import { useListOauthProvidersApiV1AuthOauthProvidersGet } from "@/generated/orval/endpoints/api";
+import { useI18n } from "vue-i18n";
 
 const router = useRouter();
 const message = useMessage();
 const authStore = useAuthStore();
+const { t } = useI18n();
 const themeVars = useThemeVars();
 const themeStyleVars = computed(() => ({
   "--auth-bg-start": themeVars.value.bodyColor,
@@ -85,10 +87,22 @@ const formData = ref({
   password: "",
 });
 
-const rules: FormRules = {
-  email: [{ required: true, message: "Email is required", trigger: "blur" }],
-  password: [{ required: true, message: "Password is required", trigger: "blur" }],
-};
+const rules = computed<FormRules>(() => ({
+  email: [
+    {
+      required: true,
+      message: t("common.required", { field: t("common.email") }),
+      trigger: "blur",
+    },
+  ],
+  password: [
+    {
+      required: true,
+      message: t("common.required", { field: t("common.password") }),
+      trigger: "blur",
+    },
+  ],
+}));
 
 async function handleSubmit() {
   try {
@@ -102,7 +116,7 @@ async function handleSubmit() {
     await orgStore.fetchOrganizations();
     router.push("/library");
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "Login failed";
+    const msg = err instanceof Error ? err.message : t("auth.loginFailed");
     message.error(msg);
   } finally {
     loading.value = false;

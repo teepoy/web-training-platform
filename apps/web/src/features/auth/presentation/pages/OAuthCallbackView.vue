@@ -5,11 +5,11 @@
       <n-result
         v-else-if="errorMessage"
         status="error"
-        title="Authentication Failed"
+        :title="t('auth.authenticationFailed')"
         :description="errorMessage"
       >
         <template #footer>
-          <n-button @click="router.push('/login')">Back to Login</n-button>
+          <n-button @click="router.push('/login')">{{ t("auth.backToLogin") }}</n-button>
         </template>
       </n-result>
     </n-card>
@@ -22,11 +22,13 @@ import { useRouter, useRoute } from "vue-router";
 import { useOrgStore } from "@/features/auth/application/org";
 import { useAuthStore } from "@/features/auth/application/store";
 import { useThemeVars } from "naive-ui";
+import { useI18n } from "vue-i18n";
 
 const router = useRouter();
 const route = useRoute();
 const authStore = useAuthStore();
 const orgStore = useOrgStore();
+const { t } = useI18n();
 const themeVars = useThemeVars();
 const themeStyleVars = computed(() => ({
   "--auth-bg-start": themeVars.value.bodyColor,
@@ -43,7 +45,7 @@ onMounted(async () => {
   const token = Array.isArray(raw) ? raw[0] : raw;
 
   if (!token) {
-    errorMessage.value = "No authentication token received. Please try logging in again.";
+    errorMessage.value = t("auth.noToken");
     processing.value = false;
     return;
   }
@@ -53,7 +55,7 @@ onMounted(async () => {
     await orgStore.fetchOrganizations();
     router.replace("/library");
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "OAuth authentication failed";
+    const msg = err instanceof Error ? err.message : t("auth.oauthFailed");
     errorMessage.value = msg;
     processing.value = false;
   }
