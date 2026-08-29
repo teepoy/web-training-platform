@@ -12,22 +12,25 @@ not own development data generation.
 
 ## Default contents
 
-| Area                    | Development fixtures                                                                                                                                                 |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Datasets                | 180 labeled classification samples, 96 mixed labeled/unlabeled multi-image samples, one empty classification dataset, and one 2,500-row sparse SC inspection dataset |
-| SC annotations          | Labels on the first 96 SC samples, spread across three classes                                                                                                       |
-| Collections             | A two-dataset classification collection and a one-dataset SC collection with saved snapshots, plus one empty dynamic SC Collection for automation tests              |
-| Training and prediction | Four training jobs and four prediction jobs covering completed, failed, and cancelled states, with event histories                                                   |
-| Models                  | Two metadata-only JSON model display fixtures plus metrics artifacts                                                                                                 |
-| Membership automation   | One manual-only SC rule with a typed `defects >= 1` condition, a 10-record run cap, and a 2,500-row per-Dataset import cap                                           |
-| Legacy execution data   | Two paused schedules and four disabled sensor subscriptions retained for backend compatibility tests; they are not ordinary-user navigation                          |
-| Gallery profile VQA     | Three 64-defect inspections: Gray8 1R/1D/1M, Gray16 1R/1D/1M, and Gray16 2R/2D/1M; each has eight square Review images                                               |
+| Area                    | Development fixtures                                                                                                                                                       |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Datasets                | 180 labeled classification samples, 96 mixed labeled/unlabeled multi-image samples, one empty classification dataset, and one 2,500-row sparse SC inspection dataset       |
+| SC annotations          | Labels on the first 96 SC samples, spread across three classes                                                                                                             |
+| Collections             | A two-dataset classification collection and a one-dataset SC collection with saved snapshots, plus one empty dynamic SC Collection for automation tests                    |
+| Training and prediction | Four training jobs and four prediction jobs covering completed, failed, and cancelled states, with event histories                                                         |
+| Models                  | Two metadata-only JSON model display fixtures plus metrics artifacts                                                                                                       |
+| Membership automation   | One active SC rule with a typed `defects >= 1` condition, a 10-record run cap, and a 2,500-row per-Dataset import cap; the internal poller evaluates it every five minutes |
+| Legacy execution data   | Two paused schedules retained for backend compatibility tests; they are not ordinary-user navigation                                                                       |
+| Gallery profile VQA     | Three 64-defect inspections: Gray8 1R/1D/1M, Gray16 1R/1D/1M, and Gray16 2R/2D/1M; each has eight square Review images                                                     |
 
 The model fixtures have `seed_fixture: true` and `runnable: false` metadata and
 are named as display fixtures. The seeded jobs have no external execution IDs.
 `seed-dev` does not run the membership rule, submit training or prediction jobs,
-run a schedule, or enable a sensor subscription. The dynamic Collection stays
-empty until a developer explicitly previews and starts Discovery or Backfill.
+or run a user schedule. The dynamic Collection stays empty after seeding because
+the baseline upstream records predate rule activation. Publishing a later
+inspection through the simulator is discovered by the next five-minute poll;
+developers can still use explicit Discovery or Backfill controls when testing
+those paths.
 
 ## Repeatability
 

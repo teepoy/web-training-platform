@@ -210,8 +210,6 @@ Files and features:
 - `apps/web/src/features/automations/presentation/pages/AutomationsView.vue`
 - `apps/web/src/features/schedules/presentation/pages/SchedulesView.vue`
 - `apps/web/src/features/schedules/presentation/pages/ScheduleDetailView.vue`
-- `apps/web/src/features/sensors/presentation/pages/SensorsView.vue`
-- `apps/web/src/features/sensors/presentation/pages/SensorSubscriptionModal.vue`
 
 The affected text includes page and card titles, filter labels, placeholders,
 table columns, status labels, empty states, form validation, confirmations,

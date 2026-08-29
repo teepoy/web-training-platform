@@ -9,9 +9,6 @@ from app.modules.jobs.schedules.app.services.scheduler import SchedulerService
 from app.modules.jobs.schedules.container import SchedulesContext, init_schedules
 from app.modules.jobs.schedules.domain.repository import ScheduleRepository
 from app.modules.jobs.schedules.port.local import ScheduleManagementPort
-from app.modules.jobs.sensors.container import SensorsContext, init_sensors
-from app.modules.jobs.sensors.domain.entities.registry import SensorRegistry
-from app.modules.jobs.sensors.domain.repository import SensorRepository
 from app.modules.jobs.task_tracker.app.services.task_tracker import TaskTrackerService
 from app.modules.jobs.task_tracker.container import (
     TaskTrackerContext,
@@ -29,7 +26,6 @@ from app.shared.context import SharedInfra
 @dataclass
 class JobsContext:
     schedules: SchedulesContext
-    sensors: SensorsContext
     task_tracker: TaskTrackerContext
 
 
@@ -41,7 +37,6 @@ def init_jobs(
     dataset_repository: DatasetRepository,
 ) -> JobsContext:
     schedules = init_schedules(shared)
-    sensors = init_sensors(shared)
     task_tracker = init_task_tracker(
         shared,
         training_repository=training_repository,
@@ -51,7 +46,6 @@ def init_jobs(
     )
     return JobsContext(
         schedules=schedules,
-        sensors=sensors,
         task_tracker=task_tracker,
     )
 
@@ -73,21 +67,6 @@ class JobsModule(Module):
             prediction_repository=prediction_repository,
             dataset_repository=dataset_repository,
         )
-
-    @provider
-    @singleton
-    def provide_sensors_context(self, context: JobsContext) -> SensorsContext:
-        return context.sensors
-
-    @provider
-    @singleton
-    def provide_sensor_repository(self, sensors: SensorsContext) -> SensorRepository:
-        return sensors.sensor_repository
-
-    @provider
-    @singleton
-    def provide_sensor_registry(self, sensors: SensorsContext) -> SensorRegistry:
-        return sensors.sensor_registry
 
     @provider
     @singleton

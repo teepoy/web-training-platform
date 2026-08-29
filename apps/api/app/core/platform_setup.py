@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+from typing import cast
 
 import httpx
 import redis.asyncio as redis_client  # type: ignore[import-untyped]
@@ -107,6 +108,11 @@ async def prepare_prefect(shared: SharedInfra) -> None:
             work_queue_name=(
                 str(spec["work_queue_name"]) if "work_queue_name" in spec else None
             ),
+            schedules=(
+                cast(list[dict[str, object]], spec["schedules"])
+                if "schedules" in spec
+                else None
+            ),
         )
     await validate_prefect(shared)
 
@@ -168,6 +174,35 @@ async def validate_prefect(shared: SharedInfra) -> None:
                 f"Prefect deployment {deployment_name!r} does not match its "
                 f"runtime descriptor: expected {expected!r}, got {actual!r}"
             )
+        if "schedules" in spec and not _deployment_has_schedules(
+            deployment,
+            cast(list[dict[str, object]], spec["schedules"]),
+        ):
+            raise RuntimeError(
+                f"Prefect deployment {deployment_name!r} is missing its "
+                "descriptor-owned schedule"
+            )
+
+
+def _deployment_has_schedules(
+    deployment: dict[str, object],
+    expected: list[dict[str, object]],
+) -> bool:
+    actual = deployment.get("schedules")
+    if not isinstance(actual, list):
+        return False
+
+    def identity(value: object) -> tuple[object, object, object] | None:
+        if not isinstance(value, dict):
+            return None
+        schedule = value.get("schedule")
+        if not isinstance(schedule, dict):
+            return None
+        return schedule.get("cron"), schedule.get("timezone"), value.get("active")
+
+    actual_identities = {item for value in actual if (item := identity(value))}
+    expected_identities = {item for value in expected if (item := identity(value))}
+    return expected_identities.issubset(actual_identities)
 
 
 async def validate_label_studio(config: AppConfig) -> None:

@@ -34,8 +34,8 @@ FRONTEND_ONLY_TYPES: set[str] = {
 def filename_to_type(name: str) -> str:
     """Convert a filename base to its exported PascalCase type name.
 
-    Orval names each file after the type name (e.g. 'sensorSubscriptionResponse.ts'
-    exports 'SensorSubscriptionResponse'), so we just uppercase the first character.
+    Orval names each file after the type name (e.g. 'scheduleResponse.ts'
+    exports 'ScheduleResponse'), so we just uppercase the first character.
     """
     return name[0].upper() + name[1:]
 

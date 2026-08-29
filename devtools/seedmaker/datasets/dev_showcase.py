@@ -65,7 +65,7 @@ def run(args: Any, runner: SeedRunner) -> int:
 
     if args.sc_inspection_time is None:
         raise ValueError("--sc-inspection-time is required for dev-showcase")
-    print("[5/13] Publishing deterministic SC upstream behavior ...")
+    print("[5/12] Publishing deterministic SC upstream behavior ...")
     publish_dev_showcase(
         inspection_time=args.sc_inspection_time,
         total_defects=sc_samples,
@@ -77,7 +77,7 @@ def run(args: Any, runner: SeedRunner) -> int:
         append_batch_size=args.sc_append_batch_size,
     )
 
-    print("[6/13] Seeding classification datasets ...")
+    print("[6/12] Seeding classification datasets ...")
     balanced = _ensure_dataset(
         runner,
         name=BALANCED_DATASET_NAME,
@@ -124,7 +124,7 @@ def run(args: Any, runner: SeedRunner) -> int:
         metadata_schema=COMMON_METADATA_SCHEMA,
     )
 
-    print("[7/13] Importing the current SC inspection ...")
+    print("[7/12] Importing the current SC inspection ...")
     inspection = _latest_inspection(runner, args.sc_inspection_time)
     sc_dataset = _ensure_sc_dataset(
         runner,
@@ -139,7 +139,7 @@ def run(args: Any, runner: SeedRunner) -> int:
         actual_sc_annotations,
     )
 
-    print("[8/13] Seeding dataset collections and revisions ...")
+    print("[8/12] Seeding dataset collections and revisions ...")
     classification_collection, classification_revision = _ensure_collection(
         runner,
         name=CLASSIFICATION_COLLECTION_NAME,
@@ -155,33 +155,25 @@ def run(args: Any, runner: SeedRunner) -> int:
         dataset_ids=(str(sc_dataset["id"]),),
     )
 
-    print("[9/13] Seeding a safe Source membership rule ...")
+    print("[9/12] Seeding a safe Source membership rule ...")
     dynamic_collection = _ensure_draft_collection(
         runner,
         name=DYNAMIC_SC_COLLECTION_NAME,
         description=(
-            "Empty Collection for manual Discovery and Backfill testing. "
-            "seed-dev never runs the rule."
+            "Empty Collection for scheduled Discovery and explicit Backfill testing."
         ),
         target_view_id="patch_image_v1",
     )
     _ensure_source_membership_rule(runner, dynamic_collection)
 
-    print("[10/13] Seeding safe, paused schedules ...")
+    print("[10/12] Seeding safe, paused schedules ...")
     _ensure_schedules(
         runner,
         classification_dataset_id=str(balanced["id"]),
         sc_dataset_id=str(sc_dataset["id"]),
     )
 
-    print("[11/13] Seeding disabled sensor subscriptions ...")
-    _ensure_sensor_subscriptions(
-        runner,
-        classification_dataset_id=str(balanced["id"]),
-        sc_dataset_id=str(sc_dataset["id"]),
-    )
-
-    print("[12/13] Seeding non-executing job and model activity ...")
+    print("[11/12] Seeding non-executing job and model activity ...")
     activity = asyncio.run(
         _seed_activity(
             DevActivityContext(
@@ -197,7 +189,7 @@ def run(args: Any, runner: SeedRunner) -> int:
         )
     )
 
-    print("[13/13] Development seed summary")
+    print("[12/12] Development seed summary")
     print(
         "  Datasets: 4 "
         f"({classification_samples + review_samples + actual_sc_samples} samples; "
@@ -211,10 +203,7 @@ def run(args: Any, runner: SeedRunner) -> int:
         f"  Activity: {activity.training_jobs} training jobs, "
         f"{activity.prediction_jobs} prediction jobs, {activity.models} models"
     )
-    print(
-        "  Automation: 1 manual-only membership rule, 2 paused schedules, "
-        "4 disabled sensor subscriptions"
-    )
+    print("  Automation: 1 active five-minute membership rule, 2 paused schedules")
     print(f"  Empty-state dataset: {empty['id']}")
     return 0
 
@@ -736,60 +725,6 @@ def _ensure_schedules(
             },
         )
         response.raise_for_status()
-
-
-def _ensure_sensor_subscriptions(
-    runner: SeedRunner,
-    *,
-    classification_dataset_id: str,
-    sc_dataset_id: str,
-) -> None:
-    definitions = (
-        (
-            "dataset_size_sensor",
-            "train",
-            {"dataset_id": classification_dataset_id, "min_sample_count": 100},
-        ),
-        (
-            "dataset_size_sensor",
-            "predict",
-            {"dataset_id": sc_dataset_id, "min_sample_count": 1000},
-        ),
-        ("timer_sensor", "train", {"year": 2099, "month": 1, "day": 1}),
-        ("timer_sensor", "predict", {"year": 2099, "month": 7, "day": 1}),
-    )
-    by_sensor: dict[str, list[dict[str, Any]]] = {}
-    for sensor_id, workflow_type, filter_config in definitions:
-        if sensor_id not in by_sensor:
-            response = runner.client.get(f"/api/v1/sensors/{sensor_id}/subscriptions")
-            response.raise_for_status()
-            by_sensor[sensor_id] = response.json()
-        existing = next(
-            (
-                item
-                for item in by_sensor[sensor_id]
-                if item.get("workflow_type") == workflow_type
-                and item.get("filter_config") == filter_config
-            ),
-            None,
-        )
-        if existing is None:
-            response = runner.client.post(
-                f"/api/v1/sensors/{sensor_id}/subscriptions",
-                json={
-                    "workflow_type": workflow_type,
-                    "filter_config": filter_config,
-                    "enabled": False,
-                },
-            )
-            response.raise_for_status()
-            by_sensor[sensor_id].append(response.json())
-        elif existing.get("enabled"):
-            response = runner.client.patch(
-                f"/api/v1/sensors/{sensor_id}/subscriptions/{existing['id']}",
-                json={"enabled": False},
-            )
-            response.raise_for_status()
 
 
 async def _seed_activity(context: Any):

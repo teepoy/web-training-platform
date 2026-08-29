@@ -46,8 +46,6 @@ SUFFIX_MATCHES = {
     "ReviewAction": ("ReviewActionResponse", "ReviewAction"),
     "RunLog": ("RunLogResponse", "RunLog"),
     "Schedule": ("ScheduleResponse", "Schedule"),
-    "SensorDefinition": ("SensorDefinitionResponse", "SensorDefinition"),
-    "SensorSubscription": ("SensorSubscriptionResponse", "SensorSubscription"),
     "TaskTrackerDetail": ("TaskTrackerDetailResponse", "TaskTrackerDetail"),
     "TaskTrackerSummary": ("TaskTrackerSummaryResponse", "TaskTrackerSummary"),
     "User": ("UserResponse", "User"),

@@ -11,9 +11,15 @@ from app.modules.source_discovery.adapter.sql_repository import (
 from app.modules.source_discovery.app.services.source_discovery_service import (
     SourceDiscoveryService,
 )
+from app.modules.source_discovery.app.services.collection_discovery_poller import (
+    CollectionDiscoveryPoller,
+)
 from app.modules.source_discovery.domain.provider import SourceProviderCatalog
 from app.modules.source_discovery.domain.repository import SourceDiscoveryRepository
-from app.modules.source_discovery.port.local import SourceDiscoveryManagementPort
+from app.modules.source_discovery.port.local import (
+    CollectionDiscoveryPollingPort,
+    SourceDiscoveryManagementPort,
+)
 from app.shared.db.session import AppDatabaseSessionFactory
 
 
@@ -45,3 +51,10 @@ class SourceDiscoveryModule(Module):
         self, service: SourceDiscoveryService
     ) -> SourceDiscoveryManagementPort:
         return service
+
+    @provider
+    @singleton
+    def provide_polling_port(
+        self, poller: CollectionDiscoveryPoller
+    ) -> CollectionDiscoveryPollingPort:
+        return poller

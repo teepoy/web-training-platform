@@ -143,6 +143,15 @@ class CollectionMembershipRuleVersionORM(Base):
 
 class CollectionDiscoveryRunORM(Base):
     __tablename__ = "collection_discovery_runs"
+    __table_args__ = (
+        Index(
+            "ux_collection_discovery_runs_active_rule",
+            "rule_id",
+            unique=True,
+            postgresql_where=text("status = 'running'"),
+            sqlite_where=text("status = 'running'"),
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     org_id: Mapped[str] = mapped_column(

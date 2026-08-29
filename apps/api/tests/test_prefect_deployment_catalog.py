@@ -22,12 +22,17 @@ def test_platform_prefect_deployment_specs_cover_runtime_and_cpu() -> None:
         "train-and-predict-deployment",
         "predict-job-batch-deployment",
         "predict-job-batch-automation-deployment",
-        "timer-sensor",
-        "dataset-size-sensor",
+        "collection-discovery-poll",
         "drain-dataset",
     } <= set(specs)
     assert specs["train-job-deployment"]["work_pool_name"] == "default-gpu"
-    assert specs["timer-sensor"]["work_pool_name"] == "default-cpu"
+    assert specs["collection-discovery-poll"]["work_pool_name"] == "default-cpu"
+    assert specs["collection-discovery-poll"]["schedules"] == [
+        {
+            "schedule": {"cron": "*/5 * * * *", "timezone": "UTC"},
+            "active": True,
+        }
+    ]
 
 
 @pytest.mark.anyio

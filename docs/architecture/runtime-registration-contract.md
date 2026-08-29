@@ -106,7 +106,8 @@ Deployment seed, startup validation, and submission consume the same objects.
 | `train-and-predict-deployment`            | `training-train-and-predict` | `default-gpu` | default                      |
 | `predict-job-batch-deployment`            | `prediction-predict-job`     | `default-gpu` | `prediction-manual` / 1      |
 | `predict-job-batch-automation-deployment` | `prediction-predict-job`     | `default-gpu` | `prediction-automation` / 10 |
-| sensor/drain deployments                  | their declared CPU flows     | `default-cpu` | default                      |
+| `collection-discovery-poll`               | `collection-discovery-poll`  | `default-cpu` | default                      |
+| `drain-dataset`                           | `drain-dataset`              | `default-cpu` | default                      |
 
 A deployment identifies a configured flow submission target. A work pool is
 the execution resource queue to which that deployment is bound. CPU/GPU is

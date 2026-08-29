@@ -1309,61 +1309,6 @@
       "contributor": null
     },
     {
-      "id": "architecture_sensor_pubsub_sensor_pubsub_architecture",
-      "label": "Sensor Pub/Sub Architecture",
-      "file_type": "document",
-      "source_file": "docs/architecture/sensor-pubsub.md",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null
-    },
-    {
-      "id": "architecture_sensor_pubsub_sensor_pubsub",
-      "label": "Sensor Pub/Sub",
-      "file_type": "concept",
-      "source_file": "docs/architecture/sensor-pubsub.md",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null
-    },
-    {
-      "id": "architecture_sensor_pubsub_sensor_subscription",
-      "label": "SensorSubscription",
-      "file_type": "concept",
-      "source_file": "docs/architecture/sensor-pubsub.md",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null
-    },
-    {
-      "id": "architecture_sensor_pubsub_sensor_checkpoint",
-      "label": "SensorCheckpoint",
-      "file_type": "concept",
-      "source_file": "docs/architecture/sensor-pubsub.md",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null
-    },
-    {
-      "id": "architecture_sensor_pubsub_yaml_sensor_registry",
-      "label": "YAML Sensor Registry",
-      "file_type": "concept",
-      "source_file": "docs/architecture/sensor-pubsub.md",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null
-    },
-    {
       "id": "architecture_contextual_collection_automation_plan_contextual_collection_automation_implementation_plan",
       "label": "Contextual Collection Automation Implementation Plan",
       "file_type": "document",
@@ -3001,56 +2946,6 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "docs/architecture/schedule-execution.md",
-      "source_location": null,
-      "weight": 1.0
-    },
-    {
-      "source": "architecture_sensor_pubsub_sensor_pubsub_architecture",
-      "target": "architecture_sensor_pubsub_sensor_pubsub",
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "docs/architecture/sensor-pubsub.md",
-      "source_location": null,
-      "weight": 1.0
-    },
-    {
-      "source": "architecture_sensor_pubsub_sensor_pubsub_architecture",
-      "target": "architecture_sensor_pubsub_sensor_subscription",
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "docs/architecture/sensor-pubsub.md",
-      "source_location": null,
-      "weight": 1.0
-    },
-    {
-      "source": "architecture_sensor_pubsub_sensor_pubsub_architecture",
-      "target": "architecture_sensor_pubsub_sensor_checkpoint",
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "docs/architecture/sensor-pubsub.md",
-      "source_location": null,
-      "weight": 1.0
-    },
-    {
-      "source": "architecture_sensor_pubsub_sensor_pubsub_architecture",
-      "target": "architecture_sensor_pubsub_yaml_sensor_registry",
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "docs/architecture/sensor-pubsub.md",
-      "source_location": null,
-      "weight": 1.0
-    },
-    {
-      "source": "architecture_sensor_pubsub_sensor_subscription",
-      "target": "core_designs_resource_automation",
-      "relation": "conceptually_related_to",
-      "confidence": "AMBIGUOUS",
-      "confidence_score": 0.25,
-      "source_file": "docs/architecture/sensor-pubsub.md",
       "source_location": null,
       "weight": 1.0
     },

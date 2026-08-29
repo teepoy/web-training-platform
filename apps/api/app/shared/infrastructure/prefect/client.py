@@ -374,6 +374,7 @@ class PrefectClient:
         parameters: dict[str, object] | None = None,
         tags: list[str] | None = None,
         work_queue_name: str | None = None,
+        schedules: list[dict[str, object]] | None = None,
     ) -> dict:
         """Ensure a deployment exists, creating it via the Prefect API if needed.
 
@@ -394,6 +395,8 @@ class PrefectClient:
             Optional default parameter values for flow runs.
         tags:
             Optional list of tags.
+        schedules:
+            Optional deployment-owned Prefect schedules.
 
         Returns
         -------
@@ -411,6 +414,7 @@ class PrefectClient:
                     "parameters": parameters,
                     "tags": tags,
                     "work_queue_name": work_queue_name,
+                    "schedules": schedules,
                 }.items()
                 if value is not None
             }
@@ -440,6 +444,8 @@ class PrefectClient:
             body["tags"] = tags
         if work_queue_name is not None:
             body["work_queue_name"] = work_queue_name
+        if schedules is not None:
+            body["schedules"] = schedules
         created = await self._request(
             "POST",
             "/deployments/",
@@ -465,6 +471,7 @@ class PrefectClient:
                 "parameters": parameters,
                 "tags": tags,
                 "work_queue_name": work_queue_name,
+                "schedules": schedules,
             }.items()
             if value is not None
         }

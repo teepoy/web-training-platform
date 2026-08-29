@@ -234,3 +234,9 @@ class MembershipSuppression:
 class DiscoveryExecution:
     run: DiscoveryRun
     items: tuple[DiscoveryRunItem, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True, slots=True)
+class CollectionDiscoveryPoll:
+    as_of_utc: datetime
+    executions: tuple[DiscoveryExecution, ...]

@@ -445,54 +445,26 @@ To add a new backend extension route:
 There are currently no built-in backend extension routes. Existing import and
 export flows use the typed frontend API client against core API endpoints.
 
-## Adding a New Sensor
+## Adding a Source Discovery Provider
 
-The platform's sensor pub/sub system allows you to trigger workflows based on external data changes. To add a new sensor, follow these steps:
+Generic Sensors and user-authored Sensor subscriptions are not an extension
+surface. Upstream-driven Collection membership is expressed by an active,
+target-bound membership rule and evaluated by the internal five-minute
+Collection discovery deployment.
 
-1. **Create a Sensor YAML**: Define your sensor's metadata and filtering capabilities in `apps/api/sensors/<your_sensor_id>.yaml`.
+To support another upstream source:
 
-   ```yaml
-   id: my_sensor
-   name: My Custom Sensor
-   description: Monitors an external system for changes
-   cron: "*/10 * * * *"
-   available_triggers:
-     - train
-     - predict
-   filter_schema:
-     type: object
-     properties:
-       source_name:
-         type: string
-     additionalProperties: false
-   ```
+1. Implement the source discovery provider port with a module-owned descriptor,
+   typed filter fields, current-state discovery, and import behavior.
+2. Register the provider in the source discovery module composition. Do not add
+   a YAML registry or a provider-specific scheduled flow.
+3. Keep upstream access behind a cross-process contract. A provider must not
+   import another service's repositories, ORM models, or application container.
+4. Verify connector/rule creation, live discovery, Backfill, replay,
+   suppression, upstream failure, and the one-active-run overlap policy.
 
-2. **Implement the Prefect Flow**: Create a new flow file in `apps/api/app/flows/<your_sensor_id>.py`. This flow is responsible for polling the data source and sending events to the platform.
-
-   ```python
-   from prefect import flow
-   import httpx
-
-   @flow
-   def my_sensor_flow():
-       # 1. Fetch data from source
-       # 2. Compare against previous watermark (optional)
-       # 3. Build events
-       events = [{"source_name": "example", "value": 123}]
-       # 4. POST to platform API
-       PLATFORM_API_URL = "http://localhost:8000"
-       httpx.post(f"{PLATFORM_API_URL}/api/v1/sensors/events", json={
-           "sensor_id": "my_sensor",
-           "events": events,
-           "watermark": {"last_timestamp": "2023-01-01T00:00:00"}
-       })
-   ```
-
-3. **Register the Deployment**: Open `apps/api/app/flows/serve.py` and add your flow to the `serve` list with the desired cron schedule.
-
-4. **Verification**: Once registered, your sensor will automatically appear in the platform API (`GET /api/v1/sensors`) and the Sensors UI in the web app, where users can create subscriptions for it.
-
-Refer to `apps/api/app/flows/dataset_size_sensor.py` for a complete reference implementation.
+The shared scheduled deployment enumerates all active rules every five minutes;
+adding a provider must not create a second scheduler.
 
 ---
 

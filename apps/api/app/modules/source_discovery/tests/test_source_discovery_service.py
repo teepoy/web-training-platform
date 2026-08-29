@@ -21,10 +21,14 @@ from app.modules.dataset_collections.port.local import (
 from app.modules.source_discovery.adapter.sql_repository import (
     SourceDiscoverySqlRepository,
 )
+from app.modules.source_discovery.app.services.collection_discovery_poller import (
+    CollectionDiscoveryPoller,
+)
 from app.modules.source_discovery.app.services.source_discovery_service import (
     SourceDiscoveryService,
 )
 from app.modules.source_discovery.domain.models import (
+    DiscoveryRun,
     FilterCombinator,
     FilterGroup,
     FilterOperator,
@@ -372,6 +376,83 @@ async def test_import_profiles_can_be_listed_for_rule_setup() -> None:
         listed = await service.list_import_profiles(connector.id, "org")
 
         assert [item.id for item in listed] == [profile.id]
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_live_discovery_records_overlap_as_skipped() -> None:
+    org_id = "org"
+    collections = _Collections("collection-a", org_id)
+    service, repository, engine = await _service(_Provider(()), collections)
+    try:
+        _, _, rule_id = await _configured_rule(
+            service, collection_id=collections.collection.id, org_id=org_id
+        )
+        rule, version = (await repository.list_rules("collection-a", org_id))[0]
+        active = await repository.create_run(
+            DiscoveryRun(
+                id=str(uuid4()),
+                org_id=org_id,
+                collection_id=collections.collection.id,
+                rule_id=rule_id,
+                rule_version_id=version.id,
+                kind="live",
+                status="running",
+                as_of_utc=rule.activated_at + timedelta(minutes=1),
+                range_start_utc=rule.activated_at,
+                range_end_utc=rule.activated_at + timedelta(minutes=1),
+                timezone_name=None,
+                parent_run_id=None,
+                snapshot_revision_id=None,
+                stats={},
+                error_detail=None,
+                created_by="system:collection-discovery",
+                created_at=_now(),
+                completed_at=None,
+            )
+        )
+
+        execution = await service.run_live(
+            collection_id=collections.collection.id,
+            rule_id=rule_id,
+            org_id=org_id,
+            actor_id="system:collection-discovery",
+            as_of_utc=rule.activated_at + timedelta(minutes=5),
+        )
+
+        assert execution.run.status == "skipped"
+        assert execution.run.parent_run_id == active.id
+        assert execution.run.stats == {"skipped": 1}
+        assert "still has active run" in (execution.run.error_detail or "")
+        stored_rule = await repository.get_rule(rule_id, "collection-a", org_id)
+        assert stored_rule is not None
+        assert stored_rule.live_cursor is None
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_collection_discovery_poller_runs_every_active_rule() -> None:
+    org_id = "org"
+    collections = _Collections("collection-a", org_id)
+    service, repository, engine = await _service(_Provider(()), collections)
+    try:
+        await _configured_rule(
+            service, collection_id=collections.collection.id, org_id=org_id
+        )
+        rule = (await repository.list_active_rules())[0]
+        poller = CollectionDiscoveryPoller(repository, service)
+
+        poll = await poller.poll_active_rules(
+            as_of_utc=rule.activated_at + timedelta(minutes=5),
+            actor_id="system:collection-discovery",
+        )
+
+        assert poll.as_of_utc == rule.activated_at + timedelta(minutes=5)
+        assert len(poll.executions) == 1
+        assert poll.executions[0].run.status == "completed"
+        assert poll.executions[0].run.created_by == "system:collection-discovery"
     finally:
         await engine.dispose()
 

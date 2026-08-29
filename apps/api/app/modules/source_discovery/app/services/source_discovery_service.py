@@ -16,6 +16,7 @@ from app.modules.source_discovery.domain.conditions import (
     validate_condition,
 )
 from app.modules.source_discovery.domain.errors import (
+    ActiveDiscoveryRunExistsError,
     SourceDiscoveryConflictError,
     SourceDiscoveryNotFoundError,
     SourceDiscoveryValidationError,
@@ -245,19 +246,47 @@ class SourceDiscoveryService:
             raise SourceDiscoveryValidationError(
                 "invalid_live_range", "as_of_utc must be after the live cursor"
             )
-        run = await self._new_run(
-            org_id=org_id,
-            collection_id=collection_id,
-            rule=rule,
-            version=version,
-            kind="live",
-            actor_id=actor_id,
-            as_of_utc=as_of_utc,
-            start_utc=cursor_time,
-            end_utc=as_of_utc,
-            timezone_name=None,
-            parent_run_id=None,
-        )
+        try:
+            run = await self._new_run(
+                org_id=org_id,
+                collection_id=collection_id,
+                rule=rule,
+                version=version,
+                kind="live",
+                actor_id=actor_id,
+                as_of_utc=as_of_utc,
+                start_utc=cursor_time,
+                end_utc=as_of_utc,
+                timezone_name=None,
+                parent_run_id=None,
+            )
+        except ActiveDiscoveryRunExistsError as exc:
+            skipped = await self._repository.create_run(
+                DiscoveryRun(
+                    id=str(uuid4()),
+                    org_id=org_id,
+                    collection_id=collection_id,
+                    rule_id=rule.id,
+                    rule_version_id=version.id,
+                    kind="live",
+                    status="skipped",
+                    as_of_utc=as_of_utc,
+                    range_start_utc=cursor_time,
+                    range_end_utc=as_of_utc,
+                    timezone_name=None,
+                    parent_run_id=exc.run_id,
+                    snapshot_revision_id=None,
+                    stats={"skipped": 1},
+                    error_detail=(
+                        "Scheduled discovery skipped because the same membership "
+                        f"rule still has active run {exc.run_id}"
+                    ),
+                    created_by=actor_id,
+                    created_at=_utcnow(),
+                    completed_at=_utcnow(),
+                )
+            )
+            return DiscoveryExecution(run=skipped)
         try:
             batch = await self._providers.get(connector.provider_id).discover(
                 connector=connector,

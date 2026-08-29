@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Protocol
 
 from app.modules.source_discovery.domain.models import (
+    CollectionDiscoveryPoll,
     DiscoveryExecution,
     FilterGroup,
     ImportProfileVersion,
@@ -14,6 +15,15 @@ from app.modules.source_discovery.domain.models import (
     SourceEstimate,
     SourceProviderDescriptor,
 )
+
+
+class CollectionDiscoveryPollingPort(Protocol):
+    async def poll_active_rules(
+        self,
+        *,
+        as_of_utc: datetime,
+        actor_id: str,
+    ) -> CollectionDiscoveryPoll: ...
 
 
 class SourceDiscoveryManagementPort(Protocol):

@@ -25,6 +25,7 @@ from app.modules.source_discovery.domain.models import (
     SourceConnector,
     SourceMembership,
 )
+from app.modules.source_discovery.domain.errors import ActiveDiscoveryRunExistsError
 from app.shared.db.models.source_discovery import (
     CollectionDiscoveryReceiptORM,
     CollectionDiscoveryRunItemORM,
@@ -353,6 +354,21 @@ class SourceDiscoverySqlRepository:
             ).all()
             return [(_rule(rule), _rule_version(version)) for rule, version in pairs]
 
+    async def list_active_rules(self) -> list[MembershipRule]:
+        async with self._session_factory() as session:
+            rows = (
+                await session.scalars(
+                    select(CollectionMembershipRuleORM)
+                    .where(CollectionMembershipRuleORM.status == "active")
+                    .order_by(
+                        CollectionMembershipRuleORM.org_id,
+                        CollectionMembershipRuleORM.collection_id,
+                        CollectionMembershipRuleORM.created_at,
+                    )
+                )
+            ).all()
+            return [_rule(row) for row in rows]
+
     async def get_rule(
         self, rule_id: str, collection_id: str, org_id: str
     ) -> MembershipRule | None:
@@ -405,11 +421,28 @@ class SourceDiscoverySqlRepository:
             await session.commit()
 
     async def create_run(self, run: DiscoveryRun) -> DiscoveryRun:
+        try:
+            async with self._session_factory() as session:
+                row = CollectionDiscoveryRunORM(**asdict(run))
+                session.add(row)
+                await session.commit()
+                return _run(row)
+        except IntegrityError as exc:
+            active = await self.get_active_run(run.rule_id)
+            if active is None:
+                raise
+            raise ActiveDiscoveryRunExistsError(active.id) from exc
+
+    async def get_active_run(self, rule_id: str) -> DiscoveryRun | None:
         async with self._session_factory() as session:
-            row = CollectionDiscoveryRunORM(**asdict(run))
-            session.add(row)
-            await session.commit()
-            return _run(row)
+            row = await session.scalar(
+                select(CollectionDiscoveryRunORM)
+                .where(CollectionDiscoveryRunORM.rule_id == rule_id)
+                .where(CollectionDiscoveryRunORM.status == "running")
+                .order_by(CollectionDiscoveryRunORM.created_at)
+                .limit(1)
+            )
+            return _run(row) if row is not None else None
 
     async def finish_run(
         self,

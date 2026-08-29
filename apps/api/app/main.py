@@ -98,12 +98,6 @@ async def lifespan(api: FastAPI):
         if ctx.jobs is None:
             raise RuntimeError("AppContext jobs module was not initialized")
 
-        try:
-            sensor_count = ctx.jobs.sensors.sensor_registry.load()
-        except Exception:
-            sensor_count = 0
-        _logger.info("Sensor registry: %d sensors loaded", sensor_count)
-
         if str(cfg.execution.engine) == "prefect":
             training_status_reconciler.start()
 

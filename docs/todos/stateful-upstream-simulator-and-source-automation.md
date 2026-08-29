@@ -2,9 +2,7 @@
 
 ## Progress
 
-- **Overall status:** In progress; the database, control, platform-facing read
-  interfaces, and simulator-owned showcase publication are complete. Recurring
-  Collection discovery remains.
+- **Overall status:** Complete.
 - **Completed intermediate slices:** resolved the PostgreSQL, HTTP API, CLI,
   latest-value, and five-minute automation decisions; recorded the current
   direct-write inventory; moved the artifact generator out of Compose code;
@@ -20,16 +18,23 @@
   the production query cache. A named, idempotent HTTP scenario now generates
   deterministic defects, review images, patch archives, PostgreSQL metadata,
   and object-store payloads inside the simulator and publishes them coherently;
-  the CLI and platform seed recipe use that same API.
-- **Next milestone:** add the five-minute internal Collection-discovery trigger.
+  the CLI and platform seed recipe use that same API. The final slice replaces
+  the legacy Sensor subsystem with one deployment-owned five-minute Collection
+  discovery poll, enforces one active run per rule in the database, records
+  overlapping ticks as skipped, and removes generic Sensor API/UI/YAML and seed
+  fixtures while retaining migration history for existing databases.
+- **Verification:** 1,040 API tests passed (15 skipped, 1 expected pass), the
+  OpenAPI contract is synchronized, 507 Web tests passed, the production Web
+  build completed, and all federated Graphify contexts plus the generated
+  contract overlay validate.
 - **Done when:** every acceptance criterion below is verified. Package
   relocation is not simulator completion.
 
-This document records the proposal to replace distributed SC fixture scripts
+This document records the implemented replacement for distributed SC fixture scripts
 with a stateful development upstream service and database that can simulate
 source behavior over time. It is an audit and architecture proposal only. No
-service, database, seed, sensor, or automation behavior should be changed until
-the target boundary and migration order are approved.
+The findings below preserve the pre-implementation inventory that justified the
+change; completed sections state the resulting ownership explicitly.
 
 This todo refines the SC portions of
 `docs/todos/mock-seed-code-package-separation.md`. The earlier todo correctly
@@ -51,10 +56,9 @@ an explicit behavior/control interface.
   updating mutable fields on published rows. Deletion/tombstones, outages,
   artificial latency, delayed assets, and incomplete publication are deferred.
 - Active Collection membership rules are the product surface for upstream
-  discovery. Retain internal sensor scheduling capability, remove the legacy
-  timer/dataset-size definitions and generic Sensor subscription UI/API, and
-  add an internal Collection-discovery sensor whose definition owns the
-  five-minute interval.
+  discovery. One internal Prefect deployment owns the five-minute interval;
+  the legacy timer/dataset-size definitions and generic Sensor subscription
+  UI/API are removed.
 - If a run for the same Collection rule is still active at the next tick, skip
   the new run and record that outcome; do not queue duplicate runs.
 - Discovery and imported Datasets use current-state semantics. Mutable upstream
@@ -116,8 +120,8 @@ Files and entrypoints:
   - Owns another set of fixture counts, timestamps, bucket names, and endpoints.
 - `devtools/seedmaker/datasets/dev_showcase.py`
   - Assumes the upstream fixture already exists, imports its latest inspection,
-    creates platform collections and a source connector, creates a manual-only
-    membership rule, then creates disabled legacy sensor subscriptions.
+    creates platform collections and a source connector, and creates an active
+    membership rule evaluated by the shared five-minute poller.
 - `devtools/seedmaker/dev_activity.py`
   - Inserts non-executing platform jobs, models, metrics, and events directly for
     display purposes; this is platform fixture data, not upstream behavior.
@@ -241,26 +245,34 @@ metadata independently.
 
 ## Candidate Work
 
-### P0: Implement Collection discovery on the internal sensor capability
+### P0: Implement internal scheduled Collection discovery — completed
 
 - Use active Collection membership rules as the supported product surface for
   reacting to upstream SC arrivals.
-- Add an internal sensor definition that invokes live discovery for eligible
-  active rules every five minutes. Define org/system actor, cursor, retry,
-  cancellation, and Task Tracker behavior in that definition.
+- Add one internal deployment that invokes live discovery for eligible active
+  rules every five minutes with an explicit system actor and existing cursor
+  semantics.
 - Enforce one active run per Collection rule. When the next interval arrives,
   skip and record it if the same rule is still running; do not enqueue a
   duplicate.
 - Keep the trigger target-bound and recipe-bound according to
   `CORE_DESIGNS.md`; do not expose arbitrary sensor/workflow subscriptions to
   ordinary users.
-- Retain only the internal scheduling/trigger capability from
-  `apps/api/app/modules/jobs/sensors`. Remove the legacy timer and dataset-size
-  definitions, generic subscription APIs, migrations where safely superseded,
-  generated clients, stale documentation, and the unregistered Sensor UI.
+- Remove `apps/api/app/modules/jobs/sensors`, the legacy timer and dataset-size
+  definitions, generic subscription APIs/current ORM registration, generated
+  clients, stale documentation, and the unregistered Sensor UI. Historical
+  Alembic migrations remain so existing databases can still upgrade without a
+  rewrite or backfill.
 - Do not connect a new upstream event to the current exact-equality dispatch
-  service; the Collection-discovery sensor calls the resource-discovery
+  service; the Collection-discovery deployment calls the resource-discovery
   contract directly.
+
+Completed: `collection-discovery-poll` enumerates active rules on a
+deployment-owned `*/5 * * * *` UTC schedule and invokes the source-discovery
+application contract directly. A partial unique database index permits only one
+`running` row per rule. A colliding scheduled run is persisted as `skipped`,
+linked to the active run, and does not advance the live cursor. Provider failure
+is persisted by discovery and causes the Prefect flow to fail.
 
 ### P0: Separate production upstream reading from development simulation
 

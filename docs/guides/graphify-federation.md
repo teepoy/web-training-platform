@@ -12,7 +12,7 @@ The tracked contract is `graphify/federation.json`. Generated graphs remain loca
 | `data-resources`         | Dataset, storage, Collection, Revision/Snapshot, and Library                        |
 | `ml-lifecycle`           | Model, training, prediction, jobs, Prefect dispatch, and artifacts                  |
 | `sc-domain`              | SC inspection, review sampling, image parsing, upstream data, and SC ML             |
-| `ingestion-automation`   | Resource automation, source discovery, Backfill, schedules, and sensors             |
+| `ingestion-automation`   | Resource automation, source discovery, Backfill, schedules, and admission           |
 | `platform-access`        | Authentication, organization context, admin, settings, and dashboard                |
 | `agent-surface`          | Agent chat, display surfaces, widgets, descriptors, and registration                |
 

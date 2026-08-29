@@ -152,11 +152,6 @@ class DataConfig(ConfigSection):
     dir: str = ""
 
 
-class SensorsConfig(ConfigSection):
-    dir: str = "sensors"
-    strict: bool = False
-
-
 class AgentConfig(ConfigSection):
     enabled: bool = True
     max_panels: int = 8
@@ -271,7 +266,6 @@ class AppConfig(ConfigSection):
     llm: LlmConfig = Field(default_factory=LlmConfig)
     label_studio: LabelStudioConfig = Field(default_factory=LabelStudioConfig)
     data: DataConfig = Field(default_factory=DataConfig)
-    sensors: SensorsConfig = Field(default_factory=SensorsConfig)
     agent: AgentConfig = Field(default_factory=AgentConfig)
     redis: RedisConfig = Field(default_factory=RedisConfig)
     startup_checks: StartupChecksConfig = Field(default_factory=StartupChecksConfig)

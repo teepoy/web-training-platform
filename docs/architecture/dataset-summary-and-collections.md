@@ -1,6 +1,6 @@
 # Dataset Summary, Collection Stack, and Dynamic Collection
 
-Status: partially superseded by ADR 0003 and ADR 0014
+Status: partially superseded by ADR 0003, ADR 0014, and the implemented source-discovery poller
 Date: 2026-08-15
 
 The retained Collection Snapshot contract is now a composite logical manifest
@@ -9,6 +9,10 @@ Any section below that describes an archived full `data.parquet` or
 `provenance.parquet` per Collection revision is historical implementation
 context, not the target architecture. See ADR 0003, ADR 0014, and
 `contextual-collection-automation-plan.md` for the accepted design.
+Sections 6.1-6.3 describing generic Sensor subscriptions are also historical.
+The implemented product surface is an active Collection membership rule; one
+internal Prefect deployment evaluates all active rules every five minutes.
+There is no generic Sensor API, YAML registry, persistence model, or UI.
 
 ## 1. Scope
 

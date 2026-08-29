@@ -152,6 +152,7 @@ class PrefectClient(Protocol):
         parameters: dict[str, object] | None = None,
         tags: list[str] | None = None,
         work_queue_name: str | None = None,
+        schedules: list[dict[str, object]] | None = None,
     ) -> dict[str, Any]: ...
 
     async def create_deployment(

@@ -43,7 +43,7 @@
       "nodes": [
         "context_sc_domain",
         "contract_protobuf",
-        "contract_image_parser",
+        "contract_semantic_image_streams",
         "context_ml_lifecycle"
       ]
     },
@@ -264,14 +264,13 @@
     },
     {
       "name": "ingestion-automation",
-      "description": "Resource automation, discovery, schedules, sensors, and source admission.",
+      "description": "Resource automation, discovery, schedules, and source admission.",
       "aliases": [
         "automation",
         "source discovery",
         "connector",
         "backfill",
         "schedule",
-        "sensor",
         "admission"
       ],
       "roots": [
@@ -279,8 +278,7 @@
         "apps/api/app/modules/source_discovery",
         "apps/api/app/modules/jobs",
         "apps/web/src/features/automations",
-        "apps/web/src/features/schedules",
-        "apps/web/src/features/sensors"
+        "apps/web/src/features/schedules"
       ],
       "max_source_files": 240,
       "max_nodes": 5000,
@@ -293,8 +291,7 @@
           ],
           "include_globs": [
             "apps/web/src/features/automations/**/*.spec.ts",
-            "apps/web/src/features/schedules/**/*.spec.ts",
-            "apps/web/src/features/sensors/**/*.spec.ts"
+            "apps/web/src/features/schedules/**/*.spec.ts"
           ]
         }
       }

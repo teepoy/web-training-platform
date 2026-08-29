@@ -12,9 +12,11 @@ class PrefectDeploymentSpec:
     path: str = ""
     work_queue_name: str | None = None
     work_queue_priority: int | None = None
+    cron: str | None = None
+    cron_timezone: str | None = None
 
-    def as_dict(self) -> dict[str, str | int]:
-        result: dict[str, str | int] = {
+    def as_dict(self) -> dict[str, object]:
+        result: dict[str, object] = {
             "deployment_name": self.deployment_name,
             "flow_name": self.flow_name,
             "work_pool_name": self.work_pool_name,
@@ -25,6 +27,18 @@ class PrefectDeploymentSpec:
             result["work_queue_name"] = self.work_queue_name
         if self.work_queue_priority is not None:
             result["work_queue_priority"] = self.work_queue_priority
+        if self.cron is not None:
+            if self.cron_timezone is None:
+                raise ValueError("cron_timezone is required when cron is configured")
+            result["schedules"] = [
+                {
+                    "schedule": {
+                        "cron": self.cron,
+                        "timezone": self.cron_timezone,
+                    },
+                    "active": True,
+                }
+            ]
         return result
 
 
@@ -56,19 +70,16 @@ PREDICTION_AUTOMATION_RUNTIME_DEPLOYMENT = PrefectDeploymentSpec(
     work_queue_name="prediction-automation",
     work_queue_priority=10,
 )
-TIMER_SENSOR_DEPLOYMENT = PrefectDeploymentSpec(
-    deployment_name="timer-sensor",
-    flow_name="timer-sensor",
-    work_pool_name="default-cpu",
-    entrypoint="app.modules.jobs.sensors.adapter.flows.timer_sensor:timer_sensor",
-)
-DATASET_SIZE_SENSOR_DEPLOYMENT = PrefectDeploymentSpec(
-    deployment_name="dataset-size-sensor",
-    flow_name="dataset-size-sensor",
+COLLECTION_DISCOVERY_DEPLOYMENT = PrefectDeploymentSpec(
+    deployment_name="collection-discovery-poll",
+    flow_name="collection-discovery-poll",
     work_pool_name="default-cpu",
     entrypoint=(
-        "app.modules.jobs.sensors.adapter.flows.dataset_size_sensor:dataset_size_sensor"
+        "app.modules.source_discovery.adapter.flows.collection_discovery:"
+        "collection_discovery_poll"
     ),
+    cron="*/5 * * * *",
+    cron_timezone="UTC",
 )
 DRAIN_DATASET_DEPLOYMENT = PrefectDeploymentSpec(
     deployment_name="drain-dataset",
@@ -84,8 +95,7 @@ _RUNTIME_DEPLOYMENTS = (
     PREDICTION_AUTOMATION_RUNTIME_DEPLOYMENT,
 )
 _CPU_DEPLOYMENTS = (
-    TIMER_SENSOR_DEPLOYMENT,
-    DATASET_SIZE_SENSOR_DEPLOYMENT,
+    COLLECTION_DISCOVERY_DEPLOYMENT,
     DRAIN_DATASET_DEPLOYMENT,
 )
 _PLATFORM_DEPLOYMENTS = (*_RUNTIME_DEPLOYMENTS, *_CPU_DEPLOYMENTS)
@@ -95,11 +105,11 @@ _PLATFORM_DEPLOYMENTS = (*_RUNTIME_DEPLOYMENTS, *_CPU_DEPLOYMENTS)
 _SCHEDULABLE_DEPLOYMENTS = (DRAIN_DATASET_DEPLOYMENT,)
 
 
-def runtime_prefect_deployment_specs() -> list[dict[str, str | int]]:
+def runtime_prefect_deployment_specs() -> list[dict[str, object]]:
     return [spec.as_dict() for spec in _RUNTIME_DEPLOYMENTS]
 
 
-def platform_prefect_deployment_specs() -> list[dict[str, str | int]]:
+def platform_prefect_deployment_specs() -> list[dict[str, object]]:
     """Return every repository-owned Prefect deployment."""
 
     return [spec.as_dict() for spec in _PLATFORM_DEPLOYMENTS]
@@ -139,12 +149,11 @@ def prefect_work_queue_specs() -> tuple[tuple[str, str, int], ...]:
 
 
 __all__ = [
-    "DATASET_SIZE_SENSOR_DEPLOYMENT",
+    "COLLECTION_DISCOVERY_DEPLOYMENT",
     "DRAIN_DATASET_DEPLOYMENT",
     "PREDICTION_AUTOMATION_RUNTIME_DEPLOYMENT",
     "PREDICTION_RUNTIME_DEPLOYMENT",
     "PrefectDeploymentSpec",
-    "TIMER_SENSOR_DEPLOYMENT",
     "TRAIN_AND_PREDICT_RUNTIME_DEPLOYMENT",
     "TRAIN_RUNTIME_DEPLOYMENT",
     "get_schedulable_prefect_deployment",
