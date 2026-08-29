@@ -3,16 +3,17 @@
 ## Progress
 
 - **Overall status:** In progress; the database/publication foundation is
-  implemented, but the simulator is not yet connected or operable through its
-  required control and read interfaces.
+  implemented and operable through its control interface, but it is not yet
+  connected to the platform-facing read interfaces.
 - **Completed intermediate slices:** resolved the PostgreSQL, HTTP API, CLI,
   latest-value, and five-minute automation decisions; recorded the current
   direct-write inventory; moved the artifact generator out of Compose code;
   created the separate `services/sc-upstream-simulator` package, its initial
   Alembic migration, and transactional draft-to-published state with a monotonic
-  change token.
-- **Next milestone:** add the authenticated HTTP control API and thin CLI, then
-  expose published rows through the existing gRPC/Flight contracts.
+  change token; added the bearer-authenticated HTTP control API, HTTP-only CLI,
+  simulator-owned development database, and Compose service.
+- **Next milestone:** expose only published rows through the existing
+  gRPC/Flight contracts and transport the latest-change freshness value.
 - **Done when:** every acceptance criterion below is verified. Package
   relocation is not simulator completion.
 
@@ -318,6 +319,14 @@ The control API must bind only in development/test profiles and require an
 explicit development credential or private network boundary. The CLI calls the
 same API; there is no Make command that reimplements or wraps simulator
 behavior.
+
+Completed intermediate slice: the control API now supports atomic draft
+creation, pre-publication child append, publication, mutable source updates,
+list, and inspect. Every mutation requires the configured bearer credential.
+The CLI requires explicit API URL, token, and timeout inputs and communicates
+only through HTTP. Local Compose creates the dedicated `sc_simulator` database,
+applies migrations, and starts the separately named simulator service; release
+manifests do not include it.
 
 ### P0: Add a latest-change freshness contract
 

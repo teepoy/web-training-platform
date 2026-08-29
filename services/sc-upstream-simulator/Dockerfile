@@ -8,21 +8,17 @@ COPY pyproject.toml uv.lock ./
 COPY apps/api/pyproject.toml apps/api/pyproject.toml
 COPY libs/protos/pyproject.toml libs/protos/pyproject.toml
 COPY libs/ml/pyproject.toml libs/ml/pyproject.toml
+COPY libs/sampling-rules/pyproject.toml libs/sampling-rules/pyproject.toml
+COPY libs/klarf/pyproject.toml libs/klarf/pyproject.toml
 COPY services/sc-upstream/pyproject.toml services/sc-upstream/pyproject.toml
 COPY services/sc-upstream-simulator/pyproject.toml services/sc-upstream-simulator/pyproject.toml
-COPY libs/protos/ libs/protos/
-COPY services/sc-upstream/ services/sc-upstream/
+COPY services/sc-upstream-simulator/ services/sc-upstream-simulator/
 
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --package sc-upstream --no-dev
+    uv sync --frozen --package sc-upstream-simulator --no-dev
 
-ENV GRPC_PORT=9091
-ENV FLIGHT_PORT=9093
-ENV UPSTREAM_DB_URL=sqlite:////data/wafer_inspection.db
-ENV ZIPS_DB_URL=sqlite:////data/inspection_zips.db
-ENV CACHE_DIR=/data/cache
+WORKDIR /app/services/sc-upstream-simulator
 
-EXPOSE 9091 9093
+EXPOSE 8094
 
-WORKDIR /app/services/sc-upstream
-CMD ["/app/.venv/bin/python", "-m", "sc_upstream.server"]
+CMD ["/app/.venv/bin/uvicorn", "--factory", "sc_upstream_simulator.server:create_app", "--host", "0.0.0.0", "--port", "8094"]

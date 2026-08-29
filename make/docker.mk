@@ -50,7 +50,8 @@ ensure-fixtures: ## Ensure host-side bind-mount fixture files exist (idempotent;
 		infra/compose/pgadmin-pgpass \
 		infra/compose/prefect.yaml \
 		infra/compose/init-scripts/create-labelstudio-db.sql \
-		infra/compose/init-scripts/create-prefect-db.sql; \
+		infra/compose/init-scripts/create-prefect-db.sql \
+		infra/compose/init-scripts/03-create-sc-simulator.sql; \
 	do \
 		if [ ! -f "$$f" ]; then \
 			echo "⚠️  Missing optional fixture: $$f" >&2; \

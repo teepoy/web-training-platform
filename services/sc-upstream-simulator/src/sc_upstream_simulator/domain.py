@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Literal
 
 
 def _require_aware(value: datetime, field_name: str) -> None:
@@ -84,3 +85,27 @@ class Publication:
     published_at: datetime
     last_updated_at: datetime
     change_token: int
+
+
+@dataclass(frozen=True)
+class InspectionRecord:
+    key: InspectionKey
+    lot_id: str
+    wafer_id: str
+    layer_id: str
+    device: str
+    inspect_equip_id: str
+    recipe_key: int
+    recipe_id: str
+    origin_index_x: int
+    origin_index_y: int
+    center_x: int
+    center_y: int
+    origin_x: int
+    origin_y: int
+    die_size_x: int
+    die_size_y: int
+    state: Literal["draft", "published"]
+    published_at: datetime | None
+    last_updated_at: datetime | None
+    change_token: int | None

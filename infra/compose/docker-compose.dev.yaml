@@ -78,6 +78,64 @@ x-api-runtime: &api-runtime
   restart: on-failure
 
 services:
+  # Creates the simulator-owned database for both fresh and existing local
+  # Postgres volumes. The SQL is idempotent and this container exits afterward.
+  sc-simulator-db-prepare:
+    image: pgvector/pgvector:pg16
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: postgres
+    volumes:
+      - ./init-scripts/03-create-sc-simulator.sql:/init/03-create-sc-simulator.sql:ro
+    command:
+      [
+        "psql",
+        "-h",
+        "postgres",
+        "-U",
+        "postgres",
+        "-d",
+        "postgres",
+        "-f",
+        "/init/03-create-sc-simulator.sql",
+      ]
+    restart: "no"
+
+  sc-upstream-simulator:
+    build:
+      context: ../..
+      dockerfile: services/sc-upstream-simulator/Dockerfile
+    depends_on:
+      sc-simulator-db-prepare:
+        condition: service_completed_successfully
+    environment:
+      SC_SIMULATOR_ALLOW_MUTATIONS: "1"
+      SC_SIMULATOR_DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/sc_simulator
+      SC_SIMULATOR_API_TOKEN: ${SC_SIMULATOR_API_TOKEN:-local-development-sc-simulator-token}
+    command:
+      [
+        "/bin/sh",
+        "-lc",
+        "/app/.venv/bin/alembic -c /app/services/sc-upstream-simulator/alembic.ini upgrade head && exec /app/.venv/bin/uvicorn --factory sc_upstream_simulator.server:create_app --host 0.0.0.0 --port 8094",
+      ]
+    ports:
+      - "8094:8094"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8094/ready', timeout=2)",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 20s
+    restart: on-failure
+
   # ───────────────────────────────────────────────────────────────────
   # API — dev mode with bind mounts and hot reload. Platform preparation is
   # performed by the explicit prepare-platform one-shot before this starts.

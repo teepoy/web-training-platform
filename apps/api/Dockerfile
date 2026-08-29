@@ -17,6 +17,7 @@ COPY libs/ml/pyproject.toml libs/ml/pyproject.toml
 COPY libs/sampling-rules/pyproject.toml libs/sampling-rules/pyproject.toml
 COPY libs/klarf/pyproject.toml libs/klarf/pyproject.toml
 COPY services/sc-upstream/pyproject.toml services/sc-upstream/pyproject.toml
+COPY services/sc-upstream-simulator/pyproject.toml services/sc-upstream-simulator/pyproject.toml
 
 COPY libs/protos/ libs/protos/
 
