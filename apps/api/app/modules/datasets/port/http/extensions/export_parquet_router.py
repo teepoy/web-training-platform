@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import os
 import tempfile
@@ -72,7 +73,17 @@ def _rows_to_table(rows: list[Any]) -> pa.Table:
                 type=pa.list_(_IMAGE_TYPE),
             ),
             pa.array([row.latest_label for row in rows], type=pa.string()),
-            pa.array([str(dict(row.metadata or {})) for row in rows], type=pa.string()),
+            pa.array(
+                [
+                    json.dumps(
+                        dict(row.metadata or {}),
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    )
+                    for row in rows
+                ],
+                type=pa.string(),
+            ),
         ],
         schema=_EXPORT_SCHEMA,
     )

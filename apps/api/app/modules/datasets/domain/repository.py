@@ -83,6 +83,8 @@ class DatasetRepository(Protocol):
         org_id: str | None = None,
     ) -> Dataset | None: ...
 
+    async def existing_sample_ids(self, sample_ids: set[str]) -> set[str]: ...
+
     async def rename_dataset(
         self,
         dataset_id: str,

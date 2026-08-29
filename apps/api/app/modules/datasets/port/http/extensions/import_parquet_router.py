@@ -2,6 +2,7 @@ from __future__ import annotations
 
 # pyright: reportMissingImports=false
 
+import json
 import logging
 from collections.abc import AsyncIterator
 from typing import TypeGuard
@@ -12,7 +13,13 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pyarrow import Table as ArrowTable
 
 from app.core.config import AppConfig
-from app.shared.api.schemas import Annotation, Organization, User, SPARSE_NO_LS
+from app.shared.api.schemas import (
+    Annotation,
+    DatasetStorageMode,
+    Organization,
+    SPARSE_NO_LS,
+    User,
+)
 from app.modules.auth.port.http.deps import (
     get_current_org,
     get_current_user,
@@ -114,7 +121,7 @@ def _parquet_to_sample_items(
     metadata_cols = [
         c
         for c in table.column_names
-        if c not in image_cols and c != label_col and c != "sample_id"
+        if c not in image_cols and c not in {label_col, "sample_id", "metadata"}
     ]
 
     warnings: list[str] = []
@@ -138,6 +145,22 @@ def _parquet_to_sample_items(
                 label = str(raw)
 
         metadata: dict[str, object] = {}
+        if "metadata" in table.column_names:
+            raw_metadata = table.column("metadata")[row_idx].as_py()
+            if isinstance(raw_metadata, dict):
+                metadata.update(raw_metadata)
+            elif isinstance(raw_metadata, str):
+                try:
+                    decoded_metadata = json.loads(raw_metadata)
+                except json.JSONDecodeError:
+                    metadata["metadata"] = raw_metadata
+                else:
+                    if isinstance(decoded_metadata, dict):
+                        metadata.update(decoded_metadata)
+                    else:
+                        metadata["metadata"] = raw_metadata
+            elif raw_metadata is not None:
+                metadata["metadata"] = raw_metadata
         if "sample_id" in table.column_names:
             raw_sample_id = table.column("sample_id")[row_idx].as_py()
             if raw_sample_id is not None:
@@ -179,6 +202,11 @@ async def import_parquet(
     dataset = await repo.get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="dataset not found")
+    if dataset.storage_mode != DatasetStorageMode.DB_FULL:
+        raise HTTPException(
+            status_code=422,
+            detail="Parquet import currently requires db_full Dataset storage",
+        )
     if not dataset.ls_project_id or dataset.ls_project_id == SPARSE_NO_LS:
         raise HTTPException(
             status_code=500,
@@ -220,6 +248,23 @@ async def import_parquet(
             status_code=400, detail="No importable rows found in parquet file"
         )
 
+    allowed_labels = set(dataset.task_spec.label_space)
+    unknown_labels = sorted(
+        {
+            item.label
+            for item in items
+            if item.label is not None and item.label not in allowed_labels
+        }
+    )
+    if unknown_labels:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Parquet labels are not in the target Dataset label space: "
+                + ", ".join(unknown_labels[:5])
+            ),
+        )
+
     for w in warnings:
         _logger.warning("parquet import [%s]: %s", dataset_id, w)
 
@@ -231,7 +276,7 @@ async def import_parquet(
         raise HTTPException(
             status_code=422, detail="Parquet sample_id values must be unique"
         )
-    existing_sample_ids = await storage.existing_sample_ids(set(sample_ids))
+    existing_sample_ids = await repo.existing_sample_ids(set(sample_ids))
     if existing_sample_ids:
         raise HTTPException(
             status_code=409,

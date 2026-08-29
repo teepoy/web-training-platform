@@ -187,12 +187,12 @@ Dataset name 不是 identity。
 Dataset/annotation/Model transfer uses registered frontend importer/exporter
 descriptors rather than page-owned format switches. The first portable Dataset
 format is Parquet sample rows: `sample_id` is a dedicated identity column, latest
-label is included, image object references remain references, and receiving
-Dataset metadata/organization/creator are never imported. Legacy Parquet without
-`sample_id` remains accepted and receives new platform IDs; an explicit imported
-ID must be unique and absent from the target Dataset. Export writes paged row
-groups to object storage, while import is bounded by tracked YAML byte and row
-limits.
+label and structured JSON metadata are included, image object references remain
+references, and receiving Dataset metadata/organization/creator are never imported.
+Legacy Parquet without `sample_id` remains accepted and receives new platform IDs;
+an explicit imported ID must be unique and absent platform-wide because `Sample.id`
+is the global primary key. Export writes paged row groups to object storage, while
+import is bounded by tracked YAML byte and row limits.
 
 Portable annotations use `platform.annotations.jsonl` schema version 1, an exact
 Dataset contract (`dataset_type`, `task_type`, ordered label space), and platform

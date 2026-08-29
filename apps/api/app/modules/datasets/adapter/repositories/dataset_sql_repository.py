@@ -765,6 +765,26 @@ class DatasetSqlRepository:
             await session.commit()
         return samples
 
+    async def existing_sample_ids(self, sample_ids: set[str]) -> set[str]:
+        if not sample_ids:
+            return set()
+        ordered_ids = list(sample_ids)
+        existing: set[str] = set()
+        async with self.session_factory() as session:
+            for offset in range(0, len(ordered_ids), 500):
+                existing.update(
+                    (
+                        await session.execute(
+                            select(SampleORM.id).where(
+                                SampleORM.id.in_(ordered_ids[offset : offset + 500])
+                            )
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+        return existing
+
     async def list_samples(
         self, dataset_id: str, offset: int = 0, limit: int = 50
     ) -> tuple[list[Sample], int]:

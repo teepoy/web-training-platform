@@ -61,9 +61,9 @@
 ## Implemented Contract
 
 - Dataset: registered JSON/manual/Parquet imports and Parquet export. Parquet
-  preserves a dedicated platform `sample_id`, latest label, metadata, and image
+  preserves a dedicated platform `sample_id`, latest label, structured JSON metadata, and image
   references without embedding raw images. Legacy Parquet without IDs remains
-  accepted and receives new IDs. Explicit duplicate/conflicting IDs fail before
+  accepted and receives new IDs. Explicit duplicate/platform-wide conflicting IDs fail before
   Label Studio or Dataset writes.
 - Annotation: registered version-1 JSONL import/export keyed only by platform
   `sample_id`. The header carries the Dataset type/task/label-space contract.
@@ -89,8 +89,8 @@
 ## Verification Record
 
 - Focused annotation, Parquet round-trip/sample-identity, and Model route/upload
-  tests: 64 passed with one pre-existing skip.
-- Full API suite and OpenAPI sync: 1,055 passed, 15 skipped, one expected pass;
+  tests: 67 passed with one pre-existing skip.
+- Full API suite and OpenAPI sync: 1,058 passed, 15 skipped, one expected pass;
   OpenAPI is in sync.
 - Backend Ruff and Pyright: clean.
 - Frontend: 101 test files / 523 tests passed; production build passed.

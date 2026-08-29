@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import json
 
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -204,6 +205,14 @@ class TestParquetToSampleItems:
         )
         items, _ = _parquet_to_sample_items(table)
         assert items[0].metadata["__platform_sample_id"] == "portable-sample-1"
+
+    def test_decodes_portable_json_metadata(self) -> None:
+        table = self._make_hf_table(1).append_column(
+            "metadata", pa.array(['{"source":"portable","rank":3}'])
+        )
+        items, _ = _parquet_to_sample_items(table)
+        assert items[0].metadata["source"] == "portable"
+        assert items[0].metadata["rank"] == 3
 
     def test_no_image_columns_warns(self) -> None:
         table = pa.table({"text": pa.array(["hello"]), "label": pa.array(["cat"])})
@@ -418,6 +427,58 @@ class TestImportParquetEndpoint:
             assert response.status_code == 200
             assert response.json()["sample_ids"] == ["portable-sample-1"]
 
+    def test_import_rejects_sample_id_used_by_another_dataset(self) -> None:
+        with TestClient(app) as c:
+            source = c.post(
+                "/api/v1/datasets",
+                json={
+                    "name": "parquet-id-source",
+                    "dataset_type": "image_classification",
+                    "task_spec": {
+                        "task_type": "classification",
+                        "label_space": ["cat"],
+                    },
+                },
+            )
+            source_id = source.json()["id"]
+            sample = c.post(
+                f"/api/v1/datasets/{source_id}/samples",
+                json={"image_uris": []},
+            )
+            sample_id = sample.json()["id"]
+            target = c.post(
+                "/api/v1/datasets",
+                json={
+                    "name": "parquet-id-target",
+                    "dataset_type": "image_classification",
+                    "task_spec": {
+                        "task_type": "classification",
+                        "label_space": ["cat"],
+                    },
+                },
+            )
+            target_id = target.json()["id"]
+            table = pa.table(
+                {
+                    "sample_id": pa.array([sample_id]),
+                    "label": pa.array(["cat"]),
+                }
+            )
+            response = c.post(
+                f"/api/v1/plugins/import-parquet/import?dataset_id={target_id}",
+                files={
+                    "file": (
+                        "conflict.parquet",
+                        io.BytesIO(_make_parquet_bytes(table)),
+                        "application/octet-stream",
+                    )
+                },
+            )
+            assert response.status_code == 409
+            assert "already exist" in response.json()["detail"]
+            listed = c.get(f"/api/v1/datasets/{target_id}/samples")
+            assert listed.json()["total"] == 0
+
     def test_import_invalid_file(self) -> None:
         with TestClient(app) as c:
             ds = c.post(
@@ -446,6 +507,36 @@ class TestImportParquetEndpoint:
             )
             assert r.status_code == 400
             assert "Invalid parquet file" in r.json()["detail"]
+
+    def test_import_rejects_unknown_label_before_writes(self) -> None:
+        with TestClient(app) as c:
+            ds = c.post(
+                "/api/v1/datasets",
+                json={
+                    "name": "parquet-label-contract-ds",
+                    "dataset_type": "image_classification",
+                    "task_spec": {
+                        "task_type": "classification",
+                        "label_space": ["cat"],
+                    },
+                },
+            )
+            dataset_id = ds.json()["id"]
+            table = pa.table({"label": pa.array(["horse"])})
+            response = c.post(
+                f"/api/v1/plugins/import-parquet/import?dataset_id={dataset_id}",
+                files={
+                    "file": (
+                        "unknown-label.parquet",
+                        io.BytesIO(_make_parquet_bytes(table)),
+                        "application/octet-stream",
+                    )
+                },
+            )
+            assert response.status_code == 422
+            assert "not in the target Dataset label space" in response.json()["detail"]
+            listed = c.get(f"/api/v1/datasets/{dataset_id}/samples")
+            assert listed.json()["total"] == 0
 
     def test_import_empty_parquet(self) -> None:
         with TestClient(app) as c:
@@ -568,7 +659,6 @@ class TestExportParquetEndpoint:
                     ]
                 },
             )
-
             r = c.post(
                 f"/api/v1/plugins/export-parquet/export?dataset_id={dataset_id}",
             )
@@ -625,7 +715,7 @@ class TestExportParquetEndpoint:
             assert ds.status_code == 200
             dataset_id = ds.json()["id"]
 
-            c.post(
+            imported = c.post(
                 f"/api/v1/datasets/{dataset_id}/samples/import",
                 json={
                     "items": [
@@ -637,6 +727,7 @@ class TestExportParquetEndpoint:
                     ]
                 },
             )
+            source_sample_id = imported.json()["sample_ids"][0]
 
             r = c.post(
                 f"/api/v1/plugins/export-parquet/export?dataset_id={dataset_id}",
@@ -654,6 +745,37 @@ class TestExportParquetEndpoint:
                 content = resolve_r.content
                 table = pq.read_table(io.BytesIO(content))
                 assert table.num_rows == 1
-                assert table.column("sample_id")[0].as_py()
+                assert table.column("sample_id")[0].as_py() == source_sample_id
                 assert "image" in table.column_names
                 assert "label" in table.column_names
+                assert json.loads(table.column("metadata")[0].as_py()) == {"idx": 0}
+
+                deleted = c.delete(f"/api/v1/datasets/{dataset_id}")
+                assert deleted.status_code == 204
+
+                target = c.post(
+                    "/api/v1/datasets",
+                    json={
+                        "name": "parquet-roundtrip-target",
+                        "dataset_type": "image_classification",
+                        "task_spec": {
+                            "task_type": "classification",
+                            "label_space": ["cat", "dog"],
+                        },
+                    },
+                )
+                target_id = target.json()["id"]
+                restored = c.post(
+                    f"/api/v1/plugins/import-parquet/import?dataset_id={target_id}",
+                    files={
+                        "file": (
+                            "roundtrip.parquet",
+                            io.BytesIO(content),
+                            "application/octet-stream",
+                        )
+                    },
+                )
+                assert restored.status_code == 200
+                assert restored.json()["sample_ids"] == [source_sample_id]
+                restored_samples = c.get(f"/api/v1/datasets/{target_id}/samples")
+                assert restored_samples.json()["items"][0]["metadata"] == {"idx": 0}
