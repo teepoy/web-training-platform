@@ -234,7 +234,7 @@
         "apps/api/app/modules/sc",
         "apps/web/src/features/sc",
         "services/sc-upstream/src",
-        "services/sc-upstream-simulator/src",
+        "devtools/sc-upstream-simulator/src",
         "services/image-parser",
         "libs/sc-ml/src",
         "libs/sampling-rules/src"
@@ -246,7 +246,7 @@
           "roots": [
             "apps/api/app/modules/sc/tests",
             "services/sc-upstream/tests",
-            "services/sc-upstream-simulator/tests",
+            "devtools/sc-upstream-simulator/tests",
             "libs/sc-ml/tests",
             "libs/sampling-rules/tests"
           ],

@@ -8,13 +8,14 @@ If this file conflicts with `CORE_DESIGNS.md`, treat `CORE_DESIGNS.md` as author
 
 Monorepo for an online finetune platform:
 
-| Area     | Path       | Role                                                                  |
-| -------- | ---------- | --------------------------------------------------------------------- |
-| API      | `apps/api` | FastAPI control plane, metadata, auth, jobs, SSE, persistence         |
-| Web      | `apps/web` | Vue 3 + Vite frontend, widgets, dataset/job/schedule UI               |
-| Services | `services` | Out-of-process runtime services such as SC upstream and image parsing |
-| Infra    | `infra`    | Compose and Kubernetes manifests                                      |
-| Docs     | `docs`     | Architecture, guides, protocols                                       |
+| Area      | Path       | Role                                                                    |
+| --------- | ---------- | ----------------------------------------------------------------------- |
+| API       | `apps/api` | FastAPI control plane, metadata, auth, jobs, SSE, persistence           |
+| Web       | `apps/web` | Vue 3 + Vite frontend, widgets, dataset/job/schedule UI                 |
+| Services  | `services` | Out-of-process runtime services such as SC upstream and image parsing   |
+| Dev tools | `devtools` | Development-only seeds, simulators, synthetic data, and fake benchmarks |
+| Infra     | `infra`    | Compose and Kubernetes manifests                                        |
+| Docs      | `docs`     | Architecture, guides, protocols                                         |
 
 Runtime topology:
 

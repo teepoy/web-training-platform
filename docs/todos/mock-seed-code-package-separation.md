@@ -4,8 +4,10 @@
 
 - **Overall status:** In progress; the goal is not complete.
 - **Completed intermediate slices:** removed the disposable settings scaffold,
-  moved the active SC artifact generator into `scripts/seedmaker/`, retired its
-  unused duplicate, and removed the obsolete demo request prefix.
+  established the root `devtools/` boundary; moved seedmaker, synthetic SC
+  artifacts, the legacy SQLite fixture CLI, fake-kernel benchmarks, and the SC
+  simulator beneath it; retired the unused duplicate; and removed the obsolete
+  demo request prefix.
 - **Next milestone:** move mock SC database implementations, API storage test
   doubles, and the local training engine out of production package paths.
 - **Done when:** every acceptance criterion below is verified. The artifact
@@ -21,9 +23,8 @@ This cleanup follows the existing repository rules:
 
 - `test` may use SQLite, memory storage, and mocked external services.
 - `dev`, `pre-release`, and `prod` must use explicit runtime service boundaries.
-- Repository-wide seed implementations belong under `scripts/seedmaker/`.
-- Service-local development fixtures belong under the service's `tools/`
-  directory.
+- Repository-wide seed implementations belong under `devtools/seedmaker/`.
+- Executable development fixtures and simulators belong under `devtools/`.
 - Production `app/` and service `src/` packages must not import seed, mock,
   dummy, fake, or fixture implementations.
 - Moves preserve existing product behavior and compatibility reads without a
@@ -48,11 +49,11 @@ Files and features:
     unconditionally.
 - `services/sc-upstream/src/sc_upstream/__init__.py`
   - Exports the mock factories as part of the installable service package.
-- `services/sc-upstream/tools/seed_fixtures.py`
-  - Is already in the correct development-only directory, but imports the mock
-    schema from the production package.
+- `devtools/seedmaker/legacy_sc_sqlite.py`
+  - Preserves the legacy SQLite seed CLI under the development-only boundary,
+    but still imports the mock schema from the production package.
 - `services/sc-upstream/tests/test_flight_server.py` and
-  `services/sc-upstream/tests/test_seed_fixture.py`
+  `devtools/seedmaker/tests/test_legacy_sc_sqlite.py`
   - Import the mock implementation or schema directly.
 - `services/sc-upstream/Dockerfile`,
   `infra/compose/docker-compose.dev.yaml`,
@@ -65,7 +66,8 @@ Proposed ownership:
 
 - Keep the Protocols and transport service in `sc_upstream` production code.
 - Move the SQLite mock adapter, its ORM fixture schema, and mock factories into
-  a service-local development package under `services/sc-upstream/tools/`.
+  `devtools/` after the simulator read transport replaces the implicit mock
+  production adapter.
 - Give the mock service an explicit development entrypoint instead of selecting
   it silently from the normal server.
 - Add a separately named production adapter/entrypoint and make deployable
@@ -158,32 +160,32 @@ its authentication-token APIs were left unchanged.
 
 Files and features:
 
-- `scripts/seedmaker/sc_artifacts.py` (moved from Compose infrastructure)
+- `devtools/seedmaker/sc_artifacts.py` (moved from Compose infrastructure)
   - Generates mock SC patch/review image archives, uploads them to MinIO, updates
     the fixture zip database, and clears development caches.
-- `scripts/tests/test_seedmaker_sc_artifacts.py`
+- `devtools/seedmaker/tests/test_sc_artifacts.py`
   - Tests the seeder from the infrastructure package.
 - `infra/compose/seed_review_images.py` (removed)
   - Had no repository caller other than its own usage text and duplicated the
     active SC artifact workflow.
 - `make/build.mk`
-  - Calls `scripts/seedmaker/sc_artifacts.py` from the `seed-wafer-*` targets.
+  - Calls `devtools/seedmaker/sc_artifacts.py` from the `seed-wafer-*` targets.
 - `infra/compose/README.md`
   - Documents the current script path.
 
 Proposed ownership:
 
 - Move active cross-service SC fixture generation into a dedicated namespace
-  below `scripts/seedmaker/`, which is already the repository's canonical seed
+  below `devtools/seedmaker/`, which is already the repository's canonical seed
   package.
 - Keep Compose responsible only for wiring and invoking seed commands.
 - The unused `seed_review_images.py` duplicate has been retired rather than
   moved into the new package.
 - Update Make targets, tests, and documentation together after the package move.
 
-Completed: the active generator and its tests now live under the repository
-seedmaker/scripts namespaces. Compose retains only invocation and service
-wiring; the CLI behavior and Make targets remain compatible.
+Completed: the active generator, legacy SQLite compatibility seeder, and their
+tests now live under `devtools/seedmaker/`. Compose retains only invocation and
+service wiring; the CLI behavior and Make targets remain compatible.
 
 Completion scope: this is package separation only. It does not complete the
 stateful upstream simulator goal. The current Make targets and generator still
@@ -262,11 +264,11 @@ the build currently includes it in runtime source discovery.
 The following matched search terms but already have appropriate ownership or
 are not mocks:
 
-- `scripts/seedmaker/` is the existing dedicated repository seed package.
-- `scripts/benchmarks/` is the existing dedicated fake-kernel/benchmark package.
-- `services/sc-upstream/tools/seed_fixtures.py` is correctly placed as a
-  service-local tool; only its dependency on production mock ORM models needs
-  separation.
+- `devtools/seedmaker/` is the existing dedicated repository seed package.
+- `devtools/benchmarks/` is the existing dedicated fake-kernel/benchmark package.
+- `devtools/seedmaker/legacy_sc_sqlite.py` is correctly placed as a
+  development-only compatibility tool; only its dependency on production mock
+  ORM models still needs separation.
 - `apps/web/e2e/mocks/`, `apps/web/e2e/seed/`, and
   `apps/web/src/testing/` are dedicated test support trees.
 - Generated gRPC classes named `*Stub` are transport clients, not test stubs.
@@ -287,7 +289,7 @@ are not mocks:
 4. Remove the disposable generic settings router, repository, generated client
    surface, and registration after a final external-consumer check; preserve
    the access-key Settings page and auth token APIs.
-5. Consolidate active SC seeders under `scripts/seedmaker/` and retire confirmed
+5. Consolidate active SC seeders under `devtools/seedmaker/` and retire confirmed
    dead seed scripts.
 6. Extract the web sandbox into a dev-only entrypoint/package.
 7. Remove stale demo DTO fields and optionally relocate Storybook support.

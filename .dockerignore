@@ -1,12 +1,15 @@
 .git
 .venv
+**/.venv
 __pycache__
 *.pyc
 node_modules
 apps/web/dist
 apps/web/node_modules
 services/image-parser/tmp
-services/sc-upstream/tools
+devtools/benchmarks
+devtools/seedmaker
+devtools/sc-upstream-simulator/tests
 .mypy_cache
 .pytest_cache
 *.db

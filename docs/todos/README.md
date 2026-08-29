@@ -18,10 +18,10 @@ criteria are satisfied.
 | Goal                                                                                | Status      | Latest completed slice                                               | Next milestone                                                    |
 | ----------------------------------------------------------------------------------- | ----------- | -------------------------------------------------------------------- | ----------------------------------------------------------------- |
 | [Legacy configuration and code cleanup](legacy-configuration-and-code-cleanup.md)   | In progress | API configuration ownership and Make target consistency              | Continue the subsystem inventory and unnecessary-prefix cleanup   |
-| [Mock, seed, and demo package separation](mock-seed-code-package-separation.md)     | In progress | Settings scaffold removal and SC artifact generator relocation       | Remove mock implementations from production package paths         |
+| [Mock, seed, and demo package separation](mock-seed-code-package-separation.md)     | In progress | Root `devtools/` boundary for seeds, simulator, and fake benchmarks  | Remove mock implementations from production package paths         |
 | [Visual reuse and resource parity](visual-component-reuse-and-resource-parity.md)   | In progress | Removed the duplicate Dataset list surface                           | Share model search and standardize reusable table filters         |
 | [Internationalization](internationalization-and-localization.md)                    | In progress | Installed browser locale persistence and UI-library locale providers | Migrate global navigation, authentication, and settings copy      |
-| [Stateful upstream simulator](stateful-upstream-simulator-and-source-automation.md) | In progress | PostgreSQL simulator, authenticated control API/CLI, and dev Compose | Expose published rows through gRPC/Flight and freshness transport |
+| [Stateful upstream simulator](stateful-upstream-simulator-and-source-automation.md) | In progress | Isolated devtool package/image plus API/CLI and PostgreSQL Compose   | Expose published rows through gRPC/Flight and freshness transport |
 | [SC identity-only materialization](sc-sample-identity-only-materialization.md)      | Planned     | Contract and migration design recorded                               | Implement the bulk live-source resolution boundary                |
 
 The Prefect GPU worker release task is tracked separately in

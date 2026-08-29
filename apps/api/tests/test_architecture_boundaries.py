@@ -7,6 +7,7 @@ from pathlib import Path
 
 
 APP_ROOT = Path(__file__).resolve().parents[1] / "app"
+REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 DEV_ONLY_MODULE_TOKENS = frozenset(
     {
         "benchmark",
@@ -20,7 +21,7 @@ DEV_ONLY_MODULE_TOKENS = frozenset(
     }
 )
 DEV_ONLY_MODULE_NAMES = frozenset({"wafer_data_gen"})
-DEV_ONLY_IMPORT_ROOTS = ("benchmarks", "seedmaker")
+DEV_ONLY_IMPORT_ROOTS = ("benchmarks", "devtools", "seedmaker")
 
 
 def _python_files(root: Path) -> list[Path]:
@@ -33,7 +34,9 @@ def _relative(path: Path) -> str:
 
 def test_dev_only_implementations_live_outside_production_app() -> None:
     production_files = [
-        path for path in _python_files(APP_ROOT) if "tests" not in path.relative_to(APP_ROOT).parts
+        path
+        for path in _python_files(APP_ROOT)
+        if "tests" not in path.relative_to(APP_ROOT).parts
     ]
     misplaced_modules = [
         _relative(path)
@@ -61,6 +64,50 @@ def test_dev_only_implementations_live_outside_production_app() -> None:
     assert sorted(set(forbidden_imports)) == []
 
 
+def test_production_source_trees_do_not_import_devtools() -> None:
+    production_roots = [
+        APP_ROOT,
+        *sorted((REPOSITORY_ROOT / "services").glob("*/src")),
+        *sorted((REPOSITORY_ROOT / "libs").glob("*/src")),
+    ]
+    violations: list[str] = []
+    for root in production_roots:
+        for path in _python_files(root):
+            if "tests" in path.relative_to(root).parts:
+                continue
+            tree = ast.parse(path.read_text(), filename=str(path))
+            for node in ast.walk(tree):
+                modules: list[str] = []
+                if isinstance(node, ast.Import):
+                    modules.extend(alias.name for alias in node.names)
+                elif isinstance(node, ast.ImportFrom) and node.module is not None:
+                    modules.append(node.module)
+                if any(
+                    module == name or module.startswith(f"{name}.")
+                    for module in modules
+                    for name in DEV_ONLY_IMPORT_ROOTS
+                ):
+                    violations.append(path.relative_to(REPOSITORY_ROOT).as_posix())
+
+    assert sorted(set(violations)) == []
+
+
+def test_production_images_and_release_manifests_exclude_devtools() -> None:
+    inspected_paths = [
+        *sorted((REPOSITORY_ROOT / "apps").glob("*/Dockerfile")),
+        *sorted((REPOSITORY_ROOT / "services").glob("*/Dockerfile")),
+        *sorted((REPOSITORY_ROOT / "infra" / "compose" / "production").glob("*.yaml")),
+        *sorted((REPOSITORY_ROOT / "infra" / "k8s").glob("*.yaml")),
+    ]
+    violations = [
+        path.relative_to(REPOSITORY_ROOT).as_posix()
+        for path in inspected_paths
+        if "devtools/" in path.read_text()
+    ]
+
+    assert violations == []
+
+
 def test_no_dependency_injector_imports() -> None:
     ALLOWLIST: list[str] = []
 
@@ -70,10 +117,14 @@ def test_no_dependency_injector_imports() -> None:
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 for alias in node.names:
-                    if alias.name == "dependency_injector" or alias.name.startswith("dependency_injector."):
+                    if alias.name == "dependency_injector" or alias.name.startswith(
+                        "dependency_injector."
+                    ):
                         violations.append(_relative(path))
             elif isinstance(node, ast.ImportFrom) and node.module is not None:
-                if node.module == "dependency_injector" or node.module.startswith("dependency_injector."):
+                if node.module == "dependency_injector" or node.module.startswith(
+                    "dependency_injector."
+                ):
                     violations.append(_relative(path))
 
     unexpected = sorted(set(violations) - set(ALLOWLIST))
@@ -119,7 +170,8 @@ def test_no_app_container_ref_in_production() -> None:
     violations = [
         path.name
         for path in _python_files(modules_root)
-        if "tests" not in path.relative_to(modules_root).parts and "_app_container_ref" in path.read_text()
+        if "tests" not in path.relative_to(modules_root).parts
+        and "_app_container_ref" in path.read_text()
     ]
 
     unexpected = sorted(set(violations) - set(ALLOWLIST))
@@ -132,7 +184,9 @@ def test_no_shared_infra_module_repos() -> None:
     context_path = APP_ROOT / "shared" / "context.py"
     tree = ast.parse(context_path.read_text(), filename=str(context_path))
     shared_infra = next(
-        node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "SharedInfra"
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "SharedInfra"
     )
     forbidden_suffixes = ("_repository", "_service", "_orchestrator")
     violations = [
@@ -436,8 +490,7 @@ def test_runtime_compat_is_only_imported_by_prefect_flow_or_runtime_code() -> No
             or (
                 isinstance(node, ast.Import)
                 and any(
-                    alias.name.startswith("app.runtime_compat")
-                    for alias in node.names
+                    alias.name.startswith("app.runtime_compat") for alias in node.names
                 )
             )
             for node in ast.walk(tree)

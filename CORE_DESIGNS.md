@@ -35,6 +35,19 @@
   `apps/api/app/modules/sc` 持有；Torch/torchvision/Ultralytics 内核位于可选
   workspace library `libs/ml`。
 
+### 开发工具隔离
+
+可执行的 mock、seed、simulator、synthetic-data generator 和 fake-kernel
+benchmark 统一归属根目录 `devtools/`。生产 `apps/*/src`、`apps/api/app`、
+`services/*/src` 与 `libs/*/src` 禁止定义或 import 这些实现；依赖方向只能从
+`devtools/` 指向稳定的生产 contract/client，不能反向依赖。明确位于 `tests/`、
+`e2e/mocks/` 或 `src/testing/` 的测试局部替身可以保留在所属项目测试树中。
+
+开发 simulator 使用独立项目依赖锁与镜像构建，不作为根 uv workspace member，
+生产 Dockerfile 和 release manifest 不复制或包含其 source/metadata。为兼容既有
+开发入口，`scripts/` 可以保留只负责转发的薄 wrapper，但不得承载 mock/seed
+实现。
+
 目标执行拓扑：
 
 ```text

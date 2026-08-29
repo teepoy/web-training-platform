@@ -26,6 +26,7 @@ from __future__ import annotations
 import argparse
 import json
 import random
+import sys
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -33,7 +34,10 @@ from pathlib import Path
 
 import httpx
 
-from seedmaker.wafer_data import LABELS as CLASS_LABELS
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPOSITORY_ROOT / "devtools"))
+
+from seedmaker.wafer_data import LABELS as CLASS_LABELS  # noqa: E402
 
 API_URL = "http://localhost:8000"
 SEED_EMAIL = "seed@example.com"

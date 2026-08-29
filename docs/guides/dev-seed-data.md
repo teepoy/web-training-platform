@@ -5,6 +5,11 @@ a moderate, deterministic showcase instead of the historical 300,000-row wafer
 fixture. It is intended for exercising management pages, not for performance
 benchmarks.
 
+All seed and synthetic-data implementations live under
+`devtools/seedmaker/`. The compatibility entrypoints under `scripts/` contain
+only thin forwarding code so production application and service packages do
+not own development data generation.
+
 ## Default contents
 
 | Area                    | Development fixtures                                                                                                                                                 |

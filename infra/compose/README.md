@@ -278,7 +278,7 @@ All services at a glance:
   generation (300,000 by default); zip seeding validates the source defect IDs
   are the contiguous range `1..N` before uploading objects or metadata, then
   clears stale SC upstream inspection/zip metadata after the replacement
-  succeeds. `scripts/seedmaker/sc_artifacts.py --inspection-time <ISO timestamp>`
+  succeeds. `devtools/seedmaker/sc_artifacts.py --inspection-time <ISO timestamp>`
   can seed an older inspection explicitly when immutable imported datasets still
   reference it; the default remains the latest inspection for the wafer.
 - Dev services default `LOG_LEVEL` to `INFO`, so data-provider memory records

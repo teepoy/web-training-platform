@@ -74,7 +74,7 @@ markers = [
   "dev_server: requires a running local dev API/server and is skipped unless --run-dev-server is passed",
 ]
 addopts = "-m 'not slow and not dev_server'"
-pythonpath = ["../../scripts"]
+pythonpath = ["../../devtools", "../../scripts"]
 filterwarnings = [
   "ignore::pydantic.warnings.PydanticDeprecatedSince20:label_studio_sdk.*",
 ]
@@ -89,6 +89,7 @@ sc-runtime = ["ml-library"]
 
 [tool.pyright]
 extraPaths = [
+  "../../devtools",
   "../../scripts",
   "../../libs/klarf/src",
   "../../libs/ml/src",

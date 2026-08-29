@@ -14,7 +14,7 @@ from sc_upstream.models import (
     InspectDefectORM,
     InspectImageORM,
 )
-from seed_fixtures import (
+from seedmaker.legacy_sc_sqlite import (
     GALLERY_PROFILE_FIXTURES,
     mass_fixture_matches,
     main,
@@ -26,10 +26,14 @@ from seed_fixtures import (
 
 
 def test_seed_fixture_implementation_is_outside_runtime_package() -> None:
-    service_root = Path(__file__).resolve().parents[1]
+    repository_root = Path(__file__).resolve().parents[3]
 
-    assert (service_root / "tools" / "seed_fixtures.py").is_file()
-    assert not (service_root / "src" / "sc_upstream" / "seed.py").exists()
+    assert (
+        repository_root / "devtools" / "seedmaker" / "legacy_sc_sqlite.py"
+    ).is_file()
+    assert not (
+        repository_root / "services" / "sc-upstream" / "src" / "sc_upstream" / "seed.py"
+    ).exists()
 
 
 def test_mass_fixture_matches_reusable_seed(tmp_path) -> None:

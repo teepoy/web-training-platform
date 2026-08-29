@@ -8,10 +8,12 @@
 - **Completed intermediate slices:** resolved the PostgreSQL, HTTP API, CLI,
   latest-value, and five-minute automation decisions; recorded the current
   direct-write inventory; moved the artifact generator out of Compose code;
-  created the separate `services/sc-upstream-simulator` package, its initial
+  established a root `devtools/` boundary and moved the separate
+  `devtools/sc-upstream-simulator` package beneath it with its initial
   Alembic migration, and transactional draft-to-published state with a monotonic
   change token; added the bearer-authenticated HTTP control API, HTTP-only CLI,
-  simulator-owned development database, and Compose service.
+  simulator-owned development database, and Compose service; and separated its
+  dependency lock and image build from the production uv workspace/images.
 - **Next milestone:** expose only published rows through the existing
   gRPC/Flight contracts and transport the latest-change freshness value.
 - **Done when:** every acceptance criterion below is verified. Package
@@ -38,7 +40,7 @@ an explicit behavior/control interface.
   behavior is not implemented as Make targets or direct database/object-store
   scripts.
 - Repository development seeding calls the simulator API for every upstream
-  record. Platform-owned seed data remains in `scripts/seedmaker/`.
+  record. Platform-owned seed data remains in `devtools/seedmaker/`.
 - The initial simulator supports creating and publishing inspections and
   updating mutable fields on published rows. Deletion/tombstones, outages,
   artificial latency, delayed assets, and incomplete publication are deferred.
@@ -89,13 +91,13 @@ be represented as the same thing.
 
 Files and entrypoints:
 
-- `services/sc-upstream/tools/seed_fixtures.py`
+- `devtools/seedmaker/legacy_sc_sqlite.py`
   - Writes inspection summaries, defects, recipes, classes, and review-image
     metadata directly into SQLite.
   - Provides mass and gallery scenarios.
   - Advertises a `representative` subcommand, but the current command dispatch
     does not populate representative inspections.
-- `scripts/seedmaker/sc_artifacts.py` (moved from Compose infrastructure)
+- `devtools/seedmaker/sc_artifacts.py` (moved from Compose infrastructure)
   - Reads the inspection SQLite database, generates image archives, uploads
     objects to MinIO, writes a second SQLite zip-metadata database, and directly
     clears the upstream disk cache.
@@ -106,11 +108,11 @@ Files and entrypoints:
     restarts services, and contains separate mass/gallery variants.
 - `Makefile`
   - Owns another set of fixture counts, timestamps, bucket names, and endpoints.
-- `scripts/seedmaker/datasets/dev_showcase.py`
+- `devtools/seedmaker/datasets/dev_showcase.py`
   - Assumes the upstream fixture already exists, imports its latest inspection,
     creates platform collections and a source connector, creates a manual-only
     membership rule, then creates disabled legacy sensor subscriptions.
-- `scripts/seedmaker/dev_activity.py`
+- `devtools/seedmaker/dev_activity.py`
   - Inserts non-executing platform jobs, models, metrics, and events directly for
     display purposes; this is platform fixture data, not upstream behavior.
 
@@ -265,7 +267,7 @@ Proposed ownership:
   code.
 - Put the simulator in a clearly development-only service package or entrypoint,
   such as a service-local `tools/simulator/` package or a separately named
-  `services/sc-upstream-simulator` service.
+  `devtools/sc-upstream-simulator` service.
 - Ensure release images and production Compose/Kubernetes manifests cannot
   import or start the simulator control surface.
 - Implement or configure a separate real production upstream adapter only when
@@ -293,12 +295,13 @@ Required behavior:
   database or shared object-store state implicitly.
 - Health/readiness checks that verify both the database and read interfaces.
 
-Completed intermediate slice: `services/sc-upstream-simulator` now owns the
+Completed intermediate slice: `devtools/sc-upstream-simulator` now owns the
 initial inspection, defect, review-image, patch-archive, publication, and
 change-clock schema. Repository tests verify atomic child-record rollback,
 single publication, timezone-aware identity, and change-token allocation. The
 same suite has been verified against the migrated PostgreSQL schema. Development
-Compose wiring, the HTTP control surface, and read interfaces remain open.
+Development Compose wiring and the HTTP control surface are complete. The
+gRPC/Flight read interfaces remain open.
 
 ### P0: Add an explicit development control surface
 
@@ -345,9 +348,9 @@ manifests do not include it.
 
 Relevant current files:
 
-- `scripts/seedmaker/sc_artifacts.py`
+- `devtools/seedmaker/sc_artifacts.py`
 - removed legacy `infra/compose/seed_review_images.py`
-- `services/sc-upstream/tools/seed_fixtures.py`
+- `devtools/seedmaker/legacy_sc_sqlite.py`
 - `services/image-parser/`
 
 Proposed direction:
@@ -371,12 +374,12 @@ Relevant files:
 - `make/build.mk`
 - `Makefile`
 - `scripts/seed.py`
-- `scripts/seedmaker/datasets/dev_showcase.py`
-- `scripts/seedmaker/dev_activity.py`
+- `devtools/seedmaker/datasets/dev_showcase.py`
+- `devtools/seedmaker/dev_activity.py`
 
 Proposed direction:
 
-- Keep `scripts/seedmaker/` responsible for platform-owned development objects
+- Keep `devtools/seedmaker/` responsible for platform-owned development objects
   such as users, Datasets, Collections, rules, and optional display fixtures.
 - Replace direct upstream database/object/cache operations with calls to a
   named simulator scenario API.

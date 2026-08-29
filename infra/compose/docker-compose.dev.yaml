@@ -106,7 +106,7 @@ services:
   sc-upstream-simulator:
     build:
       context: ../..
-      dockerfile: services/sc-upstream-simulator/Dockerfile
+      dockerfile: devtools/sc-upstream-simulator/Dockerfile
     depends_on:
       sc-simulator-db-prepare:
         condition: service_completed_successfully
@@ -118,7 +118,7 @@ services:
       [
         "/bin/sh",
         "-lc",
-        "/app/.venv/bin/alembic -c /app/services/sc-upstream-simulator/alembic.ini upgrade head && exec /app/.venv/bin/uvicorn --factory sc_upstream_simulator.server:create_app --host 0.0.0.0 --port 8094",
+        "/app/.venv/bin/alembic -c /app/alembic.ini upgrade head && exec /app/.venv/bin/uvicorn --factory sc_upstream_simulator.server:create_app --host 0.0.0.0 --port 8094",
       ]
     ports:
       - "8094:8094"

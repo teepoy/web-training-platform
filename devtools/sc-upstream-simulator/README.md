@@ -23,14 +23,14 @@ Apply migrations from the repository root:
 
 ```bash
 SC_SIMULATOR_DATABASE_URL=postgresql+asyncpg://... \
-  uv run --package sc-upstream-simulator \
-  alembic -c services/sc-upstream-simulator/alembic.ini upgrade head
+  uv run --project devtools/sc-upstream-simulator \
+  alembic -c devtools/sc-upstream-simulator/alembic.ini upgrade head
 ```
 
 Run the repository unit tests:
 
 ```bash
-uv run --package sc-upstream-simulator pytest services/sc-upstream-simulator/tests
+uv run --project devtools/sc-upstream-simulator pytest devtools/sc-upstream-simulator/tests
 ```
 
 To exercise the same repository suite against a migrated PostgreSQL database,
@@ -46,9 +46,9 @@ export SC_SIMULATOR_API_URL=http://127.0.0.1:8094
 export SC_SIMULATOR_API_TOKEN=local-development-sc-simulator-token
 export SC_SIMULATOR_HTTP_TIMEOUT_SECONDS=30
 
-uv run --package sc-upstream-simulator sc-upstream-simulator list
-uv run --package sc-upstream-simulator sc-upstream-simulator create --file inspection.json
-uv run --package sc-upstream-simulator sc-upstream-simulator publish \
+uv run --project devtools/sc-upstream-simulator sc-upstream-simulator list
+uv run --project devtools/sc-upstream-simulator sc-upstream-simulator create --file inspection.json
+uv run --project devtools/sc-upstream-simulator sc-upstream-simulator publish \
   --wafer-key 7 \
   --inspection-time 2026-08-29T01:02:00Z \
   --published-at 2026-08-29T01:05:00Z

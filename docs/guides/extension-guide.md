@@ -591,7 +591,7 @@ import "./schemas/image-segmentation";
 
 #### Seed script (optional but recommended)
 
-**h. Create** `scripts/seedmaker/datasets/image_segmentation.py` using `SeedConfig` + `SeedRunner`:
+**h. Create** `devtools/seedmaker/datasets/image_segmentation.py` using `SeedConfig` + `SeedRunner`:
 
 ```python
 from seedmaker.config import SeedConfig
@@ -606,7 +606,7 @@ config = SeedConfig(
 )
 ```
 
-**i. Register** in `scripts/seedmaker/datasets/__init__.py`:
+**i. Register** in `devtools/seedmaker/datasets/__init__.py`:
 
 ```python
 from seedmaker.datasets import image_segmentation  # noqa: F401

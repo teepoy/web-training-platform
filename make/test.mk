@@ -23,7 +23,8 @@ test-web: ## Run frontend unit tests (vitest)
 
 .PHONY: test-seed-tools
 test-seed-tools: ## Run repository seed-tool unit tests
-	PYTHONPATH=scripts $(UV_RUN_INSTALLED) python -m pytest scripts/tests/test_seedmaker_sc_artifacts.py
+	PYTHONPATH=devtools $(UV_RUN_INSTALLED) python -m pytest devtools/seedmaker/tests/test_sc_artifacts.py
+	PYTHONPATH=devtools $(UV_RUN_INSTALLED) --package sc-upstream python -m pytest devtools/seedmaker/tests/test_legacy_sc_sqlite.py
 
 .PHONY: benchmark-sc-prediction
 benchmark-sc-prediction: ## Require >3000 samples/s for bounded SC prediction preprocessing
@@ -41,7 +42,7 @@ benchmark-sc-runtime-data-paths: ## Benchmark real SC train/predict data paths w
 		SC_PATCH_S3_SECRET_KEY=minioadmin \
 		SC_PATCH_S3_BUCKET=$(SC_PATCH_ZIP_BUCKET) \
 		LITELLM_LOCAL_MODEL_COST_MAP=True \
-		$(UV_RUN_INSTALLED) --package finetune-api python -m scripts.benchmarks.sc_runtime_data_paths \
+		$(UV_RUN_INSTALLED) --package finetune-api python -m devtools.benchmarks.sc_runtime_data_paths \
 			--source-dataset-name '$(SC_RUNTIME_BENCHMARK_SOURCE_DATASET_NAME)' \
 			--samples $(SC_RUNTIME_BENCHMARK_SAMPLES) $(if $(SC_RUNTIME_BENCHMARK_MIN_TRAIN_SPS),--minimum-training-samples-per-second $(SC_RUNTIME_BENCHMARK_MIN_TRAIN_SPS),) $(if $(SC_RUNTIME_BENCHMARK_MIN_PREDICT_SPS),--minimum-prediction-samples-per-second $(SC_RUNTIME_BENCHMARK_MIN_PREDICT_SPS),)
 
