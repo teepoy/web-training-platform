@@ -2,6 +2,7 @@
 import { computed, h, ref } from "vue";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { useRoute, useRouter } from "vue-router";
+import { useI18n } from "vue-i18n";
 import {
   NAlert,
   NButton,
@@ -71,8 +72,10 @@ import { useAuthStore } from "@/features/auth/application/store";
 import { useOrgStore } from "@/features/auth/application/org";
 import { orgScopedQueryKey, toUserMessage } from "@/shared/api";
 import RemoteModelPicker from "@/features/models/presentation/components/RemoteModelPicker.vue";
+import { formatDateTime, formatNumber } from "@/shared/i18n/format";
 
 const route = useRoute();
+const { t } = useI18n();
 const router = useRouter();
 const queryClient = useQueryClient();
 const message = useMessage();
@@ -322,7 +325,7 @@ const linkOptions = computed(() => {
 const linkMutation = useMutation({
   mutationFn: () => {
     const version = collection.value?.definition_version;
-    if (version === undefined) throw new Error("Collection definition is not loaded");
+    if (version === undefined) throw new Error(t("collectionDetail.definitionMissing"));
     return linkMembersApiV1DatasetCollectionsCollectionIdMembersPost(collectionId.value, {
       expected_definition_version: version,
       members: selectedDatasetIds.value.map((sourceDatasetId, offset) => ({
@@ -335,18 +338,18 @@ const linkMutation = useMutation({
     });
   },
   onSuccess: async () => {
-    message.success("Datasets linked");
+    message.success(t("collectionDetail.linked"));
     linkVisible.value = false;
     selectedDatasetIds.value = [];
     await refreshCollection();
   },
-  onError: (error) => message.error(toUserMessage(error, "Failed to link datasets")),
+  onError: (error) => message.error(toUserMessage(error, t("collectionDetail.linkFailed"))),
 });
 
 const unlinkMutation = useMutation({
   mutationFn: (member: DatasetCollectionMemberResponse) => {
     const version = collection.value?.definition_version;
-    if (version === undefined) throw new Error("Collection definition is not loaded");
+    if (version === undefined) throw new Error(t("collectionDetail.definitionMissing"));
     return unlinkMemberApiV1DatasetCollectionsCollectionIdMembersMemberIdDelete(
       collectionId.value,
       member.id,
@@ -354,31 +357,32 @@ const unlinkMutation = useMutation({
     );
   },
   onSuccess: async () => {
-    message.success("Dataset unlinked");
+    message.success(t("collectionDetail.unlinked"));
     await refreshCollection();
   },
-  onError: (error) => message.error(toUserMessage(error, "Failed to unlink dataset")),
+  onError: (error) => message.error(toUserMessage(error, t("collectionDetail.unlinkFailed"))),
 });
 
 const revisionMutation = useMutation({
   mutationFn: () => {
     const version = collection.value?.definition_version;
-    if (version === undefined) throw new Error("Collection definition is not loaded");
+    if (version === undefined) throw new Error(t("collectionDetail.definitionMissing"));
     return createRevisionApiV1DatasetCollectionsCollectionIdRevisionsPost(collectionId.value, {
       expected_definition_version: version,
     });
   },
   onSuccess: async () => {
-    message.success("Snapshot record saved");
+    message.success(t("collectionDetail.snapshotSaved"));
     await refreshCollection();
   },
-  onError: (error) => message.error(toUserMessage(error, "Failed to create snapshot")),
+  onError: (error) =>
+    message.error(toUserMessage(error, t("collectionDetail.snapshotCreateFailed"))),
 });
 
 const snapshotRefreshMutation = useMutation({
   mutationFn: () => {
     const version = collection.value?.definition_version;
-    if (version === undefined) throw new Error("Collection definition is not loaded");
+    if (version === undefined) throw new Error(t("collectionDetail.definitionMissing"));
     return refreshCollectionSnapshot(collectionId.value, {
       expected_definition_version: version,
     });
@@ -386,12 +390,13 @@ const snapshotRefreshMutation = useMutation({
   onSuccess: async (result) => {
     message.success(
       result.outcome === "refreshed"
-        ? `Snapshot #${result.snapshot.revision_number} now records the latest Dataset changes`
-        : "Snapshot already records the latest Dataset changes",
+        ? t("collectionDetail.snapshotRefreshed", { revision: result.snapshot.revision_number })
+        : t("collectionDetail.snapshotCurrent"),
     );
     await refreshCollection();
   },
-  onError: (error) => message.error(toUserMessage(error, "Failed to refresh snapshot")),
+  onError: (error) =>
+    message.error(toUserMessage(error, t("collectionDetail.snapshotRefreshFailed"))),
 });
 
 const defaultModelQuery = useQuery({
@@ -437,12 +442,12 @@ const selectedExportDatasets = computed(() =>
     .filter((dataset): dataset is Dataset => !!dataset),
 );
 const exportDisabledReason = computed(() => {
-  if (selectedMembers.value.length === 0) return "Select at least one linked Dataset record";
+  if (selectedMembers.value.length === 0) return t("collectionDetail.selectExport");
   if (
     selectedExportDatasets.value.length !== selectedMembers.value.length ||
     selectedExportDatasets.value.some((dataset) => !supportsScPredictionExport(dataset))
   ) {
-    return "Current-result export requires SC Datasets using sparse storage";
+    return t("collectionDetail.exportRequiresSc");
   }
   return "";
 });
@@ -455,7 +460,7 @@ function showModelPicker(): void {
 const defaultModelMutation = useMutation({
   mutationFn: (modelId: string | null) => {
     const bindingVersion = collection.value?.model_binding_version;
-    if (bindingVersion === undefined) throw new Error("Default model setting is not loaded");
+    if (bindingVersion === undefined) throw new Error(t("collectionDetail.modelSettingMissing"));
     return updateCollectionDefaultModel(collectionId.value, {
       expected_binding_version: bindingVersion,
       model_id: modelId,
@@ -464,18 +469,20 @@ const defaultModelMutation = useMutation({
   onSuccess: async () => {
     modelVisible.value = false;
     message.success(
-      selectedDefaultModelId.value ? "Default model updated" : "Default model cleared",
+      selectedDefaultModelId.value
+        ? t("collectionDetail.modelUpdated")
+        : t("collectionDetail.modelCleared"),
     );
     await refreshCollection();
   },
-  onError: (error) => message.error(toUserMessage(error, "Failed to update default model")),
+  onError: (error) => message.error(toUserMessage(error, t("collectionDetail.modelUpdateFailed"))),
 });
 
 const reconcileMutation = useMutation({
   mutationFn: () => {
     const snapshot = latestReadyRevision.value;
     const modelId = collection.value?.default_model_id;
-    if (!snapshot || !modelId) throw new Error("Snapshot and default model are required");
+    if (!snapshot || !modelId) throw new Error(t("collectionDetail.predictionRequirements"));
     return createCollectionPredictionBatch(collectionId.value, {
       snapshot_id: snapshot.id,
       expected_default_model_id: modelId,
@@ -484,36 +491,36 @@ const reconcileMutation = useMutation({
     });
   },
   onSuccess: async () => {
-    message.success("Prediction batch started");
+    message.success(t("collectionDetail.predictionStarted"));
     reconcileVisible.value = false;
     selectedCoverageMemberIds.value = [];
     await refreshCollection();
   },
-  onError: (error) => message.error(toUserMessage(error, "Failed to start prediction batch")),
+  onError: (error) => message.error(toUserMessage(error, t("collectionDetail.predictionFailed"))),
 });
 
 const retryBatchMutation = useMutation({
   mutationFn: (batchId: string) => retryCollectionPredictionBatch(collectionId.value, batchId),
   onSuccess: async () => {
-    message.success("Failed datasets queued again");
+    message.success(t("collectionDetail.retryStarted"));
     await refreshCollection();
   },
-  onError: (error) => message.error(toUserMessage(error, "Failed to retry prediction batch")),
+  onError: (error) => message.error(toUserMessage(error, t("collectionDetail.retryFailed"))),
 });
 
 function coverageLabel(item: CollectionPredictionCoverage | undefined): string {
   if (!item) {
-    if (!latestReadyRevision.value) return "No snapshot";
-    if (coverageQuery.isLoading.value) return "Loading";
-    if (coverageQuery.isError.value) return "Unavailable";
-    return "Not evaluated";
+    if (!latestReadyRevision.value) return t("collectionDetail.noSnapshotReview");
+    if (coverageQuery.isLoading.value) return t("collectionDetail.loading");
+    if (coverageQuery.isError.value) return t("collectionDetail.unavailable");
+    return t("collectionDetail.notEvaluated");
   }
-  if (item.active_prediction_status === "running") return "Prediction running";
-  if (item.active_prediction_status === "queued") return "Prediction queued";
-  if (item.status === "current") return "Current";
-  if (item.status === "model_mismatch") return "Different model";
-  if (item.status === "data_outdated") return "Dataset changed";
-  return "Not predicted";
+  if (item.active_prediction_status === "running") return t("collectionDetail.predictionRunning");
+  if (item.active_prediction_status === "queued") return t("collectionDetail.predictionQueued");
+  if (item.status === "current") return t("collectionDetail.current");
+  if (item.status === "model_mismatch") return t("collectionDetail.differentModel");
+  if (item.status === "data_outdated") return t("collectionDetail.datasetChanged");
+  return t("collectionDetail.notPredicted");
 }
 
 function coverageTagType(
@@ -549,15 +556,15 @@ function closeExport(): void {
 
 const memberColumns: DataTableColumns<DatasetCollectionMemberResponse> = [
   { type: "selection" },
-  { title: "Order", key: "position", width: 80 },
+  { title: t("collectionDetail.order"), key: "position", width: 80 },
   {
-    title: "Dataset",
+    title: t("collectionDetail.dataset"),
     key: "source_dataset_id",
     minWidth: 180,
     render: (row) => datasetById.value.get(row.source_dataset_id)?.name ?? row.source_dataset_id,
   },
   {
-    title: "Prediction",
+    title: t("collectionDetail.prediction"),
     key: "prediction",
     minWidth: 150,
     render: (row) => {
@@ -566,7 +573,7 @@ const memberColumns: DataTableColumns<DatasetCollectionMemberResponse> = [
     },
   },
   {
-    title: "Actions",
+    title: t("collectionDetail.actions"),
     key: "actions",
     width: 250,
     fixed: "right",
@@ -576,7 +583,7 @@ const memberColumns: DataTableColumns<DatasetCollectionMemberResponse> = [
           h(
             NButton,
             { size: "small", onClick: () => router.push(`/datasets/${row.source_dataset_id}`) },
-            { default: () => "Open standalone" },
+            { default: () => t("collectionDetail.openStandalone") },
           ),
           h(
             NButton,
@@ -588,7 +595,7 @@ const memberColumns: DataTableColumns<DatasetCollectionMemberResponse> = [
               loading: unlinkMutation.isPending.value,
               onClick: () => unlinkMutation.mutate(row),
             },
-            { default: () => "Unlink" },
+            { default: () => t("collectionDetail.unlink") },
           ),
         ],
       }),
@@ -597,39 +604,48 @@ const memberColumns: DataTableColumns<DatasetCollectionMemberResponse> = [
 
 const batchColumns: DataTableColumns<CollectionPredictionBatch> = [
   {
-    title: "Started",
+    title: t("collectionDetail.started"),
     key: "created_at",
     width: 180,
-    render: (row) => new Date(row.created_at).toLocaleString(),
+    render: (row) => formatDateTime(row.created_at),
   },
   {
-    title: "Reason",
+    title: t("collectionDetail.reason"),
     key: "kind",
-    render: (row) => (row.kind === "incremental" ? "New datasets" : "Selected rerun"),
+    render: (row) =>
+      row.kind === "incremental"
+        ? t("collectionDetail.newDatasets")
+        : t("collectionDetail.selectedRerun"),
   },
   {
-    title: "Progress",
+    title: t("collectionDetail.progress"),
     key: "status",
     render: (row) => {
       const completed = row.items.filter((item) => item.status === "completed").length;
       const failed = row.items.filter((item) =>
         ["failed", "cancelled"].includes(item.status),
       ).length;
-      return `${completed}/${row.items.length} completed${failed ? ` · ${failed} failed` : ""}`;
+      const progress = t("collectionDetail.completedProgress", {
+        completed: formatNumber(completed),
+        total: formatNumber(row.items.length),
+      });
+      return failed
+        ? `${progress} · ${t("collectionDetail.failedProgress", { count: formatNumber(failed) })}`
+        : progress;
     },
   },
   {
-    title: "Status",
+    title: t("collectionDetail.status"),
     key: "status",
     render: (row) =>
       h(
         NTag,
         { type: row.status === "failed" || row.status === "partial" ? "error" : "info" },
-        { default: () => row.status },
+        { default: () => t(`status.${row.status}`, row.status) },
       ),
   },
   {
-    title: "Actions",
+    title: t("collectionDetail.actions"),
     key: "actions",
     width: 120,
     fixed: "right",
@@ -643,7 +659,7 @@ const batchColumns: DataTableColumns<CollectionPredictionBatch> = [
               loading: retryBatchMutation.isPending.value,
               onClick: () => retryBatchMutation.mutate(row.id),
             },
-            { default: () => "Retry failed" },
+            { default: () => t("collectionDetail.retryFailedItems") },
           )
         : "—";
     },
@@ -763,10 +779,10 @@ const createRuleMutation = useMutation({
   },
   onSuccess: async () => {
     await rulesQuery.refetch();
-    message.success("Dynamic membership rule created");
+    message.success(t("collectionDetail.ruleCreated"));
     resetRuleForm();
   },
-  onError: (error) => message.error(toUserMessage(error, "Failed to create membership rule")),
+  onError: (error) => message.error(toUserMessage(error, t("collectionDetail.ruleCreateFailed"))),
 });
 
 const runRuleMutation = useMutation({
@@ -780,11 +796,11 @@ const runRuleMutation = useMutation({
     await Promise.all([rulesQuery.refetch(), refreshCollection()]);
     message.success(
       run.status === "needs_attention"
-        ? "Discovery finished and needs attention"
-        : "Discovery finished",
+        ? t("collectionDetail.discoveryAttention")
+        : t("collectionDetail.discoveryFinished"),
     );
   },
-  onError: (error) => message.error(toUserMessage(error, "Discovery run failed")),
+  onError: (error) => message.error(toUserMessage(error, t("collectionDetail.discoveryFailed"))),
 });
 
 function connectorName(connectorId: string): string {
@@ -800,30 +816,30 @@ function ruleConditionCount(condition: unknown): number {
 }
 
 const ruleColumns: DataTableColumns<MembershipRuleResponse> = [
-  { title: "Rule", key: "name", minWidth: 180 },
+  { title: t("collectionDetail.rule"), key: "name", minWidth: 180 },
   {
-    title: "Source",
+    title: t("collectionDetail.source"),
     key: "connector",
     minWidth: 160,
     render: (rule) => connectorName(rule.active_version.connector_id),
   },
   {
-    title: "Conditions",
+    title: t("collectionDetail.conditions"),
     key: "conditions",
     minWidth: 150,
     render: (rule) => {
       const count = ruleConditionCount(rule.active_version.condition);
-      return `${count} condition${count === 1 ? "" : "s"}`;
+      return t("collectionDetail.conditionCount", { count }, count);
     },
   },
   {
-    title: "Status",
+    title: t("collectionDetail.status"),
     key: "status",
     width: 110,
     render: (rule) => h(NTag, { size: "small" }, { default: () => rule.status }),
   },
   {
-    title: "Action",
+    title: t("collectionDetail.action"),
     key: "action",
     width: 110,
     render: (rule) =>
@@ -835,34 +851,39 @@ const ruleColumns: DataTableColumns<MembershipRuleResponse> = [
           loading: runRuleMutation.isPending.value && runRuleMutation.variables.value === rule.id,
           onClick: () => runRuleMutation.mutate(rule.id),
         },
-        { default: () => "Run now" },
+        { default: () => t("collectionDetail.runNow") },
       ),
   },
 ];
 
 const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
   {
-    title: "Snapshot",
+    title: t("collectionDetail.snapshot"),
     key: "revision_number",
     render: (row) => `r${row.revision_number}`,
   },
   {
-    title: "Saved from setup",
+    title: t("collectionDetail.savedFromSetup"),
     key: "definition_version",
     render: (row) => `v${row.definition_version}`,
   },
   {
-    title: "Status",
+    title: t("collectionDetail.status"),
     key: "status",
     render: (row) =>
       h(
         NTag,
         { type: row.status === "ready" ? "success" : "error" },
-        { default: () => (row.status === "ready" ? "Ready to use" : "Failed") },
+        {
+          default: () =>
+            row.status === "ready"
+              ? t("collectionDetail.readyToUse")
+              : t("collectionDetail.failed"),
+        },
       ),
   },
   {
-    title: "Data resolution",
+    title: t("collectionDetail.dataResolution"),
     key: "source_resolution",
     render: (row) =>
       h(
@@ -870,16 +891,22 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
         { type: row.reproducibility_capability ? "success" : "warning" },
         {
           default: () =>
-            row.reproducibility_capability ? "Frozen (legacy)" : "Current data at run",
+            row.reproducibility_capability
+              ? t("collectionDetail.frozenLegacy")
+              : t("collectionDetail.currentDataAtRun"),
         },
       ),
   },
-  { title: "Rows", key: "row_count", render: (row) => row.row_count?.toLocaleString() ?? "—" },
   {
-    title: "Created",
+    title: t("collectionDetail.rows"),
+    key: "row_count",
+    render: (row) => (row.row_count === null ? "—" : formatNumber(row.row_count)),
+  },
+  {
+    title: t("collectionDetail.created"),
     key: "created_at",
     width: 180,
-    render: (row) => new Date(row.created_at).toLocaleString(),
+    render: (row) => formatDateTime(row.created_at),
   },
 ];
 </script>
@@ -888,10 +915,10 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
   <div class="collection-detail-page">
     <div class="collection-detail-header">
       <div>
-        <NButton text size="small" @click="router.push('/dataset-collections')"
-          >← Collections</NButton
-        >
-        <h1>{{ collection?.name ?? "Dataset collection" }}</h1>
+        <NButton text size="small" @click="router.push('/dataset-collections')">
+          {{ t("collectionDetail.back") }}
+        </NButton>
+        <h1>{{ collection?.name ?? t("collectionDetail.fallbackName") }}</h1>
         <NText depth="3">{{ collection?.description }}</NText>
       </div>
       <NSpace class="collection-header-actions" :wrap="true">
@@ -901,7 +928,11 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
           :type="revisionOutdated ? 'primary' : 'default'"
           @click="revisionMutation.mutate()"
         >
-          {{ latestReadyRevision ? "Save current setup as snapshot" : "Save first snapshot" }}
+          {{
+            latestReadyRevision
+              ? t("collectionDetail.saveSnapshot")
+              : t("collectionDetail.saveFirstSnapshot")
+          }}
         </NButton>
         <NButton
           :type="revisionOutdated ? 'default' : 'primary'"
@@ -910,8 +941,10 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
         >
           {{
             latestReadyRevision
-              ? `Review snapshot r${latestReadyRevision.revision_number}`
-              : "No snapshot to review"
+              ? t("collectionDetail.reviewSnapshot", {
+                  revision: latestReadyRevision.revision_number,
+                })
+              : t("collectionDetail.noSnapshotReview")
           }}
         </NButton>
       </NSpace>
@@ -919,12 +952,11 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
 
     <div v-if="isLoading" class="collection-loading"><NSpin size="large" /></div>
     <NAlert v-else-if="loadError" type="error">
-      {{ toUserMessage(loadError, "Failed to load dataset collection") }}
+      {{ toUserMessage(loadError, t("collectionDetail.loadFailed")) }}
     </NAlert>
     <template v-else-if="collection">
       <NAlert v-if="!canModify" type="info">
-        This collection is read-only for you. Only its creator can change membership or create
-        snapshots.
+        {{ t("collectionDetail.readOnly") }}
       </NAlert>
       <NTabs
         v-model:value="activeTab"
@@ -933,21 +965,20 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
         class="collection-tabs"
         :on-before-leave="handleTabBeforeLeave"
       >
-        <NTabPane name="overview" tab="Overview">
+        <NTabPane name="overview" :tab="t('collectionDetail.overview')">
           <NAlert type="info" :show-icon="false" class="snapshot-explainer">
-            <strong>What is a snapshot?</strong>
-            It records this Collection's members, rules, and current Dataset change numbers. Data is
-            read when a review, training, or prediction run starts; it is not copied or frozen.
+            <strong>{{ t("collectionDetail.snapshotQuestion") }}</strong>
+            {{ t("collectionDetail.snapshotExplanation") }}
           </NAlert>
           <NAlert v-if="!latestReadyRevision" type="info">
-            This collection does not have a saved snapshot yet. Save one before using it for review,
-            training, or prediction.
+            {{ t("collectionDetail.noSnapshot") }}
           </NAlert>
           <NAlert v-else-if="revisionOutdated" type="warning">
-            The collection setup has changed since the latest snapshot. Save a new snapshot to use
-            the current setup. Review still opens snapshot r{{
-              latestReadyRevision.revision_number
-            }}.
+            {{
+              t("collectionDetail.outdatedSnapshot", {
+                revision: latestReadyRevision.revision_number,
+              })
+            }}
           </NAlert>
           <CollectionSnapshotUpdateAlert
             v-if="snapshotUpdateQuery.data.value?.update_available"
@@ -960,32 +991,37 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
           <NCard size="small">
             <div class="collection-summary-grid">
               <div class="collection-summary-field">
-                <NText depth="3">Target view</NText>
+                <NText depth="3">{{ t("collections.targetView") }}</NText>
                 <strong>{{ collection.target_view_id }}</strong>
               </div>
               <div class="collection-summary-field">
                 <NTooltip>
                   <template #trigger>
-                    <NText depth="3" class="help-label">Current setup version</NText>
+                    <NText depth="3" class="help-label">{{
+                      t("collectionDetail.currentSetupVersion")
+                    }}</NText>
                   </template>
-                  Increases whenever linked datasets or their rules change.
+                  {{ t("collectionDetail.currentSetupHelp") }}
                 </NTooltip>
                 <strong>v{{ collection.definition_version }}</strong>
               </div>
               <div class="collection-summary-field">
-                <NText depth="3">Linked datasets</NText>
-                <strong>{{ members.length }}</strong>
+                <NText depth="3">{{ t("collectionDetail.linkedDatasets") }}</NText>
+                <strong>{{ formatNumber(members.length) }}</strong>
               </div>
               <div class="collection-summary-field">
                 <NTooltip>
                   <template #trigger>
-                    <NText depth="3" class="help-label">Latest saved snapshot</NText>
+                    <NText depth="3" class="help-label">{{
+                      t("collectionDetail.latestSnapshot")
+                    }}</NText>
                   </template>
-                  The saved Collection setup used to start review, training, and prediction. Member
-                  data is resolved when each run starts.
+                  {{ t("collectionDetail.latestSnapshotHelp") }}
                 </NTooltip>
                 <strong>{{
-                  latestReadyRevision ? `r${latestReadyRevision.revision_number}` : "None"
+                  latestReadyRevision
+                    ? `r${latestReadyRevision.revision_number}`
+                    : t("collectionDetail.none")
                 }}</strong>
               </div>
             </div>
@@ -995,14 +1031,14 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
           <template #tab>
             <NTooltip :disabled="!!latestReadyRevision">
               <template #trigger>
-                <span>Classify <span aria-hidden="true">&#8599;</span></span>
+                <span>{{ t("collectionDetail.classify") }}</span>
               </template>
-              Save a snapshot before opening the Classify workspace.
+              {{ t("collectionDetail.classifyNeedsSnapshot") }}
             </NTooltip>
           </template>
         </NTabPane>
-        <NTabPane name="data" tab="Data & rules">
-          <NCard title="Dynamic membership" class="dynamic-membership-card">
+        <NTabPane name="data" :tab="t('collectionDetail.dataRules')">
+          <NCard :title="t('collectionDetail.dynamicMembership')" class="dynamic-membership-card">
             <template #header-extra>
               <NButton
                 type="primary"
@@ -1010,13 +1046,11 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
                 :disabled="!canManageAutomation"
                 @click="ruleVisible = true"
               >
-                Add rule
+                {{ t("collectionDetail.addRule") }}
               </NButton>
             </template>
             <NAlert type="info" :show-icon="false" class="dynamic-membership-explainer">
-              Rules discover new source records and add only newly matched Datasets to this
-              Collection. Existing linked Datasets are not re-imported. Run a rule manually now;
-              scheduled polling can be configured later.
+              {{ t("collectionDetail.dynamicMembershipHelp") }}
             </NAlert>
             <NDataTable
               v-if="(rulesQuery.data.value ?? []).length > 0"
@@ -1027,10 +1061,10 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
               :scroll-x="700"
               size="small"
             />
-            <NEmpty v-else description="No dynamic membership rules yet" />
+            <NEmpty v-else :description="t('collectionDetail.noRules')" />
           </NCard>
 
-          <NCard title="Linked datasets">
+          <NCard :title="t('collectionDetail.linkedDatasets')">
             <template #header-extra>
               <NSpace>
                 <NButton
@@ -1038,7 +1072,7 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
                   :disabled="selectedCoverage.length === 0 || !collection.default_model_id"
                   @click="reconcileVisible = true"
                 >
-                  Predict selected ({{ selectedCoverage.length }})
+                  {{ t("collectionDetail.predictSelected", { count: selectedCoverage.length }) }}
                 </NButton>
                 <NTooltip :disabled="!exportDisabledReason">
                   <template #trigger>
@@ -1048,7 +1082,9 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
                         :disabled="!!exportDisabledReason"
                         @click="exportVisible = true"
                       >
-                        Export selected ({{ selectedMembers.length }})
+                        {{
+                          t("collectionDetail.exportSelected", { count: selectedMembers.length })
+                        }}
                       </NButton>
                     </span>
                   </template>
@@ -1060,7 +1096,7 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
                   :disabled="!canModify"
                   @click="linkVisible = true"
                 >
-                  Link datasets
+                  {{ t("collectionDetail.linkDatasets") }}
                 </NButton>
               </NSpace>
             </template>
@@ -1072,49 +1108,54 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
               :row-key="(row: DatasetCollectionMemberResponse) => row.id"
               :scroll-x="760"
             />
-            <NEmpty v-else description="No datasets linked" />
+            <NEmpty v-else :description="t('collectionDetail.noLinkedDatasets')" />
           </NCard>
         </NTabPane>
-        <NTabPane name="models" tab="Models">
-          <NCard title="Default prediction model">
+        <NTabPane name="models" :tab="t('collectionDetail.models')">
+          <NCard :title="t('collectionDetail.defaultModel')">
             <template #header-extra>
               <NButton size="small" :disabled="!canModify" @click="showModelPicker">
-                {{ collection.default_model_id ? "Change model" : "Select model" }}
+                {{
+                  collection.default_model_id
+                    ? t("collectionDetail.changeModel")
+                    : t("collectionDetail.selectModel")
+                }}
               </NButton>
             </template>
             <div class="model-binding-summary">
               <div>
-                <NText depth="3">Model for newly added datasets</NText>
+                <NText depth="3">{{ t("collectionDetail.newDatasetModel") }}</NText>
                 <strong>
                   {{
                     collection.default_model_id
                       ? defaultModel?.name || collection.default_model_id
-                      : "No default model selected"
+                      : t("collectionDetail.noDefaultModel")
                   }}
                 </strong>
               </div>
               <NText depth="3">
-                Only datasets added after a snapshot is saved are predicted automatically. Changing
-                the model never reruns existing datasets.
+                {{ t("collectionDetail.modelBehavior") }}
               </NText>
             </div>
             <NAlert v-if="!collection.default_model_id" type="warning" class="model-status-alert">
-              No automatic prediction will start for newly added datasets until a model is chosen.
+              {{ t("collectionDetail.noAutomaticPrediction") }}
             </NAlert>
             <NAlert v-else-if="modelMismatchCount > 0" type="error" class="model-status-alert">
-              {{ modelMismatchCount }} linked dataset{{
-                modelMismatchCount === 1 ? " uses" : "s use"
+              {{
+                t(
+                  "collectionDetail.modelMismatch",
+                  { count: modelMismatchCount },
+                  modelMismatchCount,
+                )
               }}
-              a different model. Select affected rows in Data to rerun them with the default model.
             </NAlert>
             <NText depth="3" class="candidate-training-note">
-              Automatic candidate training is not enabled yet. A future version will add readiness
-              and regression checks before any model can be promoted.
+              {{ t("collectionDetail.candidateTraining") }}
             </NText>
           </NCard>
         </NTabPane>
-        <NTabPane name="snapshots" tab="Snapshots">
-          <NCard title="Saved snapshots">
+        <NTabPane name="snapshots" :tab="t('collectionDetail.snapshots')">
+          <NCard :title="t('collectionDetail.savedSnapshots')">
             <NDataTable
               v-if="(revisionsQuery.data.value ?? []).length > 0"
               :columns="revisionColumns"
@@ -1122,11 +1163,11 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
               :row-key="(row: DatasetCollectionRevisionResponse) => row.id"
               :scroll-x="640"
             />
-            <NEmpty v-else description="Save a snapshot to train or predict this collection" />
+            <NEmpty v-else :description="t('collectionDetail.snapshotEmpty')" />
           </NCard>
         </NTabPane>
-        <NTabPane name="activity" tab="Activity">
-          <NCard title="Prediction activity">
+        <NTabPane name="activity" :tab="t('collectionDetail.activity')">
+          <NCard :title="t('collectionDetail.predictionActivity')">
             <NDataTable
               v-if="(batchesQuery.data.value ?? []).length > 0"
               :columns="batchColumns"
@@ -1134,7 +1175,7 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
               :row-key="(row: CollectionPredictionBatch) => row.id"
               :scroll-x="760"
             />
-            <NEmpty v-else description="Prediction batches will appear here" />
+            <NEmpty v-else :description="t('collectionDetail.batchesEmpty')" />
           </NCard>
         </NTabPane>
       </NTabs>
@@ -1143,14 +1184,17 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
     <NModal
       v-model:show="exportVisible"
       preset="card"
-      title="Export selected Collection records"
+      :title="t('collectionDetail.exportTitle')"
       :style="{ width: 'min(920px, calc(100vw - 32px))' }"
     >
       <NAlert type="info" :show-icon="false" class="collection-export-note">
-        {{ selectedMembers.length }} linked Dataset record{{
-          selectedMembers.length === 1 ? "" : "s"
+        {{
+          t(
+            "collectionDetail.exportSummary",
+            { count: selectedMembers.length },
+            selectedMembers.length,
+          )
         }}
-        selected. Parquet stays combined; KLARF creates one complete numbered file per inspection.
       </NAlert>
       <PredictionExportPlugin
         :collection-id="collectionId"
@@ -1164,26 +1208,24 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
     <NModal
       v-model:show="ruleVisible"
       preset="card"
-      title="Add dynamic membership rule"
+      :title="t('collectionDetail.addRuleTitle')"
       :style="{ width: 'min(680px, calc(100vw - 32px))' }"
     >
       <NAlert v-if="connectorOptions.length === 0" type="warning" :show-icon="false">
-        An administrator must configure a source connector and import profile before rules can be
-        created.
+        {{ t("collectionDetail.connectorRequired") }}
       </NAlert>
       <template v-else>
         <NText depth="3" class="rule-intro">
-          When this rule runs, each newly matched source record is imported as a standalone Dataset
-          and linked to this Collection. Existing matches are skipped.
+          {{ t("collectionDetail.ruleIntro") }}
         </NText>
-        <NFormItem label="Rule name" required>
-          <NInput v-model:value="ruleName" placeholder="For example: Line A metal layers" />
+        <NFormItem :label="t('collectionDetail.ruleName')" required>
+          <NInput v-model:value="ruleName" :placeholder="t('collectionDetail.ruleExample')" />
         </NFormItem>
-        <NFormItem label="Source" required>
+        <NFormItem :label="t('collectionDetail.source')" required>
           <NSelect
             v-model:value="ruleConnectorId"
             :options="connectorOptions"
-            placeholder="Choose a configured source"
+            :placeholder="t('collectionDetail.chooseSource')"
             @update:value="
               () => {
                 ruleProfileId = null;
@@ -1193,13 +1235,13 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
             "
           />
         </NFormItem>
-        <NFormItem label="Import profile" required>
+        <NFormItem :label="t('collectionDetail.importProfile')" required>
           <NSelect
             v-model:value="ruleProfileId"
             :options="profileOptions"
             :loading="profilesQuery.isLoading.value"
             :disabled="!ruleConnectorId || profileOptions.length === 0"
-            placeholder="Choose how matched records become Datasets"
+            :placeholder="t('collectionDetail.chooseProfile')"
           />
         </NFormItem>
         <NAlert
@@ -1207,38 +1249,38 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
           type="warning"
           :show-icon="false"
         >
-          This source has no import profile. Ask an administrator to add one.
+          {{ t("collectionDetail.noProfile") }}
         </NAlert>
         <div class="rule-condition-row">
-          <NFormItem label="Field" required>
+          <NFormItem :label="t('collectionDetail.field')" required>
             <NSelect
               v-model:value="ruleField"
               :options="ruleFieldOptions"
               :disabled="!ruleConnectorId"
-              placeholder="Choose a field"
+              :placeholder="t('collectionDetail.chooseField')"
               @update:value="ruleOperator = null"
             />
           </NFormItem>
-          <NFormItem label="Condition" required>
+          <NFormItem :label="t('collectionDetail.condition')" required>
             <NSelect
               v-model:value="ruleOperator"
               :options="ruleOperatorOptions"
               :disabled="!ruleField"
-              placeholder="Choose a condition"
+              :placeholder="t('collectionDetail.chooseCondition')"
             />
           </NFormItem>
           <NFormItem
             v-if="ruleOperator !== 'is_null'"
-            label="Value"
+            :label="t('collectionDetail.value')"
             required
             :validation-status="ruleValue.trim() && !hasValidRuleValue ? 'error' : undefined"
             :feedback="
               ruleValue.trim() && !hasValidRuleValue
                 ? selectedRuleField?.field_type === 'number'
-                  ? 'Enter a valid number.'
+                  ? t('collectionDetail.validNumber')
                   : selectedRuleField?.field_type === 'boolean'
-                    ? 'Enter true or false.'
-                    : 'Enter at least one value.'
+                    ? t('collectionDetail.validBoolean')
+                    : t('collectionDetail.atLeastOneValue')
                 : undefined
             "
           >
@@ -1246,8 +1288,8 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
               v-model:value="ruleValue"
               :placeholder="
                 ruleOperator === 'in' || ruleOperator === 'not_in'
-                  ? 'Separate values with commas'
-                  : 'Enter a value'
+                  ? t('collectionDetail.commaValues')
+                  : t('collectionDetail.enterValue')
               "
             />
           </NFormItem>
@@ -1255,14 +1297,14 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
       </template>
       <template #footer>
         <NSpace justify="end">
-          <NButton @click="resetRuleForm">Cancel</NButton>
+          <NButton @click="resetRuleForm">{{ t("common.cancel") }}</NButton>
           <NButton
             type="primary"
             :disabled="!canCreateRule"
             :loading="createRuleMutation.isPending.value"
             @click="createRuleMutation.mutate()"
           >
-            Create rule
+            {{ t("collectionDetail.createRule") }}
           </NButton>
         </NSpace>
       </template>
@@ -1271,7 +1313,7 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
     <NModal
       v-model:show="linkVisible"
       preset="card"
-      title="Link existing datasets"
+      :title="t('collectionDetail.linkTitle')"
       :style="{ width: 'min(560px, calc(100vw - 32px))' }"
     >
       <template v-if="linkOptions.length > 0">
@@ -1280,26 +1322,23 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
           multiple
           filterable
           :options="linkOptions"
-          placeholder="Select compatible datasets"
+          :placeholder="t('collectionDetail.compatibleDatasets')"
         />
         <NAlert v-if="!selectedLinksCompatible" type="error" :show-icon="false">
-          Selected datasets must use the same labels in the same order.
+          {{ t("collectionDetail.sameLabelsRequired") }}
         </NAlert>
       </template>
-      <NEmpty
-        v-else
-        description="No unlinked datasets match this collection's view and label contract"
-      />
+      <NEmpty v-else :description="t('collectionDetail.noCompatibleDatasets')" />
       <template #footer>
         <NSpace justify="end">
-          <NButton @click="linkVisible = false">Cancel</NButton>
+          <NButton @click="linkVisible = false">{{ t("common.cancel") }}</NButton>
           <NButton
             type="primary"
             :disabled="selectedDatasetIds.length === 0 || !selectedLinksCompatible"
             :loading="linkMutation.isPending.value"
             @click="linkMutation.mutate()"
           >
-            Link
+            {{ t("collectionDetail.link") }}
           </NButton>
         </NSpace>
       </template>
@@ -1308,12 +1347,11 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
     <NModal
       v-model:show="modelVisible"
       preset="card"
-      title="Default prediction model"
+      :title="t('collectionDetail.defaultModel')"
       :style="{ width: 'min(960px, calc(100vw - 32px))' }"
     >
       <NText depth="3">
-        The selected model applies only to newly added datasets. Existing results stay unchanged
-        until you select and rerun them.
+        {{ t("collectionDetail.modelPickerHelp") }}
       </NText>
       <RemoteModelPicker
         v-model="selectedDefaultModelId"
@@ -1334,20 +1372,20 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
                 :disabled="!collection?.default_model_id"
                 :loading="defaultModelMutation.isPending.value"
               >
-                Clear default
+                {{ t("collectionDetail.clearDefault") }}
               </NButton>
             </template>
-            New datasets will no longer start prediction automatically.
+            {{ t("collectionDetail.clearDefaultConfirm") }}
           </NPopconfirm>
           <NSpace>
-            <NButton @click="modelVisible = false">Cancel</NButton>
+            <NButton @click="modelVisible = false">{{ t("common.cancel") }}</NButton>
             <NButton
               type="primary"
               :disabled="!selectedDefaultModelId"
               :loading="defaultModelMutation.isPending.value"
               @click="defaultModelMutation.mutate(selectedDefaultModelId)"
             >
-              Save model
+              {{ t("collectionDetail.saveModel") }}
             </NButton>
           </NSpace>
         </NSpace>
@@ -1357,27 +1395,32 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
     <NModal
       v-model:show="reconcileVisible"
       preset="card"
-      title="Predict selected datasets"
+      :title="t('collectionDetail.predictTitle')"
       :style="{ width: 'min(560px, calc(100vw - 32px))' }"
     >
       <NAlert type="warning" :show-icon="false">
-        This starts {{ selectedCoverage.length }} prediction job{{
-          selectedCoverage.length === 1 ? "" : "s"
+        {{
+          t(
+            "collectionDetail.predictConfirm",
+            {
+              count: selectedCoverage.length,
+              model: defaultModel?.name || collection?.default_model_id,
+              snapshot: latestReadyRevision ? `r${latestReadyRevision.revision_number}` : "—",
+            },
+            selectedCoverage.length,
+          )
         }}
-        using {{ defaultModel?.name || collection?.default_model_id }} and snapshot
-        {{ latestReadyRevision ? `r${latestReadyRevision.revision_number}` : "—" }}. Each dataset
-        runs separately, so failed items can be retried without rerunning successful ones.
       </NAlert>
       <template #footer>
         <NSpace justify="end">
-          <NButton @click="reconcileVisible = false">Cancel</NButton>
+          <NButton @click="reconcileVisible = false">{{ t("common.cancel") }}</NButton>
           <NButton
             type="primary"
             :disabled="selectedCoverage.length === 0"
             :loading="reconcileMutation.isPending.value"
             @click="reconcileMutation.mutate()"
           >
-            Start prediction
+            {{ t("collectionDetail.startPrediction") }}
           </NButton>
         </NSpace>
       </template>
