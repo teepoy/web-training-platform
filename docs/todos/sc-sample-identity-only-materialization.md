@@ -7,9 +7,10 @@
 - **Completed intermediate slice:** new imports write schema
   `v4_identity` (`sample_id`, `defect_id`); Dataset/Collection workbench,
   map/filter, runtime, and prediction-export paths rehydrate current source
-  rows; v2/v3 extras are ignored; cache keys include inspection freshness.
-- **Next milestone:** remove the unused direct Sample table endpoints/client,
-  verify the generic sparse-export surface, and complete broad/E2E checks.
+  rows; v2/v3 extras are ignored; cache keys include inspection freshness; and
+  the unused direct Sample table endpoints/client have been removed.
+- **Next milestone:** verify the generic sparse-export surface and complete
+  broad/E2E checks.
 - **Done when:** every acceptance criterion below is verified.
 
 This document records the proposal to give the SC Sample table one explicit

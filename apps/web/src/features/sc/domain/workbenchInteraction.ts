@@ -1,5 +1,3 @@
-import type { ScSampleTableRow } from "@/generated/orval/models/scSampleTableRow";
-import type { ScSampleTableRowsRequest } from "@/generated/orval/models/scSampleTableRowsRequest";
 import type { ScSampleTableFilter, ScSampleTableSort } from "@/features/sc/domain/sampleTable";
 import type { ReticleMapOptions } from "@/features/sc/application/reticleMapOptions";
 import type { ScDataColumn } from "@/features/sc/domain/workbenchDataSource";
@@ -21,9 +19,31 @@ export interface ScSelectionAction {
   mode: "replace" | "add" | "toggle";
 }
 
-export interface ScSampleTableDisplayRow extends ScSampleTableRow {
+export interface ScSampleTableDisplayRow {
   row_key: string;
   sample_id?: string | null;
+  defect_id: string;
+  rough_bin: number;
+  class_number: number;
+  images: number;
+  test_id: number;
+  wafer_x: number;
+  wafer_y: number;
+  index_x: number;
+  index_y: number;
+  adder: number;
+  cluster_id?: number | null;
+  die_x: number;
+  die_y: number;
+  reticle_x: number;
+  reticle_y: number;
+  size_x: number;
+  size_y: number;
+  size_d: number;
+  area: number;
+  final_bin: number;
+  manual_bin: number;
+  kill_ratio?: number | null;
   source_dataset_id?: string | null;
   source_sample_id?: string | null;
   annotation_label?: string | null;
@@ -61,29 +81,4 @@ export interface ScSampleTableDataSource {
   loadColumns?: () => Promise<ScDataColumn[]>;
   loadRows: (query: ScSampleTableRowsQuery) => Promise<ScSampleTableRowsPage>;
   loadDistinctValues?: (query: ScSampleTableDistinctValuesQuery) => Promise<Array<string | number>>;
-}
-
-export function buildScSampleTableRowsRequest(
-  query: ScSampleTableRowsQuery,
-): ScSampleTableRowsRequest {
-  const payload: ScSampleTableRowsRequest = {
-    anchor: query.anchor,
-    limit: query.limit,
-  };
-  if (query.defectIds.length > 0) {
-    payload.defect_ids = query.defectIds;
-  }
-  if (query.filter && Object.keys(query.filter).length > 0) {
-    payload.filter = query.filter;
-  }
-  if (query.sort?.direction) {
-    payload.sort = query.sort;
-  }
-  if (query.reticleOptions) {
-    payload.reticle_x_die_count = query.reticleOptions.xDieCount;
-    payload.reticle_y_die_count = query.reticleOptions.yDieCount;
-    payload.reticle_x_die_shift = query.reticleOptions.xDieShift;
-    payload.reticle_y_die_shift = query.reticleOptions.yDieShift;
-  }
-  return payload;
 }

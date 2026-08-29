@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
-import math
 import re
 import tempfile
 from datetime import datetime, timedelta, timezone
@@ -60,9 +59,7 @@ from app.modules.sc.schemas import (
     ScInspectionSummaryItem,
     ScReviewImageItem,
     ScReviewImagesByDefectItem,
-    ScSampleTableRow,
     ScSampleTableRowsRequest,
-    ScSampleTableRowsResponse,
 )
 from app.shared.api.schemas import Organization, User
 from app.shared.sse.emit import emit_sse
@@ -1096,142 +1093,6 @@ def _apply_sample_table_filter(
     return samples_df
 
 
-def _apply_sample_table_sort(
-    samples_df: pl.DataFrame,
-    sort_params: Any | None,
-    requested: list[str] | None,
-) -> pl.DataFrame:
-    if sort_params:
-        sort_field = _SAMPLE_TABLE_COLUMNS.get(sort_params.field)
-        if sort_field is not None and sort_field in samples_df.columns:
-            if sort_params.field == "defect_id":
-                return samples_df.sort(
-                    pl.col(sort_field).cast(pl.Int64),
-                    descending=(sort_params.direction == "desc"),
-                )
-            return samples_df.sort(
-                sort_field, descending=(sort_params.direction == "desc")
-            )
-    if requested is not None:
-        request_order = {defect_id: index for index, defect_id in enumerate(requested)}
-        return (
-            samples_df.with_columns(
-                pl.col("defect_id")
-                .cast(pl.Utf8)
-                .replace_strict(request_order, default=len(request_order))
-                .alias("_request_order")
-            )
-            .sort("_request_order")
-            .drop("_request_order")
-        )
-    return (
-        samples_df.sort(pl.col("defect_id").cast(pl.Int64))
-        if "defect_id" in samples_df.columns
-        else samples_df
-    )
-
-
-def _sample_table_row_from_dict(
-    row: dict[str, Any], *, inspection_time: datetime, wafer_key: int
-) -> ScSampleTableRow:
-    def int_or_zero(value: Any) -> int:
-        if value is None:
-            return 0
-        if isinstance(value, float) and math.isnan(value):
-            return 0
-        return int(value)
-
-    return ScSampleTableRow(
-        row_key=(f"{inspection_time.isoformat()}::{wafer_key}::{row['defect_id']}"),
-        defect_id=str(row["defect_id"]),
-        rough_bin=int_or_zero(row["rough_bin"]),
-        class_number=int_or_zero(row["class_number"]),
-        images=int_or_zero(row["images"]),
-        test_id=int_or_zero(row["test_id"]),
-        wafer_x=int_or_zero(row["wafer_x"]),
-        wafer_y=int_or_zero(row["wafer_y"]),
-        index_x=int_or_zero(row["index_x"]),
-        index_y=int_or_zero(row["index_y"]),
-        adder=int_or_zero(row["adder"]),
-        cluster_id=None if row["cluster"] is None else int_or_zero(row["cluster"]),
-        die_x=int_or_zero(row["index_x"]),
-        die_y=int_or_zero(row["index_y"]),
-        reticle_x=int_or_zero(row.get("reticle_x", 0)),
-        reticle_y=int_or_zero(row.get("reticle_y", 0)),
-        size_x=int_or_zero(row["size_x"]),
-        size_y=int_or_zero(row["size_y"]),
-        size_d=int_or_zero(row["size_d"]),
-        area=int_or_zero(row["area"]),
-        final_bin=int_or_zero(row["final_bin"]),
-        manual_bin=int_or_zero(row["manual_bin"]),
-        kill_ratio=row["kill_ratio"],
-    )
-
-
-async def _build_sample_table_rows_response(
-    *,
-    payload: ScSampleTableRowsRequest,
-    upstream_reader: Any,
-    insp_dt: datetime,
-    inspection: Any,
-    wafer_key: int,
-) -> ScSampleTableRowsResponse:
-    defect_ids = payload.defect_ids
-    anchor = (
-        int(payload.anchor) if payload.anchor and payload.anchor.isdigit() else None
-    )
-    limit = payload.limit if payload.anchor is not None else payload.page_size
-    offset = anchor if anchor is not None else payload.page * payload.page_size
-    filter_params = payload.filter
-    sort_params = payload.sort
-    reticle_size_x = payload.reticle_x_die_count
-    reticle_size_y = payload.reticle_y_die_count
-    reticle_offset_x = payload.reticle_x_die_shift
-    reticle_offset_y = payload.reticle_y_die_shift
-
-    requested = list(dict.fromkeys(defect_ids)) if defect_ids else None
-    requested_set = set(requested) if requested else None
-
-    row_count = (
-        max(inspection.defects, len(requested), 100_000)
-        if requested is not None
-        else inspection.defects
-    )
-    samples_df = await _load_or_build_sample_table_df(
-        upstream_reader=upstream_reader,
-        inspection_time=insp_dt,
-        wafer_key=wafer_key,
-        row_count=row_count,
-        reticle_size_x=reticle_size_x,
-        reticle_size_y=reticle_size_y,
-        reticle_offset_x=reticle_offset_x,
-        reticle_offset_y=reticle_offset_y,
-    )
-
-    if requested_set is not None:
-        samples_df = samples_df.filter(
-            pl.col("defect_id").cast(pl.Utf8).is_in(requested_set)
-        )
-
-    samples_df = _apply_sample_table_filter(samples_df, filter_params)
-    samples_df = _apply_sample_table_sort(samples_df, sort_params, requested)
-
-    total_matched = len(samples_df)
-    page_df = samples_df.slice(offset, limit)
-    matched = [
-        _sample_table_row_from_dict(row, inspection_time=insp_dt, wafer_key=wafer_key)
-        for row in page_df.to_dicts()
-    ]
-    next_offset = offset + len(matched)
-    next_anchor = str(next_offset) if next_offset < total_matched else None
-
-    return ScSampleTableRowsResponse(
-        items=matched,
-        total=total_matched,
-        next_anchor=next_anchor,
-    )
-
-
 async def _resolve_inspection_or_404(
     upstream_reader: Any,
     inspection_time: str,
@@ -1245,103 +1106,6 @@ async def _resolve_inspection_or_404(
             detail=f"Inspection not found: {inspection_time}/{wafer_key}",
         )
     return insp_dt, inspection
-
-
-@router.post(
-    "/inspections/{inspection_time}/{wafer_key}/sample-table-rows",
-    response_model=ScSampleTableRowsResponse,
-)
-async def get_inspection_sample_table_rows(
-    payload: ScSampleTableRowsRequest,
-    upstream_reader: ScUpstreamReaderDep,
-    inspection_time: str,
-    wafer_key: int,
-) -> ScSampleTableRowsResponse:
-    insp_dt, inspection = await _resolve_inspection_or_404(
-        upstream_reader, inspection_time, wafer_key
-    )
-    return await _build_sample_table_rows_response(
-        payload=payload,
-        upstream_reader=upstream_reader,
-        insp_dt=insp_dt,
-        inspection=inspection,
-        wafer_key=wafer_key,
-    )
-
-
-@router.post("/inspections/{inspection_time}/{wafer_key}/sample-table-rows/stream")
-async def stream_inspection_sample_table_rows(
-    payload: ScSampleTableRowsRequest,
-    request: Request,
-    upstream_reader: ScUpstreamReaderDep,
-    inspection_time: str,
-    wafer_key: int,
-) -> StreamingResponse:
-    insp_dt, inspection = await _resolve_inspection_or_404(
-        upstream_reader, inspection_time, wafer_key
-    )
-
-    async def event_generator():
-        if await request.is_disconnected():
-            return
-        yield emit_sse(
-            SSEEvent(
-                ScProgressEvent(
-                    event_type="progress",
-                    operation="sc.sample-table",
-                    status="loading",
-                    message="Loading sample rows",
-                    total_count=inspection.defects,
-                )
-            )
-        )
-        try:
-            response = await _build_sample_table_rows_response(
-                payload=payload,
-                upstream_reader=upstream_reader,
-                insp_dt=insp_dt,
-                inspection=inspection,
-                wafer_key=wafer_key,
-            )
-        except Exception as exc:
-            yield emit_sse(
-                SSEEvent(
-                    ScErrorEvent(
-                        event_type="error",
-                        status="failed",
-                        error=str(exc),
-                    )
-                )
-            )
-            return
-        yield emit_sse(
-            SSEEvent(
-                ScProgressEvent(
-                    event_type="progress",
-                    operation="sc.sample-table",
-                    status="serializing",
-                    message="Serializing sample rows",
-                    loaded_count=len(response.items),
-                    total_count=response.total,
-                )
-            )
-        )
-        yield emit_sse(
-            SSEEvent(
-                ScDataEvent(
-                    event_type="data",
-                    operation="sc.sample-table",
-                    payload=response.model_dump(mode="json"),
-                )
-            )
-        )
-        yield emit_sse(SSEEvent(DoneEvent(event_type="done")))
-
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers=_SSE_HEADERS,
-    )
 
 
 CurrentUserDep = Annotated[User, Depends(get_current_user)]

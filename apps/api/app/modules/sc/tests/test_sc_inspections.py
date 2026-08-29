@@ -5,16 +5,13 @@ from __future__ import annotations
 import asyncio
 import json
 from datetime import datetime, timedelta, timezone
-from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
-import polars as pl
 import pytest
 from sqlalchemy import event
 
 from app.main import app
 from app.modules.sc.port.http.deps import get_upstream_reader
-from app.modules.sc.port.http.router import _apply_sample_table_sort
 from proto_stubs.sc.v1 import sample_pb2
 from tests.conftest import create_dataset
 
@@ -40,18 +37,6 @@ def _parse_map_points_resp(body: bytes) -> sample_pb2.WaferMapResponse:
 TODAY = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
 SAFE_START = (TODAY - timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%S")
 SAFE_END = (TODAY + timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%S")
-
-
-def test_sample_table_sort_orders_defect_id_numerically():
-    df = pl.DataFrame({"defect_id": ["1", "10", "2"]})
-
-    sorted_df = _apply_sample_table_sort(
-        df,
-        SimpleNamespace(field="defect_id", direction="asc"),
-        requested=None,
-    )
-
-    assert sorted_df["defect_id"].to_list() == ["1", "2", "10"]
 
 
 def test_list_inspections_returns_items_and_total(
@@ -231,7 +216,9 @@ def test_list_inspections_range_exceeds_14_days_returns_400(
     app.dependency_overrides[get_upstream_reader] = lambda: mock_wafer_db_reader
     try:
         with TestClient(app) as client:
-            over_start = (TODAY - timedelta(days=MAX_INSPECTION_RANGE_DAYS + 1)).strftime("%Y-%m-%dT%H:%M:%S")
+            over_start = (
+                TODAY - timedelta(days=MAX_INSPECTION_RANGE_DAYS + 1)
+            ).strftime("%Y-%m-%dT%H:%M:%S")
             over_end = TODAY.strftime("%Y-%m-%dT%H:%M:%S")
             resp = client.get(
                 "/api/v1/sc/inspections",
@@ -241,131 +228,15 @@ def test_list_inspections_range_exceeds_14_days_returns_400(
                 },
             )
             assert resp.status_code == 400
-            assert f"must not exceed {MAX_INSPECTION_RANGE_DAYS} days" in resp.json()["detail"]
+            assert (
+                f"must not exceed {MAX_INSPECTION_RANGE_DAYS} days"
+                in resp.json()["detail"]
+            )
     finally:
         app.dependency_overrides.pop(get_upstream_reader, None)
 
 
 # ── Inspection samples tests ───────────────────────────────────────
-
-
-def test_inspection_samples_success(
-    mock_wafer_db_reader,
-):
-    app.dependency_overrides[get_upstream_reader] = lambda: mock_wafer_db_reader
-    try:
-        with TestClient(app) as client:
-            resp = client.get(
-                "/api/v1/sc/inspections",
-                params={
-                    "start_time": SAFE_START,
-                    "end_time": SAFE_END,
-                },
-            )
-            msg = _parse_summary_resp(resp.content)
-            assert len(msg["items"]) >= 1
-
-            first = msg["items"][0]
-            insp_time = first["inspection_time"]
-            wafer_key = first["wafer_key"]
-
-            resp2 = client.post(
-                f"/api/v1/sc/inspections/{insp_time}/{wafer_key}/sample-table-rows",
-                json={"defect_ids": ["3", "1", "2"], "page": 0, "page_size": 10},
-            )
-            assert resp2.status_code == 200, resp.text
-            body = resp2.json()
-            assert body["total"] >= 1
-            assert len(body["items"]) >= 1
-            assert "defect_id" in body["items"][0]
-    finally:
-        app.dependency_overrides.pop(get_upstream_reader, None)
-
-
-def test_sample_table_rows_stream_emits_progress_data_done(
-    mock_wafer_db_reader,
-):
-    app.dependency_overrides[get_upstream_reader] = lambda: mock_wafer_db_reader
-    try:
-        with TestClient(app) as client:
-            resp = client.get(
-                "/api/v1/sc/inspections",
-                params={
-                    "start_time": SAFE_START,
-                    "end_time": SAFE_END,
-                },
-            )
-            first = _parse_summary_resp(resp.content)["items"][0]
-            stream_resp = client.post(
-                (
-                    f"/api/v1/sc/inspections/{first['inspection_time']}/"
-                    f"{first['wafer_key']}/sample-table-rows/stream"
-                ),
-                json={"defect_ids": ["3", "1", "2"], "page": 0, "page_size": 10},
-            )
-            assert stream_resp.status_code == 200, stream_resp.text
-            assert stream_resp.headers.get("content-type", "").startswith(
-                "text/event-stream"
-            )
-            body = stream_resp.text
-            assert "event: progress" in body
-            assert "event: data" in body
-            assert "event: done" in body
-            assert '"operation":"sc.sample-table"' in body
-            assert '"items":' in body
-    finally:
-        app.dependency_overrides.pop(get_upstream_reader, None)
-
-
-def test_sample_table_rows_filters_sorts_then_paginates(
-    mock_wafer_db_reader,
-):
-    app.dependency_overrides[get_upstream_reader] = lambda: mock_wafer_db_reader
-    try:
-        with TestClient(app) as client:
-            summary = client.get(
-                "/api/v1/sc/inspections",
-                params={"start_time": SAFE_START, "end_time": SAFE_END},
-            )
-            first = _parse_summary_resp(summary.content)["items"][0]
-            url = (
-                f"/api/v1/sc/inspections/{first['inspection_time']}/"
-                f"{first['wafer_key']}/sample-table-rows"
-            )
-
-            response = client.post(
-                url,
-                json={
-                    "page": 0,
-                    "page_size": 5,
-                    "filter": {
-                        "rough_bin": {
-                            "filterType": "set",
-                            "values": [1, 2, 3],
-                        },
-                        "wafer_x": {
-                            "filterType": "number",
-                            "type": "inRange",
-                            "filter": -1_000_000,
-                            "filterTo": 1_000_000,
-                        },
-                    },
-                    "sort": {"field": "defect_id", "direction": "desc"},
-                },
-            )
-
-            assert response.status_code == 200, response.text
-            body = response.json()
-            defect_ids = [int(row["defect_id"]) for row in body["items"]]
-            assert defect_ids == sorted(defect_ids, reverse=True)
-            assert len(body["items"]) <= 5
-            assert all(row["rough_bin"] in {1, 2, 3} for row in body["items"])
-            assert all(
-                -1_000_000 <= row["wafer_x"] <= 1_000_000
-                for row in body["items"]
-            )
-    finally:
-        app.dependency_overrides.pop(get_upstream_reader, None)
 
 
 def test_inspection_defect_ids_binary_returns_sorted_int32(
@@ -532,7 +403,9 @@ def test_inspection_split_preview_endpoints_success(
             assert filtered_review_resp.status_code == 200, filtered_review_resp.text
             filtered_review_body = filtered_review_resp.json()
             assert filtered_review_body["total"] == 1
-            assert filtered_review_body["items"][0]["defect_id"] == first_review_defect_id
+            assert (
+                filtered_review_body["items"][0]["defect_id"] == first_review_defect_id
+            )
             filter_only_review_resp = client.get(
                 f"/api/v1/sc/inspections/{insp_time}/{wafer_key}/review-images",
                 params={
@@ -546,46 +419,16 @@ def test_inspection_split_preview_endpoints_success(
                     )
                 },
             )
-            assert filter_only_review_resp.status_code == 200, filter_only_review_resp.text
+            assert filter_only_review_resp.status_code == 200, (
+                filter_only_review_resp.text
+            )
             filter_only_review_body = filter_only_review_resp.json()
             assert filter_only_review_body["total"] == 1
-            assert filter_only_review_body["items"][0]["defect_id"] == first_review_defect_id
-
-            table_resp = client.post(
-                f"/api/v1/sc/inspections/{insp_time}/{wafer_key}/sample-table-rows",
-                json={"defect_ids": ["3", "1", "2"], "page": 0, "page_size": 10},
+            assert (
+                filter_only_review_body["items"][0]["defect_id"]
+                == first_review_defect_id
             )
-            assert table_resp.status_code == 200, table_resp.text
-            table_body = table_resp.json()
-            assert table_body["total"] == 3
-            assert table_body["next_anchor"] is None
-            assert [row["defect_id"] for row in table_body["items"]] == ["3", "1", "2"]
-            assert set(table_body["items"][0]) == {
-                "row_key",
-                "sample_id",
-                "defect_id",
-                "rough_bin",
-                "class_number",
-                "images",
-                "test_id",
-                "wafer_x",
-                "wafer_y",
-                "index_x",
-                "index_y",
-                "adder",
-                "cluster_id",
-                "die_x",
-                "die_y",
-                "reticle_x",
-                "reticle_y",
-                "size_x",
-                "size_y",
-                "size_d",
-                "area",
-                "final_bin",
-                "manual_bin",
-                "kill_ratio",
-            }
+
     finally:
         app.dependency_overrides.pop(get_upstream_reader, None)
 
@@ -610,9 +453,7 @@ def test_inspection_samples_invalid_datetime_400(
     app.dependency_overrides[get_upstream_reader] = lambda: mock_wafer_db_reader
     try:
         with TestClient(app) as client:
-            resp = client.get(
-                "/api/v1/sc/inspections/not-a-date/1/review-images"
-            )
+            resp = client.get("/api/v1/sc/inspections/not-a-date/1/review-images")
             assert resp.status_code == 400
     finally:
         app.dependency_overrides.pop(get_upstream_reader, None)
