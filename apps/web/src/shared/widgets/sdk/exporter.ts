@@ -12,12 +12,14 @@
 
 import type { Component } from "vue";
 
-export type ExporterSurface = "dataset" | "prediction" | "preview";
+export type ExporterSurface = "dataset" | "annotation" | "model" | "prediction" | "preview";
 
 export interface ExporterDescriptor {
   id: string;
   label: string;
+  labelKey?: string;
   description?: string;
+  descriptionKey?: string;
   icon?: string;
   surfaces: ExporterSurface[];
   component: Component;
@@ -28,6 +30,7 @@ export interface ExporterDescriptor {
  */
 export interface ExporterProps {
   datasetId: string;
+  resourceId?: string;
   onComplete: (result?: ExporterResult) => void;
   onCancel: () => void;
 }

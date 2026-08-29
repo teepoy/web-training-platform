@@ -85,6 +85,10 @@ class ModelManagementPort(Protocol):
         self, artifact_id: str, org_id: str
     ) -> tuple[bytes, str]: ...
 
+    async def prepare_model_download(
+        self, artifact_id: str, org_id: str
+    ) -> tuple[str, str, int]: ...
+
     async def upload_model(
         self,
         file: UploadFile,

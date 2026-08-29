@@ -152,6 +152,11 @@ class BulkAnnotationResponse(BaseModel):
     created: int
 
 
+class AnnotationImportResponse(BaseModel):
+    imported: int
+    cleared: int
+
+
 class SyncAnnotationsResponse(BaseModel):
     synced_count: int
     errors: list[str] = Field(default_factory=list)

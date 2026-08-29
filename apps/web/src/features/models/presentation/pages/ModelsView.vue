@@ -3,7 +3,7 @@ import { computed, ref } from "vue";
 import { useQueryClient } from "@tanstack/vue-query";
 import { useRouter } from "vue-router";
 import type { DataTableRowKey } from "naive-ui";
-import { NButton, NInput, NModal, NPopconfirm, NSpace, NText, useMessage } from "naive-ui";
+import { NButton, NInput, NModal, NPopconfirm, NSpace, useMessage } from "naive-ui";
 import { useI18n } from "vue-i18n";
 import {
   deleteModelApiV1ModelsModelIdDelete,
@@ -15,7 +15,8 @@ import { useAuthStore } from "@/features/auth/application/store";
 import { useOrgStore } from "@/features/auth/application/org";
 import { orgScopedQueryKey, toUserMessage } from "@/shared/api";
 import BulkSelectionToolbar from "@/shared/components/bulk-selection-toolbar/BulkSelectionToolbar.vue";
-import { ResourcePageShell, ResourceToolbar } from "@/shared";
+import { FlowModal, ResourcePageShell, ResourceToolbar, type FlowCard } from "@/shared";
+import { widgetRegistry } from "@/app/registrations";
 import { runBatchAction } from "@/shared/utils/runBatchAction";
 import ModelSearchSurface from "../components/ModelSearchSurface.vue";
 
@@ -30,6 +31,30 @@ const batchDeletePending = ref(false);
 const renameVisible = ref(false);
 const renameTarget = ref<ModelResponse | null>(null);
 const renameName = ref("");
+const importVisible = ref(false);
+const exportVisible = ref(false);
+const exportTarget = ref<ModelResponse | null>(null);
+
+function localizedFlow(descriptor: {
+  id: string;
+  label: string;
+  labelKey?: string;
+  description?: string;
+  descriptionKey?: string;
+  icon?: string;
+  component: FlowCard["component"];
+}): FlowCard {
+  return {
+    id: descriptor.id,
+    label: descriptor.labelKey ? t(descriptor.labelKey) : descriptor.label,
+    description: descriptor.descriptionKey ? t(descriptor.descriptionKey) : descriptor.description,
+    icon: descriptor.icon,
+    component: descriptor.component,
+  };
+}
+
+const modelImportFlows = computed(() => widgetRegistry.getImporters("model").map(localizedFlow));
+const modelExportFlows = computed(() => widgetRegistry.getExporters("model").map(localizedFlow));
 
 const modelsApiQueryKey = computed(() =>
   orgScopedQueryKey(orgStore.currentOrgId, ["api", "v1", "models"]),
@@ -118,6 +143,11 @@ function openRename(model: ModelResponse): void {
   renameVisible.value = true;
 }
 
+function openExport(model: ModelResponse): void {
+  exportTarget.value = model;
+  exportVisible.value = true;
+}
+
 function resetRename(): void {
   renameVisible.value = false;
   renameTarget.value = null;
@@ -136,7 +166,13 @@ function submitRename(): false {
 <template>
   <ResourcePageShell :is-loading="false" :has-org="!!orgStore.currentOrgId">
     <div class="models-view">
-      <ResourceToolbar :title="t('models.title')" />
+      <ResourceToolbar :title="t('models.title')">
+        <template #actions>
+          <NButton type="primary" @click="importVisible = true">
+            {{ t("models.importModel") }}
+          </NButton>
+        </template>
+      </ResourceToolbar>
       <ModelSearchSurface
         v-model:checked-row-keys="checkedModelIds"
         mode="management"
@@ -162,11 +198,22 @@ function submitRename(): false {
           </BulkSelectionToolbar>
         </template>
         <template #row-actions="{ model }">
-          <NSpace v-if="model.created_by === authStore.user?.id" :size="6" :wrap="false">
-            <NButton size="small" quaternary @click="openRename(model)">
+          <NSpace :size="6" :wrap="false">
+            <NButton size="small" quaternary @click="openExport(model)">
+              {{ t("common.export") }}
+            </NButton>
+            <NButton
+              v-if="model.created_by === authStore.user?.id"
+              size="small"
+              quaternary
+              @click="openRename(model)"
+            >
               {{ t("common.rename") }}
             </NButton>
-            <NPopconfirm @positive-click="deleteMutation.mutate({ modelId: model.id })">
+            <NPopconfirm
+              v-if="model.created_by === authStore.user?.id"
+              @positive-click="deleteMutation.mutate({ modelId: model.id })"
+            >
               <template #trigger>
                 <NButton
                   size="small"
@@ -183,7 +230,6 @@ function submitRename(): false {
               {{ t("models.confirmDelete", { name: modelDisplayName(model) }) }}
             </NPopconfirm>
           </NSpace>
-          <NText v-else depth="3">—</NText>
         </template>
       </ModelSearchSurface>
     </div>
@@ -205,6 +251,20 @@ function submitRename(): false {
         show-count
       />
     </NModal>
+    <FlowModal
+      v-model:show="importVisible"
+      :flows="modelImportFlows"
+      kind="import"
+      :title="t('models.importModel')"
+      @complete="invalidateModelQueries"
+    />
+    <FlowModal
+      v-model:show="exportVisible"
+      :flows="modelExportFlows"
+      kind="export"
+      :title="t('models.exportModel')"
+      :resource-id="exportTarget?.id"
+    />
   </ResourcePageShell>
 </template>
 

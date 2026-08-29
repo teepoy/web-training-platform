@@ -12,6 +12,7 @@ const props = defineProps<{
   kind: FlowKind;
   title?: string;
   datasetId?: string;
+  resourceId?: string;
 }>();
 
 const emit = defineEmits<{
@@ -93,6 +94,7 @@ function handleBack(): void {
         :is="selectedFlow.component"
         v-if="props.kind === 'import'"
         :dataset-id="props.datasetId ?? ''"
+        :resource-id="props.resourceId"
         :on-complete="handleComplete"
         :on-cancel="handleCancel"
       />
@@ -100,6 +102,7 @@ function handleBack(): void {
         :is="selectedFlow.component"
         v-else-if="props.kind === 'export'"
         :dataset-id="props.datasetId ?? ''"
+        :resource-id="props.resourceId"
         embedded
         :on-complete="handleComplete"
         :on-cancel="handleCancel"

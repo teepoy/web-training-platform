@@ -27,9 +27,15 @@ from app.modules.datasets.port.http.deps import (
     SampleSimilarityDep,
     SessionFactoryDep,
     get_artifact_storage,
+    get_config,
     get_dataset_payload_store,
     get_dataset_storage_factory,
     get_repository,
+)
+from app.core.config import AppConfig
+from app.modules.datasets.app.services.annotation_transfer import (
+    export_annotations_jsonl,
+    import_annotations_jsonl,
 )
 from app.modules.datasets.app.services.dataset_deletion_guard import (
     DatasetDeletionConflictError,
@@ -56,6 +62,7 @@ from app.modules.storage.domain.sparse import SparseManifestReader
 from app.modules.datasets.port.http.schemas import (
     BulkAnnotationRequest,
     BulkAnnotationResponse,
+    AnnotationImportResponse,
     BulkCreateSampleRequest,
     BulkCreateSampleResponse,
     CreateAnnotationRequest,
@@ -249,6 +256,12 @@ async def _stream_artifact_download(
 _logger = logging.getLogger(__name__)
 _MAX_SAMPLE_UPLOAD_BYTES = 10 * 1024 * 1024
 _ANNOTATION_SYNC_PAGE_SIZE = 1000
+
+
+class AnnotationJsonlStreamingResponse(StreamingResponse):
+    media_type = "application/x-ndjson"
+
+
 _SSE_HEADERS = {
     "Cache-Control": "no-cache",
     "Connection": "keep-alive",
@@ -1431,6 +1444,75 @@ async def bulk_create_annotations(
     await dataset_service.merge_label_space(dataset_id, org.id, incoming_labels)
 
     return BulkAnnotationResponse(created=created)
+
+
+@router.get(
+    "/datasets/{dataset_id}/annotations/export",
+    response_class=AnnotationJsonlStreamingResponse,
+)
+async def export_annotations(
+    dataset_id: str,
+    factory: DatasetStorageFactoryDep,
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+    repo: DatasetRepository = Depends(get_repository),
+    config: AppConfig = Depends(get_config),
+) -> AnnotationJsonlStreamingResponse:
+    del current_user
+    dataset = await repo.get_dataset(dataset_id, org_id=org.id)
+    if dataset is None:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    storage = await _open_storage(factory, dataset_id, org_id=org.id)
+    return AnnotationJsonlStreamingResponse(
+        export_annotations_jsonl(
+            dataset,
+            storage,
+            page_rows=config.dataset_transfer.annotation_batch_rows,
+        ),
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="{dataset_id}-annotations.jsonl"'
+            )
+        },
+    )
+
+
+@router.post(
+    "/datasets/{dataset_id}/annotations/import",
+    response_model=AnnotationImportResponse,
+)
+async def import_annotations(
+    dataset_id: str,
+    factory: DatasetStorageFactoryDep,
+    event_publisher: RedisEventPublisherDep,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
+    repo: DatasetRepository = Depends(get_repository),
+    config: AppConfig = Depends(get_config),
+) -> AnnotationImportResponse:
+    dataset = await repo.get_dataset(dataset_id, org_id=org.id)
+    if dataset is None:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    storage = await _open_storage(factory, dataset_id, org_id=org.id)
+    try:
+        result = await import_annotations_jsonl(
+            dataset,
+            storage,
+            file.file,
+            actor_id=current_user.id,
+            max_bytes=config.dataset_transfer.annotation_import_max_bytes,
+            max_records=config.dataset_transfer.annotation_import_max_records,
+            batch_rows=config.dataset_transfer.annotation_batch_rows,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if result.imported or result.cleared:
+        await event_publisher.publish_annotation_refresh(dataset_id=dataset_id)
+    return AnnotationImportResponse(
+        imported=result.imported,
+        cleared=result.cleared,
+    )
 
 
 @router.post(

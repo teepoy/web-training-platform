@@ -18,6 +18,7 @@ const props = withDefaults(
   <div>
     <n-space justify="space-between" align="center" style="margin-bottom: 16px">
       <n-h2 style="margin: 0">{{ props.title ?? t("resources.datasets") }}</n-h2>
+      <slot name="actions" />
     </n-space>
   </div>
 </template>

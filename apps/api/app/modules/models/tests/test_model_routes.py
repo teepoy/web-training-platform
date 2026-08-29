@@ -72,6 +72,16 @@ def test_get_model_not_found() -> None:
         assert resp.status_code == 404
 
 
+def test_model_artifact_upload_download_round_trip() -> None:
+    with TestClient(app) as c:
+        _, _, model_id = _setup(c)
+        response = c.get(f"/api/v1/models/{model_id}/download")
+        assert response.status_code == 200
+        assert response.content == b"fake-model"
+        assert response.headers["content-length"] == str(len(b"fake-model"))
+        assert 'filename="test-model.pt"' in response.headers["content-disposition"]
+
+
 def test_list_models_applies_search_and_creator_before_pagination() -> None:
     with TestClient(app) as c:
         _, _, model_id = _setup(c)

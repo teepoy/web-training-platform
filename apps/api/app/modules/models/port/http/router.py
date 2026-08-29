@@ -13,6 +13,7 @@ from fastapi import (
     Response,
     UploadFile,
 )
+from fastapi.responses import StreamingResponse
 
 from app.shared.api.schemas import CreatorSummary, Organization, PaginatedResponse, User
 from app.shared.domain.protocols import ArtifactStorage
@@ -177,12 +178,18 @@ async def download_model(
     model_service: ModelServiceDep,
     current_user: CurrentUserDep,
     org: CurrentOrgDep,
-) -> Response:
-    data, filename = await model_service.download_model(model_id, org_id=org.id)
-    return Response(
-        content=data,
+    storage: Annotated[ArtifactStorage, Depends(get_artifact_storage)],
+) -> StreamingResponse:
+    uri, filename, size = await model_service.prepare_model_download(
+        model_id, org_id=org.id
+    )
+    return StreamingResponse(
+        storage.iter_bytes(uri),
         media_type="application/octet-stream",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Length": str(size),
+        },
     )
 
 

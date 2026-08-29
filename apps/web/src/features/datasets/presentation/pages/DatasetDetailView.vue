@@ -4,6 +4,7 @@ import { useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { useQueryClient } from "@tanstack/vue-query";
 import { FlowModal, SampleDetailDrawer, type FlowCard } from "@/shared";
+import { widgetRegistry } from "@/app/registrations";
 import {
   getGetDatasetApiV1DatasetsDatasetIdGetQueryKey,
   getGetSparseSummaryApiV1DatasetsDatasetIdSparseSummaryGetQueryKey,
@@ -13,9 +14,6 @@ import {
 import type { Dataset, SparseSummaryResponse } from "@/generated/orval/models";
 import { useOrgStore } from "@/features/auth/application/org";
 import { orgScopedQueryKey } from "@/shared/api";
-import ManualImporter from "@/features/datasets/presentation/components/ManualImporter.vue";
-import ManualDatasetImporter from "@/features/datasets/presentation/components/ManualDatasetImporter.vue";
-import ParquetImporter from "@/features/datasets/presentation/components/ParquetImporter.vue";
 import DatasetTrainTab from "@/features/datasets/presentation/components/DatasetTrainTab.vue";
 import DatasetPredictTab from "@/features/datasets/presentation/components/DatasetPredictTab.vue";
 import DatasetPredictionExportTab from "@/features/datasets/presentation/components/DatasetPredictionExportTab.vue";
@@ -38,6 +36,9 @@ function tabFromHash(hash: string): string {
 const activeTab = ref(tabFromHash(route.hash));
 const selectedSampleId = ref<string | null>(null);
 const showImportFlow = ref(false);
+const showExportFlow = ref(false);
+const showAnnotationImportFlow = ref(false);
+const showAnnotationExportFlow = ref(false);
 
 const datasetQuery = useGetDatasetApiV1DatasetsDatasetIdGet(id, {
   query: {
@@ -131,29 +132,34 @@ watch(activeTab, (tab) => {
   if (route.hash !== hash) void router.replace({ hash });
 });
 
-const importerFlows = computed<FlowCard[]>(() => [
-  {
-    id: "import-manual",
-    label: t("datasetDetail.manualEntry"),
-    description: t("datasetDetail.manualEntryHelp"),
-    icon: "✏️",
-    component: ManualImporter,
-  },
-  {
-    id: "import-dataset-manual",
-    label: t("datasetDetail.importJson"),
-    description: t("datasetDetail.importJsonHelp"),
-    icon: "📁",
-    component: ManualDatasetImporter,
-  },
-  {
-    id: "import-parquet",
-    label: t("datasetDetail.importParquet"),
-    description: t("datasetDetail.importParquetHelp"),
-    icon: "📦",
-    component: ParquetImporter,
-  },
-]);
+function localizedFlows(
+  descriptors: Array<{
+    id: string;
+    label: string;
+    labelKey?: string;
+    description?: string;
+    descriptionKey?: string;
+    icon?: string;
+    component: FlowCard["component"];
+  }>,
+): FlowCard[] {
+  return descriptors.map((descriptor) => ({
+    id: descriptor.id,
+    label: descriptor.labelKey ? t(descriptor.labelKey) : descriptor.label,
+    description: descriptor.descriptionKey ? t(descriptor.descriptionKey) : descriptor.description,
+    icon: descriptor.icon,
+    component: descriptor.component,
+  }));
+}
+
+const importerFlows = computed(() => localizedFlows(widgetRegistry.getImporters("dataset")));
+const exporterFlows = computed(() => localizedFlows(widgetRegistry.getExporters("dataset")));
+const annotationImporterFlows = computed(() =>
+  localizedFlows(widgetRegistry.getImporters("annotation")),
+);
+const annotationExporterFlows = computed(() =>
+  localizedFlows(widgetRegistry.getExporters("annotation")),
+);
 
 function handleImporterComplete() {
   showImportFlow.value = false;
@@ -217,6 +223,15 @@ function handleTabBeforeLeave(name: string | number): boolean {
             @click="showImportFlow = true"
           >
             {{ t("datasetDetail.addSamples") }}
+          </n-button>
+          <n-button @click="showExportFlow = true">
+            {{ t("datasetDetail.exportDataset") }}
+          </n-button>
+          <n-button @click="showAnnotationImportFlow = true">
+            {{ t("datasetDetail.importAnnotations") }}
+          </n-button>
+          <n-button @click="showAnnotationExportFlow = true">
+            {{ t("datasetDetail.exportAnnotations") }}
           </n-button>
         </n-space>
       </header>
@@ -329,6 +344,28 @@ function handleTabBeforeLeave(name: string | number): boolean {
         :title="t('datasetDetail.importSamples')"
         :dataset-id="id"
         @complete="handleImporterComplete"
+      />
+      <FlowModal
+        v-model:show="showExportFlow"
+        :flows="exporterFlows"
+        kind="export"
+        :title="t('datasetDetail.exportDataset')"
+        :dataset-id="id"
+      />
+      <FlowModal
+        v-model:show="showAnnotationImportFlow"
+        :flows="annotationImporterFlows"
+        kind="import"
+        :title="t('datasetDetail.importAnnotations')"
+        :dataset-id="id"
+        @complete="handleImporterComplete"
+      />
+      <FlowModal
+        v-model:show="showAnnotationExportFlow"
+        :flows="annotationExporterFlows"
+        kind="export"
+        :title="t('datasetDetail.exportAnnotations')"
+        :dataset-id="id"
       />
     </template>
   </div>

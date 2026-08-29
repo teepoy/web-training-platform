@@ -125,6 +125,14 @@ class PredictionConfig(ConfigSection):
     compaction_row_group_rows: int = 100_000
 
 
+class DatasetTransferConfig(ConfigSection):
+    annotation_import_max_bytes: int = Field(default=67_108_864, gt=0)
+    annotation_import_max_records: int = Field(default=300_000, gt=0)
+    annotation_batch_rows: int = Field(default=1_000, gt=0)
+    parquet_import_max_bytes: int = Field(default=536_870_912, gt=0)
+    parquet_import_max_rows: int = Field(default=300_000, gt=0)
+
+
 class LlmConfig(ConfigSection):
     base_url: str = ""
     api_key: str = ""
@@ -261,6 +269,9 @@ class AppConfig(ConfigSection):
     auth: AuthConfig = Field(default_factory=AuthConfig)
     sc: ScConfig = Field(default_factory=_default_sc_config)
     prediction: PredictionConfig = Field(default_factory=PredictionConfig)
+    dataset_transfer: DatasetTransferConfig = Field(
+        default_factory=DatasetTransferConfig
+    )
 
 
 # Environment-owned values are restricted to secrets and deployment topology.

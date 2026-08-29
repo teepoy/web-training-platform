@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import io
 import logging
+import os
+import tempfile
 from typing import Any
 
 import pyarrow as pa
@@ -48,23 +49,33 @@ def _build_image_struct(path: str, image_bytes: bytes | None = None) -> dict:
     }
 
 
-async def _list_all_samples_with_labels(ds_storage: Any) -> list[Any]:
-    rows: list[Any] = []
-    offset = 0
-    while True:
-        page, total = await ds_storage.list_samples(
-            offset=offset,
-            limit=_EXPORT_PAGE_SIZE,
-            with_labels=True,
-        )
-        rows.extend(page)
-        offset += len(page)
-        if offset >= total:
-            return rows
-        if not page:
-            raise RuntimeError(
-                "Dataset storage returned an empty page before the reported total"
-            )
+_IMAGE_TYPE = pa.struct([pa.field("bytes", pa.binary()), pa.field("path", pa.string())])
+_EXPORT_SCHEMA = pa.schema(
+    [
+        pa.field("sample_id", pa.string()),
+        pa.field("image", pa.list_(_IMAGE_TYPE)),
+        pa.field("label", pa.string()),
+        pa.field("metadata", pa.string()),
+    ]
+)
+
+
+def _rows_to_table(rows: list[Any]) -> pa.Table:
+    return pa.Table.from_arrays(
+        [
+            pa.array([str(row.sample_id) for row in rows], type=pa.string()),
+            pa.array(
+                [
+                    [_build_image_struct(uri) for uri in row.image_uris] or [{}]
+                    for row in rows
+                ],
+                type=pa.list_(_IMAGE_TYPE),
+            ),
+            pa.array([row.latest_label for row in rows], type=pa.string()),
+            pa.array([str(dict(row.metadata or {})) for row in rows], type=pa.string()),
+        ],
+        schema=_EXPORT_SCHEMA,
+    )
 
 
 @router.post("/export")
@@ -81,57 +92,43 @@ async def export_parquet(
         raise HTTPException(status_code=404, detail="dataset not found")
 
     ds_storage = await factory.open(dataset_id, org_id=org.id)
-    rows = await _list_all_samples_with_labels(ds_storage)
-
-    image_arrays: list[list[dict]] = []
-    label_arrays: list[str | None] = []
-    metadata_arrays: list[dict] = []
-
-    for row in rows:
-        image_structs = [_build_image_struct(uri) for uri in row.image_uris]
-        image_arrays.append(image_structs if image_structs else [{}])
-
-        label_arrays.append(row.latest_label)
-
-        md = {k: v for k, v in row.metadata.items()} if row.metadata else {}
-        metadata_arrays.append(md)
-
-    image_type = pa.struct(
-        [pa.field("bytes", pa.binary()), pa.field("path", pa.string())]
-    )
-
-    arrays: list[pa.Array] = []
-    fields: list[pa.Field] = []
-
-    image_array = pa.array(
-        image_arrays,
-        type=pa.list_(image_type),
-    )
-    fields.append(pa.field("image", pa.list_(image_type)))
-    arrays.append(image_array)
-
-    label_array = pa.array(label_arrays, type=pa.string())
-    fields.append(pa.field("label", pa.string()))
-    arrays.append(label_array)
-
-    metadata_str_array = pa.array([str(m) for m in metadata_arrays], type=pa.string())
-    fields.append(pa.field("metadata", pa.string()))
-    arrays.append(metadata_str_array)
-
-    table = pa.table({f.name: a for f, a in zip(fields, arrays)})
-
-    buf = io.BytesIO()
-    pq.write_table(table, buf, row_group_size=100)
-    parquet_bytes = buf.getvalue()
-
     filename = f"{dataset.name.replace(' ', '_')}_export.parquet"
-    uri = await storage.put_bytes(
-        f"exports/{dataset_id}/{filename}",
-        parquet_bytes,
-        content_type="application/octet-stream",
-    )
+    fd, temp_path = tempfile.mkstemp(suffix=".parquet")
+    os.close(fd)
+    writer: pq.ParquetWriter | None = None
+    exported_rows = 0
+    try:
+        writer = pq.ParquetWriter(temp_path, _EXPORT_SCHEMA)
+        offset = 0
+        while True:
+            rows, total = await ds_storage.list_samples(
+                offset=offset,
+                limit=_EXPORT_PAGE_SIZE,
+                with_labels=True,
+            )
+            if rows:
+                writer.write_table(_rows_to_table(rows), row_group_size=100)
+            exported_rows += len(rows)
+            offset += len(rows)
+            if offset >= total:
+                break
+            if not rows:
+                raise RuntimeError(
+                    "Dataset storage returned an empty page before the reported total"
+                )
+        writer.close()
+        writer = None
+        uri = await storage.put_file(
+            f"exports/{dataset_id}/{filename}",
+            temp_path,
+            content_type="application/octet-stream",
+        )
+    finally:
+        if writer is not None:
+            writer.close()
+        os.unlink(temp_path)
 
-    return {"uri": uri, "rows": table.num_rows, "format": "parquet"}
+    return {"uri": uri, "rows": exported_rows, "format": "parquet"}
 
 
 @router.post("/export/stream")

@@ -19,7 +19,7 @@ import type { Component } from "vue";
 // Surface — which host views this importer appears in
 // ---------------------------------------------------------------------------
 
-export type ImporterSurface = "dataset" | "preview";
+export type ImporterSurface = "dataset" | "annotation" | "model" | "preview";
 
 // ---------------------------------------------------------------------------
 // Plugin descriptor
@@ -28,7 +28,9 @@ export type ImporterSurface = "dataset" | "preview";
 export interface ImporterDescriptor {
   id: string;
   label: string;
+  labelKey?: string;
   description?: string;
+  descriptionKey?: string;
   icon?: string;
   surfaces: ImporterSurface[];
   component: Component;
@@ -47,6 +49,8 @@ export interface ImporterDescriptor {
 export interface ImporterProps {
   /** Target dataset (or preview session) ID. */
   datasetId: string;
+  /** Generic target resource ID for non-Dataset transfer surfaces. */
+  resourceId?: string;
   /** Call when import is complete (host closes the modal and refreshes data). */
   onComplete: (result?: ImporterResult) => void;
   /** Call when the user cancels (host closes the modal). */
@@ -63,26 +67,18 @@ export interface ImporterResult {
 // Helper
 // ---------------------------------------------------------------------------
 
-export function defineImporter(
-  descriptor: ImporterDescriptor,
-): ImporterDescriptor {
+export function defineImporter(descriptor: ImporterDescriptor): ImporterDescriptor {
   if (!descriptor.id || descriptor.id.trim() === "") {
     throw new Error("[widget-sdk] defineImporter: id must not be empty");
   }
   if (!descriptor.label || descriptor.label.trim() === "") {
-    throw new Error(
-      `[widget-sdk] defineImporter(${descriptor.id}): label must not be empty`,
-    );
+    throw new Error(`[widget-sdk] defineImporter(${descriptor.id}): label must not be empty`);
   }
   if (!descriptor.component) {
-    throw new Error(
-      `[widget-sdk] defineImporter(${descriptor.id}): component must be provided`,
-    );
+    throw new Error(`[widget-sdk] defineImporter(${descriptor.id}): component must be provided`);
   }
   if (descriptor.surfaces.length === 0) {
-    throw new Error(
-      `[widget-sdk] defineImporter(${descriptor.id}): surfaces must not be empty`,
-    );
+    throw new Error(`[widget-sdk] defineImporter(${descriptor.id}): surfaces must not be empty`);
   }
   return descriptor;
 }

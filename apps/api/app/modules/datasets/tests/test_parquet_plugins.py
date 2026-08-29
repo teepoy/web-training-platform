@@ -15,7 +15,9 @@ from app.modules.datasets.port.http.extensions.import_parquet_router import (
     _is_image_struct,
     _parquet_to_sample_items,
 )
-from app.modules.datasets.port.http.extensions.export_parquet_router import _build_image_struct
+from app.modules.datasets.port.http.extensions.export_parquet_router import (
+    _build_image_struct,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -87,35 +89,57 @@ class TestExtractImageUri:
 
 class TestFindImageColumns:
     def test_detects_struct_column(self) -> None:
-        image_type = pa.struct([pa.field("bytes", pa.binary()), pa.field("path", pa.string())])
-        table = pa.table({
-            "image": pa.array([{"bytes": b"\x89", "path": "a.jpg"}], type=image_type),
-            "label": pa.array(["cat"]),
-        })
+        image_type = pa.struct(
+            [pa.field("bytes", pa.binary()), pa.field("path", pa.string())]
+        )
+        table = pa.table(
+            {
+                "image": pa.array(
+                    [{"bytes": b"\x89", "path": "a.jpg"}], type=image_type
+                ),
+                "label": pa.array(["cat"]),
+            }
+        )
         assert _find_image_columns(table) == ["image"]
 
     def test_detects_list_of_struct_column(self) -> None:
-        image_type = pa.struct([pa.field("bytes", pa.binary()), pa.field("path", pa.string())])
-        table = pa.table({
-            "images": pa.array([[{"bytes": b"\x89", "path": "a.jpg"}]], type=pa.list_(image_type)),
-            "label": pa.array(["cat"]),
-        })
+        image_type = pa.struct(
+            [pa.field("bytes", pa.binary()), pa.field("path", pa.string())]
+        )
+        table = pa.table(
+            {
+                "images": pa.array(
+                    [[{"bytes": b"\x89", "path": "a.jpg"}]], type=pa.list_(image_type)
+                ),
+                "label": pa.array(["cat"]),
+            }
+        )
         assert _find_image_columns(table) == ["images"]
 
     def test_no_image_columns(self) -> None:
-        table = pa.table({
-            "text": pa.array(["hello"]),
-            "label": pa.array(["cat"]),
-        })
+        table = pa.table(
+            {
+                "text": pa.array(["hello"]),
+                "label": pa.array(["cat"]),
+            }
+        )
         assert _find_image_columns(table) == []
 
     def test_multiple_image_columns(self) -> None:
-        image_type = pa.struct([pa.field("bytes", pa.binary()), pa.field("path", pa.string())])
-        table = pa.table({
-            "image": pa.array([{"bytes": b"\x89", "path": "a.jpg"}], type=image_type),
-            "thumbnail": pa.array([{"bytes": b"\x89", "path": "thumb_a.jpg"}], type=image_type),
-            "label": pa.array(["cat"]),
-        })
+        image_type = pa.struct(
+            [pa.field("bytes", pa.binary()), pa.field("path", pa.string())]
+        )
+        table = pa.table(
+            {
+                "image": pa.array(
+                    [{"bytes": b"\x89", "path": "a.jpg"}], type=image_type
+                ),
+                "thumbnail": pa.array(
+                    [{"bytes": b"\x89", "path": "thumb_a.jpg"}], type=image_type
+                ),
+                "label": pa.array(["cat"]),
+            }
+        )
         result = _find_image_columns(table)
         assert set(result) == {"image", "thumbnail"}
 
@@ -144,7 +168,9 @@ class TestFindLabelColumn:
 
 class TestParquetToSampleItems:
     def _make_hf_table(self, rows: int = 3) -> pa.Table:
-        image_type = pa.struct([pa.field("bytes", pa.binary()), pa.field("path", pa.string())])
+        image_type = pa.struct(
+            [pa.field("bytes", pa.binary()), pa.field("path", pa.string())]
+        )
         images = pa.array(
             [[{"bytes": b"\x89", "path": f"train/{i}.jpg"}] for i in range(rows)],
             type=pa.list_(image_type),
@@ -172,6 +198,13 @@ class TestParquetToSampleItems:
         assert items[0].metadata["caption"] == "caption 0"
         assert items[1].metadata["caption"] == "caption 1"
 
+    def test_extracts_portable_sample_id_outside_user_metadata(self) -> None:
+        table = self._make_hf_table(1).append_column(
+            "sample_id", pa.array(["portable-sample-1"])
+        )
+        items, _ = _parquet_to_sample_items(table)
+        assert items[0].metadata["__platform_sample_id"] == "portable-sample-1"
+
     def test_no_image_columns_warns(self) -> None:
         table = pa.table({"text": pa.array(["hello"]), "label": pa.array(["cat"])})
         items, warnings = _parquet_to_sample_items(table)
@@ -180,36 +213,48 @@ class TestParquetToSampleItems:
         assert items[0].image_uris == []
 
     def test_no_label_column(self) -> None:
-        image_type = pa.struct([pa.field("bytes", pa.binary()), pa.field("path", pa.string())])
-        table = pa.table({
-            "image": pa.array(
-                [[{"bytes": b"\x89", "path": "a.jpg"}]], type=pa.list_(image_type)
-            ),
-            "caption": pa.array(["a drawing of a cat"]),
-        })
+        image_type = pa.struct(
+            [pa.field("bytes", pa.binary()), pa.field("path", pa.string())]
+        )
+        table = pa.table(
+            {
+                "image": pa.array(
+                    [[{"bytes": b"\x89", "path": "a.jpg"}]], type=pa.list_(image_type)
+                ),
+                "caption": pa.array(["a drawing of a cat"]),
+            }
+        )
         items, _ = _parquet_to_sample_items(table)
         assert items[0].label is None
         assert items[0].metadata["caption"] == "a drawing of a cat"
 
     def test_null_label(self) -> None:
-        image_type = pa.struct([pa.field("bytes", pa.binary()), pa.field("path", pa.string())])
-        table = pa.table({
-            "image": pa.array(
-                [[{"bytes": b"\x89", "path": "a.jpg"}]], type=pa.list_(image_type)
-            ),
-            "label": pa.array([None], type=pa.string()),
-        })
+        image_type = pa.struct(
+            [pa.field("bytes", pa.binary()), pa.field("path", pa.string())]
+        )
+        table = pa.table(
+            {
+                "image": pa.array(
+                    [[{"bytes": b"\x89", "path": "a.jpg"}]], type=pa.list_(image_type)
+                ),
+                "label": pa.array([None], type=pa.string()),
+            }
+        )
         items, _ = _parquet_to_sample_items(table)
         assert items[0].label is None
 
     def test_null_metadata_value_skipped(self) -> None:
-        image_type = pa.struct([pa.field("bytes", pa.binary()), pa.field("path", pa.string())])
-        table = pa.table({
-            "image": pa.array(
-                [[{"bytes": b"\x89", "path": "a.jpg"}]], type=pa.list_(image_type)
-            ),
-            "extra": pa.array([None], type=pa.string()),
-        })
+        image_type = pa.struct(
+            [pa.field("bytes", pa.binary()), pa.field("path", pa.string())]
+        )
+        table = pa.table(
+            {
+                "image": pa.array(
+                    [[{"bytes": b"\x89", "path": "a.jpg"}]], type=pa.list_(image_type)
+                ),
+                "extra": pa.array([None], type=pa.string()),
+            }
+        )
         items, _ = _parquet_to_sample_items(table)
         assert "extra" not in items[0].metadata
 
@@ -236,9 +281,14 @@ def _make_parquet_bytes(table: pa.Table) -> bytes:
 
 
 def _make_hf_parquet(rows: int = 3) -> bytes:
-    image_type = pa.struct([pa.field("bytes", pa.binary()), pa.field("path", pa.string())])
+    image_type = pa.struct(
+        [pa.field("bytes", pa.binary()), pa.field("path", pa.string())]
+    )
     images = pa.array(
-        [[{"bytes": b"\x89", "path": f"memory://parquet/{i}.jpg"}] for i in range(rows)],
+        [
+            [{"bytes": b"\x89", "path": f"memory://parquet/{i}.jpg"}]
+            for i in range(rows)
+        ],
         type=pa.list_(image_type),
     )
     labels = pa.array([f"cls_{i}" for i in range(rows)], type=pa.string())
@@ -266,7 +316,13 @@ class TestImportParquetEndpoint:
             parquet_data = _make_hf_parquet(3)
             r = c.post(
                 f"/api/v1/plugins/import-parquet/import?dataset_id={dataset_id}",
-                files={"file": ("train.parquet", io.BytesIO(parquet_data), "application/octet-stream")},
+                files={
+                    "file": (
+                        "train.parquet",
+                        io.BytesIO(parquet_data),
+                        "application/octet-stream",
+                    )
+                },
             )
             assert r.status_code == 200
             body = r.json()
@@ -294,18 +350,26 @@ class TestImportParquetEndpoint:
             image_type = pa.struct(
                 [pa.field("bytes", pa.binary()), pa.field("path", pa.string())]
             )
-            table = pa.table({
-                "image": pa.array(
-                    [[{"bytes": b"\x89", "path": "memory://cat.jpg"}]],
-                    type=pa.list_(image_type),
-                ),
-                "label": pa.array(["cat"]),
-            })
+            table = pa.table(
+                {
+                    "image": pa.array(
+                        [[{"bytes": b"\x89", "path": "memory://cat.jpg"}]],
+                        type=pa.list_(image_type),
+                    ),
+                    "label": pa.array(["cat"]),
+                }
+            )
             parquet_data = _make_parquet_bytes(table)
 
             r = c.post(
                 f"/api/v1/plugins/import-parquet/import?dataset_id={dataset_id}",
-                files={"file": ("train.parquet", io.BytesIO(parquet_data), "application/octet-stream")},
+                files={
+                    "file": (
+                        "train.parquet",
+                        io.BytesIO(parquet_data),
+                        "application/octet-stream",
+                    )
+                },
             )
             assert r.status_code == 200
             body = r.json()
@@ -320,6 +384,39 @@ class TestImportParquetEndpoint:
             )
             assert anns.status_code == 200
             assert any(a["label"] == "cat" for a in anns.json())
+
+    def test_import_preserves_portable_sample_id(self) -> None:
+        with TestClient(app) as c:
+            ds = c.post(
+                "/api/v1/datasets",
+                json={
+                    "name": "parquet-portable-id-ds",
+                    "dataset_type": "image_classification",
+                    "task_spec": {
+                        "task_type": "classification",
+                        "label_space": ["cat"],
+                    },
+                },
+            )
+            dataset_id = ds.json()["id"]
+            table = pa.table(
+                {
+                    "sample_id": pa.array(["portable-sample-1"]),
+                    "label": pa.array(["cat"]),
+                }
+            )
+            response = c.post(
+                f"/api/v1/plugins/import-parquet/import?dataset_id={dataset_id}",
+                files={
+                    "file": (
+                        "portable.parquet",
+                        io.BytesIO(_make_parquet_bytes(table)),
+                        "application/octet-stream",
+                    )
+                },
+            )
+            assert response.status_code == 200
+            assert response.json()["sample_ids"] == ["portable-sample-1"]
 
     def test_import_invalid_file(self) -> None:
         with TestClient(app) as c:
@@ -339,7 +436,13 @@ class TestImportParquetEndpoint:
 
             r = c.post(
                 f"/api/v1/plugins/import-parquet/import?dataset_id={dataset_id}",
-                files={"file": ("bad.parquet", io.BytesIO(b"not a parquet file"), "application/octet-stream")},
+                files={
+                    "file": (
+                        "bad.parquet",
+                        io.BytesIO(b"not a parquet file"),
+                        "application/octet-stream",
+                    )
+                },
             )
             assert r.status_code == 400
             assert "Invalid parquet file" in r.json()["detail"]
@@ -365,7 +468,13 @@ class TestImportParquetEndpoint:
 
             r = c.post(
                 f"/api/v1/plugins/import-parquet/import?dataset_id={dataset_id}",
-                files={"file": ("empty.parquet", io.BytesIO(parquet_data), "application/octet-stream")},
+                files={
+                    "file": (
+                        "empty.parquet",
+                        io.BytesIO(parquet_data),
+                        "application/octet-stream",
+                    )
+                },
             )
             assert r.status_code == 400
             assert "no rows" in r.json()["detail"].lower()
@@ -375,7 +484,13 @@ class TestImportParquetEndpoint:
             parquet_data = _make_hf_parquet(1)
             r = c.post(
                 "/api/v1/plugins/import-parquet/import?dataset_id=nonexistent-id-99999",
-                files={"file": ("train.parquet", io.BytesIO(parquet_data), "application/octet-stream")},
+                files={
+                    "file": (
+                        "train.parquet",
+                        io.BytesIO(parquet_data),
+                        "application/octet-stream",
+                    )
+                },
             )
             assert r.status_code == 404
 
@@ -400,12 +515,19 @@ class TestImportParquetEndpoint:
 
             r = c.post(
                 f"/api/v1/plugins/import-parquet/import?dataset_id={dataset_id}",
-                files={"file": ("noimg.parquet", io.BytesIO(parquet_data), "application/octet-stream")},
+                files={
+                    "file": (
+                        "noimg.parquet",
+                        io.BytesIO(parquet_data),
+                        "application/octet-stream",
+                    )
+                },
             )
             assert r.status_code == 200
             body = r.json()
             assert body["imported"] == 1
             assert any("No image columns" in e for e in body["errors"])
+
 
 # ---------------------------------------------------------------------------
 # Integration tests — export endpoint
@@ -532,5 +654,6 @@ class TestExportParquetEndpoint:
                 content = resolve_r.content
                 table = pq.read_table(io.BytesIO(content))
                 assert table.num_rows == 1
+                assert table.column("sample_id")[0].as_py()
                 assert "image" in table.column_names
                 assert "label" in table.column_names

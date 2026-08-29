@@ -1051,6 +1051,64 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HTTPValidationError"
+  /api/v1/datasets/{dataset_id}/annotations/export:
+    get:
+      tags:
+        - datasets
+      summary: Export Annotations
+      operationId: export_annotations_api_v1_datasets__dataset_id__annotations_export_get
+      parameters:
+        - name: dataset_id
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Dataset Id
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/x-ndjson:
+              schema:
+                type: string
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /api/v1/datasets/{dataset_id}/annotations/import:
+    post:
+      tags:
+        - datasets
+      summary: Import Annotations
+      operationId: import_annotations_api_v1_datasets__dataset_id__annotations_import_post
+      parameters:
+        - name: dataset_id
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Dataset Id
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/Body_import_annotations_api_v1_datasets__dataset_id__annotations_import_post"
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnnotationImportResponse"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
   /api/v1/datasets/{dataset_id}/sync-annotations-to-ls:
     post:
       tags:
@@ -6364,6 +6422,19 @@ components:
         - label
         - created_by
       title: Annotation
+    AnnotationImportResponse:
+      properties:
+        imported:
+          type: integer
+          title: Imported
+        cleared:
+          type: integer
+          title: Cleared
+      type: object
+      required:
+        - imported
+        - cleared
+      title: AnnotationImportResponse
     AnnotationVersionResponse:
       properties:
         id:
@@ -6578,6 +6649,17 @@ components:
         - end_utc
         - timezone
       title: BackfillRangeRequest
+    Body_import_annotations_api_v1_datasets__dataset_id__annotations_import_post:
+      properties:
+        file:
+          type: string
+          contentMediaType: application/octet-stream
+          title: File
+          format: binary
+      type: object
+      required:
+        - file
+      title: Body_import_annotations_api_v1_datasets__dataset_id__annotations_import_post
     Body_import_parquet_api_v1_plugins_import_parquet_import_post:
       properties:
         file:

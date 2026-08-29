@@ -28,9 +28,11 @@ import type {
 import type {
   AddMemberRequest,
   Annotation,
+  AnnotationImportResponse,
   BackfillPreviewRequest,
   BackfillPreviewResponse,
   BackfillRangeRequest,
+  BodyImportAnnotationsApiV1DatasetsDatasetIdAnnotationsImportPost,
   BodyImportParquetApiV1PluginsImportParquetImportPost,
   BodyUploadModelApiV1ModelsUploadPost,
   BodyUploadSampleImageApiV1DatasetsDatasetIdSamplesSampleIdUploadPost,
@@ -2456,6 +2458,149 @@ export const useBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkPost =
       > => {
 
       const mutationOptions = getBulkCreateAnnotationsApiV1DatasetsDatasetIdAnnotationsBulkPostMutationOptions(options);
+
+      return useMutation(mutationOptions);
+    }
+
+/**
+ * @summary Export Annotations
+ */
+export const getExportAnnotationsApiV1DatasetsDatasetIdAnnotationsExportGetUrl = (datasetId: string,) => {
+
+
+  return `/api/v1/datasets/${datasetId}/annotations/export`
+}
+
+export const exportAnnotationsApiV1DatasetsDatasetIdAnnotationsExportGet = async (datasetId: string, options?: RequestInit): Promise<Response> => {
+
+  return orvalFetcher<Response>(getExportAnnotationsApiV1DatasetsDatasetIdAnnotationsExportGetUrl(datasetId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getExportAnnotationsApiV1DatasetsDatasetIdAnnotationsExportGetQueryKey = (datasetId: MaybeRef<string>,) => {
+    return ['api','v1','datasets',datasetId,'annotations','export'] as const;
+    }
+
+
+export const getExportAnnotationsApiV1DatasetsDatasetIdAnnotationsExportGetQueryOptions = <TData = Awaited<ReturnType<typeof exportAnnotationsApiV1DatasetsDatasetIdAnnotationsExportGet>>, TError = ErrorType<HTTPValidationError>>(datasetId: MaybeRef<string>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportAnnotationsApiV1DatasetsDatasetIdAnnotationsExportGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  getExportAnnotationsApiV1DatasetsDatasetIdAnnotationsExportGetQueryKey(datasetId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportAnnotationsApiV1DatasetsDatasetIdAnnotationsExportGet>>> = ({ signal }) => exportAnnotationsApiV1DatasetsDatasetIdAnnotationsExportGet(unref(datasetId), { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: computed(() => !!(unref(datasetId))), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportAnnotationsApiV1DatasetsDatasetIdAnnotationsExportGet>>, TError, TData>
+}
+
+export type ExportAnnotationsApiV1DatasetsDatasetIdAnnotationsExportGetQueryResult = NonNullable<Awaited<ReturnType<typeof exportAnnotationsApiV1DatasetsDatasetIdAnnotationsExportGet>>>
+export type ExportAnnotationsApiV1DatasetsDatasetIdAnnotationsExportGetQueryError = ErrorType<HTTPValidationError>
+
+
+/**
+ * @summary Export Annotations
+ */
+
+export function useExportAnnotationsApiV1DatasetsDatasetIdAnnotationsExportGet<TData = Awaited<ReturnType<typeof exportAnnotationsApiV1DatasetsDatasetIdAnnotationsExportGet>>, TError = ErrorType<HTTPValidationError>>(
+ datasetId: MaybeRef<string>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportAnnotationsApiV1DatasetsDatasetIdAnnotationsExportGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+
+  ): UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getExportAnnotationsApiV1DatasetsDatasetIdAnnotationsExportGetQueryOptions(datasetId,options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = unref(queryOptions).queryKey as DataTag<QueryKey, TData, TError>;
+
+  return query;
+}
+
+
+
+
+/**
+ * @summary Import Annotations
+ */
+export const getImportAnnotationsApiV1DatasetsDatasetIdAnnotationsImportPostUrl = (datasetId: string,) => {
+
+
+  return `/api/v1/datasets/${datasetId}/annotations/import`
+}
+
+export const importAnnotationsApiV1DatasetsDatasetIdAnnotationsImportPost = async (datasetId: string,
+    bodyImportAnnotationsApiV1DatasetsDatasetIdAnnotationsImportPost: BodyImportAnnotationsApiV1DatasetsDatasetIdAnnotationsImportPost, options?: RequestInit): Promise<AnnotationImportResponse> => {
+    const formData = new FormData();
+formData.append('file', bodyImportAnnotationsApiV1DatasetsDatasetIdAnnotationsImportPost.file)
+
+  return orvalFetcher<AnnotationImportResponse>(getImportAnnotationsApiV1DatasetsDatasetIdAnnotationsImportPostUrl(datasetId),
+  {
+    ...options,
+    method: 'POST'
+    ,
+    body:
+      formData,
+  }
+);}
+
+
+
+
+export const getImportAnnotationsApiV1DatasetsDatasetIdAnnotationsImportPostMutationOptions = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importAnnotationsApiV1DatasetsDatasetIdAnnotationsImportPost>>, TError,{datasetId: string;data: BodyType<BodyImportAnnotationsApiV1DatasetsDatasetIdAnnotationsImportPost>}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+): UseMutationOptions<Awaited<ReturnType<typeof importAnnotationsApiV1DatasetsDatasetIdAnnotationsImportPost>>, TError,{datasetId: string;data: BodyType<BodyImportAnnotationsApiV1DatasetsDatasetIdAnnotationsImportPost>}, TContext> => {
+
+const mutationKey = ['importAnnotationsApiV1DatasetsDatasetIdAnnotationsImportPost'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof importAnnotationsApiV1DatasetsDatasetIdAnnotationsImportPost>>, {datasetId: string;data: BodyType<BodyImportAnnotationsApiV1DatasetsDatasetIdAnnotationsImportPost>}> = (props) => {
+          const {datasetId,data} = props ?? {};
+
+          return  importAnnotationsApiV1DatasetsDatasetIdAnnotationsImportPost(datasetId,data,requestOptions)
+        }
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ImportAnnotationsApiV1DatasetsDatasetIdAnnotationsImportPostMutationResult = NonNullable<Awaited<ReturnType<typeof importAnnotationsApiV1DatasetsDatasetIdAnnotationsImportPost>>>
+    export type ImportAnnotationsApiV1DatasetsDatasetIdAnnotationsImportPostMutationBody = BodyType<BodyImportAnnotationsApiV1DatasetsDatasetIdAnnotationsImportPost>
+    export type ImportAnnotationsApiV1DatasetsDatasetIdAnnotationsImportPostMutationError = ErrorType<HTTPValidationError>
+
+    /**
+ * @summary Import Annotations
+ */
+export const useImportAnnotationsApiV1DatasetsDatasetIdAnnotationsImportPost = <TError = ErrorType<HTTPValidationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importAnnotationsApiV1DatasetsDatasetIdAnnotationsImportPost>>, TError,{datasetId: string;data: BodyType<BodyImportAnnotationsApiV1DatasetsDatasetIdAnnotationsImportPost>}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
+): UseMutationReturnType<
+        Awaited<ReturnType<typeof importAnnotationsApiV1DatasetsDatasetIdAnnotationsImportPost>>,
+        TError,
+        {datasetId: string;data: BodyType<BodyImportAnnotationsApiV1DatasetsDatasetIdAnnotationsImportPost>},
+        TContext
+      > => {
+
+      const mutationOptions = getImportAnnotationsApiV1DatasetsDatasetIdAnnotationsImportPostMutationOptions(options);
 
       return useMutation(mutationOptions);
     }

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 # pyright: reportMissingImports=false
 
-import io
 import logging
 from collections.abc import AsyncIterator
 from typing import TypeGuard
@@ -12,6 +11,7 @@ import pyarrow.parquet as pq
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pyarrow import Table as ArrowTable
 
+from app.core.config import AppConfig
 from app.shared.api.schemas import Annotation, Organization, User, SPARSE_NO_LS
 from app.modules.auth.port.http.deps import (
     get_current_org,
@@ -24,6 +24,7 @@ from app.modules.datasets.port.http.schemas import (
 from app.modules.datasets.port.http.deps import LabelStudioClientDep
 from app.modules.datasets.domain.repository import DatasetRepository
 from app.modules.datasets.port.http.deps import (
+    get_config,
     get_repository,
     get_dataset_storage_factory,
 )
@@ -35,6 +36,7 @@ from app.shared.infrastructure.label_studio.client import (
 
 router = APIRouter(prefix="/api/v1/plugins/import-parquet", tags=["plugins"])
 _logger = logging.getLogger(__name__)
+_PORTABLE_SAMPLE_ID_KEY = "__platform_sample_id"
 
 
 def _is_image_struct(value: object) -> TypeGuard[dict[str, object]]:
@@ -110,7 +112,9 @@ def _parquet_to_sample_items(
     image_cols = _find_image_columns(table)
     label_col = _find_label_column(table, image_cols)
     metadata_cols = [
-        c for c in table.column_names if c not in image_cols and c != label_col
+        c
+        for c in table.column_names
+        if c not in image_cols and c != label_col and c != "sample_id"
     ]
 
     warnings: list[str] = []
@@ -134,6 +138,10 @@ def _parquet_to_sample_items(
                 label = str(raw)
 
         metadata: dict[str, object] = {}
+        if "sample_id" in table.column_names:
+            raw_sample_id = table.column("sample_id")[row_idx].as_py()
+            if raw_sample_id is not None:
+                metadata[_PORTABLE_SAMPLE_ID_KEY] = str(raw_sample_id)
         for mc in metadata_cols:
             val = table.column(mc)[row_idx].as_py()
             if val is not None:
@@ -166,6 +174,7 @@ async def import_parquet(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
+    config: AppConfig = Depends(get_config),
 ) -> BulkCreateSampleResponse:
     dataset = await repo.get_dataset(dataset_id, org_id=org.id)
     if dataset is None:
@@ -175,10 +184,30 @@ async def import_parquet(
             status_code=500,
             detail="Dataset has no Label Studio project — cannot create sample.",
         )
+    storage = await factory.open(dataset_id, org_id=org.id)
 
-    content = await file.read()
+    await file.seek(0)
+    file.file.seek(0, 2)
+    file_size = file.file.tell()
+    file.file.seek(0)
+    if file_size > config.dataset_transfer.parquet_import_max_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail="Parquet import exceeds the configured byte limit",
+        )
     try:
-        table = pq.read_table(io.BytesIO(content))
+        parquet_file = pq.ParquetFile(file.file)
+        if (
+            parquet_file.metadata.num_rows
+            > config.dataset_transfer.parquet_import_max_rows
+        ):
+            raise HTTPException(
+                status_code=413,
+                detail="Parquet import exceeds the configured row limit",
+            )
+        table = parquet_file.read()
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Invalid parquet file: {exc}")
 
@@ -193,6 +222,24 @@ async def import_parquet(
 
     for w in warnings:
         _logger.warning("parquet import [%s]: %s", dataset_id, w)
+
+    sample_ids = [
+        str(item.metadata.pop(_PORTABLE_SAMPLE_ID_KEY, "")).strip() or uuid4().hex
+        for item in items
+    ]
+    if len(sample_ids) != len(set(sample_ids)):
+        raise HTTPException(
+            status_code=422, detail="Parquet sample_id values must be unique"
+        )
+    existing_sample_ids = await storage.existing_sample_ids(set(sample_ids))
+    if existing_sample_ids:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Parquet sample_id values already exist in the target Dataset: "
+                + ", ".join(sorted(existing_sample_ids)[:5])
+            ),
+        )
 
     ls_tasks: list[dict] = []
     for item in items:
@@ -226,7 +273,6 @@ async def import_parquet(
             status_code=502, detail=f"Label Studio bulk import failed: {exc}"
         )
 
-    sample_ids: list[str] = [uuid4().hex for _ in items]
     bulk_rows = [
         BulkSampleRow(
             sample_id=sample_ids[idx],
@@ -238,7 +284,6 @@ async def import_parquet(
         for idx, item in enumerate(items)
     ]
 
-    storage = await factory.open(dataset_id, org_id=org.id)
     await storage.write_samples(_collect_bulk_rows_parquet(bulk_rows))
 
     ann_list: list[Annotation] = []

@@ -183,12 +183,25 @@ class ModelService:
             )
 
     async def download_model(self, artifact_id: str, org_id: str) -> tuple[bytes, str]:
+        uri, filename, _ = await self.prepare_model_download(artifact_id, org_id)
+        try:
+            data = await self.artifact_storage.get_bytes(uri)
+        except FileNotFoundError as exc:
+            raise HTTPException(
+                status_code=404,
+                detail="Model file not found in storage",
+            ) from exc
+        return data, filename
+
+    async def prepare_model_download(
+        self, artifact_id: str, org_id: str
+    ) -> tuple[str, str, int]:
         model = await self.repository.get_model(artifact_id, org_id)
         if model is None:
             raise HTTPException(status_code=404, detail="Model not found")
 
         try:
-            data = await self.artifact_storage.get_bytes(model.uri)
+            size = await self.artifact_storage.get_size(model.uri)
         except FileNotFoundError as exc:
             raise HTTPException(
                 status_code=404,
@@ -207,7 +220,7 @@ class ModelService:
             if ext and not filename.endswith(ext):
                 filename += ext
 
-        return data, filename
+        return model.uri, filename, size
 
     async def upload_model(
         self,

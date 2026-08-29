@@ -184,6 +184,33 @@ Source version 与 Import profile version 建立 Import receipt 和数据库唯�
 重放/并发创建重复 Dataset；不同 Automation/Collection 不共享自动导入的 Dataset。
 Dataset name 不是 identity。
 
+Dataset/annotation/Model transfer uses registered frontend importer/exporter
+descriptors rather than page-owned format switches. The first portable Dataset
+format is Parquet sample rows: `sample_id` is a dedicated identity column, latest
+label is included, image object references remain references, and receiving
+Dataset metadata/organization/creator are never imported. Legacy Parquet without
+`sample_id` remains accepted and receives new platform IDs; an explicit imported
+ID must be unique and absent from the target Dataset. Export writes paged row
+groups to object storage, while import is bounded by tracked YAML byte and row
+limits.
+
+Portable annotations use `platform.annotations.jsonl` schema version 1, an exact
+Dataset contract (`dataset_type`, `task_type`, ordered label space), and platform
+`sample_id` identity. Import mode is `replace_provided`: omitted samples are
+unchanged and an explicit null clears the provided sample. The complete file,
+labels, duplicate IDs, and sample membership are validated before the first write;
+writes are bounded batches and replay is idempotent. A storage failure after
+writes begin may leave completed batches applied, and replaying the same file is
+the recovery boundary. Unknown samples, labels, or contract mismatches fail rather
+than being ignored; extra fields are ignored.
+
+Model export returns the immutable artifact bytes with bounded streaming and the
+stored checksum remains the integrity fact. Model import attaches an artifact to
+an existing training job in the receiving organization; that job fixes Dataset,
+trainer, view/model contract, creator authorization, and provenance. Imported
+organization/user IDs or alternate contracts are not accepted. Trainer-owned
+artifact validation runs before the Model becomes usable.
+
 ### Dataset Collection 与 Snapshot
 
 Collection 是 Dataset membership 的组合资源；Dataset 与 Collection 在 `Library` 中
