@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { NButton, NModal, NSpace } from "naive-ui";
+import { useI18n } from "vue-i18n";
 
 import FlowTypeSelector from "../flow-type-selector/FlowTypeSelector.vue";
 import type { FlowCard, FlowKind } from "../../flow";
@@ -20,6 +21,7 @@ const emit = defineEmits<{
 
 const step = ref<"select" | "execute">("select");
 const selectedFlow = ref<FlowCard | null>(null);
+const { t } = useI18n();
 
 watch(
   () => props.show,
@@ -38,7 +40,11 @@ const modalTitle = computed(() => {
 
   return (
     props.title ??
-    (props.kind === "import" ? "Import" : props.kind === "export" ? "Export" : "Preview")
+    (props.kind === "import"
+      ? t("common.import")
+      : props.kind === "export"
+        ? t("common.export")
+        : t("common.preview"))
   );
 });
 
@@ -107,9 +113,11 @@ function handleBack(): void {
     </template>
     <template #footer>
       <NSpace justify="space-between">
-        <NButton v-if="step === 'execute'" @click="handleBack"> &larr; Back </NButton>
+        <NButton v-if="step === 'execute'" @click="handleBack">
+          &larr; {{ t("common.back") }}
+        </NButton>
         <span v-else />
-        <NButton @click="emit('update:show', false)"> Cancel </NButton>
+        <NButton @click="emit('update:show', false)">{{ t("common.cancel") }}</NButton>
       </NSpace>
     </template>
   </NModal>

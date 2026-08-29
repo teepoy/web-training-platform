@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { NAlert, NButton, NText } from "naive-ui";
+import { useI18n } from "vue-i18n";
 
 defineProps<{
   outdatedMemberCount: number;
@@ -11,26 +12,32 @@ defineProps<{
 defineEmits<{
   refresh: [];
 }>();
+const { t } = useI18n();
 </script>
 
 <template>
-  <NAlert title="Update available" type="warning" class="snapshot-update-alert">
+  <NAlert
+    :title="t('collectionDetail.updateAvailable')"
+    type="warning"
+    class="snapshot-update-alert"
+  >
     <div class="snapshot-update-content">
       <div>
         <strong>
-          {{ outdatedMemberCount }} linked Dataset{{
-            outdatedMemberCount === 1 ? " has" : "s have"
+          {{
+            t(
+              "collectionDetail.outdatedMembers",
+              { count: outdatedMemberCount },
+              outdatedMemberCount,
+            )
           }}
-          newer change numbers.
         </strong>
-        Refreshing records the latest observed change number for every member in a new Collection
-        Snapshot. It does not copy or freeze Dataset data, and it does not start prediction or
-        training.
+        {{ t("collectionDetail.refreshExplanation") }}
         <NText v-if="snapshotRevisionNumber !== null" depth="3">
-          Current Snapshot: #{{ snapshotRevisionNumber }}.
+          {{ t("collectionDetail.currentSnapshot", { revision: snapshotRevisionNumber }) }}
         </NText>
         <NText v-if="!canModify" depth="3">
-          Only the Collection creator can refresh this snapshot.
+          {{ t("collectionDetail.creatorRefreshOnly") }}
         </NText>
       </div>
       <NButton
@@ -40,7 +47,7 @@ defineEmits<{
         :loading="loading"
         @click="$emit('refresh')"
       >
-        Refresh snapshot
+        {{ t("collectionDetail.refreshSnapshot") }}
       </NButton>
     </div>
   </NAlert>

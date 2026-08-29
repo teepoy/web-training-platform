@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { useI18n } from "vue-i18n";
 import { useQueryClient } from "@tanstack/vue-query";
 import { FlowModal, SampleDetailDrawer, type FlowCard } from "@/shared";
 import {
@@ -21,11 +22,13 @@ import DatasetPredictionExportTab from "@/features/datasets/presentation/compone
 import DatasetViewPage from "@/features/datasets/presentation/pages/DatasetViewPage.vue";
 import GlobalFilterControl from "@/features/sc/presentation/components/GlobalFilterControl.vue";
 import { supportsScPredictionExport } from "@/features/sc/domain/predictionExportCapability";
+import { formatDateTime, formatNumber } from "@/shared/i18n/format";
 
 const route = useRoute();
 const router = useRouter();
 const qc = useQueryClient();
 const orgStore = useOrgStore();
+const { t } = useI18n();
 
 const id = computed(() => String(route.params.id));
 function tabFromHash(hash: string): string {
@@ -85,10 +88,11 @@ const sampleCount = computed<number | null>(() => {
   return typeof metadataTotal === "number" ? metadataTotal : null;
 });
 const datasetKindLabel = computed(() => {
-  if (isScDataset.value) return "Patch inspection";
-  if (dataset.value?.dataset_type === "image_classification") return "Image classification";
+  if (isScDataset.value) return t("datasetDetail.patchInspection");
+  if (dataset.value?.dataset_type === "image_classification")
+    return t("datasetDetail.imageClassification");
   const value = dataset.value?.dataset_type?.replace(/_/g, " ").trim();
-  return value ? value.replace(/^./, (character) => character.toUpperCase()) : "Dataset";
+  return value || t("datasetDetail.dataset");
 });
 
 const availableTabs = computed(() => {
@@ -127,30 +131,29 @@ watch(activeTab, (tab) => {
   if (route.hash !== hash) void router.replace({ hash });
 });
 
-const importerFlows: FlowCard[] = [
+const importerFlows = computed<FlowCard[]>(() => [
   {
     id: "import-manual",
-    label: "Manual Sample Entry",
-    description: "Create one sample at a time with URI, metadata, or uploaded image.",
+    label: t("datasetDetail.manualEntry"),
+    description: t("datasetDetail.manualEntryHelp"),
     icon: "✏️",
     component: ManualImporter,
   },
   {
     id: "import-dataset-manual",
-    label: "Import from JSON",
-    description: "Create a dataset by uploading a JSON file of sample items.",
+    label: t("datasetDetail.importJson"),
+    description: t("datasetDetail.importJsonHelp"),
     icon: "📁",
     component: ManualDatasetImporter,
   },
   {
     id: "import-parquet",
-    label: "Import from Parquet",
-    description:
-      "Import samples from a HuggingFace-compatible Parquet file (image struct with bytes/path columns).",
+    label: t("datasetDetail.importParquet"),
+    description: t("datasetDetail.importParquetHelp"),
     icon: "📦",
     component: ParquetImporter,
   },
-];
+]);
 
 function handleImporterComplete() {
   showImportFlow.value = false;
@@ -183,11 +186,13 @@ function handleTabBeforeLeave(name: string | number): boolean {
     <n-result
       v-else-if="datasetQuery.isError.value || !datasetQuery.data.value"
       status="404"
-      title="Dataset Not Found"
-      description="The dataset you are looking for does not exist or could not be loaded."
+      :title="t('datasetDetail.notFound')"
+      :description="t('datasetDetail.notFoundHelp')"
     >
       <template #footer
-        ><n-button @click="router.push('/datasets')">Back to Datasets</n-button></template
+        ><n-button @click="router.push('/datasets')">{{
+          t("datasetDetail.back")
+        }}</n-button></template
       >
     </n-result>
 
@@ -196,7 +201,7 @@ function handleTabBeforeLeave(name: string | number): boolean {
         <div class="dataset-heading">
           <n-button text class="back-button" @click="router.push('/datasets')">
             <template #icon><span aria-hidden="true">&#8592;</span></template>
-            Datasets
+            {{ t("datasetDetail.datasets") }}
           </n-button>
           <div class="dataset-title-block">
             <div class="dataset-title-line">
@@ -211,7 +216,7 @@ function handleTabBeforeLeave(name: string | number): boolean {
             :type="dataset.task_spec?.task_type === 'sc' ? 'default' : 'primary'"
             @click="showImportFlow = true"
           >
-            Add samples
+            {{ t("datasetDetail.addSamples") }}
           </n-button>
         </n-space>
       </header>
@@ -225,61 +230,61 @@ function handleTabBeforeLeave(name: string | number): boolean {
         class="dataset-tabs"
         :on-before-leave="handleTabBeforeLeave"
       >
-        <n-tab-pane name="overview" tab="Overview">
-          <n-card size="small" title="About this dataset" class="dataset-overview-card">
+        <n-tab-pane name="overview" :tab="t('datasetDetail.overview')">
+          <n-card size="small" :title="t('datasetDetail.about')" class="dataset-overview-card">
             <div class="dataset-overview-grid">
               <div class="overview-field">
-                <n-text depth="3">Purpose</n-text>
+                <n-text depth="3">{{ t("datasetDetail.purpose") }}</n-text>
                 <strong>{{ datasetKindLabel }}</strong>
               </div>
               <div class="overview-field">
-                <n-text depth="3">Samples</n-text>
-                <strong>{{ sampleCount === null ? "—" : sampleCount.toLocaleString() }}</strong>
+                <n-text depth="3">{{ t("datasetDetail.samples") }}</n-text>
+                <strong>{{ sampleCount === null ? "—" : formatNumber(sampleCount) }}</strong>
               </div>
               <div class="overview-field">
-                <n-text depth="3">Created by</n-text>
-                <strong>{{ dataset.creator_name || dataset.created_by || "System" }}</strong>
-              </div>
-              <div class="overview-field">
-                <n-text depth="3">Created</n-text>
+                <n-text depth="3">{{ t("datasetDetail.createdBy") }}</n-text>
                 <strong>{{
-                  dataset.created_at ? new Date(dataset.created_at).toLocaleString() : "—"
+                  dataset.creator_name || dataset.created_by || t("common.system")
                 }}</strong>
               </div>
+              <div class="overview-field">
+                <n-text depth="3">{{ t("datasetDetail.created") }}</n-text>
+                <strong>{{ dataset.created_at ? formatDateTime(dataset.created_at) : "—" }}</strong>
+              </div>
               <div class="overview-field overview-field-wide">
-                <n-text depth="3">Labels</n-text>
+                <n-text depth="3">{{ t("datasetDetail.labels") }}</n-text>
                 <n-space v-if="labelSpace.length" size="small">
                   <n-tag v-for="label in labelSpace" :key="label" size="small">
                     {{ label }}
                   </n-tag>
                 </n-space>
-                <n-text v-else depth="3">No labels configured</n-text>
+                <n-text v-else depth="3">{{ t("datasetDetail.noLabels") }}</n-text>
               </div>
             </div>
           </n-card>
         </n-tab-pane>
         <n-tab-pane v-if="isScDataset" name="classify">
           <template #tab>
-            <span>Classify <span aria-hidden="true">&#8599;</span></span>
+            <span>{{ t("datasetDetail.classify") }}</span>
           </template>
         </n-tab-pane>
-        <n-tab-pane v-else-if="hasSampleBrowser" name="samples" tab="Samples">
+        <n-tab-pane v-else-if="hasSampleBrowser" name="samples" :tab="t('datasetDetail.samples')">
           <DatasetViewPage
             :dataset-id="id"
             view-type="image_input_v1"
             @select-sample="selectedSampleId = $event"
           />
         </n-tab-pane>
-        <n-tab-pane name="train" tab="Train">
+        <n-tab-pane name="train" :tab="t('datasetDetail.train')">
           <DatasetTrainTab :dataset-id="id" :dataset="dataset" />
         </n-tab-pane>
-        <n-tab-pane name="predict" tab="Predict">
+        <n-tab-pane name="predict" :tab="t('datasetDetail.predict')">
           <DatasetPredictTab :dataset-id="id" :compatible-view-types="dataset.view_types ?? []" />
         </n-tab-pane>
-        <n-tab-pane v-if="supportsPredictionExport" name="export" tab="Export">
+        <n-tab-pane v-if="supportsPredictionExport" name="export" :tab="t('datasetDetail.export')">
           <DatasetPredictionExportTab :dataset-id="id" />
         </n-tab-pane>
-        <n-tab-pane v-if="!isSparse" name="annotate" tab="Annotate">
+        <n-tab-pane v-if="!isSparse" name="annotate" :tab="t('datasetDetail.annotate')">
           <template v-if="dataset?.ls_project_url"
             ><iframe
               :src="dataset.ls_project_url"
@@ -287,18 +292,19 @@ function handleTabBeforeLeave(name: string | number): boolean {
               allow="clipboard-read; clipboard-write"
             />
             <div style="margin-top: 8px; display: flex; align-items: center; gap: 8px">
-              <n-text depth="3" style="font-size: 12px"
-                >Label Studio Project #{{ dataset.ls_project_id }}</n-text
-              ><n-button text size="small" tag="a" :href="dataset.ls_project_url" target="_blank"
-                >Open in new tab ↗</n-button
-              >
+              <n-text depth="3" style="font-size: 12px">{{
+                t("datasetDetail.labelStudioProject", { id: dataset.ls_project_id })
+              }}</n-text
+              ><n-button text size="small" tag="a" :href="dataset.ls_project_url" target="_blank">{{
+                t("datasetDetail.openNewTab")
+              }}</n-button>
             </div></template
           >
           <n-result
             v-else
             status="info"
-            title="Label Studio URL Not Configured"
-            description="The server does not have a Label Studio URL configured. Contact your administrator."
+            :title="t('datasetDetail.labelStudioMissing')"
+            :description="t('datasetDetail.labelStudioMissingHelp')"
           />
         </n-tab-pane>
       </n-tabs>
@@ -320,7 +326,7 @@ function handleTabBeforeLeave(name: string | number): boolean {
         v-model:show="showImportFlow"
         :flows="importerFlows"
         kind="import"
-        title="Import Samples"
+        :title="t('datasetDetail.importSamples')"
         :dataset-id="id"
         @complete="handleImporterComplete"
       />

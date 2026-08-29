@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import { useI18n } from "vue-i18n";
 import { useQuery } from "@tanstack/vue-query";
 import { NButton, NResult, NSpin, NText } from "naive-ui";
 import { getViewSamples } from "@/shared/api/datasets";
@@ -22,6 +23,7 @@ const emit = defineEmits<{
 const id = computed(() => props.datasetId);
 const viewType = computed(() => props.viewType);
 const orgStore = useOrgStore();
+const { t } = useI18n();
 
 const viewSchema = computed(() => getViewSchema(viewType.value));
 const viewComponent = computed(() => resolveViewComponent(viewType.value));
@@ -73,8 +75,13 @@ function handlePrevPage() {
     <n-result
       v-if="isViewValid === false"
       status="404"
-      title="Invalid View Type"
-      :description="`View type '${viewType}' is not registered or not supported for this dataset. Registered view types: ${listRegisteredViewTypes().join(', ') || 'none'}`"
+      :title="t('datasetDetail.invalidView')"
+      :description="
+        t('datasetDetail.invalidViewHelp', {
+          viewType,
+          registered: listRegisteredViewTypes().join(', ') || t('datasetDetail.none'),
+        })
+      "
     />
 
     <template v-else>
@@ -86,8 +93,8 @@ function handlePrevPage() {
       <n-result
         v-else-if="!isSelfLoadingView && viewSamplesQuery.isError.value"
         status="error"
-        title="Failed to Load View Data"
-        description="Could not load samples for this view. The view type may not be supported by the backend."
+        :title="t('datasetDetail.viewLoadFailed')"
+        :description="t('datasetDetail.viewLoadFailedHelp')"
       />
 
       <template v-else>
@@ -104,13 +111,21 @@ function handlePrevPage() {
           v-if="!isSelfLoadingView && viewData && viewData.total > limit"
           style="display: flex; justify-content: center; gap: 12px; margin-top: 16px"
         >
-          <n-button :disabled="offset === 0" @click="handlePrevPage">Previous</n-button>
+          <n-button :disabled="offset === 0" @click="handlePrevPage">
+            {{ t("common.previous") }}
+          </n-button>
           <n-text depth="3" style="line-height: 34px">
-            {{ offset + 1 }}–{{ Math.min(offset + limit, viewData.total) }} of {{ viewData.total }}
+            {{
+              t("common.pageRange", {
+                start: offset + 1,
+                end: Math.min(offset + limit, viewData.total),
+                total: viewData.total,
+              })
+            }}
           </n-text>
-          <n-button :disabled="offset + limit >= viewData.total" @click="handleNextPage"
-            >Next</n-button
-          >
+          <n-button :disabled="offset + limit >= viewData.total" @click="handleNextPage">{{
+            t("common.next")
+          }}</n-button>
         </div>
       </template>
     </template>

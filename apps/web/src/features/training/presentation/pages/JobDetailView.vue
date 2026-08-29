@@ -1,19 +1,21 @@
 <template>
   <n-space vertical size="large">
-    <n-page-header :title="job ? job.id : 'Loading…'" @back="goBack">
+    <n-page-header :title="job ? job.id : t('common.loading')" @back="goBack">
       <template #subtitle>
         <n-space align="center" :size="8">
           <n-tag v-if="job" :type="statusType(job.status!)" size="small" round>
-            {{ job.status }}
+            {{ t(`status.${job.status}`) }}
           </n-tag>
           <span v-if="job" style="color: var(--n-text-color-3); font-size: 12px">
-            by {{ job.created_by }}
+            {{ t("jobDetail.by", { creator: job.created_by }) }}
           </span>
         </n-space>
       </template>
       <template #extra>
         <n-space>
-          <n-tag :type="sseTagType" size="small"> SSE: {{ sseStatus }} </n-tag>
+          <n-tag :type="sseTagType" size="small">
+            {{ t("jobDetail.connection", { status: t(`jobDetail.${sseStatus}`) }) }}
+          </n-tag>
           <n-button
             v-if="job && (job.status === 'running' || job.status === 'queued')"
             type="error"
@@ -21,7 +23,7 @@
             :loading="cancelMutation.isPending.value"
             @click="onCancelClick"
           >
-            Cancel Job
+            {{ t("jobDetail.cancelJob") }}
           </n-button>
         </n-space>
       </template>
@@ -36,15 +38,19 @@
     <n-alert
       v-else-if="isError"
       type="error"
-      :title="(error as Error)?.message ?? 'Failed to load job'"
+      :title="(error as Error)?.message ?? t('jobDetail.loadFailed')"
     />
 
     <template v-else-if="job">
-      <n-card title="Training Progress" :bordered="true" data-testid="job-training-progress-card">
+      <n-card
+        :title="t('jobDetail.trainingProgress')"
+        :bordered="true"
+        data-testid="job-training-progress-card"
+      >
         <TrainingChart :events="events" :metrics-artifact="metricsArtifact" />
       </n-card>
 
-      <n-card title="Event Log" :bordered="true">
+      <n-card :title="t('jobDetail.eventLog')" :bordered="true">
         <n-data-table
           :columns="eventColumns"
           :data="sortedEvents"
@@ -56,10 +62,10 @@
         />
       </n-card>
 
-      <n-card title="Artifacts" :bordered="true">
+      <n-card :title="t('jobDetail.artifacts')" :bordered="true">
         <n-empty
           v-if="!job.artifact_refs || job.artifact_refs.length === 0"
-          description="No artifacts yet"
+          :description="t('jobDetail.noArtifacts')"
         />
         <n-list v-else bordered>
           <n-list-item v-for="artifact in job.artifact_refs" :key="artifact.id">
@@ -76,7 +82,7 @@
                 :disabled="!artifact.id"
                 @click="artifact.id ? onDownload(artifact.id) : undefined"
               >
-                Download
+                {{ t("jobDetail.download") }}
               </n-button>
             </n-space>
           </n-list-item>
@@ -89,6 +95,7 @@
 <script setup lang="ts">
 import { computed, ref, h } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { useI18n } from "vue-i18n";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { useDialog, useMessage, NTag, NEllipsis } from "naive-ui";
 import type { DataTableColumns } from "naive-ui";
@@ -105,6 +112,7 @@ import { orgScopedQueryKey, toUserMessage } from "@/shared/api";
 import type { JobStatus, TrainingJob } from "@/generated/orval/models";
 import type { TrainingEvent } from "@/shared/types/components";
 import { useJobEvents } from "../../application/useJobEvents";
+import { formatDateTime } from "@/shared/i18n/format";
 
 const route = useRoute();
 const router = useRouter();
@@ -112,6 +120,7 @@ const dialog = useDialog();
 const message = useMessage();
 const qc = useQueryClient();
 const orgStore = useOrgStore();
+const { t } = useI18n();
 
 const id = computed(() => route.params.id as string);
 const jobQueryKey = computed(() => orgScopedQueryKey(orgStore.currentOrgId, ["jobs", id.value]));
@@ -238,13 +247,13 @@ function truncateUri(uri: string, maxLen = 60): string {
 
 const eventColumns = computed<DataTableColumns<TrainingEvent>>(() => [
   {
-    title: "Timestamp",
+    title: t("jobDetail.timestamp"),
     key: "ts",
     width: 190,
-    render: (row) => new Date(row.ts).toLocaleString(),
+    render: (row) => formatDateTime(row.ts),
   },
   {
-    title: "Level",
+    title: t("jobDetail.level"),
     key: "level",
     width: 90,
     render: (row) =>
@@ -255,12 +264,12 @@ const eventColumns = computed<DataTableColumns<TrainingEvent>>(() => [
       ),
   },
   {
-    title: "Message",
+    title: t("jobDetail.message"),
     key: "message",
     ellipsis: { tooltip: true },
   },
   {
-    title: "Payload",
+    title: t("jobDetail.payload"),
     key: "payload",
     width: 260,
     render: (row) =>
@@ -275,24 +284,24 @@ const eventColumns = computed<DataTableColumns<TrainingEvent>>(() => [
 const cancelMutation = useCancelJobApiV1TrainingJobsJobIdCancelPost({
   mutation: {
     onSuccess: () => {
-      message.success("Job cancelled");
+      message.success(t("jobDetail.cancelled"));
       qc.invalidateQueries({ queryKey: jobQueryKey.value });
       qc.invalidateQueries({
         queryKey: orgScopedQueryKey(orgStore.currentOrgId, ["jobs"]),
       });
     },
     onError: (error) => {
-      message.error(toUserMessage(error, "Failed to cancel job"));
+      message.error(toUserMessage(error, t("jobDetail.cancelFailed")));
     },
   },
 });
 
 function onCancelClick() {
   dialog.warning({
-    title: "Confirm",
-    content: "Are you sure you want to cancel this job? This action cannot be undone.",
-    positiveText: "Cancel Job",
-    negativeText: "Go Back",
+    title: t("jobDetail.confirm"),
+    content: t("jobDetail.confirmHelp"),
+    positiveText: t("jobDetail.cancelJob"),
+    negativeText: t("jobDetail.goBack"),
     onPositiveClick: () => {
       cancelMutation.mutate({ jobId: id.value });
     },
@@ -309,7 +318,7 @@ async function onDownload(artifactId: string) {
     );
     window.open(downloadUrl, "_blank");
   } catch (error) {
-    message.error(toUserMessage(error, "Download failed"));
+    message.error(toUserMessage(error, t("jobDetail.downloadFailed")));
   } finally {
     downloadingId.value = null;
   }

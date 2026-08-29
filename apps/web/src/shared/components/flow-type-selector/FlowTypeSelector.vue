@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { NCard, NSpace, NText } from "naive-ui";
+import { useI18n } from "vue-i18n";
 
 import type { FlowCard } from "../../flow";
 
@@ -11,6 +12,7 @@ defineProps<{
 const emit = defineEmits<{
   select: [flow: FlowCard];
 }>();
+const { t } = useI18n();
 </script>
 
 <template>
@@ -51,7 +53,7 @@ const emit = defineEmits<{
       depth="3"
       style="display: block; text-align: center; padding: 24px 0"
     >
-      No importers or exporters available.
+      {{ t("common.noFlows") }}
     </NText>
   </div>
 </template>
