@@ -28,35 +28,31 @@
     </nav>
 
     <section class="library-resource-panel">
-      <div class="library-query" aria-label="Library filters">
-        <NInput
-          :value="searchQuery"
-          clearable
-          :placeholder="activeTab === 'datasets' ? 'Search datasets' : 'Search collections'"
-          data-testid="library-search"
-          class="library-search"
-          @update:value="searchQuery = $event"
-        />
-        <CreatorScopeSelect
-          v-model="creatorScope"
-          :creators="libraryCreators"
-          :loading="datasetCreatorsLoading || collectionCreatorsLoading"
-          resource-label="resources"
-          class="library-creator"
-        />
-        <NButton v-if="activeFilterCount > 0" quaternary @click="clearFilters">
-          Clear filters ({{ activeFilterCount }})
-        </NButton>
-        <NButton
-          v-if="activeTab === 'collections'"
-          type="primary"
-          class="library-primary-action"
-          data-testid="library-new-collection"
-          @click="collectionListRef?.openCreate()"
-        >
-          New collection
-        </NButton>
-      </div>
+      <ResourceFilterBar
+        :keyword="searchQuery"
+        :keyword-placeholder="activeTab === 'datasets' ? 'Search datasets' : 'Search collections'"
+        :creator-scope="creatorScope"
+        :creators="libraryCreators"
+        :creators-loading="datasetCreatorsLoading || collectionCreatorsLoading"
+        :active-filter-count="activeFilterCount"
+        resource-label="resources"
+        search-test-id="library-search"
+        aria-label="Library filters"
+        @update:keyword="searchQuery = $event"
+        @update:creator-scope="creatorScope = $event"
+        @clear="clearFilters"
+      >
+        <template #actions>
+          <NButton
+            v-if="activeTab === 'collections'"
+            type="primary"
+            data-testid="library-new-collection"
+            @click="collectionListRef?.openCreate()"
+          >
+            New collection
+          </NButton>
+        </template>
+      </ResourceFilterBar>
       <KeepAlive>
         <component
           ref="collectionListRef"
@@ -75,7 +71,7 @@
 import { computed, ref, watch } from "vue";
 import { refDebounced } from "@vueuse/core";
 import { useRoute, useRouter, type LocationQueryRaw } from "vue-router";
-import { NButton, NInput } from "naive-ui";
+import { NButton } from "naive-ui";
 import {
   useListCollectionCreatorsApiV1DatasetCollectionsCreatorsGet,
   useListDatasetCreatorsApiV1DatasetsCreatorsGet,
@@ -86,7 +82,7 @@ import { useOrgStore } from "@/features/auth/application/org";
 import DatasetListView from "@/features/datasets/presentation/pages/DatasetListView.vue";
 import DatasetCollectionListView from "@/features/dataset-collections/presentation/pages/DatasetCollectionListView.vue";
 import { orgScopedQueryKey } from "@/shared/api";
-import CreatorScopeSelect from "@/shared/components/creator-scope-select";
+import ResourceFilterBar from "@/shared/components/resource-filter-bar";
 import { useCreatorScopeQuery } from "@/shared/composables/useCreatorScopeQuery";
 
 type LibraryTab = "datasets" | "collections";
@@ -213,27 +209,6 @@ h1 {
   color: var(--n-text-color-3, #6a7280);
 }
 
-.library-query {
-  display: flex;
-  gap: 10px;
-  padding: 12px 0;
-  background: var(--n-color, #fff);
-  border-bottom: 1px solid var(--n-border-color, #e1e4e9);
-}
-
-.library-search {
-  width: min(420px, 100%);
-}
-
-.library-creator {
-  width: min(240px, 100%);
-}
-
-.library-primary-action {
-  flex: none;
-  margin-left: auto;
-}
-
 .library-tabs {
   display: flex;
   gap: 4px;
@@ -272,21 +247,5 @@ h1 {
 
 .library-resource-panel {
   min-height: 0;
-}
-
-@media (max-width: 640px) {
-  .library-query {
-    flex-direction: column;
-  }
-
-  .library-search,
-  .library-creator {
-    width: 100%;
-  }
-
-  .library-primary-action {
-    width: 100%;
-    margin-left: 0;
-  }
 }
 </style>

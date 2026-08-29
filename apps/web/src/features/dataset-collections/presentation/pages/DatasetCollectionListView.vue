@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { computed, h, reactive, ref, watch } from "vue";
+import { computed, h, ref, watch } from "vue";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
-import { refDebounced } from "@vueuse/core";
 import { useRouter } from "vue-router";
 import {
   NButton,
@@ -20,12 +19,12 @@ import {
   type DataTableColumns,
   type DataTableRowKey,
   type DataTableSortState,
-  type PaginationProps,
 } from "naive-ui";
 import {
   deleteCollectionApiV1DatasetCollectionsCollectionIdDelete,
   listCollectionsApiV1DatasetCollectionsGet,
   listDatasetsApiV1DatasetsGet,
+  useListCollectionCreatorsApiV1DatasetCollectionsCreatorsGet,
 } from "@/generated/orval/endpoints/api";
 import type { Dataset, DatasetCollectionResponse } from "@/generated/orval/models";
 import {
@@ -35,8 +34,9 @@ import {
 import { useOrgStore } from "@/features/auth/application/org";
 import { useAuthStore } from "@/features/auth/application/store";
 import { orgScopedQueryKey, toUserMessage } from "@/shared/api";
-import { useDefaultCreatorFilter } from "@/shared/composables/useDefaultCreatorFilter";
+import { useRemoteListState } from "@/shared/composables/useRemoteListState";
 import BulkSelectionToolbar from "@/shared/components/bulk-selection-toolbar/BulkSelectionToolbar.vue";
+import ResourceFilterBar from "@/shared/components/resource-filter-bar";
 import { runBatchAction } from "@/shared/utils/runBatchAction";
 
 const router = useRouter();
@@ -56,23 +56,19 @@ const props = withDefaults(
     creatorId: null,
   },
 );
-const debouncedSearch = refDebounced(
-  computed(() => props.search),
-  250,
-);
-const { creatorFilter: localCreatorFilter, isReady: localCreatorFilterReady } =
-  useDefaultCreatorFilter(
-    () => orgStore.currentOrgId,
-    () => authStore.user?.id,
-  );
-const creatorFilter = computed({
-  get: () => (props.embedded ? props.creatorId : localCreatorFilter.value),
-  set: (value: string | null) => {
-    localCreatorFilter.value = value;
-  },
+const localSearch = ref("");
+const localCreatorScope = ref("all");
+const search = computed(() => (props.embedded ? props.search : localSearch.value));
+const localCreatorId = computed(() => {
+  if (localCreatorScope.value === "all") return null;
+  if (localCreatorScope.value === "me") return authStore.user?.id ?? null;
+  return localCreatorScope.value;
 });
+const creatorFilter = computed(() => (props.embedded ? props.creatorId : localCreatorId.value));
 const creatorFilterReady = computed(() =>
-  props.embedded ? authStore.user !== null : localCreatorFilterReady.value,
+  props.embedded
+    ? authStore.user !== null
+    : localCreatorScope.value !== "me" || authStore.user !== null,
 );
 const createVisible = ref(false);
 const name = ref("");
@@ -80,26 +76,18 @@ const description = ref("");
 const targetViewId = ref<string | null>(null);
 const selectedDatasetIds = ref<string[]>([]);
 const checkedCollectionIds = ref<DataTableRowKey[]>([]);
-const sorter = ref<DataTableSortState | null>({
-  columnKey: "updated_at",
-  order: "descend",
-  sorter: true,
-});
 const batchDeletePending = ref(false);
-const pagination = reactive<PaginationProps>({
-  page: 1,
-  pageSize: 20,
-  itemCount: 0,
-  showSizePicker: true,
-  pageSizes: [10, 20, 50, 100],
-  onUpdatePage: (page: number) => {
-    pagination.page = page;
-  },
-  onUpdatePageSize: (pageSize: number) => {
-    pagination.pageSize = pageSize;
-    pagination.page = 1;
+const total = ref(0);
+const listState = useRemoteListState({
+  keyword: search,
+  filters: [creatorFilter, () => orgStore.currentOrgId],
+  total,
+  initialSorter: { columnKey: "updated_at", order: "descend", sorter: true },
+  onResetSelection: () => {
+    checkedCollectionIds.value = [];
   },
 });
+const { debouncedKeyword: debouncedSearch, pagination, sorter, tablePagination } = listState;
 
 async function loadAllDatasets(): Promise<Dataset[]> {
   const datasets: Dataset[] = [];
@@ -147,14 +135,7 @@ function collectionSortField(columnKey: DataTableSortState["columnKey"] | undefi
   return "updated_at" as const;
 }
 
-function handleSorterChange(value: DataTableSortState | DataTableSortState[] | null): void {
-  sorter.value = Array.isArray(value) ? (value[0] ?? null) : value;
-  pagination.page = 1;
-  checkedCollectionIds.value = [];
-}
-const tablePagination = computed(() =>
-  (pagination.itemCount ?? 0) > (pagination.pageSize ?? 20) ? pagination : false,
-);
+const handleSorterChange = listState.handleSorterChange;
 const datasets = computed(() => datasetsQuery.data.value ?? []);
 const selectedDatasets = computed(() =>
   datasets.value.filter((dataset) => selectedDatasetIds.value.includes(String(dataset.id ?? ""))),
@@ -165,28 +146,30 @@ const labelSpacesCompatible = computed(() =>
 
 watch(
   () => collectionsQuery.data.value?.total ?? 0,
-  (total) => {
-    pagination.itemCount = total;
+  (nextTotal) => {
+    total.value = nextTotal;
   },
   { immediate: true },
 );
 
-watch([creatorFilter, debouncedSearch], () => {
-  pagination.page = 1;
-  checkedCollectionIds.value = [];
-});
+const { data: collectionCreators, isLoading: collectionCreatorsLoading } =
+  useListCollectionCreatorsApiV1DatasetCollectionsCreatorsGet({
+    query: {
+      queryKey: computed(() =>
+        orgScopedQueryKey(orgStore.currentOrgId, ["dataset-collections", "creators"]),
+      ),
+      enabled: computed(() => !props.embedded && !!orgStore.currentOrgId),
+    },
+  });
 
-watch(
-  () => [pagination.page, pagination.pageSize, orgStore.currentOrgId],
-  () => {
-    checkedCollectionIds.value = [];
-  },
+const activeFilterCount = computed(
+  () => Number(localSearch.value.trim().length > 0) + Number(localCreatorScope.value !== "all"),
 );
 
-const creatorOptions = computed(() => {
-  const user = authStore.user;
-  return user ? [{ label: user.name || user.email || user.id, value: user.id }] : [];
-});
+function clearFilters(): void {
+  localSearch.value = "";
+  localCreatorScope.value = "all";
+}
 
 const emptyDescription = computed(() =>
   debouncedSearch.value.trim()
@@ -406,17 +389,19 @@ const columns = computed<DataTableColumns<DatasetCollectionResponse>>(() => [
       :bordered="!props.embedded"
       :content-style="props.embedded ? { padding: '0' } : undefined"
     >
-      <div v-if="!props.embedded" class="collection-list-filters">
-        <NSelect
-          v-model:value="creatorFilter"
-          size="small"
-          clearable
-          placeholder="All creators"
-          :options="creatorOptions"
-          class="collection-list-creator"
-        />
-        <NText depth="3">Clear the creator filter to view collections from everyone.</NText>
-      </div>
+      <ResourceFilterBar
+        v-if="!props.embedded"
+        :keyword="localSearch"
+        keyword-placeholder="Search collections"
+        :creator-scope="localCreatorScope"
+        :creators="collectionCreators ?? []"
+        :creators-loading="collectionCreatorsLoading"
+        :active-filter-count="activeFilterCount"
+        resource-label="collections"
+        @update:keyword="localSearch = $event"
+        @update:creator-scope="localCreatorScope = $event"
+        @clear="clearFilters"
+      />
       <BulkSelectionToolbar
         :selected-count="selectedCollections.length"
         item-label="collection"
@@ -553,17 +538,6 @@ h1 {
   font-size: 12px;
 }
 
-.collection-list-filters {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
-}
-
-.collection-list-creator {
-  width: min(220px, 100%);
-}
-
 .mobile-table-hint {
   display: none;
 }
@@ -575,15 +549,6 @@ h1 {
   }
 
   .collection-list-header :deep(.n-button) {
-    width: 100%;
-  }
-
-  .collection-list-filters {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .collection-list-creator {
     width: 100%;
   }
 

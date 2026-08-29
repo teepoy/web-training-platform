@@ -8,10 +8,17 @@ import {
   NNotificationProvider,
 } from "naive-ui";
 import { createPinia } from "pinia";
+import { createMemoryHistory, createRouter } from "vue-router";
 import { configureTransport } from "../src/shared/api/client";
+
+const router = createRouter({
+  history: createMemoryHistory(),
+  routes: [{ path: "/", component: { template: "<div />" } }],
+});
 
 setup((app) => {
   app.use(createPinia());
+  app.use(router);
   app.use(VueQueryPlugin, {
     queryClient: new QueryClient({
       defaultOptions: {

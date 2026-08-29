@@ -3,10 +3,12 @@
 ## Progress
 
 - **Overall status:** In progress; the goal is not complete.
-- **Completed intermediate slice:** removed the duplicate shared Dataset list
-  surface so the feature-owned implementation is authoritative.
-- **Next milestone:** use one shared model-search experience for Dataset and
-  Collection flows, then standardize reusable table-filter behavior.
+- **Completed intermediate slices:** removed the duplicate shared Dataset list
+  surface; model management and Dataset/Collection model selection now use one
+  model-search surface; Dataset, Collection, and Library list filters now share
+  one responsive filter bar and remote-list state contract.
+- **Next milestone:** standardize remote list loading/error/empty presentation,
+  then expose Dataset/Collection target parity in training and prediction.
 - **Done when:** every acceptance criterion below is verified.
 
 This document records repeated visual/list behavior and dataset-versus-collection
@@ -155,6 +157,14 @@ Proposed direction:
 - Define whether `LibraryWorkspaceView.vue` or its embedded resource list owns
   search and creator state, then use one owner instead of parallel state paths.
 
+Completed: `ResourceFilterBar` now owns the shared search/creator/clear/action
+layout, while `useRemoteListState` owns debounce, pagination, sorting, total,
+and selection-reset mechanics. Dataset and Collection standalone lists consume
+the same contracts, and the Library remains the sole filter-state owner when
+those lists are embedded. Focused tests cover debounce, filter/page resets,
+sorting, conditional pagination, the compatibility search selector, and the
+shared action slot.
+
 ### P0: Model browsing is implemented twice
 
 Files:
@@ -181,6 +191,12 @@ Proposed direction:
   actions in their owning dataset/collection flows.
 - Preserve the current collection support instead of creating a second
   collection-only model picker.
+
+Completed: `ModelSearchSurface` and `useModelSearch` now serve both management
+and selection modes. The existing `RemoteModelPicker` is a compatibility-thin
+wrapper, and Dataset/Collection source compatibility remains a typed query
+constraint. Management and Collection-compatible picker stories were rendered
+and reviewed as the representative states for this slice.
 
 ### P1: Dataset and collection list experiences are asymmetric
 

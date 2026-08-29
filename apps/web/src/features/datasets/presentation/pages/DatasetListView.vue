@@ -6,24 +6,18 @@
         :title="activeDatasetType === 'image_sc' ? 'Patch Datasets' : 'Datasets'"
       />
 
-      <div v-if="!props.embedded" class="dataset-list-filters">
-        <n-input
-          v-model:value="keyword"
-          size="small"
-          clearable
-          placeholder="Search datasets"
-          class="dataset-list-search"
-        />
-        <n-select
-          v-model:value="creatorFilter"
-          size="small"
-          clearable
-          filterable
-          placeholder="Creator"
-          :options="creatorOptions"
-          class="dataset-list-creator"
-        />
-      </div>
+      <ResourceFilterBar
+        v-if="!props.embedded"
+        :keyword="localKeyword"
+        keyword-placeholder="Search datasets"
+        :creator-scope="localCreatorScope"
+        :creators="datasetCreators ?? []"
+        :active-filter-count="activeFilterCount"
+        resource-label="datasets"
+        @update:keyword="localKeyword = $event"
+        @update:creator-scope="localCreatorScope = $event"
+        @clear="clearFilters"
+      />
 
       <BulkSelectionToolbar
         :selected-count="selectedDatasets.length"
@@ -48,7 +42,7 @@
         :current-user-id="authStore.user?.id ?? null"
         :is-superadmin="authStore.user?.is_superadmin ?? false"
         :checked-row-keys="checkedDatasetIds"
-        :pagination="pagination"
+        :pagination="tablePagination"
         :sorter="sorter"
         @view="handleViewDataset"
         @toggle-public="handleTogglePublic"
@@ -81,19 +75,16 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useQueryClient } from "@tanstack/vue-query";
-import { refDebounced } from "@vueuse/core";
 import {
   useMessage,
   NButton,
   NModal,
   NInput,
-  NSelect,
   type DataTableRowKey,
   type DataTableSortState,
-  type PaginationProps,
 } from "naive-ui";
 import { DatasetPageShell, DatasetToolbar } from "@/shared";
 import {
@@ -109,8 +100,9 @@ import { orgScopedQueryKey, toUserMessage } from "@/shared/api";
 import { useOrgStore } from "@/features/auth/application/org";
 import { useAuthStore } from "@/features/auth/application/store";
 import { useDatasetListSurface } from "@/features/datasets/application/surface";
-import { useDefaultCreatorFilter } from "@/shared/composables/useDefaultCreatorFilter";
+import { useRemoteListState } from "@/shared/composables/useRemoteListState";
 import BulkSelectionToolbar from "@/shared/components/bulk-selection-toolbar/BulkSelectionToolbar.vue";
+import ResourceFilterBar from "@/shared/components/resource-filter-bar";
 import { runBatchAction } from "@/shared/utils/runBatchAction";
 import { resolveDatasetShim } from "./schema-registry";
 import { resolveDatasetTaskType } from "./registry";
@@ -137,12 +129,8 @@ const props = withDefaults(
   },
 );
 const localKeyword = ref("");
+const localCreatorScope = ref("all");
 const checkedDatasetIds = ref<DataTableRowKey[]>([]);
-const sorter = ref<DataTableSortState | null>({
-  columnKey: "created_at",
-  order: "descend",
-  sorter: true,
-});
 const batchDeletePending = ref(false);
 const keyword = computed({
   get: () => (props.embedded ? props.search : localKeyword.value),
@@ -150,36 +138,28 @@ const keyword = computed({
     localKeyword.value = value;
   },
 });
-const debouncedKeyword = refDebounced(keyword, 250);
-const { creatorFilter: localCreatorFilter, isReady: localCreatorFilterReady } =
-  useDefaultCreatorFilter(
-    () => orgStore.currentOrgId,
-    () => authStore.user?.id,
-  );
-const creatorFilter = computed({
-  get: () => (props.embedded ? props.creatorId : localCreatorFilter.value),
-  set: (value: string | null) => {
-    localCreatorFilter.value = value;
-  },
+const localCreatorId = computed(() => {
+  if (localCreatorScope.value === "all") return null;
+  if (localCreatorScope.value === "me") return authStore.user?.id ?? null;
+  return localCreatorScope.value;
 });
+const creatorFilter = computed(() => (props.embedded ? props.creatorId : localCreatorId.value));
 const creatorFilterReady = computed(() =>
-  props.embedded ? authStore.user !== null : localCreatorFilterReady.value,
+  props.embedded
+    ? authStore.user !== null
+    : localCreatorScope.value !== "me" || authStore.user !== null,
 );
-
-const pagination = reactive<PaginationProps>({
-  page: 1,
-  pageSize: 20,
-  itemCount: 0,
-  showSizePicker: true,
-  pageSizes: [10, 20, 50, 100],
-  onUpdatePage: (page: number) => {
-    pagination.page = page;
-  },
-  onUpdatePageSize: (pageSize: number) => {
-    pagination.pageSize = pageSize;
-    pagination.page = 1;
+const total = ref(0);
+const listState = useRemoteListState({
+  keyword,
+  filters: [creatorFilter, () => orgStore.currentOrgId],
+  total,
+  initialSorter: { columnKey: "created_at", order: "descend", sorter: true },
+  onResetSelection: () => {
+    checkedDatasetIds.value = [];
   },
 });
+const { debouncedKeyword, pagination, sorter, tablePagination } = listState;
 
 const datasetListParams = computed<ListDatasetsApiV1DatasetsGetParams>(() => ({
   limit: pagination.pageSize ?? 20,
@@ -199,11 +179,7 @@ function datasetSortField(
   return "created_at" as const;
 }
 
-function handleSorterChange(value: DataTableSortState | null): void {
-  sorter.value = value;
-  pagination.page = 1;
-  checkedDatasetIds.value = [];
-}
+const handleSorterChange = listState.handleSorterChange;
 const datasetListQueryKey = computed(() =>
   orgScopedQueryKey(
     orgStore.currentOrgId,
@@ -236,37 +212,22 @@ const { data: datasetCreators } = useListDatasetCreatorsApiV1DatasetsCreatorsGet
     enabled: computed(() => !props.embedded && !!orgStore.currentOrgId),
   },
 });
-const creatorOptions = computed(() => {
-  const options = (datasetCreators.value ?? []).map((creator) => ({
-    label: creator.name,
-    value: creator.id,
-  }));
-  const user = authStore.user;
-  if (user && !options.some((option) => option.value === user.id)) {
-    options.unshift({ label: user.name || user.email || user.id, value: user.id });
-  }
-  return options;
-});
-
-watch([keyword, creatorFilter], () => {
-  pagination.page = 1;
-  checkedDatasetIds.value = [];
-});
-
-watch(
-  () => [pagination.page, pagination.pageSize],
-  () => {
-    checkedDatasetIds.value = [];
-  },
-);
-
 watch(
   () => datasetPage.value?.total ?? 0,
-  (total) => {
-    pagination.itemCount = total;
+  (nextTotal) => {
+    total.value = nextTotal;
   },
   { immediate: true },
 );
+
+const activeFilterCount = computed(
+  () => Number(localKeyword.value.trim().length > 0) + Number(localCreatorScope.value !== "all"),
+);
+
+function clearFilters(): void {
+  localKeyword.value = "";
+  localCreatorScope.value = "all";
+}
 
 const toggleDatasetPublicMut = useSetDatasetPublicApiV1DatasetsDatasetIdPublicPatch({
   mutation: {
@@ -442,21 +403,3 @@ const activeShim = computed(() =>
   resolveDatasetShim(activeDatasetType.value, activeViewTypes.value),
 );
 </script>
-
-<style scoped>
-.dataset-list-filters {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-  margin: 8px 0 12px;
-}
-
-.dataset-list-search {
-  width: min(320px, 100%);
-}
-
-.dataset-list-creator {
-  width: min(220px, 100%);
-}
-</style>
