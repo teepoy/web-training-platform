@@ -3,13 +3,12 @@ from __future__ import annotations
 from functools import lru_cache
 import os
 from pathlib import Path
-from typing import Any, Literal, TypeVar
+from typing import Literal
 
 from omegaconf import DictConfig, OmegaConf
 from pydantic import BaseModel, ConfigDict, Field
 
 
-T = TypeVar("T")
 _SUPPORTED_PROFILES = frozenset({"dev", "pre-release", "prod", "test"})
 _PROFILE_ENV = {
     "dev": "dev",
@@ -21,19 +20,12 @@ _INSECURE_SECRET_VALUES = frozenset({"replace-me-in-production"})
 
 
 class ConfigSection(BaseModel):
-    """Typed config section with temporary dict-like access for legacy callers."""
+    """Typed config section that ignores retired fields on compatibility reads."""
 
-    model_config = ConfigDict(extra="allow")
-
-    def get(self, key: str, default: T | None = None) -> Any | T | None:
-        if hasattr(self, key):
-            return getattr(self, key)
-        extra = self.__pydantic_extra__ or {}
-        return extra.get(key, default)
+    model_config = ConfigDict(extra="ignore")
 
 
 class AppSection(ConfigSection):
-    name: str = "online-finetune-api"
     env: str = "dev"
     frontend_url: str = ""
 
@@ -41,6 +33,10 @@ class AppSection(ConfigSection):
 class ExecutionConfig(ConfigSection):
     engine: str = "local"
     status_reconcile_interval_seconds: float = 2.0
+
+
+class LoggingConfig(ConfigSection):
+    level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
 
 
 class DatabaseConfig(ConfigSection):
@@ -96,7 +92,6 @@ class WebhookConfig(ConfigSection):
 
 
 class NotificationConfig(ConfigSection):
-    sink: str = "webhook"
     webhook: WebhookConfig = Field(default_factory=WebhookConfig)
 
 
@@ -122,10 +117,6 @@ class OAuthConfig(ConfigSection):
 class PrefectConfig(ConfigSection):
     api_url: str = ""
     ui_url: str = ""
-    work_pool_name: str = "default-cpu"
-    work_pool_type: str = "process"
-    flow_name: str = "train-job"
-    concurrency_limit: int = 1
 
 
 class PredictionConfig(ConfigSection):
@@ -148,13 +139,8 @@ class LabelStudioConfig(ConfigSection):
     database_url: str = ""
 
 
-class DataConfig(ConfigSection):
-    dir: str = ""
-
-
 class AgentConfig(ConfigSection):
     enabled: bool = True
-    max_panels: int = 8
     metadata_sample_size: int = 100
 
 
@@ -256,6 +242,7 @@ def _default_sc_config() -> ScConfig:
 class AppConfig(ConfigSection):
     app: AppSection = Field(default_factory=AppSection)
     execution: ExecutionConfig = Field(default_factory=ExecutionConfig)
+    logging: LoggingConfig = Field(default_factory=LoggingConfig)
     db: DatabaseConfig = Field(default_factory=DatabaseConfig)
     storage: StorageConfig = Field(default_factory=StorageConfig)
     k8s: K8sConfig = Field(default_factory=K8sConfig)
@@ -265,15 +252,12 @@ class AppConfig(ConfigSection):
     prefect: PrefectConfig = Field(default_factory=PrefectConfig)
     llm: LlmConfig = Field(default_factory=LlmConfig)
     label_studio: LabelStudioConfig = Field(default_factory=LabelStudioConfig)
-    data: DataConfig = Field(default_factory=DataConfig)
     agent: AgentConfig = Field(default_factory=AgentConfig)
     redis: RedisConfig = Field(default_factory=RedisConfig)
     startup_checks: StartupChecksConfig = Field(default_factory=StartupChecksConfig)
     auth: AuthConfig = Field(default_factory=AuthConfig)
     sc: ScConfig = Field(default_factory=_default_sc_config)
     prediction: PredictionConfig = Field(default_factory=PredictionConfig)
-    model: str = "openai/clip-vit-base-patch32"
-    dimension: int = 512
 
 
 # Environment-owned values are restricted to secrets and deployment topology.
@@ -303,7 +287,6 @@ _ENVIRONMENT_CONFIG_PATHS = {
     "OAUTH_GITHUB_CLIENT_SECRET": "oauth.providers.github.client_secret",
     "OAUTH_CUSTOM_CLIENT_ID": "oauth.providers.custom.client_id",
     "OAUTH_CUSTOM_CLIENT_SECRET": "oauth.providers.custom.client_secret",
-    "MNT": "data.dir",
     "SC_UPSTREAM_ADDR": "sc.upstream.grpc_addr",
     "SC_UPSTREAM_FLIGHT_ADDR": "sc.upstream.flight_addr",
     "IMAGE_PARSER_GRPC_ADDR": "sc.image_parser.grpc_addr",

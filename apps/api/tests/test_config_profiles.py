@@ -8,6 +8,7 @@ from omegaconf import OmegaConf
 from app.core.config import (
     _ENVIRONMENT_CONFIG_PATHS,
     _config_root,
+    AppConfig,
     AuthConfig,
     load_config,
 )
@@ -54,6 +55,18 @@ def test_supported_profile_sets_matching_environment(
 def test_auth_configuration_cannot_be_disabled() -> None:
     with pytest.raises(ValueError, match="enabled"):
         AuthConfig.model_validate({"enabled": False})
+
+
+def test_retired_config_fields_are_ignored_for_compatibility_reads() -> None:
+    cfg = AppConfig.model_validate(
+        {
+            "legacy_section": {"enabled": True},
+            "prefect": {"work_pool_name": "retired-pool"},
+        }
+    )
+
+    assert "legacy_section" not in cfg.model_dump()
+    assert "work_pool_name" not in cfg.prefect.model_dump()
 
 
 @pytest.mark.parametrize("profile", ["pre-release", "prod"])
@@ -115,6 +128,8 @@ def test_profile_owned_settings_ignore_retired_environment_variables(
     monkeypatch.setenv("LLM_MODEL", "retired-model")
     monkeypatch.setenv("SC_PIPELINE_IMPORT_BATCH_ROWS", "4096")
     monkeypatch.setenv("PREDICTION_COMPACTION_MEMORY_LIMIT", "256MiB")
+    monkeypatch.setenv("MNT", "/retired/data/path")
+    monkeypatch.setenv("LOG_LEVEL", "DEBUG")
 
     cfg = load_config(skip_runtime_validation=True)
 
@@ -124,6 +139,8 @@ def test_profile_owned_settings_ignore_retired_environment_variables(
     assert cfg.llm.model == "qwen/qwen-max"
     assert cfg.sc.pipeline.import_batch_rows == 25_000
     assert cfg.prediction.compaction_memory_limit == "512MiB"
+    assert cfg.logging.level == "WARNING"
+    assert "data" not in cfg.model_dump()
 
 
 def test_deployment_owned_sc_endpoints_use_central_config_loader(
@@ -131,9 +148,7 @@ def test_deployment_owned_sc_endpoints_use_central_config_loader(
 ) -> None:
     monkeypatch.setenv("APP_CONFIG_PROFILE", "test")
     monkeypatch.setenv("SC_UPSTREAM_ADDR", "upstream.example:19091")
-    monkeypatch.setenv(
-        "SC_UPSTREAM_FLIGHT_ADDR", "grpc://upstream.example:19093"
-    )
+    monkeypatch.setenv("SC_UPSTREAM_FLIGHT_ADDR", "grpc://upstream.example:19093")
     monkeypatch.setenv("IMAGE_PARSER_GRPC_ADDR", "parser.example:19092")
     monkeypatch.setenv("SC_DATA_PROVIDER_CACHE_DIR", "/cache/sc")
     monkeypatch.setenv("SC_DATA_PROVIDER_CACHE_NAMESPACE", "sc-pod-1")
@@ -193,7 +208,6 @@ def test_deployable_sc_data_provider_values_come_from_profiles(
     assert cfg.sc.data_provider.cache_dir == expected_cache_dir
     assert cfg.sc.data_provider.worker_count == expected_worker_count
     assert (
-        cfg.sc.data_provider.container_memory_limit_mb
-        == expected_container_memory_mb
+        cfg.sc.data_provider.container_memory_limit_mb == expected_container_memory_mb
     )
     assert cfg.sc.data_provider.service_headroom_mb == expected_service_headroom_mb

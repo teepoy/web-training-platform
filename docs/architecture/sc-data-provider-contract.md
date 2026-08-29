@@ -248,9 +248,9 @@ metadata for files that exist only in another Pod.
 | SQL timeout / maximum response | 30 s / 256 MiB |
 | SSE response cap / heartbeat   |    60 s / 15 s |
 
-Development defaults `LOG_LEVEL` to `INFO`; it may be raised to `DEBUG`. Every
-`/health` and `/ready` call logs worker RSS at info level and returns RSS, worker
-PID, and current DuckDB temp bytes.
+Development uses tracked `logging.level: INFO`. Every `/health` and `/ready`
+call logs worker RSS at info level and returns RSS, worker PID, and current
+DuckDB temp bytes.
 
 ## Verification
 

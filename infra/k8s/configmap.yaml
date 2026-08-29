@@ -6,7 +6,6 @@ metadata:
 data:
   APP_CONFIG_PROFILE: "dev"
   FRONTEND_URL: "http://localhost:5173"
-  MNT: "/mnt/data"
   PREFECT_API_URL: "http://prefect-server.finetune.svc.cluster.local:4200/api"
   PREFECT_UI_URL: "http://localhost:4200"
   EMBEDDING_GRPC_TARGET: "embedding.finetune.svc.cluster.local:50051"

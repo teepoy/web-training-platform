@@ -41,7 +41,6 @@ x-platform-environment: &platform-environment
   LLM_API_KEY: ${LLM_API_KEY:-}
   REDIS_HOST: redis
   REDIS_PASSWORD: ${REDIS_PASSWORD:-}
-  LOG_LEVEL: ${LOG_LEVEL:-INFO}
 
 x-api-runtime: &api-runtime
   build:

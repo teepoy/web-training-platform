@@ -1,11 +1,13 @@
 app:
-  name: online-finetune-api
   env: dev
   frontend_url: ""
 
 execution:
   engine: local
   status_reconcile_interval_seconds: 2
+
+logging:
+  level: INFO
 
 db:
   url: ""
@@ -40,7 +42,6 @@ kubeflow:
   image: "python:3.11-slim"
 
 notification:
-  sink: webhook
   webhook:
     endpoint: "http://localhost:9000/hooks/training"
     timeout_seconds: 5
@@ -85,10 +86,6 @@ oauth:
 prefect:
   api_url: ""
   ui_url: ""
-  work_pool_name: "default-cpu"
-  work_pool_type: "process"
-  flow_name: "train-job"
-  concurrency_limit: 1
 
 llm:
   # litellm-backed.  Model string controls provider routing:
@@ -108,12 +105,8 @@ label_studio:
   api_key: ""
   database_url: ""
 
-data:
-  dir: ""
-
 agent:
   enabled: true
-  max_panels: 8
   metadata_sample_size: 100
 
 prediction:

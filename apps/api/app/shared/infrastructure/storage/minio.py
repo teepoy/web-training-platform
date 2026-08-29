@@ -5,7 +5,6 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass
 import re
 from io import BytesIO
-from typing import Any
 
 from minio.commonconfig import Filter
 from minio.lifecycleconfig import (
@@ -14,6 +13,8 @@ from minio.lifecycleconfig import (
     Rule,
 )
 from minio import Minio
+
+from app.core.config import AppConfig
 
 _S3_URI_RE = re.compile(r"^s3://([^/]+)/(.+)$")
 EXPORT_LIFECYCLE_RULE_ID = "finetune-export-expiration"
@@ -54,12 +55,9 @@ class MinioExportLifecycle:
         ]
 
 
-def build_minio_export_lifecycle(cfg: Any) -> MinioExportLifecycle | None:
-    lifecycle_cfg = cfg.storage.minio.get("lifecycle")
-    if lifecycle_cfg is None:
-        return None
-    exports_cfg = lifecycle_cfg.get("exports")
-    if exports_cfg is None or not bool(exports_cfg.get("enabled", False)):
+def build_minio_export_lifecycle(cfg: AppConfig) -> MinioExportLifecycle | None:
+    exports_cfg = cfg.storage.minio.lifecycle.exports
+    if not exports_cfg.enabled:
         return None
     return MinioExportLifecycle(
         prefix=str(exports_cfg.prefix),

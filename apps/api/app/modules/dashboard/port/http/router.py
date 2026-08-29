@@ -23,6 +23,7 @@ from app.modules.dashboard.port.http.deps import (
     get_service_health,
 )
 from app.shared.domain.protocols import PrefectClient
+from app.shared.infrastructure.prefect.deployments import CONTROL_PLANE_WORK_POOL_NAME
 from app.modules.jobs.task_tracker.port.task_tracker_port import TaskTrackerPort
 
 router = APIRouter(prefix="/api/v1", tags=["dashboard"])
@@ -79,7 +80,7 @@ async def get_dashboard(
     engine_name = str(cfg.execution.engine)
 
     if engine_name == "prefect":
-        pool_name = str(cfg.prefect.work_pool_name)
+        pool_name = CONTROL_PLANE_WORK_POOL_NAME
         try:
             pool_data = await prefect_client.get_work_pool(pool_name)
             prefect_connected = True

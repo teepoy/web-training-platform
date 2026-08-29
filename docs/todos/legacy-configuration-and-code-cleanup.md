@@ -5,9 +5,13 @@
 - **Overall status:** In progress; the goal is not complete.
 - **Completed intermediate slice:** API configuration ownership was
   consolidated, tracked `prod.yaml` became the stable non-secret production
-  source, and Make targets were aligned with the shared development inputs.
-- **Next milestone:** continue the subsystem inventory, remove remaining
-  duplicate inputs, and begin the unnecessary-prefix/shared-component cleanup.
+  source, and Make targets were aligned with the shared development inputs. A
+  canonical ownership catalog now covers every supported API setting; retired
+  typed fields and `MNT` were removed, extra compatibility fields are ignored,
+  MinIO lifecycle uses typed config, and Dashboard reads its pool identity from
+  the Prefect deployment catalog instead of duplicate YAML.
+- **Next milestone:** complete the unnecessary-prefix/shared-component cleanup
+  with the visual reuse todo.
 - **Done when:** every acceptance criterion below is verified.
 
 This document tracks deferred cleanup of legacy configuration paths, duplicated
@@ -132,7 +136,8 @@ MinIO endpoints derive from the canonical Make variables instead of repeating
 hard-coded ports.
 
 The broader unused-code and prefix inventory remains open and should continue
-as subsystem-sized changes.
+as subsystem-sized changes. Configuration ownership itself is complete and is
+documented in `docs/architecture/configuration-ownership.md`.
 
 ### Before Implementation
 

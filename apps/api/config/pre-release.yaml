@@ -4,6 +4,9 @@ app:
 execution:
   engine: prefect
 
+logging:
+  level: WARNING
+
 db:
   echo: false
   auto_create: false

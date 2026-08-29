@@ -5,6 +5,9 @@ app:
 execution:
   engine: local
 
+logging:
+  level: WARNING
+
 db:
   url: "sqlite+aiosqlite:///./finetune-test.db"
   echo: false
@@ -14,7 +17,6 @@ storage:
   kind: memory
 
 notification:
-  sink: webhook
   webhook:
     endpoint: "http://localhost:9000/hooks/training"
 
@@ -30,5 +32,4 @@ oauth:
 
 agent:
   enabled: true
-  max_panels: 8
   metadata_sample_size: 50

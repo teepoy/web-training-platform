@@ -278,9 +278,9 @@ All services at a glance:
   publish the repeatable SC inspection. The simulator owns deterministic defect
   rows, review objects, patch archives, and PostgreSQL metadata; Compose no
   longer invokes direct SQLite/S3 seeders, clears caches, or restarts services.
-- Dev services default `LOG_LEVEL` to `INFO`, so data-provider memory records
-  are visible. Set `LOG_LEVEL=DEBUG` when additional diagnostics are
-  needed.
+- Dev services use the tracked `logging.level: INFO` profile setting, so
+  data-provider memory records are visible. Use a reviewed profile YAML change
+  when a different threshold is required; there is no environment override.
 
 ## Observability
 

@@ -13,6 +13,7 @@ from app.shared.api.schemas import (
     WorkPoolStatus,
 )
 from app.shared.domain.protocols import PrefectClient
+from app.shared.infrastructure.prefect.deployments import CONTROL_PLANE_WORK_POOL_NAME
 from injector import inject
 
 
@@ -69,7 +70,7 @@ class DashboardService:
         engine_name = str(self._config.execution.engine)
 
         if engine_name == "prefect":
-            pool_name = str(self._config.prefect.work_pool_name)
+            pool_name = CONTROL_PLANE_WORK_POOL_NAME
             try:
                 pool_data = await self._prefect_client.get_work_pool(pool_name)
                 prefect_connected = True

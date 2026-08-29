@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from app.core.config import AppConfig
 from app.shared.domain.protocols import PrefectClient
+from app.shared.infrastructure.prefect.deployments import CONTROL_PLANE_WORK_POOL_NAME
 
 
 class ServiceCheckResult(BaseModel):
@@ -82,9 +83,7 @@ class ServiceHealthService:
         endpoint = str(self._config.prefect.api_url)
         start = time.perf_counter()
         try:
-            await self._prefect_client.get_work_pool(
-                str(self._config.prefect.work_pool_name)
-            )
+            await self._prefect_client.get_work_pool(CONTROL_PLANE_WORK_POOL_NAME)
             latency_ms = int((time.perf_counter() - start) * 1000)
             return ServiceCheckResult(
                 name="prefect",
@@ -130,7 +129,7 @@ class ServiceHealthService:
     async def _check_prefect_worker(self) -> ServiceCheckResult:
         """Check Prefect worker health via work pool and work queue availability."""
         endpoint = str(self._config.prefect.api_url)
-        work_pool_name = str(self._config.prefect.work_pool_name)
+        work_pool_name = CONTROL_PLANE_WORK_POOL_NAME
         start = time.perf_counter()
         try:
             await self._prefect_client.get_work_pool(work_pool_name)

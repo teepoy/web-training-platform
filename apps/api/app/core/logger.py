@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import logging
 import logging.config
-import os
 from datetime import UTC, datetime
 from typing import Any
 
@@ -62,26 +61,14 @@ class JsonLogFormatter(logging.Formatter):
 def init_logging(cfg: AppConfig | DictConfig) -> None:
     cfg = _as_app_config(cfg)
     env = str(cfg.app.env)
-    log_level_override = os.getenv("LOG_LEVEL", "").upper()
-
-    if env == "test":
-        level = log_level_override or "WARNING"
-    elif env == "dev":
-        level = log_level_override or "INFO"
-    else:
-        level = log_level_override or "WARNING"
-
-    log_cfg_value = cfg.get("logging", {}) or {}
-    log_cfg = log_cfg_value if isinstance(log_cfg_value, dict) else {}
+    level = cfg.logging.level.upper()
 
     config: dict = {
         "version": 1,
         "disable_existing_loggers": False,
         "formatters": {
             "detailed": {
-                "format": log_cfg.get(
-                    "format", "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
-                ),
+                "format": "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
             },
             "brief": {
                 "format": "%(asctime)s [%(levelname)s] %(message)s",

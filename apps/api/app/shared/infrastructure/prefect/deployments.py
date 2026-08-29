@@ -81,6 +81,7 @@ COLLECTION_DISCOVERY_DEPLOYMENT = PrefectDeploymentSpec(
     cron="*/5 * * * *",
     cron_timezone="UTC",
 )
+CONTROL_PLANE_WORK_POOL_NAME = COLLECTION_DISCOVERY_DEPLOYMENT.work_pool_name
 DRAIN_DATASET_DEPLOYMENT = PrefectDeploymentSpec(
     deployment_name="drain-dataset",
     flow_name="drain-dataset",
@@ -150,6 +151,7 @@ def prefect_work_queue_specs() -> tuple[tuple[str, str, int], ...]:
 
 __all__ = [
     "COLLECTION_DISCOVERY_DEPLOYMENT",
+    "CONTROL_PLANE_WORK_POOL_NAME",
     "DRAIN_DATASET_DEPLOYMENT",
     "PREDICTION_AUTOMATION_RUNTIME_DEPLOYMENT",
     "PREDICTION_RUNTIME_DEPLOYMENT",
