@@ -9,8 +9,8 @@
   one responsive filter bar and remote-list state contract; job histories and
   Collection lists share status/list presentation; training and prediction can
   select either resource kind and pin the latest ready Collection revision.
-- **Next milestone:** extract the SC-specific filter controller and retire or
-  alias misleading Dataset/SC-prefixed shared component names.
+- **Next milestone:** retire or alias misleading Dataset/SC-prefixed shared
+  component names and finish the i18n migration.
 - **Done when:** every acceptance criterion below is verified.
 
 This document records repeated visual/list behavior and dataset-versus-collection
@@ -303,6 +303,13 @@ Proposed direction:
   its workflow-specific submission behavior.
 - Do not merge SC field/filter semantics into the generic resource-list filter
   bar; these are separate abstractions at different layers.
+
+Completed: `useScFilterLookupController` now owns stale-response protection,
+distinct-value results, numeric-range caching, per-rule loading/error state,
+and reset behavior. Both the Dataset Global Filter and Inspection workspace use
+it while retaining their workflow-specific loaders and error reporting. Tests
+cover stale searches and keyed range failures; the specialized SC tables remain
+unchanged.
 
 ### P2: Shared visual primitives are dataset-named despite broader use
 

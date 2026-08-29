@@ -12,6 +12,7 @@ import {
 } from "@/features/sc/domain/globalFilter";
 import type { ScDataColumn } from "@/features/sc/domain/workbenchDataSource";
 import { useScDataWorkbench } from "@/features/sc/presentation/composables/useScDataWorkbench";
+import { useScFilterLookupController } from "@/features/sc/presentation/composables/useScFilterLookupController";
 import ScGlobalFilterModal from "./ScGlobalFilterModal.vue";
 
 const props = defineProps<{
@@ -23,16 +24,12 @@ const reclassifyStore = useScReclassifyStore();
 const workbench = useScDataWorkbench();
 const modalVisible = ref(false);
 const columns = ref<ScDataColumn[]>([]);
-const distinctValues = ref<Record<string, Array<string | number>>>({});
-const numericRanges = ref<Record<string, { min: number; max: number } | null>>({});
-const numericRangeLoading = ref<Record<string, boolean>>({});
-const numericRangeErrors = ref<Record<string, boolean>>({});
+const filterLookups = useScFilterLookupController();
+const { distinctValues, numericRanges, numericRangeLoading, numericRangeErrors } = filterLookups;
 const totalCount = ref<number | null>(null);
 const filteredCount = ref<number | null>(null);
 const statsLoading = ref(false);
 const statsError = ref<string | null>(null);
-const distinctSearchVersions = new Map<string, number>();
-const numericRangeVersions = new Map<string, number>();
 let statsVersion = 0;
 let columnsVersion = 0;
 let unsubscribeInvalidations: (() => void) | null = null;
@@ -120,48 +117,31 @@ async function loadColumns(): Promise<void> {
 async function searchFilterOptions(payload: { field: string; search: string }): Promise<void> {
   const source = workbench.dataSource.value;
   if (!source) return;
-  const version = (distinctSearchVersions.get(payload.field) ?? 0) + 1;
-  distinctSearchVersions.set(payload.field, version);
-  try {
-    const values = await source.loadDistinctValues({
-      field: payload.field,
-      search: payload.search,
-      limit: 500,
-      filter: {},
-      sort: null,
-      filters: [],
-    });
-    if (distinctSearchVersions.get(payload.field) !== version) return;
-    distinctValues.value = { ...distinctValues.value, [payload.field]: values };
-  } catch (error) {
-    if (distinctSearchVersions.get(payload.field) !== version) return;
-    message.error(error instanceof Error ? error.message : "Failed to load filter options");
-  }
+  await filterLookups.searchDistinct(
+    payload,
+    () =>
+      source.loadDistinctValues({
+        field: payload.field,
+        search: payload.search,
+        limit: 500,
+        filter: {},
+        sort: null,
+        filters: [],
+      }),
+    (error) =>
+      message.error(error instanceof Error ? error.message : "Failed to load filter options"),
+  );
 }
 
 async function requestFilterRange(payload: { field: string; itemId?: string }): Promise<void> {
   const source = workbench.dataSource.value;
   if (!source) return;
-  const key = payload.itemId ?? payload.field;
-  const version = (numericRangeVersions.get(key) ?? 0) + 1;
-  numericRangeVersions.set(key, version);
-  numericRangeLoading.value = { ...numericRangeLoading.value, [key]: true };
-  numericRangeErrors.value = { ...numericRangeErrors.value, [key]: false };
-  try {
-    const range = await source.loadNumericRange({
+  await filterLookups.requestRange(payload, () =>
+    source.loadNumericRange({
       field: payload.field,
       filters: buildScGlobalDataFilters(globalFilter.value, { omitItemId: payload.itemId }),
-    });
-    if (numericRangeVersions.get(key) !== version) return;
-    numericRanges.value = { ...numericRanges.value, [key]: range };
-  } catch {
-    if (numericRangeVersions.get(key) !== version) return;
-    numericRangeErrors.value = { ...numericRangeErrors.value, [key]: true };
-  } finally {
-    if (numericRangeVersions.get(key) === version) {
-      numericRangeLoading.value = { ...numericRangeLoading.value, [key]: false };
-    }
-  }
+    }),
+  );
 }
 
 function updateGlobalFilter(filter: ScGlobalFilter): void {
@@ -175,10 +155,7 @@ function clearGlobalFilter(): void {
 watch(
   () => props.datasetId,
   async (datasetId) => {
-    distinctValues.value = {};
-    numericRanges.value = {};
-    numericRangeLoading.value = {};
-    numericRangeErrors.value = {};
+    filterLookups.reset();
     await workbench.connect({ kind: "reclassify", datasetId });
   },
   { immediate: true },

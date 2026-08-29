@@ -41,6 +41,7 @@ import {
 } from "@/features/sc/application/reticleMapOptions";
 import { applyMapSelectionToGlobalFilter } from "@/features/sc/application/inspectionFilterPolicy";
 import { useInspectionQuadData } from "@/features/sc/presentation/composables/useInspectionQuadData";
+import { useScFilterLookupController } from "@/features/sc/presentation/composables/useScFilterLookupController";
 import type { ScSamplingCandidateOptions } from "@/features/sc/presentation/composables/useSqlInspectionModel";
 
 use([BarChart, GridComponent, TooltipComponent, CanvasRenderer]);
@@ -94,12 +95,13 @@ const isColumnResizing = ref(false);
 const isAnnotationResizing = ref(false);
 const isRowResizing = ref(false);
 const isBarResizing = ref(false);
-const globalDistinctValues = ref<Record<string, Array<string | number>>>({});
-const globalNumericRanges = ref<Record<string, { min: number; max: number } | null>>({});
-const globalNumericRangeLoading = ref<Record<string, boolean>>({});
-const globalNumericRangeErrors = ref<Record<string, boolean>>({});
-const globalFilterSearchVersions = new Map<string, number>();
-const globalRangeVersions = new Map<string, number>();
+const filterLookups = useScFilterLookupController();
+const {
+  distinctValues: globalDistinctValues,
+  numericRanges: globalNumericRanges,
+  numericRangeLoading: globalNumericRangeLoading,
+  numericRangeErrors: globalNumericRangeErrors,
+} = filterLookups;
 // Preview uses the local fallback. ReclassifyPage supplies the controlled model
 // so workflow consumers and outer route shells share the same Global Filter.
 const localGlobalFilter = ref<ScGlobalFilter>(emptyScGlobalFilter());
@@ -409,12 +411,7 @@ watch(
       localGlobalFilter.value = emptyScGlobalFilter();
     }
     globalFilterModalVisible.value = false;
-    globalDistinctValues.value = {};
-    globalNumericRanges.value = {};
-    globalNumericRangeLoading.value = {};
-    globalNumericRangeErrors.value = {};
-    globalFilterSearchVersions.clear();
-    globalRangeVersions.clear();
+    filterLookups.reset();
     activeMapTab.value = "wafer";
     mapZoomByMode.value = emptyMapZoomByMode();
     reticleOptions.value = normalizeReticleMapOptions(DEFAULT_RETICLE_MAP_OPTIONS);
@@ -545,77 +542,41 @@ async function searchGlobalFilterOptions(payload: {
   field: string;
   search: string;
 }): Promise<void> {
-  const version = (globalFilterSearchVersions.get(payload.field) ?? 0) + 1;
-  globalFilterSearchVersions.set(payload.field, version);
-  const values = await model.loadGlobalDistinctValues(payload.field, payload.search);
-  if (globalFilterSearchVersions.get(payload.field) !== version) return;
-  globalDistinctValues.value = { ...globalDistinctValues.value, [payload.field]: values };
+  await filterLookups.searchDistinct(
+    payload,
+    () => model.loadGlobalDistinctValues(payload.field, payload.search),
+    (error) => reportDataError(`Global filter options query failed for ${payload.field}`, error),
+  );
 }
 
 async function requestGlobalFilterRange(payload: {
   field: string;
   itemId?: string;
 }): Promise<void> {
-  const requestKey = payload.itemId ?? `draft:${payload.field}`;
-  const version = (globalRangeVersions.get(requestKey) ?? 0) + 1;
-  globalRangeVersions.set(requestKey, version);
-  globalNumericRangeLoading.value = {
-    ...globalNumericRangeLoading.value,
-    [requestKey]: true,
-  };
-  globalNumericRangeErrors.value = {
-    ...globalNumericRangeErrors.value,
-    [requestKey]: false,
-  };
-  try {
-    const range = await model.loadGlobalNumericRange(payload.field, payload.itemId);
-    if (globalRangeVersions.get(requestKey) !== version) return;
-    globalNumericRanges.value = { ...globalNumericRanges.value, [requestKey]: range };
-  } catch (error) {
-    if (globalRangeVersions.get(requestKey) !== version) return;
-    globalNumericRangeErrors.value = { ...globalNumericRangeErrors.value, [requestKey]: true };
-    reportDataError(`Global filter range query failed for ${payload.field}`, error);
-  } finally {
-    if (globalRangeVersions.get(requestKey) === version) {
-      globalNumericRangeLoading.value = {
-        ...globalNumericRangeLoading.value,
-        [requestKey]: false,
-      };
-    }
-  }
+  await filterLookups.requestRange(
+    payload,
+    () => model.loadGlobalNumericRange(payload.field, payload.itemId),
+    {
+      key: payload.itemId ?? `draft:${payload.field}`,
+      onError: (error) =>
+        reportDataError(`Global filter range query failed for ${payload.field}`, error),
+    },
+  );
 }
 
 async function requestSamplingExtraFilterRange(
   filter: ScGlobalFilter,
   payload: { field: string; itemId?: string },
 ): Promise<void> {
-  const requestKey = payload.itemId ?? `sampling-draft:${payload.field}`;
-  const version = (globalRangeVersions.get(requestKey) ?? 0) + 1;
-  globalRangeVersions.set(requestKey, version);
-  globalNumericRangeLoading.value = {
-    ...globalNumericRangeLoading.value,
-    [requestKey]: true,
-  };
-  globalNumericRangeErrors.value = {
-    ...globalNumericRangeErrors.value,
-    [requestKey]: false,
-  };
-  try {
-    const range = await model.loadFilterNumericRange(filter, payload.field, payload.itemId);
-    if (globalRangeVersions.get(requestKey) !== version) return;
-    globalNumericRanges.value = { ...globalNumericRanges.value, [requestKey]: range };
-  } catch (error) {
-    if (globalRangeVersions.get(requestKey) !== version) return;
-    globalNumericRangeErrors.value = { ...globalNumericRangeErrors.value, [requestKey]: true };
-    reportDataError(`Extra filter range query failed for ${payload.field}`, error);
-  } finally {
-    if (globalRangeVersions.get(requestKey) === version) {
-      globalNumericRangeLoading.value = {
-        ...globalNumericRangeLoading.value,
-        [requestKey]: false,
-      };
-    }
-  }
+  await filterLookups.requestRange(
+    payload,
+    () => model.loadFilterNumericRange(filter, payload.field, payload.itemId),
+    {
+      key: payload.itemId ?? `sampling-draft:${payload.field}`,
+      onError: (error) =>
+        reportDataError(`Extra filter range query failed for ${payload.field}`, error),
+    },
+  );
 }
 
 function onColumnResizeStart(e: PointerEvent): void {
