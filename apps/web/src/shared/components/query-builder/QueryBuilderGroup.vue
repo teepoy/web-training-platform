@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { NButton, NButtonGroup } from "naive-ui";
+import { useI18n } from "vue-i18n";
 import {
   createQueryBuilderGroup,
   isQueryBuilderGroup,
@@ -8,6 +9,8 @@ import {
   type QueryBuilderGroup,
   type QueryBuilderRule,
 } from "./types";
+
+const { t } = useI18n();
 
 type RuleValue = unknown;
 
@@ -100,7 +103,7 @@ function onDrop(targetNodeId: string): void {
           data-testid="query-combinator-and"
           @click="updateCombinator('and')"
         >
-          AND
+          {{ t("widgets.and") }}
         </NButton>
         <NButton
           :type="modelValue.combinator === 'or' ? 'primary' : 'default'"
@@ -108,7 +111,7 @@ function onDrop(targetNodeId: string): void {
           data-testid="query-combinator-or"
           @click="updateCombinator('or')"
         >
-          OR
+          {{ t("widgets.or") }}
         </NButton>
       </NButtonGroup>
 
@@ -120,7 +123,7 @@ function onDrop(targetNodeId: string): void {
           data-testid="query-add-condition"
           @click="appendRule"
         >
-          + Condition
+          {{ t("widgets.addCondition") }}
         </NButton>
         <NButton
           size="tiny"
@@ -129,7 +132,7 @@ function onDrop(targetNodeId: string): void {
           data-testid="query-add-group"
           @click="appendGroup"
         >
-          + Group
+          {{ t("widgets.addGroup") }}
         </NButton>
         <NButton
           v-if="!root"
@@ -139,7 +142,7 @@ function onDrop(targetNodeId: string): void {
           data-testid="query-delete-group"
           @click="emit('delete')"
         >
-          Delete group
+          {{ t("widgets.deleteGroup") }}
         </NButton>
       </div>
     </header>
@@ -147,7 +150,7 @@ function onDrop(targetNodeId: string): void {
     <div v-if="modelValue.items.length > 0" class="query-builder__items">
       <template v-for="(node, index) in modelValue.items" :key="node.id">
         <div v-if="index > 0" class="query-builder__join">
-          {{ modelValue.combinator.toUpperCase() }}
+          {{ t(`widgets.${modelValue.combinator}`) }}
         </div>
 
         <div
@@ -158,7 +161,7 @@ function onDrop(targetNodeId: string): void {
           @dragover.prevent
           @drop="onDrop(node.id)"
         >
-          <span class="query-builder__drag" aria-label="Drag query item">⋮⋮</span>
+          <span class="query-builder__drag" :aria-label="t('widgets.dragQueryItem')">⋮⋮</span>
 
           <QueryBuilderGroup
             v-if="isQueryBuilderGroup(node)"
@@ -189,14 +192,14 @@ function onDrop(targetNodeId: string): void {
               data-testid="query-delete-condition"
               @click="deleteNode(node.id)"
             >
-              Delete
+              {{ t("common.delete") }}
             </NButton>
           </div>
         </div>
       </template>
     </div>
 
-    <div v-else class="query-builder__empty">No conditions</div>
+    <div v-else class="query-builder__empty">{{ t("widgets.noConditions") }}</div>
   </section>
 </template>
 

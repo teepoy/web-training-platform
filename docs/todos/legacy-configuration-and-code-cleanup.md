@@ -2,17 +2,20 @@
 
 ## Progress
 
-- **Overall status:** In progress; the goal is not complete.
-- **Completed intermediate slice:** API configuration ownership was
-  consolidated, tracked `prod.yaml` became the stable non-secret production
-  source, and Make targets were aligned with the shared development inputs. A
-  canonical ownership catalog now covers every supported API setting; retired
-  typed fields and `MNT` were removed, extra compatibility fields are ignored,
-  MinIO lifecycle uses typed config, and Dashboard reads its pool identity from
-  the Prefect deployment catalog instead of duplicate YAML.
-- **Next milestone:** complete the unnecessary-prefix/shared-component cleanup
-  with the visual reuse todo.
-- **Done when:** every acceptance criterion below is verified.
+- **Overall status:** Complete.
+- **Completed outcome:** configuration has one documented ownership model,
+  tracked `prod.yaml` owns stable non-secret production behavior, environment
+  variables own secrets and deployment topology, registries own executable
+  categories, and Make/release inputs no longer provide competing application
+  settings. Extra compatibility fields are ignored as approved.
+- **Code cleanup:** the last live consumer of the retired classify package was
+  moved into the dataset feature, the unregistered classify/preview legacy
+  trees were deleted after a repository consumer audit, generic components use
+  shared ownership, and unnecessary production `Sc*` Vue filenames are gone.
+- **Verification:** repository searches find no production `@/legacy`, retired
+  classify/preview route, or unnecessary `Sc*.vue` consumer; lint, all 516 web
+  unit tests, the production web build, and the full browser regression suite
+  pass.
 
 This document tracks deferred cleanup of legacy configuration paths, duplicated
 options, unused code, and unnecessary naming prefixes. It records work to be
@@ -135,9 +138,10 @@ development environment definition, and their frontend, platform API, and
 MinIO endpoints derive from the canonical Make variables instead of repeating
 hard-coded ports.
 
-The broader unused-code and prefix inventory remains open and should continue
-as subsystem-sized changes. Configuration ownership itself is complete and is
-documented in `docs/architecture/configuration-ownership.md`.
+The agreed unused-code and prefix inventory is complete. The only similarly
+named live route is `CollectionClassifyView.vue`, where “Classify” describes the
+supported collection workflow rather than a retired prefix. Configuration
+ownership is documented in `docs/architecture/configuration-ownership.md`.
 
 ### Before Implementation
 
@@ -146,3 +150,7 @@ tasks. Preserve product behavior and compatibility reads without requiring
 backfill. Settings and deployment inputs may break as explicitly recorded
 above; publish their migration notes before deleting old names or changing
 production configuration ownership.
+
+Implementation is complete. New settings must be added to the ownership catalog
+and exactly one canonical source; future dead-code removal remains normal
+subsystem maintenance rather than an open item in this modernization goal.

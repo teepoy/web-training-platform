@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { useI18n } from "vue-i18n";
 import VChart from "vue-echarts";
 import { use } from "echarts/core";
 import { LineChart } from "echarts/charts";
@@ -8,6 +9,8 @@ import { CanvasRenderer } from "echarts/renderers";
 import type { EChartsOption } from "echarts";
 
 import type { TrainingEvent } from "../../types/components";
+
+const { t } = useI18n();
 
 use([CanvasRenderer, GridComponent, LegendComponent, LineChart, TooltipComponent]);
 
@@ -55,7 +58,9 @@ const latestProgress = computed(() => {
   return {
     epoch: latest.epoch,
     totalEpochs,
-    label: totalEpochs ? `Epoch ${latest.epoch} / ${totalEpochs}` : `Epoch ${latest.epoch}`,
+    label: totalEpochs
+      ? t("widgets.epochProgress", { epoch: latest.epoch, total: totalEpochs })
+      : t("widgets.epochCurrent", { epoch: latest.epoch }),
     loss: latest.loss,
     accuracy: latest.accuracy,
     percentage:
@@ -113,7 +118,7 @@ const option = computed<EChartsOption>(() => ({
   },
   xAxis: {
     type: "value",
-    name: "Epoch",
+    name: t("widgets.epoch"),
     minInterval: 1,
     splitLine: {
       lineStyle: {
@@ -123,7 +128,7 @@ const option = computed<EChartsOption>(() => ({
   },
   yAxis: {
     type: "value",
-    name: "Loss",
+    name: t("widgets.loss"),
     scale: true,
     splitLine: {
       lineStyle: {
@@ -134,7 +139,7 @@ const option = computed<EChartsOption>(() => ({
   series: [
     {
       type: "line",
-      name: "Loss",
+      name: t("widgets.loss"),
       data: metrics.value.map(({ epoch, loss }) => [epoch, loss]),
       showSymbol: true,
       symbolSize: 8,
@@ -165,10 +170,14 @@ const option = computed<EChartsOption>(() => ({
       <n-space justify="space-between" align="center">
         <n-text strong>{{ latestProgress.label }}</n-text>
         <n-text depth="3">
-          loss {{ latestProgress.loss.toFixed(4) }}
-          <template v-if="latestProgress.accuracy !== undefined">
-            · accuracy {{ (latestProgress.accuracy * 100).toFixed(1) }}%
-          </template>
+          {{
+            latestProgress.accuracy !== undefined
+              ? t("widgets.metricSummary", {
+                  loss: latestProgress.loss.toFixed(4),
+                  accuracy: (latestProgress.accuracy * 100).toFixed(1),
+                })
+              : t("widgets.lossSummary", { loss: latestProgress.loss.toFixed(4) })
+          }}
         </n-text>
       </n-space>
       <n-progress
@@ -183,7 +192,7 @@ const option = computed<EChartsOption>(() => ({
     </n-space>
     <n-empty
       v-if="metrics.length === 0 && !hasArtifactSummary"
-      description="No training metrics available yet"
+      :description="t('widgets.noTrainingMetrics')"
     />
     <VChart
       v-else-if="metrics.length > 0"
@@ -199,7 +208,12 @@ const option = computed<EChartsOption>(() => ({
         </n-gi>
       </n-grid>
 
-      <n-card v-if="labelBreakdown.length > 0" size="small" embedded title="Label Breakdown">
+      <n-card
+        v-if="labelBreakdown.length > 0"
+        size="small"
+        embedded
+        :title="t('widgets.labelBreakdown')"
+      >
         <n-grid :cols="2" :x-gap="12" :y-gap="8">
           <n-gi v-for="item in labelBreakdown" :key="item.label">
             <n-space justify="space-between" align="center">

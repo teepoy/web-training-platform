@@ -8,49 +8,53 @@
     - Confidence distribution
 -->
 <script setup lang="ts">
-import { inject, computed, type Ref } from 'vue'
+import { inject, computed, type Ref } from "vue";
+import { useI18n } from "vue-i18n";
 import type { SidebarAnnotationGridItem } from "../../types/sidebar-widgets";
 
-const gridItems = inject<Ref<SidebarAnnotationGridItem[]>>('pr-grid-items')
+const { t } = useI18n();
 
-const total = computed(() => gridItems?.value.length ?? 0)
+const gridItems = inject<Ref<SidebarAnnotationGridItem[]>>("pr-grid-items");
 
-const edited = computed(() =>
-  (gridItems?.value ?? []).filter((item) =>
-    item.draftLabel != null && item.draftLabel !== item.predictionLabel
-  ).length
-)
+const total = computed(() => gridItems?.value.length ?? 0);
 
-const accepted = computed(() => total.value - edited.value)
+const edited = computed(
+  () =>
+    (gridItems?.value ?? []).filter(
+      (item) => item.draftLabel != null && item.draftLabel !== item.predictionLabel,
+    ).length,
+);
+
+const accepted = computed(() => total.value - edited.value);
 
 const avgConfidence = computed(() => {
-  const items = gridItems?.value ?? []
-  const withConf = items.filter((i) => i.predictionConfidence != null)
-  if (withConf.length === 0) return null
-  const sum = withConf.reduce((acc, i) => acc + (i.predictionConfidence ?? 0), 0)
-  return sum / withConf.length
-})
+  const items = gridItems?.value ?? [];
+  const withConf = items.filter((i) => i.predictionConfidence != null);
+  if (withConf.length === 0) return null;
+  const sum = withConf.reduce((acc, i) => acc + (i.predictionConfidence ?? 0), 0);
+  return sum / withConf.length;
+});
 </script>
 
 <template>
   <div class="psw">
     <div class="psw-row">
-      <span class="psw-label">Total</span>
+      <span class="psw-label">{{ t("widgets.total") }}</span>
       <span class="psw-value">{{ total }}</span>
     </div>
     <div class="psw-row">
-      <span class="psw-label">Accepted</span>
+      <span class="psw-label">{{ t("widgets.accepted") }}</span>
       <span class="psw-value psw-value--ok">{{ accepted }}</span>
     </div>
     <div class="psw-row">
-      <span class="psw-label">Edited</span>
+      <span class="psw-label">{{ t("widgets.edited") }}</span>
       <span class="psw-value psw-value--edit">{{ edited }}</span>
     </div>
     <div v-if="avgConfidence != null" class="psw-row">
-      <span class="psw-label">Avg Confidence</span>
+      <span class="psw-label">{{ t("widgets.averageConfidence") }}</span>
       <span class="psw-value">{{ (avgConfidence * 100).toFixed(1) }}%</span>
     </div>
-    <div v-if="total === 0" class="psw-empty">No predictions loaded</div>
+    <div v-if="total === 0" class="psw-empty">{{ t("widgets.noPredictions") }}</div>
   </div>
 </template>
 
@@ -77,11 +81,11 @@ const avgConfidence = computed(() => {
 }
 
 .psw-value--ok {
-  color: #4CAF50;
+  color: #4caf50;
 }
 
 .psw-value--edit {
-  color: #FF9800;
+  color: #ff9800;
 }
 
 .psw-empty {

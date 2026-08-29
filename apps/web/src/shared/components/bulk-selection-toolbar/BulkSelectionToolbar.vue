@@ -13,6 +13,10 @@ defineEmits<{
   clear: [];
 }>();
 const { t } = useI18n();
+
+function selectedLabel(count: number, item: string): string {
+  return t(count === 1 ? "common.selectedOne" : "common.selectedMany", { count, item });
+}
 </script>
 
 <template>
@@ -24,7 +28,7 @@ const { t } = useI18n();
     data-testid="bulk-selection-toolbar"
   >
     <NText strong>
-      {{ t("common.selected", { count: selectedCount, item: itemLabel }, selectedCount) }}
+      {{ selectedLabel(selectedCount, itemLabel) }}
     </NText>
     <NSpace align="center" :size="8">
       <slot />

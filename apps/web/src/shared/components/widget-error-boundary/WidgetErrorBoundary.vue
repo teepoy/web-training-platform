@@ -3,23 +3,26 @@
   a friendly error message instead of crashing the entire sidebar.
 -->
 <script setup lang="ts">
-import { ref, onErrorCaptured } from 'vue'
+import { ref, onErrorCaptured } from "vue";
+import { useI18n } from "vue-i18n";
+
+const { t } = useI18n();
 
 const props = defineProps<{
-  widgetId: string
-  widgetComponent: string
-}>()
+  widgetId: string;
+  widgetComponent: string;
+}>();
 
-const error = ref<string | null>(null)
+const error = ref<string | null>(null);
 
 onErrorCaptured((err) => {
-  error.value = err instanceof Error ? err.message : String(err)
+  error.value = err instanceof Error ? err.message : String(err);
   // Prevent propagation
-  return false
-})
+  return false;
+});
 
 function retry() {
-  error.value = null
+  error.value = null;
 }
 </script>
 
@@ -27,9 +30,9 @@ function retry() {
   <div v-if="error" class="web-error">
     <div class="web-error__icon">!</div>
     <div class="web-error__msg">
-      Widget "{{ widgetComponent }}" failed: {{ error }}
+      {{ t("widgets.widgetFailed", { widget: widgetComponent, error }) }}
     </div>
-    <button class="web-error__retry" @click="retry">Retry</button>
+    <button class="web-error__retry" @click="retry">{{ t("common.retry") }}</button>
   </div>
   <slot v-else />
 </template>

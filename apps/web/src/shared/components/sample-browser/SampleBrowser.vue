@@ -14,7 +14,11 @@
         @scroll="onContainerScroll"
       >
         <div
-          :style="{ height: virtualizer.getTotalSize() + 'px', position: 'relative', width: '100%' }"
+          :style="{
+            height: virtualizer.getTotalSize() + 'px',
+            position: 'relative',
+            width: '100%',
+          }"
         >
           <div
             v-for="vRow in virtualizer.getVirtualItems()"
@@ -66,12 +70,12 @@
                     v-if="effectiveLabel(item)"
                     class="sb-badge"
                     :style="{ background: labelColor(effectiveLabel(item)!) }"
-                  >{{ effectiveLabel(item) }}</span>
+                    >{{ effectiveLabel(item) }}</span
+                  >
                   <span v-else class="sb-badge sb-badge--empty">&mdash;</span>
-                  <span
-                    v-if="item.predictionConfidence != null"
-                    class="sb-confidence"
-                  >{{ (item.predictionConfidence * 100).toFixed(0) }}%</span>
+                  <span v-if="item.predictionConfidence != null" class="sb-confidence"
+                    >{{ (item.predictionConfidence * 100).toFixed(0) }}%</span
+                  >
                 </div>
               </div>
             </div>
@@ -81,8 +85,10 @@
               class="sb-list-row"
               :class="{
                 'sb-list-row--selected': selectedIds.has(getListItem(vRow.index)!.id),
-                'sb-list-row--draft': !!(getListItem(vRow.index)!.draftLabel || getListItem(vRow.index)!.predictionLabel),
-                'sb-list-row--no-checkbox': !showCheckboxes
+                'sb-list-row--draft': !!(
+                  getListItem(vRow.index)!.draftLabel || getListItem(vRow.index)!.predictionLabel
+                ),
+                'sb-list-row--no-checkbox': !showCheckboxes,
               }"
               :data-item-id="getListItem(vRow.index)!.id"
               data-sb-item
@@ -109,7 +115,7 @@
                   :style="{ width: thumbSize + 'px', height: thumbSize + 'px' }"
                 />
                 <div v-if="getListItem(vRow.index)!.imageSrcs.length === 0" class="sb-list-empty">
-                  No image
+                  {{ t("widgets.noImage") }}
                 </div>
               </div>
               <div class="sb-list-main">
@@ -119,15 +125,23 @@
                     v-if="effectiveLabel(getListItem(vRow.index)!)"
                     class="sb-badge"
                     :style="{ background: labelColor(effectiveLabel(getListItem(vRow.index)!)!) }"
-                  >{{ effectiveLabel(getListItem(vRow.index)!) }}</span>
+                    >{{ effectiveLabel(getListItem(vRow.index)!) }}</span
+                  >
                   <span v-else class="sb-badge sb-badge--empty">&mdash;</span>
-                  <span class="sb-list-image-count">{{ getListItem(vRow.index)!.imageSrcs.length }} image{{ getListItem(vRow.index)!.imageSrcs.length === 1 ? '' : 's' }}</span>
+                  <span class="sb-list-image-count">{{
+                    t("widgets.imageCount", {
+                      count: getListItem(vRow.index)!.imageSrcs.length,
+                    })
+                  }}</span>
                   <span
                     v-if="getListItem(vRow.index)!.predictionConfidence != null"
                     class="sb-confidence"
-                  >{{ (getListItem(vRow.index)!.predictionConfidence! * 100).toFixed(0) }}%</span>
+                    >{{ (getListItem(vRow.index)!.predictionConfidence! * 100).toFixed(0) }}%</span
+                  >
                 </div>
-                <div class="sb-list-meta">{{ metadataPreview(getListItem(vRow.index)!.metadata) }}</div>
+                <div class="sb-list-meta">
+                  {{ metadataPreview(getListItem(vRow.index)!.metadata) }}
+                </div>
               </div>
             </div>
           </div>
@@ -146,7 +160,7 @@
         />
 
         <!-- Loading indicator -->
-        <div v-if="isLoading" class="sb-loading">Loading more...</div>
+        <div v-if="isLoading" class="sb-loading">{{ t("widgets.loadingMore") }}</div>
       </div>
 
       <!-- Floating bottom bar -->
@@ -156,7 +170,13 @@
         </div>
         <div class="sb-bar-right">
           <span class="sb-bar-count">
-            {{ selectedIds.size }} selected &middot; {{ items.length }} of {{ totalCount }} loaded
+            {{
+              t("widgets.selectionLoaded", {
+                selected: selectedIds.size,
+                loaded: items.length,
+                total: totalCount,
+              })
+            }}
           </span>
           <slot name="bar-right" />
         </div>
@@ -166,128 +186,142 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-import { useVirtualizer } from '@tanstack/vue-virtual'
-import type { BrowserItem } from '@/shared/types/components'
-import { handleBrowserActivation } from './browser-activation'
+import { ref, computed, onMounted, onUnmounted, watch } from "vue";
+import { useVirtualizer } from "@tanstack/vue-virtual";
+import { useI18n } from "vue-i18n";
+import type { BrowserItem } from "@/shared/types/components";
+import { handleBrowserActivation } from "./browser-activation";
 
-const props = withDefaults(defineProps<{
-  items: BrowserItem[]
-  totalCount: number
-  thumbSize?: number
-  layout?: 'grid' | 'list'
-  isLoading?: boolean
-  selectionEnabled?: boolean
-  showCheckboxes?: boolean
-  showBottomBar?: boolean
-  showLabelRail?: boolean
-  activationMode?: 'open' | 'select'
-}>(), {
-  thumbSize: 160,
-  layout: 'grid',
-  isLoading: false,
-  selectionEnabled: false,
-  showCheckboxes: false,
-  showBottomBar: false,
-  showLabelRail: false,
-  activationMode: 'open'
-})
+const { t } = useI18n();
+
+const props = withDefaults(
+  defineProps<{
+    items: BrowserItem[];
+    totalCount: number;
+    thumbSize?: number;
+    layout?: "grid" | "list";
+    isLoading?: boolean;
+    selectionEnabled?: boolean;
+    showCheckboxes?: boolean;
+    showBottomBar?: boolean;
+    showLabelRail?: boolean;
+    activationMode?: "open" | "select";
+  }>(),
+  {
+    thumbSize: 160,
+    layout: "grid",
+    isLoading: false,
+    selectionEnabled: false,
+    showCheckboxes: false,
+    showBottomBar: false,
+    showLabelRail: false,
+    activationMode: "open",
+  },
+);
 
 const emit = defineEmits<{
-  'open-item': [id: string]
-  select: [ids: Set<string>]
-  'load-more': []
-}>()
+  "open-item": [id: string];
+  select: [ids: Set<string>];
+  "load-more": [];
+}>();
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
 const LABEL_COLORS = [
-  '#4CAF50', '#2196F3', '#FF9800', '#E91E63', '#9C27B0',
-  '#00BCD4', '#FF5722', '#795548', '#607D8B', '#CDDC39',
-]
+  "#4CAF50",
+  "#2196F3",
+  "#FF9800",
+  "#E91E63",
+  "#9C27B0",
+  "#00BCD4",
+  "#FF5722",
+  "#795548",
+  "#607D8B",
+  "#CDDC39",
+];
 
 // Basic hash for label color consistency
 function labelColor(label: string): string {
-  let hash = 0
+  let hash = 0;
   for (let i = 0; i < label.length; i++) {
-    hash = label.charCodeAt(i) + ((hash << 5) - hash)
+    hash = label.charCodeAt(i) + ((hash << 5) - hash);
   }
-  const idx = Math.abs(hash) % LABEL_COLORS.length
-  return LABEL_COLORS[idx]
+  const idx = Math.abs(hash) % LABEL_COLORS.length;
+  return LABEL_COLORS[idx];
 }
 
 function effectiveLabel(item: BrowserItem): string | null {
-  return item.draftLabel ?? item.predictionLabel ?? item.currentLabel ?? null
+  return item.draftLabel ?? item.predictionLabel ?? item.currentLabel ?? null;
 }
 
 function metadataPreview(metadata: Record<string, unknown>): string {
-  const preview = JSON.stringify(metadata)
-  if (!preview || preview === '{}') return 'No metadata'
-  return preview.length > 180 ? `${preview.slice(0, 180)}...` : preview
+  const preview = JSON.stringify(metadata);
+  if (!preview || preview === "{}") return "No metadata";
+  return preview.length > 180 ? `${preview.slice(0, 180)}...` : preview;
 }
 
 // ---------------------------------------------------------------------------
 // Grid layout
 // ---------------------------------------------------------------------------
 
-const scrollRef = ref<HTMLElement | null>(null)
-const containerWidth = ref(800)
-const cardWidth = computed(() => props.thumbSize + 20)
-const cardsPerRow = computed(() => Math.max(1, Math.floor(containerWidth.value / cardWidth.value)))
-const rowCount = computed(() => Math.ceil(props.items.length / cardsPerRow.value))
-const layout = computed(() => props.layout)
+const scrollRef = ref<HTMLElement | null>(null);
+const containerWidth = ref(800);
+const cardWidth = computed(() => props.thumbSize + 20);
+const cardsPerRow = computed(() => Math.max(1, Math.floor(containerWidth.value / cardWidth.value)));
+const rowCount = computed(() => Math.ceil(props.items.length / cardsPerRow.value));
+const layout = computed(() => props.layout);
 
 function getRowItems(rowIndex: number): BrowserItem[] {
-  const start = rowIndex * cardsPerRow.value
-  return props.items.slice(start, start + cardsPerRow.value)
+  const start = rowIndex * cardsPerRow.value;
+  return props.items.slice(start, start + cardsPerRow.value);
 }
 
 function getListItem(index: number): BrowserItem | undefined {
-  return props.items[index]
+  return props.items[index];
 }
 
 // ---------------------------------------------------------------------------
 // Selection
 // ---------------------------------------------------------------------------
 
-const selectedIds = ref<Set<string>>(new Set())
+const selectedIds = ref<Set<string>>(new Set());
 
 function emitSelection() {
-  emit('select', selectedIds.value)
+  emit("select", selectedIds.value);
 }
 
 function toggleSelection(id: string) {
-  if (!props.selectionEnabled) return
-  const next = new Set(selectedIds.value)
-  if (next.has(id)) next.delete(id)
-  else next.add(id)
-  selectedIds.value = next
-  emitSelection()
+  if (!props.selectionEnabled) return;
+  const next = new Set(selectedIds.value);
+  if (next.has(id)) next.delete(id);
+  else next.add(id);
+  selectedIds.value = next;
+  emitSelection();
 }
 
 function onItemClick(id: string, e: MouseEvent) {
-  if (wasDragging) return
+  if (wasDragging) return;
 
   handleBrowserActivation(props.activationMode, id, e, {
     onOpen: (targetId) => {
-      emit('open-item', targetId)
+      emit("open-item", targetId);
       // Even in 'open' mode, we might allow multi-select if explicitly enabled
       if (props.selectionEnabled && (e.ctrlKey || e.metaKey)) {
-        toggleSelection(targetId)
+        toggleSelection(targetId);
       }
     },
     onSelect: (targetId, multi) => {
-      if (!props.selectionEnabled) return
+      if (!props.selectionEnabled) return;
       if (multi) {
-        toggleSelection(targetId)
+        toggleSelection(targetId);
       } else {
-        selectedIds.value = new Set([targetId])
-        emitSelection()
+        selectedIds.value = new Set([targetId]);
+        emitSelection();
       }
-    }
-  })
+    },
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -295,23 +329,25 @@ function onItemClick(id: string, e: MouseEvent) {
 // ---------------------------------------------------------------------------
 
 const rowHeight = computed(() => {
-  if (layout.value === 'list') return props.thumbSize + 56
-  return props.thumbSize + 48
-})
+  if (layout.value === "list") return props.thumbSize + 56;
+  return props.thumbSize + 48;
+});
 
 const virtualizer = useVirtualizer({
-  get count() { return layout.value === 'list' ? props.items.length : rowCount.value },
+  get count() {
+    return layout.value === "list" ? props.items.length : rowCount.value;
+  },
   getScrollElement: () => scrollRef.value,
   estimateSize: () => rowHeight.value,
   overscan: 3,
-})
+});
 
 // Trigger load-more when scrolling near the bottom
 function onContainerScroll() {
-  const el = scrollRef.value
-  if (!el) return
+  const el = scrollRef.value;
+  if (!el) return;
   if (el.scrollTop + el.clientHeight >= el.scrollHeight - 200) {
-    emit('load-more')
+    emit("load-more");
   }
 }
 
@@ -319,133 +355,142 @@ function onContainerScroll() {
 watch(
   () => virtualizer.value.getVirtualItems(),
   (items) => {
-    if (!items.length) return
-    const lastItem = items[items.length - 1]
-    const threshold = layout.value === 'list' ? props.items.length - 2 : rowCount.value - 2
+    if (!items.length) return;
+    const lastItem = items[items.length - 1];
+    const threshold = layout.value === "list" ? props.items.length - 2 : rowCount.value - 2;
     if (lastItem && lastItem.index >= threshold) {
-      emit('load-more')
+      emit("load-more");
     }
   },
-)
+);
 
 // ---------------------------------------------------------------------------
 // Rubber-band selection
 // ---------------------------------------------------------------------------
 
-const isDragging = ref(false)
-const dragStart = ref<{ x: number; y: number } | null>(null)
-const dragCurrent = ref<{ x: number; y: number } | null>(null)
-const DRAG_THRESHOLD = 5
-let wasDragging = false
-let dragCtrlHeld = false
-let autoScrollTimer: ReturnType<typeof setInterval> | null = null
+const isDragging = ref(false);
+const dragStart = ref<{ x: number; y: number } | null>(null);
+const dragCurrent = ref<{ x: number; y: number } | null>(null);
+const DRAG_THRESHOLD = 5;
+let wasDragging = false;
+let dragCtrlHeld = false;
+let autoScrollTimer: ReturnType<typeof setInterval> | null = null;
 
 const rubberRect = computed(() => {
-  if (!dragStart.value || !dragCurrent.value || !scrollRef.value) return null
-  const rect = scrollRef.value.getBoundingClientRect()
-  const x1 = Math.min(dragStart.value.x, dragCurrent.value.x) - rect.left
-  const y1 = Math.min(dragStart.value.y, dragCurrent.value.y) - rect.top + scrollRef.value.scrollTop
-  const x2 = Math.max(dragStart.value.x, dragCurrent.value.x) - rect.left
-  const y2 = Math.max(dragStart.value.y, dragCurrent.value.y) - rect.top + scrollRef.value.scrollTop
-  return { left: x1, top: y1, width: x2 - x1, height: y2 - y1 }
-})
+  if (!dragStart.value || !dragCurrent.value || !scrollRef.value) return null;
+  const rect = scrollRef.value.getBoundingClientRect();
+  const x1 = Math.min(dragStart.value.x, dragCurrent.value.x) - rect.left;
+  const y1 =
+    Math.min(dragStart.value.y, dragCurrent.value.y) - rect.top + scrollRef.value.scrollTop;
+  const x2 = Math.max(dragStart.value.x, dragCurrent.value.x) - rect.left;
+  const y2 =
+    Math.max(dragStart.value.y, dragCurrent.value.y) - rect.top + scrollRef.value.scrollTop;
+  return { left: x1, top: y1, width: x2 - x1, height: y2 - y1 };
+});
 
 function onMouseDown(e: MouseEvent) {
-  if (!props.selectionEnabled) return
-  if (e.button !== 0) return
-  if ((e.target as HTMLElement).closest('.sb-label-rail, .sb-bottom-bar, button, input')) return
-  e.preventDefault()
-  dragStart.value = { x: e.clientX, y: e.clientY }
-  dragCurrent.value = { x: e.clientX, y: e.clientY }
-  dragCtrlHeld = e.ctrlKey || e.metaKey
-  document.addEventListener('mousemove', onDocMouseMove)
-  document.addEventListener('mouseup', onDocMouseUp)
+  if (!props.selectionEnabled) return;
+  if (e.button !== 0) return;
+  if ((e.target as HTMLElement).closest(".sb-label-rail, .sb-bottom-bar, button, input")) return;
+  e.preventDefault();
+  dragStart.value = { x: e.clientX, y: e.clientY };
+  dragCurrent.value = { x: e.clientX, y: e.clientY };
+  dragCtrlHeld = e.ctrlKey || e.metaKey;
+  document.addEventListener("mousemove", onDocMouseMove);
+  document.addEventListener("mouseup", onDocMouseUp);
 }
 
 function onDocMouseMove(e: MouseEvent) {
-  if (!dragStart.value) return
-  dragCurrent.value = { x: e.clientX, y: e.clientY }
-  const dx = e.clientX - dragStart.value.x
-  const dy = e.clientY - dragStart.value.y
+  if (!dragStart.value) return;
+  dragCurrent.value = { x: e.clientX, y: e.clientY };
+  const dx = e.clientX - dragStart.value.x;
+  const dy = e.clientY - dragStart.value.y;
   if (!isDragging.value && Math.sqrt(dx * dx + dy * dy) >= DRAG_THRESHOLD) {
-    isDragging.value = true
-    startAutoScroll()
+    isDragging.value = true;
+    startAutoScroll();
   }
   if (isDragging.value) {
-    updateRubberBandSelection()
+    updateRubberBandSelection();
   }
 }
 
 function onDocMouseUp() {
-  document.removeEventListener('mousemove', onDocMouseMove)
-  document.removeEventListener('mouseup', onDocMouseUp)
-  stopAutoScroll()
+  document.removeEventListener("mousemove", onDocMouseMove);
+  document.removeEventListener("mouseup", onDocMouseUp);
+  stopAutoScroll();
 
   if (isDragging.value) {
-    updateRubberBandSelection()
-    wasDragging = true
-    setTimeout(() => { wasDragging = false }, 0)
+    updateRubberBandSelection();
+    wasDragging = true;
+    setTimeout(() => {
+      wasDragging = false;
+    }, 0);
   }
 
-  isDragging.value = false
-  dragStart.value = null
-  dragCurrent.value = null
+  isDragging.value = false;
+  dragStart.value = null;
+  dragCurrent.value = null;
 }
 
 function updateRubberBandSelection() {
-  if (!rubberRect.value || !scrollRef.value) return
-  const rr = rubberRect.value
-  const rrBottom = rr.top + rr.height
+  if (!rubberRect.value || !scrollRef.value) return;
+  const rr = rubberRect.value;
+  const rrBottom = rr.top + rr.height;
 
   // Find all card elements that intersect the rubber band
-  const cards = scrollRef.value.querySelectorAll<HTMLElement>('[data-item-id]')
-  const intersecting: string[] = []
-  const containerRect = scrollRef.value.getBoundingClientRect()
-  const scrollTop = scrollRef.value.scrollTop
+  const cards = scrollRef.value.querySelectorAll<HTMLElement>("[data-item-id]");
+  const intersecting: string[] = [];
+  const containerRect = scrollRef.value.getBoundingClientRect();
+  const scrollTop = scrollRef.value.scrollTop;
 
   for (const card of cards) {
-    const cardRect = card.getBoundingClientRect()
-    const cardTop = cardRect.top - containerRect.top + scrollTop
-    const cardBottom = cardTop + cardRect.height
-    const cardLeft = cardRect.left - containerRect.left
-    const cardRight = cardLeft + cardRect.width
+    const cardRect = card.getBoundingClientRect();
+    const cardTop = cardRect.top - containerRect.top + scrollTop;
+    const cardBottom = cardTop + cardRect.height;
+    const cardLeft = cardRect.left - containerRect.left;
+    const cardRight = cardLeft + cardRect.width;
 
-    if (cardBottom >= rr.top && cardTop <= rrBottom && cardRight >= rr.left && cardLeft <= rr.left + rr.width) {
-      const id = card.dataset.itemId
-      if (id) intersecting.push(id)
+    if (
+      cardBottom >= rr.top &&
+      cardTop <= rrBottom &&
+      cardRight >= rr.left &&
+      cardLeft <= rr.left + rr.width
+    ) {
+      const id = card.dataset.itemId;
+      if (id) intersecting.push(id);
     }
   }
 
   if (dragCtrlHeld) {
-    const next = new Set(selectedIds.value)
-    intersecting.forEach((id) => next.add(id))
-    selectedIds.value = next
+    const next = new Set(selectedIds.value);
+    intersecting.forEach((id) => next.add(id));
+    selectedIds.value = next;
   } else {
-    selectedIds.value = new Set(intersecting)
+    selectedIds.value = new Set(intersecting);
   }
-  emitSelection()
+  emitSelection();
 }
 
 // Auto-scroll when drag reaches viewport edges
 function startAutoScroll() {
-  if (autoScrollTimer) return
+  if (autoScrollTimer) return;
   autoScrollTimer = setInterval(() => {
-    if (!isDragging.value || !dragCurrent.value || !scrollRef.value) return
-    const rect = scrollRef.value.getBoundingClientRect()
-    const edgeZone = 40
-    const speed = 12
+    if (!isDragging.value || !dragCurrent.value || !scrollRef.value) return;
+    const rect = scrollRef.value.getBoundingClientRect();
+    const edgeZone = 40;
+    const speed = 12;
     if (dragCurrent.value.y < rect.top + edgeZone) {
-      scrollRef.value.scrollTop -= speed
+      scrollRef.value.scrollTop -= speed;
     } else if (dragCurrent.value.y > rect.bottom - edgeZone) {
-      scrollRef.value.scrollTop += speed
+      scrollRef.value.scrollTop += speed;
     }
-  }, 16)
+  }, 16);
 }
 
 function stopAutoScroll() {
   if (autoScrollTimer) {
-    clearInterval(autoScrollTimer)
-    autoScrollTimer = null
+    clearInterval(autoScrollTimer);
+    autoScrollTimer = null;
   }
 }
 
@@ -453,29 +498,29 @@ function stopAutoScroll() {
 // Container resize observer
 // ---------------------------------------------------------------------------
 
-let resizeObserver: ResizeObserver | null = null
+let resizeObserver: ResizeObserver | null = null;
 
 onMounted(() => {
   if (scrollRef.value) {
-    containerWidth.value = scrollRef.value.clientWidth
+    containerWidth.value = scrollRef.value.clientWidth;
     resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
-        containerWidth.value = entry.contentRect.width
+        containerWidth.value = entry.contentRect.width;
       }
-    })
-    resizeObserver.observe(scrollRef.value)
+    });
+    resizeObserver.observe(scrollRef.value);
   }
-})
+});
 
 onUnmounted(() => {
-  stopAutoScroll()
-  document.removeEventListener('mousemove', onDocMouseMove)
-  document.removeEventListener('mouseup', onDocMouseUp)
+  stopAutoScroll();
+  document.removeEventListener("mousemove", onDocMouseMove);
+  document.removeEventListener("mouseup", onDocMouseUp);
   if (resizeObserver) {
-    resizeObserver.disconnect()
-    resizeObserver = null
+    resizeObserver.disconnect();
+    resizeObserver = null;
   }
-})
+});
 
 // ---------------------------------------------------------------------------
 // Expose for parent ref access
@@ -484,10 +529,10 @@ onUnmounted(() => {
 defineExpose({
   selectedIds,
   clearSelection: () => {
-    selectedIds.value = new Set()
-    emitSelection()
+    selectedIds.value = new Set();
+    emitSelection();
   },
-})
+});
 </script>
 
 <style scoped>
@@ -505,7 +550,7 @@ defineExpose({
   flex-direction: column;
   width: 170px;
   min-width: 170px;
-  border-right: 1px solid var(--cv-border, rgba(255,255,255,0.12));
+  border-right: 1px solid var(--cv-border, rgba(255, 255, 255, 0.12));
   background: var(--cv-card-bg, #1e1e2e);
 }
 
@@ -557,7 +602,7 @@ defineExpose({
 }
 
 .sb-card:hover {
-  border-color: var(--cv-border, rgba(255,255,255,0.2));
+  border-color: var(--cv-border, rgba(255, 255, 255, 0.2));
 }
 
 .sb-select-box {
@@ -625,12 +670,12 @@ defineExpose({
 
 .sb-badge--empty {
   background: transparent;
-  color: var(--cv-text-disabled, rgba(255,255,255,0.3));
+  color: var(--cv-text-disabled, rgba(255, 255, 255, 0.3));
 }
 
 .sb-confidence {
   font-size: 10px;
-  color: var(--cv-text-secondary, rgba(255,255,255,0.5));
+  color: var(--cv-text-secondary, rgba(255, 255, 255, 0.5));
   flex-shrink: 0;
 }
 
@@ -640,7 +685,7 @@ defineExpose({
   gap: 12px;
   align-items: start;
   padding: 12px;
-  border: 1px solid var(--cv-border, rgba(255,255,255,0.12));
+  border: 1px solid var(--cv-border, rgba(255, 255, 255, 0.12));
   border-radius: 10px;
   background: var(--cv-card-bg, #1e1e2e);
   cursor: pointer;
@@ -682,9 +727,9 @@ defineExpose({
   justify-content: center;
   min-width: 120px;
   min-height: 80px;
-  border: 1px dashed var(--cv-border, rgba(255,255,255,0.12));
+  border: 1px dashed var(--cv-border, rgba(255, 255, 255, 0.12));
   border-radius: 8px;
-  color: var(--cv-text-secondary, rgba(255,255,255,0.5));
+  color: var(--cv-text-secondary, rgba(255, 255, 255, 0.5));
   font-size: 12px;
 }
 
@@ -711,13 +756,13 @@ defineExpose({
 
 .sb-list-image-count {
   font-size: 11px;
-  color: var(--cv-text-secondary, rgba(255,255,255,0.5));
+  color: var(--cv-text-secondary, rgba(255, 255, 255, 0.5));
 }
 
 .sb-list-meta {
   font-size: 12px;
   line-height: 1.5;
-  color: var(--cv-text-secondary, rgba(255,255,255,0.5));
+  color: var(--cv-text-secondary, rgba(255, 255, 255, 0.5));
   word-break: break-word;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -740,7 +785,7 @@ defineExpose({
   align-items: center;
   justify-content: space-between;
   padding: 8px 12px;
-  border-top: 1px solid var(--cv-border, rgba(255,255,255,0.12));
+  border-top: 1px solid var(--cv-border, rgba(255, 255, 255, 0.12));
   background: var(--cv-card-bg, #1e1e2e);
   flex-shrink: 0;
 }
@@ -759,7 +804,7 @@ defineExpose({
 
 .sb-bar-count {
   font-size: 12px;
-  color: var(--cv-text-secondary, rgba(255,255,255,0.5));
+  color: var(--cv-text-secondary, rgba(255, 255, 255, 0.5));
 }
 
 /* Loading */
@@ -767,7 +812,7 @@ defineExpose({
   padding: 12px;
   text-align: center;
   font-size: 12px;
-  color: var(--cv-text-secondary, rgba(255,255,255,0.5));
+  color: var(--cv-text-secondary, rgba(255, 255, 255, 0.5));
 }
 
 @media (max-width: 900px) {

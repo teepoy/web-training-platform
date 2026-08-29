@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from "vue-i18n";
 import type { ScSamplingCountRule } from "@/features/sc/domain/samplingRules";
 import SamplingNumericField from "./SamplingNumericField.vue";
 import type { ScSamplingRuleEditorContext } from "./types";
@@ -9,12 +10,13 @@ const props = withDefaults(
   { compact: false },
 );
 const emit = defineEmits<{ (e: "update:rule", rule: Rule): void }>();
+const { t } = useI18n();
 </script>
 
 <template>
   <div data-testid="rule-editor-repeater_count">
     <SamplingNumericField
-      label="Sample count"
+      :label="t('sc.sampleCountLabel')"
       :value="rule.count"
       :minimum="1"
       :compact="compact"

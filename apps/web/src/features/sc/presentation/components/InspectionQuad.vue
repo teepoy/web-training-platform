@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import { NButton, NSelect } from "naive-ui";
 import VChart from "vue-echarts";
 import { use } from "echarts/core";
@@ -8,6 +9,8 @@ import { GridComponent, TooltipComponent } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
 import type { EChartsOption } from "echarts";
 import type { ECElementEvent } from "echarts/core";
+
+const { t } = useI18n();
 import type { ScMapLassoSelection, ScMapSelectionCommand } from "@platform/sc-map-element";
 import BinnedMapPanel from "@/features/sc/presentation/components/BinnedMapPanel.vue";
 import GlobalFilterModal from "@/features/sc/presentation/components/GlobalFilterModal.vue";
@@ -953,7 +956,11 @@ function useMapSelectionQueue() {
             :type="globalFilterCount > 0 ? 'primary' : 'default'"
             @click="globalFilterModalVisible = true"
           >
-            Global Filter{{ globalFilterCount > 0 ? ` (${globalFilterCount})` : "" }}
+            {{
+              globalFilterCount > 0
+                ? t("sc.globalFilterCount", { count: globalFilterCount })
+                : t("sc.globalFilter")
+            }}
           </NButton>
           <NButton
             v-if="model.mapSelectedDefectIds.value.length > 0"
@@ -962,7 +969,7 @@ function useMapSelectionQueue() {
             secondary
             @click="handleClearMapSelection"
           >
-            Map selection ({{ model.mapSelectedDefectIds.value.length }}) ×
+            {{ t("sc.mapSelectionCount", { count: model.mapSelectedDefectIds.value.length }) }}
           </NButton>
           <NButton
             v-if="tableFilterCount > 0"
@@ -971,7 +978,7 @@ function useMapSelectionQueue() {
             secondary
             @click="clearTableFilters"
           >
-            Table filters ({{ tableFilterCount }}) ×
+            {{ t("sc.tableFiltersCount", { count: tableFilterCount }) }}
           </NButton>
           <NButton
             v-if="samplingCohortCount > 0"
@@ -980,7 +987,7 @@ function useMapSelectionQueue() {
             secondary
             @click="clearGalleryRandomSamplingIfActive"
           >
-            Sampling cohort ({{ samplingCohortCount }}) ×
+            {{ t("sc.samplingCohortCount", { count: samplingCohortCount }) }}
           </NButton>
         </div>
       </Teleport>
@@ -1091,7 +1098,7 @@ function useMapSelectionQueue() {
       />
       <div v-if="isReclassify" class="iq-bar-pane">
         <div class="iq-bar-header">
-          <div class="iq-bar-title">Group Distribution</div>
+          <div class="iq-bar-title">{{ t("sc.groupDistribution") }}</div>
           <NSelect
             v-model:value="barLegendSource"
             size="tiny"
@@ -1111,7 +1118,7 @@ function useMapSelectionQueue() {
       ><div
         class="iq-splitter iq-splitter--column iq-splitter--annotation"
         role="separator"
-        aria-label="Resize Annotation panel"
+        :aria-label="t('sc.resizeAnnotationPanel')"
         aria-orientation="vertical"
         @pointerdown="onAnnotationResizeStart"
         @pointermove="onAnnotationResizeMove"

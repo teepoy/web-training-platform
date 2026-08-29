@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { NButton } from "naive-ui";
+import { useI18n } from "vue-i18n";
 
 import type { DatasetListItem } from "../../../datasets/types";
+
+const { t } = useI18n();
 
 const props = withDefaults(
   defineProps<{
@@ -40,13 +43,13 @@ function onDelete(e: MouseEvent): void {
 
 <template>
   <span>
-    <NButton size="small" @click="onView">View</NButton>
+    <NButton size="small" @click="onView">{{ t("jobs.view") }}</NButton>
     <NButton v-if="canRename" size="small" style="margin-left: 6px" @click="onRename">
-      Rename
+      {{ t("common.rename") }}
     </NButton>
     <template v-if="canDelete">
       <NButton size="small" type="error" style="margin-left: 6px" @click="onDelete">
-        Delete
+        {{ t("common.delete") }}
       </NButton>
     </template>
   </span>

@@ -2,24 +2,20 @@
 
 ## Progress
 
-- **Overall status:** In progress; the goal is not complete.
-- **Completed intermediate slices:** installed the locale registry and browser
-  persistence, connected English and Simplified Chinese providers, and made
-  Naive UI and VXE UI/Table follow the active locale; migrated global
-  navigation, authentication/OAuth, settings/access-key, and admin/settings
-  shell copy and locale-aware access-key dates; added shared date, number,
-  percentage, file-size, and relative-time formatting; localized Library,
-  Dataset/Collection lists, model search/management, training/prediction,
-  Dashboard, automations, task explorer, schedules, reusable target/status/list
-  controls, bulk selection, and shared table filters; completed Dataset,
-  Collection, and Job detail workflows, Dataset import/export flows, and the
-  primary SC discovery, inspection, reclassification, annotation, legend, map,
-  and global-filter surfaces. Catalog tests now require locale key and
-  interpolation parity.
-- **Next milestone:** complete the remaining dense SC controls and reusable
-  shared widgets, then add a bounded production-literal enforcement check.
-- **Done when:** every acceptance criterion below is verified; this phase covers
-  frontend-visible strings only.
+- **Overall status:** Complete.
+- **Completed outcome:** English and Simplified Chinese now cover the agreed
+  production frontend surface, including shared widgets, descriptor-driven
+  transfer flows, SC discovery/classification/map/sampling controls, visible
+  copy, and accessibility labels. Locale selection persists per browser and
+  drives the application, Naive UI, VXE UI/Table, shared formatting, and
+  document language.
+- **Enforcement:** catalog tests require key and interpolation parity; the lint
+  workflow rejects untranslated static copy, labels, tabs, descriptions, and
+  accessibility attributes in the dense SC/shared-component scope. The SC
+  handbook is the documented English-fallback exception.
+- **Verification:** `make lint`, all 516 web unit tests, the production web
+  build, the explicit English regression suite, and the English/Chinese locale
+  persistence smoke pass.
 
 This document tracks the incremental internationalization of the product UI.
 The first phase covers
@@ -34,12 +30,12 @@ contracts.
   Naive UI, VXE UI, and VXE Table locale.
 - Global navigation and user-menu copy is translated, and language controls are
   available both before and after sign-in.
-- User-facing text is embedded directly in Vue templates, table definitions,
-  menus, form rules, dialogs, toast messages, descriptors, and Markdown.
-- Dates and numbers are sometimes formatted with `toLocaleString()` or
-  `Intl.DateTimeFormat(undefined, ...)`. This follows the browser implicitly,
-  but is not connected to an application locale and is implemented separately
-  in many files.
+- Production copy and presentation metadata resolve through locale catalogs;
+  stable IDs, protocol values, file formats, and user-entered data remain
+  untranslated.
+- Shared helpers own locale-aware dates, times, numbers, percentages, file
+  sizes, and relative time. The existing browser/business time-zone behavior is
+  intentionally independent of locale.
 - The API primarily returns English `HTTPException.detail` strings. The web
   transport maps a few HTTP statuses to separate hard-coded English messages,
   but there is no general machine-readable error contract for localization.
@@ -435,3 +431,7 @@ fallback are approved. Split this work into backward-compatible vertical
 feature migrations. A global mechanical replacement of English strings should
 not be used because pluralization, interpolation, accessibility, and domain
 terminology need deliberate keys and ownership.
+
+Implementation is complete. Future frontend features must use the established
+catalog, formatting helpers, localized descriptor metadata, and literal check;
+backend error localization remains a separately scoped API-contract project.

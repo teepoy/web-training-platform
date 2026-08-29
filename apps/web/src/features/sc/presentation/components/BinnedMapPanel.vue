@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, h, nextTick, ref, watch, type Component } from "vue";
+import { useI18n } from "vue-i18n";
 import {
   defineScMapElement,
   ScMapElement,
@@ -35,6 +36,8 @@ import ReticleMapOptionsButton from "./ReticleMapOptionsButton.vue";
 import { legendColor } from "./scMapUtils";
 import type { DefectList } from "../../generated/proto/sc/v1/sample_pb";
 import type { ScMapSelectionMode } from "@/features/sc/domain/workbenchInteraction";
+
+const { t } = useI18n();
 
 if (import.meta.env.MODE !== "test") defineScMapElement();
 
@@ -167,11 +170,11 @@ const colorMap = computed(() => colorMapsBySource.value[legendSource.value]);
 const legendSourceOptions = computed(() => {
   const enabled = props.legendSources ?? ["class", "bin"];
   const labels: Record<LegendSource, string> = {
-    class: "Class",
-    bin: "Rough Bin",
-    annotation: "Annotation",
-    prediction: "Prediction (Latest)",
-    final_class: "Final Class",
+    class: t("sc.class"),
+    bin: t("sc.roughBin"),
+    annotation: t("sc.annotation"),
+    prediction: t("sc.latestPrediction"),
+    final_class: t("sc.finalClass"),
   };
   return enabled.map((value) => ({ value, label: labels[value] }));
 });
@@ -316,24 +319,24 @@ const activeMapToolIcon = computed(() => {
 
 const mapSelectionToolOptions = computed<DropdownOption[]>(() => [
   {
-    label: "Box selection (append)",
+    label: t("sc.boxSelectionAppend"),
     key: "select" satisfies MapToolAction,
     icon: mapToolIcon(ScanOutline),
   },
   {
-    label: "Lasso selection (append)",
+    label: t("sc.lassoSelectionAppend"),
     key: "lasso" satisfies MapToolAction,
     icon: mapToolIcon(BrushOutline),
   },
 ]);
 const mapNavigationToolOptions = computed<DropdownOption[]>(() => [
   {
-    label: "Drag to zoom",
+    label: t("sc.dragToZoom"),
     key: "zoomin" satisfies MapToolAction,
     icon: mapToolIcon(SearchOutline),
   },
   {
-    label: "Pan map",
+    label: t("sc.panMap"),
     key: "pan" satisfies MapToolAction,
     icon: mapToolIcon(MoveOutline),
   },
@@ -344,32 +347,32 @@ const mapToolOptions = computed<DropdownOption[]>(() => [
 ]);
 const mapSelectionContextOptions = computed<DropdownOption[]>(() => [
   {
-    label: "Exclude all others",
+    label: t("sc.excludeAllOthers"),
     key: "include",
     disabled: !props.mapSelectionCount,
   },
   {
-    label: "Exclude selected",
+    label: t("sc.excludeSelected"),
     key: "exclude",
     disabled: !props.mapSelectionCount,
   },
   {
-    label: "Invert selection",
+    label: t("sc.invertSelection"),
     key: "invert-selection",
     disabled: !props.mapSelectionCount,
   },
   {
-    label: "Copy selected defect IDs",
+    label: t("sc.copySelectedDefectIds"),
     key: "copy-selected-defect-ids",
     disabled: !props.mapSelectionCount,
   },
   {
-    label: "Selection tool",
+    label: t("sc.selectionTool"),
     key: "selection-tool",
     children: mapSelectionToolOptions.value,
   },
   {
-    label: "Navigation tool",
+    label: t("sc.navigationTool"),
     key: "navigation-tool",
     children: mapNavigationToolOptions.value,
   },
@@ -581,7 +584,7 @@ const effectiveMapError = computed(() => props.mapError ?? nativeMapError.value)
 const effectiveMapProgressMessage = computed(
   () =>
     (nativeMapLoading.value ? nativeMapProgressMessage.value : props.mapProgressMessage) ||
-    "Loading map...",
+    t("sc.loadingMap"),
 );
 
 watch(
@@ -632,9 +635,9 @@ function handleHiddenLegendKeysUpdate(keys: string[]): void {
 <template>
   <div class="sc-map-panel" data-testid="sc-map-panel">
     <div v-if="effectiveMapError" class="sc-map-error">
-      <NResult status="error" title="Map Error" :description="effectiveMapError">
+      <NResult status="error" :title="t('sc.mapError')" :description="effectiveMapError">
         <template #footer>
-          <NButton @click="handleRetry">Retry</NButton>
+          <NButton @click="handleRetry">{{ t("common.retry") }}</NButton>
         </template>
       </NResult>
     </div>
@@ -648,9 +651,9 @@ function handleHiddenLegendKeysUpdate(keys: string[]): void {
           size="small"
           style="flex: 1"
         >
-          <NTabPane name="wafer" tab="Wafer" data-testid="sc-map-tab-wafer" />
-          <NTabPane name="die" tab="Die Stack" data-testid="sc-map-tab-die" />
-          <NTabPane name="reticle" tab="Reticle" data-testid="sc-map-tab-reticle" />
+          <NTabPane name="wafer" :tab="t('sc.wafer')" data-testid="sc-map-tab-wafer" />
+          <NTabPane name="die" :tab="t('sc.dieStack')" data-testid="sc-map-tab-die" />
+          <NTabPane name="reticle" :tab="t('sc.reticle')" data-testid="sc-map-tab-reticle" />
         </NTabs>
         <div class="map-toolbar-actions">
           <NDropdown
@@ -665,7 +668,7 @@ function handleHiddenLegendKeysUpdate(keys: string[]): void {
               size="small"
               quaternary
               type="primary"
-              aria-label="Map tools"
+              :aria-label="t('sc.mapTools')"
             >
               <template #icon>
                 <NIcon><component :is="activeMapToolIcon" /></NIcon>
@@ -677,7 +680,7 @@ function handleHiddenLegendKeysUpdate(keys: string[]): void {
             size="small"
             quaternary
             type="primary"
-            aria-label="Zoom in"
+            :aria-label="t('sc.zoomIn')"
             @click="zoomBy(0.5)"
           >
             <template #icon>
@@ -689,7 +692,7 @@ function handleHiddenLegendKeysUpdate(keys: string[]): void {
             size="small"
             quaternary
             type="primary"
-            aria-label="Zoom out"
+            :aria-label="t('sc.zoomOut')"
             :disabled="zoom == null"
             @click="zoomBy(2)"
           >
@@ -702,7 +705,7 @@ function handleHiddenLegendKeysUpdate(keys: string[]): void {
             size="small"
             quaternary
             type="primary"
-            aria-label="Reset zoom"
+            :aria-label="t('sc.resetZoom')"
             :disabled="zoom == null"
             @click="handleZoomIn(null)"
           >
@@ -745,7 +748,7 @@ function handleHiddenLegendKeysUpdate(keys: string[]): void {
           <sc-map
             ref="nativeMapElement"
             data-testid="sc-unified-map"
-            title="Right-drag or two-finger scroll to pan · Pinch to zoom"
+            :title="t('sc.mapNavigationHelp')"
             :arrowData.prop="arrowData ?? null"
             :legendColumn.prop="mapLegendColumn ?? 'class_number'"
             :hiddenLegendKeys.prop="activeHiddenLegendKeys"
@@ -804,7 +807,7 @@ function handleHiddenLegendKeysUpdate(keys: string[]): void {
           >
             <NTabPane
               name="legend"
-              tab="Legend"
+              :tab="t('sc.legend')"
               data-testid="sc-legend-tab"
               style="flex: 1; min-height: 0; display: flex; flex-direction: column"
             >
@@ -814,7 +817,7 @@ function handleHiddenLegendKeysUpdate(keys: string[]): void {
                   v-model:value="legendSource"
                   :options="legendSourceOptions"
                   size="small"
-                  placeholder="Source"
+                  :placeholder="t('sc.source')"
                 />
               </div>
 

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from "vue";
 import type { CSSProperties } from "vue";
+import { useI18n } from "vue-i18n";
 import { tableFromIPC } from "apache-arrow";
 import {
   NSwitch,
@@ -19,6 +20,8 @@ import {
   NTooltip,
 } from "naive-ui";
 import { CheckboxOutline, CloseCircleOutline, DownloadOutline } from "@vicons/ionicons5";
+
+const { t } = useI18n();
 import { withAuthQueryParams } from "@/shared/api/client";
 import { useBlinkController } from "@/shared/composables/useBlinkController";
 import {
@@ -174,6 +177,12 @@ const DEFAULT_PATCH_IMAGES: ScPatchImageDescriptor[] = [
     z_max: 65535,
   },
 ];
+function patchDisplayLabel(patch: ScPatchImageDescriptor): string {
+  if (patch.key === "Defective") return t("sc.defective");
+  if (patch.key === "Reference") return t("sc.reference");
+  if (patch.key === "Difference") return t("sc.difference");
+  return patch.label;
+}
 const SC_SPRITE_RENDER_VERSION = "7";
 const normalizeImageSize = (value: number | undefined): ImageSizeOption =>
   IMAGE_SIZE_OPTIONS.includes(value as ImageSizeOption) ? (value as ImageSizeOption) : 64;
@@ -1368,11 +1377,13 @@ defineExpose({ scrollRef });
           size="small"
           class="sbt-mode-radio"
         >
-          <n-radio-button value="patch">Patch</n-radio-button>
-          <n-radio-button value="review">Review</n-radio-button>
+          <n-radio-button value="patch">{{ t("sc.patch") }}</n-radio-button>
+          <n-radio-button value="review">{{ t("sc.review") }}</n-radio-button>
         </n-radio-group>
 
-        <n-text v-if="currentLoading" depth="3" class="sbt-review-status"> Loading... </n-text>
+        <n-text v-if="currentLoading" depth="3" class="sbt-review-status">{{
+          t("common.loading")
+        }}</n-text>
         <n-tooltip v-if="selectedCount > 0" trigger="hover">
           <template #trigger>
             <n-button
@@ -1380,7 +1391,7 @@ defineExpose({ scrollRef });
               quaternary
               circle
               data-testid="gallery-download-button"
-              aria-label="Download selected images"
+              :aria-label="t('sc.downloadSelectedImages')"
               @click="openDownload"
             >
               <template #icon>
@@ -1388,7 +1399,7 @@ defineExpose({ scrollRef });
               </template>
             </n-button>
           </template>
-          Download selected images
+          {{ t("sc.downloadSelectedImages") }}
         </n-tooltip>
       </div>
       <div class="sbt-toolbar-right">
@@ -1402,7 +1413,7 @@ defineExpose({ scrollRef });
               quaternary
               circle
               type="primary"
-              :aria-label="`Clear selection (${selectedCount.toLocaleString()})`"
+              :aria-label="`${t('common.clearSelection')} (${selectedCount.toLocaleString()})`"
               :disabled="selectingAll"
               @click="clearGallerySelection"
             >
@@ -1411,7 +1422,7 @@ defineExpose({ scrollRef });
               </template>
             </n-button>
           </template>
-          Clear selection ({{ selectedCount.toLocaleString() }})
+          {{ t("common.clearSelection") }} ({{ selectedCount.toLocaleString() }})
         </n-tooltip>
         <n-tooltip v-if="totalSamples > 0 && selectedCount < totalSamples" trigger="hover">
           <template #trigger>
@@ -1420,7 +1431,7 @@ defineExpose({ scrollRef });
               quaternary
               circle
               :loading="selectingAll"
-              :aria-label="`Select all (${totalSamples.toLocaleString()})`"
+              :aria-label="t('common.selectAll', { count: totalSamples.toLocaleString() })"
               :disabled="currentLoading"
               @click="selectAllGallerySamples"
             >
@@ -1429,10 +1440,10 @@ defineExpose({ scrollRef });
               </template>
             </n-button>
           </template>
-          Select all ({{ totalSamples.toLocaleString() }})
+          {{ t("common.selectAll", { count: totalSamples.toLocaleString() }) }}
         </n-tooltip>
         <n-text class="sbt-row-count" depth="3">
-          {{ totalSamples.toLocaleString() }} samples
+          {{ t("sc.sampleCount", { count: totalSamples }) }}
         </n-text>
       </div>
     </div>
@@ -1442,18 +1453,23 @@ defineExpose({ scrollRef });
       preset="card"
       :title="
         reviewPreview
-          ? `Defect ${reviewPreview.defectId} · Review ${reviewPreview.imageId}`
-          : 'Review image'
+          ? t('sc.reviewImageTitle', {
+              defect: reviewPreview.defectId,
+              image: reviewPreview.imageId,
+            })
+          : t('sc.reviewImagePreview')
       "
       class="sbt-review-preview-modal"
       :style="{ width: 'min(92vw, calc(88vh + 48px))' }"
-      aria-label="Review image preview"
+      :aria-label="t('sc.reviewImagePreview')"
     >
       <div class="sbt-review-preview-stage" data-testid="review-image-preview-stage">
         <img
           v-if="reviewPreview"
           :src="reviewPreview.src"
-          :alt="`Review image ${reviewPreview.imageId} for defect ${reviewPreview.defectId}`"
+          :alt="
+            t('sc.reviewImageAlt', { image: reviewPreview.imageId, defect: reviewPreview.defectId })
+          "
           class="sbt-review-preview-original"
         />
       </div>
@@ -1462,24 +1478,24 @@ defineExpose({ scrollRef });
     <n-modal
       v-model:show="downloadOpen"
       preset="card"
-      title="Download selected images"
+      :title="t('sc.downloadSelectedImages')"
       class="sbt-download-modal"
       :style="{ width: '440px' }"
-      aria-label="Download selected images"
+      :aria-label="t('sc.downloadSelectedImages')"
     >
       <div class="sbt-download-options">
-        <n-text>Selected samples: {{ selectedCount.toLocaleString() }}</n-text>
+        <n-text>{{ t("sc.selectedSamples", { count: selectedCount.toLocaleString() }) }}</n-text>
         <n-checkbox v-model:checked="applyDownloadColorMapping">
-          Apply current color mapping
+          {{ t("sc.applyColorMapping") }}
         </n-checkbox>
         <n-text depth="3" class="sbt-download-note">
-          Original bytes and dimensions are preserved unless color mapping is applied.
+          {{ t("sc.originalImageHelp") }}
         </n-text>
         <n-text v-if="downloadError" type="error" aria-live="polite">{{ downloadError }}</n-text>
         <div class="sbt-download-actions">
-          <n-button @click="downloadOpen = false">Cancel</n-button>
+          <n-button @click="downloadOpen = false">{{ t("common.cancel") }}</n-button>
           <n-button type="primary" :loading="preparingDownload" @click="prepareGalleryDownload">
-            Download ZIP
+            {{ t("sc.downloadZip") }}
           </n-button>
         </div>
       </div>
@@ -1489,7 +1505,7 @@ defineExpose({ scrollRef });
     <div class="sbt-gallery-body">
       <div v-if="totalSamples === 0" class="sbt-empty">
         <n-text depth="3">
-          {{ mode === "review" ? "No samples with review images" : "No rows to display" }}
+          {{ mode === "review" ? t("sc.noReviewSamples") : t("sc.noRows") }}
         </n-text>
       </div>
       <div v-else class="sbt-scroll-shell" data-testid="blink-table-scrollbar">
@@ -1539,7 +1555,7 @@ defineExpose({ scrollRef });
                         :key="'rev_header_' + imageId"
                         class="sbt-sample-header-label"
                       >
-                        Rev {{ imageId }}
+                        {{ t("sc.reviewShort", { image: imageId }) }}
                       </div>
                     </template>
                   </div>
@@ -1593,7 +1609,9 @@ defineExpose({ scrollRef });
                         :key="'rev_' + imageId"
                         type="button"
                         class="sbt-img-cell sbt-img-cell--preview"
-                        :aria-label="`Open review image ${imageId} for defect ${sample.defectId}`"
+                        :aria-label="
+                          t('sc.openReviewImage', { image: imageId, defect: sample.defectId })
+                        "
                         @click.stop="handleReviewPreview(sample, imageId)"
                       >
                         <div
@@ -1613,7 +1631,7 @@ defineExpose({ scrollRef });
                       type="warning"
                       size="small"
                       class="sbt-prediction-badge"
-                      title="Draft (unsubmitted)"
+                      :title="t('sc.draftUnsubmitted')"
                     >
                       D: {{ annotationDrafts[sample.rowKey] }}
                     </n-tag>
@@ -1622,7 +1640,7 @@ defineExpose({ scrollRef });
                       type="success"
                       size="small"
                       class="sbt-prediction-badge"
-                      title="Annotation (saved)"
+                      :title="t('sc.annotationSaved')"
                     >
                       A: {{ sample.annotationLabel }}
                     </n-tag>
@@ -1631,7 +1649,7 @@ defineExpose({ scrollRef });
                       type="info"
                       size="small"
                       class="sbt-prediction-badge"
-                      title="Latest prediction"
+                      :title="t('sc.latestPrediction')"
                     >
                       P: {{ sample.predictionLabel
                       }}{{
@@ -1680,26 +1698,30 @@ defineExpose({ scrollRef });
           quaternary
           size="tiny"
           class="sbt-color-dock-toggle"
-          :aria-label="colorDockCollapsed ? 'Expand gallery settings' : 'Collapse gallery settings'"
+          :aria-label="
+            colorDockCollapsed ? t('sc.expandGallerySettings') : t('sc.collapseGallerySettings')
+          "
           @click="colorDockCollapsed = !colorDockCollapsed"
         >
-          {{ colorDockCollapsed ? "Gallery" : "›" }}
+          {{ colorDockCollapsed ? t("sc.gallery") : "›" }}
         </n-button>
         <div v-if="!colorDockCollapsed" class="sbt-color-dock-content">
-          <n-text class="sbt-color-dock-title">Display</n-text>
+          <n-text class="sbt-color-dock-title">{{ t("sc.display") }}</n-text>
           <n-tabs v-model:value="settingsPanel" type="line" size="small">
-            <n-tab-pane name="gallery" tab="Gallery">
+            <n-tab-pane name="gallery" :tab="t('sc.gallery')">
               <div class="sbt-settings sbt-settings--dock">
-                <n-text v-if="imageProfileLoading" depth="3">Loading image profile…</n-text>
+                <n-text v-if="imageProfileLoading" depth="3">{{
+                  t("sc.imageProfileLoading")
+                }}</n-text>
                 <n-text v-if="imageProfileError" type="error">{{ imageProfileError }}</n-text>
                 <div class="sbt-setting-row">
-                  <n-text class="sbt-control-label">Per Row</n-text>
+                  <n-text class="sbt-control-label">{{ t("sc.perRow") }}</n-text>
                   <div class="sbt-per-row">
                     <n-button
                       size="tiny"
                       quaternary
                       class="sbt-per-row-button"
-                      aria-label="Decrease samples per row"
+                      :aria-label="t('sc.decreasePerRow')"
                       :disabled="samplesPerRow <= 1"
                       @click="adjustSamplesPerRow(-1)"
                     >
@@ -1710,7 +1732,7 @@ defineExpose({ scrollRef });
                       size="tiny"
                       quaternary
                       class="sbt-per-row-button"
-                      aria-label="Increase samples per row"
+                      :aria-label="t('sc.increasePerRow')"
                       :disabled="samplesPerRow >= MAX_SAMPLES_PER_ROW"
                       @click="adjustSamplesPerRow(1)"
                     >
@@ -1719,7 +1741,7 @@ defineExpose({ scrollRef });
                   </div>
                 </div>
                 <div class="sbt-setting-row">
-                  <n-text class="sbt-control-label">Size</n-text>
+                  <n-text class="sbt-control-label">{{ t("sc.size") }}</n-text>
                   <n-select
                     v-model:value="imageSize"
                     size="small"
@@ -1729,11 +1751,11 @@ defineExpose({ scrollRef });
                   />
                 </div>
                 <div class="sbt-setting-row">
-                  <n-text class="sbt-control-label">Blink</n-text>
+                  <n-text class="sbt-control-label">{{ t("sc.blink") }}</n-text>
                   <n-switch :value="blinkEnabled" size="small" @update:value="toggleBlink" />
                 </div>
                 <div class="sbt-setting-row">
-                  <n-text class="sbt-control-label">ID Label</n-text>
+                  <n-text class="sbt-control-label">{{ t("sc.idLabel") }}</n-text>
                   <n-switch v-model:value="showDefectIdLabel" size="small" />
                 </div>
                 <div
@@ -1742,7 +1764,7 @@ defineExpose({ scrollRef });
                   class="sbt-setting-row"
                 >
                   <div class="sbt-patch-setting-label">
-                    <n-text class="sbt-control-label">{{ patch.label }}</n-text>
+                    <n-text class="sbt-control-label">{{ patchDisplayLabel(patch) }}</n-text>
                     <n-text depth="3">{{ patch.bit_depth }}-bit</n-text>
                   </div>
                   <n-switch
@@ -1752,19 +1774,19 @@ defineExpose({ scrollRef });
                   />
                 </div>
                 <div v-if="mode === 'review'" class="sbt-setting-block">
-                  <n-text class="sbt-control-label">Review Images</n-text>
+                  <n-text class="sbt-control-label">{{ t("sc.reviewImages") }}</n-text>
                   <n-input
                     v-model:value="reviewImagesInput"
                     size="small"
-                    placeholder="Inferred from review images"
+                    :placeholder="t('sc.inferredReviewImages')"
                     @update:value="reviewImagesInputEdited = true"
                   />
                 </div>
               </div>
             </n-tab-pane>
-            <n-tab-pane name="colors" tab="Colors">
+            <n-tab-pane name="colors" :tab="t('sc.colors')">
               <n-tabs v-model:value="colorSettingsGroup" type="segment" size="small">
-                <n-tab-pane name="defective-reference" tab="D / R">
+                <n-tab-pane name="defective-reference" :tab="t('sc.defectiveReferenceShort')">
                   <GalleryColorSettings
                     compact
                     adaptive-scope="defective-reference"
@@ -1777,7 +1799,7 @@ defineExpose({ scrollRef });
                     :patches="defectiveReferenceProfile?.patches"
                   />
                 </n-tab-pane>
-                <n-tab-pane name="difference" tab="Difference">
+                <n-tab-pane name="difference" :tab="t('sc.difference')">
                   <GalleryColorSettings
                     compact
                     adaptive-scope="image"

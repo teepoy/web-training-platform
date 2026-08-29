@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import { NButton, NModal, NTag } from "naive-ui";
 import {
   cloneScGlobalFilter,
@@ -8,6 +9,8 @@ import {
 } from "@/features/sc/domain/globalFilter";
 import type { ScDataColumn } from "@/features/sc/domain/workbenchDataSource";
 import GlobalFilterBar from "./GlobalFilterBar.vue";
+
+const { t } = useI18n();
 
 const props = withDefaults(
   defineProps<{
@@ -88,9 +91,9 @@ watch(
   >
     <template #header>
       <div class="sc-global-filter-header">
-        <span class="sc-global-filter-title">Global Filters</span>
+        <span class="sc-global-filter-title">{{ t("sc.globalFilters") }}</span>
         <NTag v-if="activeCount > 0" size="small" round type="success">
-          {{ activeCount }} active
+          {{ t("sc.activeCount", { count: activeCount }) }}
         </NTag>
       </div>
     </template>

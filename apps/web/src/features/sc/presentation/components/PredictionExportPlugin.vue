@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import { useMessage, useThemeVars } from "naive-ui";
 import type {
   ScCollectionPredictionExportRequest,
@@ -26,6 +27,9 @@ import {
   saveScSamplingPreference,
 } from "@/features/sc/application/samplingPreferences";
 import ReviewSamplingModal from "./ReviewSamplingModal.vue";
+import { formatNumber } from "@/shared/i18n/format";
+
+const { t } = useI18n();
 
 const props = withDefaults(
   defineProps<{
@@ -89,33 +93,35 @@ const isCollectionExport = computed(() => !!props.collectionId);
 const targetDatasetIds = computed(() =>
   isCollectionExport.value ? props.memberDatasetIds : props.datasetId ? [props.datasetId] : [],
 );
-const resultSourceOptions = [
+const resultSourceOptions = computed<
+  ReadonlyArray<{
+    value: ScPredictionExportResultSource;
+    label: string;
+    description: string;
+    field: string;
+  }>
+>(() => [
   {
     value: "annotation" as const,
-    label: "Annotation",
-    description: "Only manually classified rows; empty and 0 annotations are omitted.",
+    label: t("sc.annotation"),
+    description: t("sc.annotationExportHelp"),
     field: "annotation_label",
   },
   {
     value: "prediction" as const,
-    label: "Prediction",
-    description: "Only rows with a current prediction are exported.",
+    label: t("sc.prediction"),
+    description: t("sc.predictionExportHelp"),
     field: "prediction_label",
   },
   {
     value: "final_class" as const,
-    label: "Final Class",
-    description: "Uses a non-zero annotation first, otherwise the current prediction.",
+    label: t("sc.finalClass"),
+    description: t("sc.finalClassExportHelp"),
     field: "final_class",
   },
-] satisfies Array<{
-  value: ScPredictionExportResultSource;
-  label: string;
-  description: string;
-  field: string;
-}>;
+]);
 const activeResultSource = computed(
-  () => resultSourceOptions.find((option) => option.value === resultSource.value)!,
+  () => resultSourceOptions.value.find((option) => option.value === resultSource.value)!,
 );
 const resultAvailabilityFilters = computed<readonly ScDataFilterExpression[]>(() => [
   [
@@ -149,27 +155,30 @@ watch(
   { immediate: true },
 );
 
-const formatOptions = [
+const formatOptions = computed(() => [
   {
     value: "parquet" as const,
     title: "Parquet",
-    description: "Columnar results for analytics.",
+    description: t("sc.parquetExportHelp"),
   },
   {
     value: "klarf" as const,
     title: "KLARF",
-    description: "Numbered .000/.001 files by inspection.",
+    description: t("sc.klarfExportHelp"),
   },
   {
     value: "zip" as const,
-    title: "ZIP package",
-    description: "Parquet, KLARF, manifest, and optional images.",
+    title: t("sc.zipPackage"),
+    description: t("sc.zipExportHelp"),
   },
-];
+]);
 const samplingSummary = computed(() =>
   samplingEnabled.value
-    ? `${samplingProgram.value.rules.length} rules · seed ${SC_SAMPLING_RANDOM_SEED}`
-    : "All current Dataset rows",
+    ? t("sc.samplingSeedSummary", {
+        rules: samplingProgram.value.rules.length,
+        seed: SC_SAMPLING_RANDOM_SEED,
+      })
+    : t("sc.allDatasetRows"),
 );
 
 async function prepareSampling(): Promise<void> {
@@ -179,7 +188,7 @@ async function prepareSampling(): Promise<void> {
     samplingAvailableCount.value = Object.values(groups).reduce((sum, count) => sum + count, 0);
     samplingVisible.value = true;
   } catch (error) {
-    message.error(toUserMessage(error, "Failed to prepare Review Sampling"));
+    message.error(toUserMessage(error, t("sc.samplingPrepareFailed")));
   } finally {
     samplingLoading.value = false;
   }
@@ -283,7 +292,7 @@ async function loadMergedGroups(
   restrictToResultSource = false,
 ): Promise<Record<string, number>> {
   if (targetDatasetIds.value.length === 0) {
-    throw new Error("No Dataset records are selected for export");
+    throw new Error(t("sc.noExportRecords"));
   }
   const groupResults = await Promise.all(
     targetDatasetIds.value.map((datasetId) =>
@@ -310,7 +319,7 @@ function confirmSampling(): void {
 async function runExport(): Promise<void> {
   loading.value = true;
   result.value = null;
-  statusMessage.value = "Preparing current prediction results...";
+  statusMessage.value = t("sc.preparingExport");
   const datasetBody: ScPredictionExportRequest = {
     format: format.value,
     result_source: resultSource.value,
@@ -337,12 +346,12 @@ async function runExport(): Promise<void> {
       body,
       onEvent: (item) => {
         if (item.event_type === "progress") {
-          statusMessage.value = item.message || item.status || "Exporting...";
+          statusMessage.value = item.message || item.status || t("sc.exporting");
         }
       },
     });
     const payload = event?.payload ?? {};
-    if (typeof payload.uri !== "string") throw new Error("Prediction export returned no URI");
+    if (typeof payload.uri !== "string") throw new Error(t("sc.exportMissingUri"));
     result.value = {
       uri: payload.uri,
       rows: typeof payload.rows === "number" ? payload.rows : 0,
@@ -354,10 +363,10 @@ async function runExport(): Promise<void> {
           ? payload.klarf_version
           : null,
     };
-    statusMessage.value = "Export complete";
-    message.success(`Exported ${result.value.rows.toLocaleString()} rows`);
+    statusMessage.value = t("sc.exportComplete");
+    message.success(t("sc.exportedRows", { count: formatNumber(result.value.rows) }));
   } catch (error) {
-    message.error(toUserMessage(error, "Prediction export failed"));
+    message.error(toUserMessage(error, t("sc.exportFailed")));
     statusMessage.value = "";
   } finally {
     loading.value = false;
@@ -368,7 +377,9 @@ function done(): void {
   props.onComplete({
     format: result.value?.format,
     url: result.value?.uri,
-    message: result.value ? `Exported ${result.value.rows.toLocaleString()} rows` : undefined,
+    message: result.value
+      ? t("sc.exportedRows", { count: formatNumber(result.value.rows) })
+      : undefined,
   });
 }
 
@@ -382,7 +393,7 @@ onUnmounted(() => {
     <n-card size="small" class="result-source-card">
       <div class="result-source-row">
         <div>
-          <strong>Exported class</strong>
+          <strong>{{ t("sc.exportedClass") }}</strong>
           <n-text depth="3">{{ activeResultSource.description }}</n-text>
         </div>
         <n-radio-group v-model:value="resultSource" :disabled="loading" size="small">
@@ -390,7 +401,7 @@ onUnmounted(() => {
             v-for="option in resultSourceOptions"
             :key="option.value"
             :value="option.value"
-            :aria-label="`Export ${option.label} results`"
+            :aria-label="t('sc.exportResultAria', { source: option.label })"
           >
             {{ option.label }}
           </n-radio-button>
@@ -398,18 +409,18 @@ onUnmounted(() => {
       </div>
       <n-divider />
       <div class="distribution-row">
-        <strong>{{ activeResultSource.label }} distribution</strong>
+        <strong>{{ activeResultSource.label }} {{ t("sc.distribution") }}</strong>
         <n-spin v-if="distributionLoading" size="small" />
         <n-space v-else-if="distributionEntries.length" size="small">
           <n-tag v-for="entry in distributionEntries" :key="entry.value" size="small">
             {{ entry.value }} · {{ entry.count.toLocaleString() }} · {{ entry.percentage }}%
           </n-tag>
         </n-space>
-        <n-text v-else depth="3">No classified rows</n-text>
+        <n-text v-else depth="3">{{ t("sc.noClassifiedRows") }}</n-text>
       </div>
     </n-card>
 
-    <div class="format-grid" role="radiogroup" aria-label="Export format">
+    <div class="format-grid" role="radiogroup" :aria-label="t('sc.exportFormat')">
       <button
         v-for="option in formatOptions"
         :key="option.value"
@@ -429,12 +440,16 @@ onUnmounted(() => {
     <n-card v-if="format !== 'parquet'" size="small" class="klarf-version-card">
       <div class="klarf-version-row">
         <div>
-          <strong>KLARF version</strong>
-          <n-text depth="3">Applies to every numbered KLARF file in this export.</n-text>
+          <strong>{{ t("sc.klarfVersion") }}</strong>
+          <n-text depth="3">{{ t("sc.klarfVersionHelp") }}</n-text>
         </div>
         <n-radio-group v-model:value="klarfVersion" :disabled="loading" size="small">
-          <n-radio-button value="1.2" aria-label="KLARF version 1.2">1.2</n-radio-button>
-          <n-radio-button value="1.8" aria-label="KLARF version 1.8">1.8</n-radio-button>
+          <n-radio-button value="1.2" :aria-label="t('sc.klarfVersionAria', { version: '1.2' })"
+            >1.2</n-radio-button
+          >
+          <n-radio-button value="1.8" :aria-label="t('sc.klarfVersionAria', { version: '1.8' })"
+            >1.8</n-radio-button
+          >
         </n-radio-group>
       </div>
     </n-card>
@@ -442,13 +457,13 @@ onUnmounted(() => {
     <n-card v-if="format !== 'parquet'" size="small" class="image-export-card">
       <div class="image-export-row">
         <div>
-          <strong>Include defect images</strong>
-          <n-text depth="3"> One defective patch per retained row; packaged as ZIP. </n-text>
+          <strong>{{ t("sc.includeDefectImages") }}</strong>
+          <n-text depth="3">{{ t("sc.includeDefectImagesHelp") }}</n-text>
         </div>
         <n-switch
           v-model:value="includeImages"
           :disabled="loading"
-          aria-label="Include defect images"
+          :aria-label="t('sc.includeDefectImages')"
         />
       </div>
     </n-card>
@@ -456,17 +471,17 @@ onUnmounted(() => {
     <n-card size="small" class="sampling-card">
       <div class="sampling-row">
         <div>
-          <strong>Review Sampling</strong>
+          <strong>{{ t("sc.reviewSampling") }}</strong>
           <n-text depth="3">{{ samplingSummary }}</n-text>
         </div>
         <n-space align="center">
           <n-switch
             v-model:value="samplingEnabled"
             :disabled="loading"
-            aria-label="Apply Review Sampling"
+            :aria-label="t('sc.applyReviewSampling')"
           />
           <n-button :loading="samplingLoading" :disabled="loading" @click="prepareSampling">
-            Configure
+            {{ t("sc.configure") }}
           </n-button>
         </n-space>
       </div>
@@ -474,21 +489,18 @@ onUnmounted(() => {
 
     <n-text depth="3" class="export-note">
       <template v-if="isCollectionExport">
-        Selected Collection records are combined; KLARF remains grouped by inspection.
+        {{ t("sc.collectionExportHelp") }}
       </template>
-      <template v-else> Large exports can exceed 100 MB; keep this tab open until ready. </template>
+      <template v-else>{{ t("sc.largeExportHelp") }}</template>
     </n-text>
 
     <n-text v-if="statusMessage" depth="3">{{ statusMessage }}</n-text>
 
-    <n-alert v-if="result" type="success" title="Export ready">
+    <n-alert v-if="result" type="success" :title="t('sc.exportReady')">
       <div class="result-row">
         <span>
-          {{ result.filename }} · {{ result.rows.toLocaleString() }} rows<span
-            v-if="result.klarfVersion"
-          >
-            · KLARF {{ result.klarfVersion }}</span
-          >
+          {{ result.filename }} · {{ t("sc.resultRows", { count: formatNumber(result.rows) })
+          }}<span v-if="result.klarfVersion"> · KLARF {{ result.klarfVersion }}</span>
         </span>
         <n-button
           tag="a"
@@ -497,16 +509,18 @@ onUnmounted(() => {
           type="primary"
           size="small"
         >
-          Download
+          {{ t("jobDetail.download") }}
         </n-button>
       </div>
     </n-alert>
 
     <div class="actions">
-      <n-button v-if="!props.embedded" @click="props.onCancel()">Close</n-button>
-      <n-button v-if="result && !props.embedded" type="success" @click="done">Done</n-button>
+      <n-button v-if="!props.embedded" @click="props.onCancel()">{{ t("widgets.close") }}</n-button>
+      <n-button v-if="result && !props.embedded" type="success" @click="done">{{
+        t("common.done")
+      }}</n-button>
       <n-button v-else type="primary" :loading="loading" @click="runExport">
-        {{ result ? "Create another export" : "Create export" }}
+        {{ result ? t("sc.createAnotherExport") : t("sc.createExport") }}
       </n-button>
     </div>
 
@@ -515,7 +529,7 @@ onUnmounted(() => {
       v-model:program="samplingProgram"
       v-model:scope="samplingScope"
       v-model:extra-filter="samplingExtraFilter"
-      title="Review Sampling for export"
+      :title="t('sc.reviewSamplingExport')"
       :distribution-label="activeResultSource.label"
       :loading="samplingLoading"
       :available-count="samplingAvailableCount"

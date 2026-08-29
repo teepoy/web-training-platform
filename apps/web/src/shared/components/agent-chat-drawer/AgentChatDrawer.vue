@@ -6,7 +6,11 @@
 -->
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onBeforeUnmount } from "vue";
+import { useI18n } from "vue-i18n";
 import type { AgentChatStatus, ChatEntry } from "../../types/components";
+import { formatTime as formatLocaleTime } from "../../i18n/format";
+
+const { t } = useI18n();
 
 const props = defineProps<{
   messages: readonly ChatEntry[];
@@ -108,8 +112,7 @@ watch(
 );
 
 function formatTime(ts: number): string {
-  const d = new Date(ts);
-  return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  return formatLocaleTime(ts);
 }
 </script>
 
@@ -119,8 +122,8 @@ function formatTime(ts: number): string {
     v-if="!isOpen"
     class="acd-fab"
     @click="toggle"
-    title="Open Agent Chat"
-    aria-label="Open Agent Chat"
+    :title="t('widgets.openAgentChat')"
+    :aria-label="t('widgets.openAgentChat')"
     data-testid="agent-chat-open"
   >
     <svg
@@ -155,9 +158,9 @@ function formatTime(ts: number): string {
       />
       <!-- Header -->
       <div class="acd-header">
-        <span id="agent-chat-title" class="acd-header__title">Agent Chat</span>
+        <span id="agent-chat-title" class="acd-header__title">{{ t("widgets.agentChat") }}</span>
         <div class="acd-header__actions">
-          <button class="acd-header__btn" @click="emit('clear')" title="Clear history">
+          <button class="acd-header__btn" @click="emit('clear')" :title="t('widgets.clearHistory')">
             <svg
               width="14"
               height="14"
@@ -172,7 +175,7 @@ function formatTime(ts: number): string {
               />
             </svg>
           </button>
-          <button class="acd-header__btn" @click="toggle" title="Close">
+          <button class="acd-header__btn" @click="toggle" :title="t('widgets.close')">
             <svg
               width="14"
               height="14"
@@ -195,7 +198,7 @@ function formatTime(ts: number): string {
           class="acd-messages__empty"
           data-testid="agent-chat-empty"
         >
-          Ask the agent to analyze your data, create charts, or explore metadata.
+          {{ t("widgets.agentEmpty") }}
         </div>
         <div
           v-for="msg in messages"
@@ -220,7 +223,7 @@ function formatTime(ts: number): string {
 
       <!-- Disclaimer -->
       <div class="acd-disclaimer">
-        AI responses may be inaccurate. Please verify important information.
+        {{ t("widgets.agentDisclaimer") }}
       </div>
 
       <!-- Input bar -->
@@ -228,7 +231,7 @@ function formatTime(ts: number): string {
         <textarea
           v-model="inputText"
           class="acd-input__field"
-          placeholder="Ask the agent..."
+          :placeholder="t('widgets.askAgent')"
           rows="1"
           @keydown="handleKeyDown"
           :disabled="isStreaming"
@@ -238,8 +241,8 @@ function formatTime(ts: number): string {
           v-if="isStreaming"
           class="acd-input__btn acd-input__btn--abort"
           @click="emit('abort')"
-          title="Stop"
-          aria-label="Stop Agent response"
+          :title="t('widgets.stop')"
+          :aria-label="t('widgets.stopAgent')"
           data-testid="agent-chat-abort"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
@@ -251,8 +254,8 @@ function formatTime(ts: number): string {
           class="acd-input__btn"
           @click="handleSend"
           :disabled="!inputText.trim()"
-          title="Send"
-          aria-label="Send Agent message"
+          :title="t('widgets.send')"
+          :aria-label="t('widgets.sendAgent')"
           data-testid="agent-chat-send"
         >
           <svg

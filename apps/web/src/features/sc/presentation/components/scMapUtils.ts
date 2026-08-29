@@ -1,7 +1,7 @@
 /**
  * scMapUtils — shared pure helpers for wafer map scatter-point data.
  *
- * Extracted from ScWaferMap.vue to support testing and reuse.
+ * Shared map helpers extracted from the former monolithic wafer-map component.
  * All functions are stateless; no Canvas, DOM, or Vue dependencies.
  */
 

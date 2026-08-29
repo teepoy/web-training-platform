@@ -11,80 +11,90 @@
   Data comes from the injected ClassifyDashboardContext.
 -->
 <script setup lang="ts">
-import { computed, inject } from 'vue'
-import VChart from 'vue-echarts'
-import { use } from 'echarts/core'
-import { PieChart, BarChart } from 'echarts/charts'
-import {
-  GridComponent,
-  LegendComponent,
-  TooltipComponent,
-} from 'echarts/components'
-import { CanvasRenderer } from 'echarts/renderers'
-import type { EChartsOption } from 'echarts'
+import { computed, inject } from "vue";
+import { useI18n } from "vue-i18n";
+import VChart from "vue-echarts";
+import { use } from "echarts/core";
+import { PieChart, BarChart } from "echarts/charts";
+import { GridComponent, LegendComponent, TooltipComponent } from "echarts/components";
+import { CanvasRenderer } from "echarts/renderers";
+import type { EChartsOption } from "echarts";
 import type { ClassifyDashboardContext } from "../../types/sidebar-widgets";
 
-use([CanvasRenderer, GridComponent, LegendComponent, PieChart, BarChart, TooltipComponent])
+const { t } = useI18n();
+
+use([CanvasRenderer, GridComponent, LegendComponent, PieChart, BarChart, TooltipComponent]);
 
 // ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
 
-const props = withDefaults(defineProps<{
-  chartType?: 'donut' | 'bar'
-  showCounts?: boolean
-  showPercent?: boolean
-  includeDrafts?: boolean
-  showLabelBreakdown?: boolean
-}>(), {
-  chartType: 'donut',
-  showCounts: true,
-  showPercent: true,
-  includeDrafts: true,
-  showLabelBreakdown: true,
-})
+const props = withDefaults(
+  defineProps<{
+    chartType?: "donut" | "bar";
+    showCounts?: boolean;
+    showPercent?: boolean;
+    includeDrafts?: boolean;
+    showLabelBreakdown?: boolean;
+  }>(),
+  {
+    chartType: "donut",
+    showCounts: true,
+    showPercent: true,
+    includeDrafts: true,
+    showLabelBreakdown: true,
+  },
+);
 
 // ---------------------------------------------------------------------------
 // Injected context
 // ---------------------------------------------------------------------------
 
-const ctx = inject<ClassifyDashboardContext>('classifyDashboard')!
+const ctx = inject<ClassifyDashboardContext>("classifyDashboard")!;
 
 // ---------------------------------------------------------------------------
 // Derived data
 // ---------------------------------------------------------------------------
 
-const total = computed(() => ctx.stats?.total_samples ?? 0)
-const annotated = computed(() => ctx.stats?.annotated_samples ?? 0)
-const unlabeled = computed(() => ctx.stats?.unlabeled_samples ?? 0)
-const draftCount = computed(() => ctx.draftCount)
-const selectedCount = computed(() => ctx.selectedCount)
+const total = computed(() => ctx.stats?.total_samples ?? 0);
+const annotated = computed(() => ctx.stats?.annotated_samples ?? 0);
+const unlabeled = computed(() => ctx.stats?.unlabeled_samples ?? 0);
+const draftCount = computed(() => ctx.draftCount);
+const selectedCount = computed(() => ctx.selectedCount);
 
 const annotatedPercent = computed(() =>
   total.value > 0 ? Math.round((annotated.value / total.value) * 100) : 0,
-)
+);
 
 const labelCounts = computed<Array<{ label: string; count: number }>>(() => {
-  const raw = ctx.stats?.label_counts ?? {}
+  const raw = ctx.stats?.label_counts ?? {};
   return Object.entries(raw)
     .map(([label, count]) => ({ label, count: Number(count) }))
-    .sort((a, b) => b.count - a.count)
-})
+    .sort((a, b) => b.count - a.count);
+});
 
 // ---------------------------------------------------------------------------
 // Chart colours
 // ---------------------------------------------------------------------------
 
 const COLORS = {
-  annotated: '#63e2b7',
-  remaining: '#e2e3e5',
-  draft: '#f0a020',
-}
+  annotated: "#63e2b7",
+  remaining: "#e2e3e5",
+  draft: "#f0a020",
+};
 
 const LABEL_COLORS = [
-  '#4CAF50', '#2196F3', '#FF9800', '#E91E63', '#9C27B0',
-  '#00BCD4', '#FF5722', '#795548', '#607D8B', '#CDDC39',
-]
+  "#4CAF50",
+  "#2196F3",
+  "#FF9800",
+  "#E91E63",
+  "#9C27B0",
+  "#00BCD4",
+  "#FF5722",
+  "#795548",
+  "#607D8B",
+  "#CDDC39",
+];
 
 // ---------------------------------------------------------------------------
 // Donut chart option
@@ -93,69 +103,77 @@ const LABEL_COLORS = [
 const donutOption = computed<EChartsOption>(() => {
   const remaining = props.includeDrafts
     ? Math.max(0, unlabeled.value - draftCount.value)
-    : unlabeled.value
-  const draftSlice = props.includeDrafts ? draftCount.value : 0
+    : unlabeled.value;
+  const draftSlice = props.includeDrafts ? draftCount.value : 0;
 
-  const data: Array<{ value: number; name: string; itemStyle: { color: string } }> = []
+  const data: Array<{ value: number; name: string; itemStyle: { color: string } }> = [];
 
   if (annotated.value > 0) {
-    data.push({ value: annotated.value, name: 'Annotated', itemStyle: { color: COLORS.annotated } })
+    data.push({
+      value: annotated.value,
+      name: t("widgets.annotated"),
+      itemStyle: { color: COLORS.annotated },
+    });
   }
   if (draftSlice > 0) {
-    data.push({ value: draftSlice, name: 'Drafts', itemStyle: { color: COLORS.draft } })
+    data.push({ value: draftSlice, name: t("widgets.drafts"), itemStyle: { color: COLORS.draft } });
   }
   if (remaining > 0) {
-    data.push({ value: remaining, name: 'Remaining', itemStyle: { color: COLORS.remaining } })
+    data.push({
+      value: remaining,
+      name: t("widgets.remaining"),
+      itemStyle: { color: COLORS.remaining },
+    });
   }
 
   // Empty dataset placeholder
   if (data.length === 0) {
-    data.push({ value: 1, name: 'No data', itemStyle: { color: COLORS.remaining } })
+    data.push({ value: 1, name: t("widgets.noData"), itemStyle: { color: COLORS.remaining } });
   }
 
   return {
-    backgroundColor: 'transparent',
-    tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+    backgroundColor: "transparent",
+    tooltip: { trigger: "item", formatter: "{b}: {c} ({d}%)" },
     series: [
       {
-        type: 'pie',
-        radius: ['55%', '80%'],
-        center: ['50%', '50%'],
+        type: "pie",
+        radius: ["55%", "80%"],
+        center: ["50%", "50%"],
         avoidLabelOverlap: false,
         label: {
           show: props.showPercent,
-          position: 'center',
+          position: "center",
           formatter: `${annotatedPercent.value}%`,
           fontSize: 22,
-          fontWeight: 'bold',
-          color: '#ffffffdd',
+          fontWeight: "bold",
+          color: "#ffffffdd",
         },
         labelLine: { show: false },
         data,
       },
     ],
-  }
-})
+  };
+});
 
 // ---------------------------------------------------------------------------
 // Bar chart option (label breakdown)
 // ---------------------------------------------------------------------------
 
 const barOption = computed<EChartsOption>(() => {
-  const items = labelCounts.value
+  const items = labelCounts.value;
   return {
-    backgroundColor: 'transparent',
-    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+    backgroundColor: "transparent",
+    tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
     grid: { left: 4, right: 12, top: 8, bottom: 4, containLabel: true },
-    xAxis: { type: 'value', splitLine: { lineStyle: { opacity: 0.12 } } },
+    xAxis: { type: "value", splitLine: { lineStyle: { opacity: 0.12 } } },
     yAxis: {
-      type: 'category',
+      type: "category",
       data: items.map((i) => i.label),
-      axisLabel: { fontSize: 11, color: '#ffffffcc' },
+      axisLabel: { fontSize: 11, color: "#ffffffcc" },
     },
     series: [
       {
-        type: 'bar',
+        type: "bar",
         data: items.map((i, idx) => ({
           value: i.count,
           itemStyle: { color: LABEL_COLORS[idx % LABEL_COLORS.length] },
@@ -163,21 +181,21 @@ const barOption = computed<EChartsOption>(() => {
         barMaxWidth: 18,
       },
     ],
-  }
-})
+  };
+});
 </script>
 
 <template>
   <div class="apw">
     <!-- Loading state -->
     <div v-if="ctx.isLoading && !ctx.stats" class="apw-loading">
-      Loading stats...
+      {{ t("widgets.loadingStats") }}
     </div>
 
     <!-- Error state -->
     <div v-else-if="ctx.isError" class="apw-error">
-      <span>Failed to load stats</span>
-      <button class="apw-error__retry" @click="ctx.refetch()">Retry</button>
+      <span>{{ t("widgets.failedStats") }}</span>
+      <button class="apw-error__retry" @click="ctx.refetch()">{{ t("common.retry") }}</button>
     </div>
 
     <template v-else>
@@ -190,46 +208,38 @@ const barOption = computed<EChartsOption>(() => {
       <div v-if="showCounts" class="apw-metrics">
         <div class="apw-metric">
           <span class="apw-metric__value" style="color: #63e2b7">{{ annotated }}</span>
-          <span class="apw-metric__label">Annotated</span>
+          <span class="apw-metric__label">{{ t("widgets.annotated") }}</span>
         </div>
         <div class="apw-metric">
           <span class="apw-metric__value" style="color: #e2e3e5">{{ unlabeled }}</span>
-          <span class="apw-metric__label">Remaining</span>
+          <span class="apw-metric__label">{{ t("widgets.remaining") }}</span>
         </div>
         <div class="apw-metric">
           <span class="apw-metric__value">{{ total }}</span>
-          <span class="apw-metric__label">Total</span>
+          <span class="apw-metric__label">{{ t("widgets.total") }}</span>
         </div>
         <div v-if="includeDrafts && draftCount > 0" class="apw-metric">
           <span class="apw-metric__value" style="color: #f0a020">{{ draftCount }}</span>
-          <span class="apw-metric__label">Drafts</span>
+          <span class="apw-metric__label">{{ t("widgets.drafts") }}</span>
         </div>
         <div v-if="selectedCount > 0" class="apw-metric">
           <span class="apw-metric__value" style="color: #70c0e8">{{ selectedCount }}</span>
-          <span class="apw-metric__label">Selected</span>
+          <span class="apw-metric__label">{{ t("widgets.selected") }}</span>
         </div>
       </div>
 
       <!-- Label breakdown -->
       <div v-if="showLabelBreakdown && labelCounts.length > 0" class="apw-labels">
-        <div class="apw-labels__title">Labels</div>
+        <div class="apw-labels__title">{{ t("widgets.labels") }}</div>
 
         <!-- Bar chart mode -->
         <div v-if="chartType === 'bar'" class="apw-barchart">
-          <VChart
-            class="apw-barchart__plot"
-            :option="barOption"
-            autoresize
-          />
+          <VChart class="apw-barchart__plot" :option="barOption" autoresize />
         </div>
 
         <!-- Default: compact list -->
         <div v-else class="apw-labels__list">
-          <div
-            v-for="(item, idx) in labelCounts"
-            :key="item.label"
-            class="apw-labels__row"
-          >
+          <div v-for="(item, idx) in labelCounts" :key="item.label" class="apw-labels__row">
             <span
               class="apw-labels__dot"
               :style="{ background: LABEL_COLORS[idx % LABEL_COLORS.length] }"

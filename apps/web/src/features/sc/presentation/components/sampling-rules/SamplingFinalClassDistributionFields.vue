@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from "vue-i18n";
 import { NInputNumber } from "naive-ui";
 import type { ScSamplingFinalClassTarget } from "@/features/sc/domain/samplingRules";
 import SamplingNumericField from "./SamplingNumericField.vue";
@@ -15,6 +16,7 @@ const emit = defineEmits<{
   (e: "update:count", value: number): void;
   (e: "update:targets", value: ScSamplingFinalClassTarget[]): void;
 }>();
+const { t } = useI18n();
 
 function updateTarget(index: number, percentage: number | null): void {
   if (percentage === null) return;
@@ -30,7 +32,7 @@ function updateTarget(index: number, percentage: number | null): void {
 <template>
   <div class="distribution-fields">
     <SamplingNumericField
-      label="Total sample count"
+      :label="t('sc.totalSampleCount')"
       :value="count"
       :minimum="1"
       @update:value="emit('update:count', $event)"
@@ -53,8 +55,8 @@ function updateTarget(index: number, percentage: number | null): void {
       <div v-if="targets.length === 0" class="empty-state">
         {{
           loading
-            ? `Loading ${distributionLabel} values…`
-            : `No ${distributionLabel} values are available.`
+            ? t("sc.loadingDistributionValues", { label: distributionLabel })
+            : t("sc.noDistributionValues", { label: distributionLabel })
         }}
       </div>
     </div>

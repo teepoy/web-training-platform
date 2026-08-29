@@ -166,7 +166,9 @@ const { data: collectionCreators, isLoading: collectionCreatorsLoading } =
   });
 
 const activeFilterCount = computed(
-  () => Number(localSearch.value.trim().length > 0) + Number(localCreatorScope.value !== "all"),
+  () =>
+    Number(search.value.trim().length > 0) +
+    Number(props.embedded ? props.creatorId !== null : localCreatorScope.value !== "all"),
 );
 
 function clearFilters(): void {

@@ -49,7 +49,7 @@ test("dataset search and creator filters apply before pagination @mock", async (
   await expect(authedPage.getByText("Beta Flowers")).toHaveCount(0);
 
   await authedPage.getByPlaceholder("Search datasets").clear();
-  await authedPage.locator(".library-creator").click();
+  await authedPage.getByTestId("creator-scope-select").click();
   await authedPage.getByText("Bob", { exact: true }).last().click();
   await expect(authedPage.getByText("Beta Flowers")).toBeVisible();
   await expect(authedPage.getByText("Alpha Flowers")).toHaveCount(0);
@@ -81,7 +81,7 @@ test("non-creator hides owner-only row actions @mock", async ({ authedPage, apiM
   const listPage = new DatasetListPage(authedPage);
   await listPage.goto("/library");
   await listPage.waitForLoaded();
-  await authedPage.locator(".library-creator").click();
+  await authedPage.getByTestId("creator-scope-select").click();
   await authedPage.getByText("All creators", { exact: true }).last().click();
   await listPage.expectDatasetVisible("flowers-dataset");
 

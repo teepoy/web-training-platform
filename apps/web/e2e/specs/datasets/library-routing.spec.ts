@@ -23,7 +23,7 @@ test("Library keeps shared query state while switching resource tabs @mock", asy
   await expect(authedPage.getByTestId("library-tab-datasets")).toHaveClass(/active/);
   await expect(authedPage.getByText("flowers-dataset")).toBeVisible();
   const tabsBox = await authedPage.locator(".library-tabs").boundingBox();
-  const filtersBox = await authedPage.locator(".library-query").boundingBox();
+  const filtersBox = await authedPage.getByTestId("resource-filter-bar").boundingBox();
   expect(tabsBox!.y).toBeLessThan(filtersBox!.y);
 
   const collectionRequestPromise = authedPage.waitForRequest((request) =>
@@ -39,7 +39,7 @@ test("Library keeps shared query state while switching resource tabs @mock", asy
   expect(collectionUrl.searchParams.get("q")).toBe("flowers");
   expect(collectionUrl.searchParams.get("creator")).toBe("me");
   await expect(authedPage.getByTestId("library-tab-collections")).toHaveClass(/active/);
-  await expect(authedPage.getByText("No dataset collections match this search")).toBeVisible();
+  await expect(authedPage.getByText("No dataset collections match these filters")).toBeVisible();
 });
 
 test("Library sorts the full Dataset result set and opens rows @mock", async ({

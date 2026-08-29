@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { computed, inject } from "vue";
+import { useI18n } from "vue-i18n";
 import { BROWSER_DASHBOARD_KEY } from "@/shared/widgets/sdk";
 import { DATA_PIPELINE_KEY } from "../../composables/useDataPipeline";
+
+const { t } = useI18n();
 
 const props = withDefaults(
   defineProps<{
@@ -38,8 +41,8 @@ const summaryText = computed<string>(() => {
   const total = resolvedTotal.value;
   const filtered = resolvedFiltered.value;
   if (total === null) return "—";
-  if (filtered === null || filtered === total) return `${total} items loaded`;
-  return `Showing ${filtered} of ${total} items`;
+  if (filtered === null || filtered === total) return t("widgets.itemsLoaded", { count: total });
+  return t("widgets.showingItems", { filtered, total });
 });
 </script>
 
@@ -47,7 +50,7 @@ const summaryText = computed<string>(() => {
   <div class="browser-summary">
     <span class="browser-summary__count">{{ summaryText }}</span>
     <span v-if="activeLabelFilter" class="browser-summary__filter">
-      Filtered: <em>{{ activeLabelFilter }}</em>
+      {{ t("widgets.filtered") }} <em>{{ activeLabelFilter }}</em>
     </span>
   </div>
 </template>

@@ -223,7 +223,9 @@ watch(
 );
 
 const activeFilterCount = computed(
-  () => Number(localKeyword.value.trim().length > 0) + Number(localCreatorScope.value !== "all"),
+  () =>
+    Number(keyword.value.trim().length > 0) +
+    Number(props.embedded ? props.creatorId !== null : localCreatorScope.value !== "all"),
 );
 
 function clearFilters(): void {

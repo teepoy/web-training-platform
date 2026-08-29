@@ -5,7 +5,7 @@
       <input
         v-model="labelSearch"
         class="ag-label-search"
-        placeholder="Search labels..."
+        :placeholder="t('widgets.searchLabels')"
         @keydown.stop
       />
       <div class="ag-label-list">
@@ -22,12 +22,8 @@
           <span v-if="idx < 9" class="ag-label-shortcut">{{ idx + 1 }}</span>
         </div>
       </div>
-      <button
-        v-if="showAddLabel"
-        class="ag-label-add"
-        @click="emit('add-label', '')"
-      >
-        + Add label
+      <button v-if="showAddLabel" class="ag-label-add" @click="emit('add-label', '')">
+        {{ t("widgets.addLabel") }}
       </button>
     </div>
 
@@ -57,7 +53,9 @@
           :disabled="submitting || draftCount === 0"
           @click="emit('submit')"
         >
-          {{ submitting ? 'Submitting...' : `Submit ${draftCount}` }}
+          {{
+            submitting ? t("widgets.submitting") : t("widgets.submitCount", { count: draftCount })
+          }}
         </button>
       </template>
     </SampleBrowser>
@@ -65,95 +63,107 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import type { AnnotationGridItem, BrowserItem } from '../../types/components'
-import SampleBrowser from '../sample-browser/SampleBrowser.vue'
+import { ref, computed } from "vue";
+import { useI18n } from "vue-i18n";
+import type { AnnotationGridItem, BrowserItem } from "../../types/components";
+import SampleBrowser from "../sample-browser/SampleBrowser.vue";
+
+const { t } = useI18n();
 
 // ---------------------------------------------------------------------------
 // Props / Events
 // ---------------------------------------------------------------------------
 
-const props = withDefaults(defineProps<{
-  items: AnnotationGridItem[]
-  totalCount: number
-  labelSpace: string[]
-  thumbSize?: number
-  layout?: 'grid' | 'list'
-  isLoading?: boolean
-  submitting?: boolean
-  showAddLabel?: boolean
-  readOnly?: boolean
-}>(), {
-  thumbSize: 160,
-  layout: 'grid',
-  isLoading: false,
-  submitting: false,
-  showAddLabel: true,
-  readOnly: false,
-})
+const props = withDefaults(
+  defineProps<{
+    items: AnnotationGridItem[];
+    totalCount: number;
+    labelSpace: string[];
+    thumbSize?: number;
+    layout?: "grid" | "list";
+    isLoading?: boolean;
+    submitting?: boolean;
+    showAddLabel?: boolean;
+    readOnly?: boolean;
+  }>(),
+  {
+    thumbSize: 160,
+    layout: "grid",
+    isLoading: false,
+    submitting: false,
+    showAddLabel: true,
+    readOnly: false,
+  },
+);
 
 const emit = defineEmits<{
-  select: [ids: Set<string>]
-  'apply-label': [payload: { ids: string[]; label: string }]
-  submit: []
-  'load-more': []
-  'add-label': [name: string]
-}>()
+  select: [ids: Set<string>];
+  "apply-label": [payload: { ids: string[]; label: string }];
+  submit: [];
+  "load-more": [];
+  "add-label": [name: string];
+}>();
 
 // ---------------------------------------------------------------------------
 // Colors
 // ---------------------------------------------------------------------------
 
 const LABEL_COLORS = [
-  '#4CAF50', '#2196F3', '#FF9800', '#E91E63', '#9C27B0',
-  '#00BCD4', '#FF5722', '#795548', '#607D8B', '#CDDC39',
-]
+  "#4CAF50",
+  "#2196F3",
+  "#FF9800",
+  "#E91E63",
+  "#9C27B0",
+  "#00BCD4",
+  "#FF5722",
+  "#795548",
+  "#607D8B",
+  "#CDDC39",
+];
 
 function labelColor(label: string): string {
-  const idx = props.labelSpace.indexOf(label)
-  if (idx === -1) return '#9E9E9E'
-  return LABEL_COLORS[idx % LABEL_COLORS.length]
+  const idx = props.labelSpace.indexOf(label);
+  if (idx === -1) return "#9E9E9E";
+  return LABEL_COLORS[idx % LABEL_COLORS.length];
 }
 
 // ---------------------------------------------------------------------------
 // Label panel
 // ---------------------------------------------------------------------------
 
-const labelSearch = ref('')
+const labelSearch = ref("");
 
 const filteredLabels = computed(() => {
-  if (!labelSearch.value) return props.labelSpace
-  const q = labelSearch.value.toLowerCase()
-  return props.labelSpace.filter((l) => l.toLowerCase().includes(q))
-})
+  if (!labelSearch.value) return props.labelSpace;
+  const q = labelSearch.value.toLowerCase();
+  return props.labelSpace.filter((l) => l.toLowerCase().includes(q));
+});
 
 // ---------------------------------------------------------------------------
 // Data mapping & Selection
 // ---------------------------------------------------------------------------
 
-const browserRef = ref<InstanceType<typeof SampleBrowser> | null>(null)
-const selectedIds = ref<Set<string>>(new Set())
+const browserRef = ref<InstanceType<typeof SampleBrowser> | null>(null);
+const selectedIds = ref<Set<string>>(new Set());
 
-const draftCount = computed(() =>
-  props.items.filter((item) => item.draftLabel != null).length
-)
+const draftCount = computed(() => props.items.filter((item) => item.draftLabel != null).length);
 
 const browserItems = computed<BrowserItem[]>(() =>
   props.items.map((item) => ({
     ...item,
     activationLabel: null,
-    sourceKind: 'classify-review' as const,
-  }))
-)
+    sourceKind: "classify-review" as const,
+  })),
+);
 
 function onBrowserSelect(ids: Set<string>) {
-  selectedIds.value = ids
-  emit('select', ids)
+  selectedIds.value = ids;
+  emit("select", ids);
 }
 
 function applyLabelToSelection(label: string) {
-  if (selectedIds.value.size === 0) return
-  emit('apply-label', { ids: [...selectedIds.value], label })
+  if (selectedIds.value.size === 0) return;
+  emit("apply-label", { ids: [...selectedIds.value], label });
 }
 
 // ---------------------------------------------------------------------------
@@ -161,21 +171,22 @@ function applyLabelToSelection(label: string) {
 // ---------------------------------------------------------------------------
 
 function onKeyDown(e: KeyboardEvent) {
-  const el = document.activeElement
+  const el = document.activeElement;
   if (
     el instanceof HTMLInputElement ||
     el instanceof HTMLSelectElement ||
     el instanceof HTMLTextAreaElement ||
     (el instanceof HTMLElement && el.isContentEditable)
-  ) return
+  )
+    return;
 
-  const num = parseInt(e.key, 10)
-  if (isNaN(num) || num < 1 || num > 9) return
-  const label = props.labelSpace[num - 1]
-  if (!label) return
-  if (selectedIds.value.size === 0) return
-  e.preventDefault()
-  applyLabelToSelection(label)
+  const num = parseInt(e.key, 10);
+  if (isNaN(num) || num < 1 || num > 9) return;
+  const label = props.labelSpace[num - 1];
+  if (!label) return;
+  if (selectedIds.value.size === 0) return;
+  e.preventDefault();
+  applyLabelToSelection(label);
 }
 
 // ---------------------------------------------------------------------------
@@ -186,13 +197,13 @@ defineExpose({
   selectedIds,
   clearSelection: () => {
     if (browserRef.value) {
-      browserRef.value.clearSelection()
+      browserRef.value.clearSelection();
     } else {
-      selectedIds.value = new Set()
-      emit('select', selectedIds.value)
+      selectedIds.value = new Set();
+      emit("select", selectedIds.value);
     }
   },
-})
+});
 </script>
 
 <style scoped>
@@ -210,14 +221,14 @@ defineExpose({
   flex-direction: column;
   width: 170px;
   min-width: 170px;
-  border-right: 1px solid var(--cv-border, rgba(255,255,255,0.12));
+  border-right: 1px solid var(--cv-border, rgba(255, 255, 255, 0.12));
   background: var(--cv-card-bg, #1e1e2e);
 }
 
 .ag-label-search {
   margin: 8px;
   padding: 6px 8px;
-  border: 1px solid var(--cv-border, rgba(255,255,255,0.12));
+  border: 1px solid var(--cv-border, rgba(255, 255, 255, 0.12));
   border-radius: 4px;
   background: transparent;
   color: var(--cv-text, #fff);
@@ -226,7 +237,7 @@ defineExpose({
 }
 
 .ag-label-search::placeholder {
-  color: var(--cv-text-disabled, rgba(255,255,255,0.3));
+  color: var(--cv-text-disabled, rgba(255, 255, 255, 0.3));
 }
 
 .ag-label-list {
@@ -248,7 +259,7 @@ defineExpose({
 }
 
 .ag-label-item:hover {
-  background: var(--cv-hover, rgba(255,255,255,0.08));
+  background: var(--cv-hover, rgba(255, 255, 255, 0.08));
 }
 
 .ag-label-dot {
@@ -267,17 +278,17 @@ defineExpose({
 
 .ag-label-shortcut {
   font-size: 10px;
-  color: var(--cv-text-disabled, rgba(255,255,255,0.3));
+  color: var(--cv-text-disabled, rgba(255, 255, 255, 0.3));
   flex-shrink: 0;
 }
 
 .ag-label-add {
   margin: 4px 8px 8px;
   padding: 6px;
-  border: 1px dashed var(--cv-border, rgba(255,255,255,0.12));
+  border: 1px dashed var(--cv-border, rgba(255, 255, 255, 0.12));
   border-radius: 4px;
   background: transparent;
-  color: var(--cv-text-secondary, rgba(255,255,255,0.5));
+  color: var(--cv-text-secondary, rgba(255, 255, 255, 0.5));
   cursor: pointer;
   font-size: 12px;
 }

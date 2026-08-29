@@ -8,10 +8,11 @@
     height — chart height in px (default depends on panel size)
 -->
 <script setup lang="ts">
-import { computed } from 'vue'
-import VChart from 'vue-echarts'
-import { use } from 'echarts/core'
-import { PieChart, BarChart, LineChart, ScatterChart } from 'echarts/charts'
+import { computed } from "vue";
+import { useI18n } from "vue-i18n";
+import VChart from "vue-echarts";
+import { use } from "echarts/core";
+import { PieChart, BarChart, LineChart, ScatterChart } from "echarts/charts";
 import {
   TitleComponent,
   TooltipComponent,
@@ -19,9 +20,11 @@ import {
   GridComponent,
   DatasetComponent,
   ToolboxComponent,
-} from 'echarts/components'
-import { CanvasRenderer } from 'echarts/renderers'
-import type { EChartsOption } from 'echarts'
+} from "echarts/components";
+import { CanvasRenderer } from "echarts/renderers";
+import type { EChartsOption } from "echarts";
+
+const { t } = useI18n();
 
 use([
   PieChart,
@@ -35,41 +38,44 @@ use([
   DatasetComponent,
   ToolboxComponent,
   CanvasRenderer,
-])
+]);
 
 const props = defineProps<{
-  data?: Record<string, unknown> | null
-  config?: Record<string, unknown>
-  size?: 'compact' | 'normal' | 'large'
-}>()
+  data?: Record<string, unknown> | null;
+  config?: Record<string, unknown>;
+  size?: "compact" | "normal" | "large";
+}>();
 
 const chartHeight = computed(() => {
-  if (props.config?.height) return `${props.config.height}px`
+  if (props.config?.height) return `${props.config.height}px`;
   switch (props.size) {
-    case 'compact': return '160px'
-    case 'large': return '320px'
-    default: return '220px'
+    case "compact":
+      return "160px";
+    case "large":
+      return "320px";
+    default:
+      return "220px";
   }
-})
+});
 
 const chartOption = computed<EChartsOption | null>(() => {
-  if (!props.data) return null
+  if (!props.data) return null;
   // Accept either raw EChartsOption or { inline: <option> }
-  const raw = (props.data as Record<string, unknown>).inline ?? props.data
-  if (!raw || typeof raw !== 'object') return null
+  const raw = (props.data as Record<string, unknown>).inline ?? props.data;
+  if (!raw || typeof raw !== "object") return null;
 
   // Merge dark-theme defaults
   return {
-    backgroundColor: 'transparent',
-    textStyle: { color: 'rgba(255,255,255,0.7)', fontSize: 11 },
+    backgroundColor: "transparent",
+    textStyle: { color: "rgba(255,255,255,0.7)", fontSize: 11 },
     ...(raw as Record<string, unknown>),
-  } as EChartsOption
-})
+  } as EChartsOption;
+});
 </script>
 
 <template>
   <div class="gew">
-    <div v-if="!chartOption" class="gew-empty">No chart data</div>
+    <div v-if="!chartOption" class="gew-empty">{{ t("widgets.noChartData") }}</div>
     <VChart
       v-else
       class="gew-chart"

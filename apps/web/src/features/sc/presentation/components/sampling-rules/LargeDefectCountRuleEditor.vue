@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from "vue-i18n";
 import type { ScSamplingLargeDefectCountRule } from "@/features/sc/domain/samplingRules";
 import SamplingNumericField from "./SamplingNumericField.vue";
 import SamplingSizeMetricField from "./SamplingSizeMetricField.vue";
@@ -12,6 +13,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: "update:rule", rule: ScSamplingLargeDefectCountRule): void;
 }>();
+const { t } = useI18n();
 </script>
 
 <template>
@@ -23,7 +25,7 @@ const emit = defineEmits<{
     <div class="two-columns">
       <div>
         <SamplingNumericField
-          label="Minimum Size"
+          :label="t('sc.minimumSize')"
           :value="rule.minimum"
           :minimum="0"
           :precision="3"
@@ -32,7 +34,7 @@ const emit = defineEmits<{
       </div>
       <div>
         <SamplingNumericField
-          label="Sample count"
+          :label="t('sc.sampleCountLabel')"
           :value="rule.count"
           :minimum="1"
           @update:value="emit('update:rule', { ...props.rule, count: $event })"

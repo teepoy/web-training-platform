@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from "vue-i18n";
 import type { ScSamplingSizeRangeRule } from "@/features/sc/domain/samplingRules";
 import SamplingNumericField from "./SamplingNumericField.vue";
 import SamplingSizeMetricField from "./SamplingSizeMetricField.vue";
@@ -10,6 +11,7 @@ const props = defineProps<{
   compact?: boolean;
 }>();
 const emit = defineEmits<{ (e: "update:rule", rule: ScSamplingSizeRangeRule): void }>();
+const { t } = useI18n();
 </script>
 
 <template>
@@ -21,7 +23,7 @@ const emit = defineEmits<{ (e: "update:rule", rule: ScSamplingSizeRangeRule): vo
     <div class="two-columns">
       <div>
         <SamplingNumericField
-          label="Minimum"
+          :label="t('sc.minimum')"
           :value="rule.minimum"
           :minimum="0"
           :precision="3"
@@ -30,7 +32,7 @@ const emit = defineEmits<{ (e: "update:rule", rule: ScSamplingSizeRangeRule): vo
       </div>
       <div>
         <SamplingNumericField
-          label="Maximum"
+          :label="t('sc.maximumLabel')"
           :value="rule.maximum"
           :minimum="0"
           :precision="3"

@@ -24,6 +24,7 @@
 -->
 <script setup lang="ts">
 import { computed, inject } from "vue";
+import { useI18n } from "vue-i18n";
 import VChart from "vue-echarts";
 import { use } from "echarts/core";
 import type { EChartsOption } from "echarts";
@@ -32,6 +33,8 @@ import { ScatterChart } from "echarts/charts";
 import { GridComponent, LegendComponent, TooltipComponent } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
 import { DATA_PIPELINE_KEY } from "../../composables/useDataPipeline";
+
+const { t } = useI18n();
 
 use([ScatterChart, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer]);
 
@@ -170,8 +173,7 @@ function onChartClick(params: ECElementEvent): void {
   }
 
   const mouseEvent = params.event?.event as MouseEvent | undefined;
-  const operation: IdsOperation =
-    mouseEvent?.metaKey || mouseEvent?.ctrlKey ? "toggle" : "replace";
+  const operation: IdsOperation = mouseEvent?.metaKey || mouseEvent?.ctrlKey ? "toggle" : "replace";
 
   const currentIds = Array.from(selectedIds.value);
   const nextIds = applyIdsOperation(currentIds, [pointId], operation);
@@ -241,7 +243,10 @@ const chartOption = computed<EChartsOption>(() => ({
         if ("data" in params && Array.isArray((params as { data?: unknown }).data)) {
           row = (params as { data?: unknown[] }).data ?? null;
         }
-        if ("seriesName" in params && typeof (params as { seriesName?: unknown }).seriesName === "string") {
+        if (
+          "seriesName" in params &&
+          typeof (params as { seriesName?: unknown }).seriesName === "string"
+        ) {
           seriesName = (params as { seriesName: string }).seriesName;
         }
       }
@@ -271,7 +276,7 @@ const chartOption = computed<EChartsOption>(() => ({
   series: [
     ...groupedSeries.value,
     {
-      name: "Selected",
+      name: t("widgets.selected"),
       type: "scatter",
       data: selectedOverlay.value,
       symbolSize: 14,
@@ -289,7 +294,9 @@ const chartOption = computed<EChartsOption>(() => ({
 
 <template>
   <div class="isw">
-    <div v-if="normalizedPoints.length === 0" class="isw-empty">No scatter coordinates</div>
+    <div v-if="normalizedPoints.length === 0" class="isw-empty">
+      {{ t("widgets.noScatterCoordinates") }}
+    </div>
     <template v-else>
       <VChart
         class="isw-chart"
@@ -299,9 +306,13 @@ const chartOption = computed<EChartsOption>(() => ({
         @click="onChartClick"
       />
       <div class="isw-footer">
-        <span>{{ normalizedPoints.length }} point{{ normalizedPoints.length === 1 ? "" : "s" }}</span>
-        <span v-if="selectedIds.size > 0">{{ selectedIds.size }} selected</span>
-        <button v-if="selectedIds.size > 0" class="isw-clear" @click="clearSelectionAndFilter">Clear</button>
+        <span>{{ t("widgets.pointCount", { count: normalizedPoints.length }) }}</span>
+        <span v-if="selectedIds.size > 0">{{
+          t("widgets.samplesSelected", { count: selectedIds.size })
+        }}</span>
+        <button v-if="selectedIds.size > 0" class="isw-clear" @click="clearSelectionAndFilter">
+          {{ t("common.clear") }}
+        </button>
       </div>
     </template>
   </div>

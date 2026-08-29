@@ -142,6 +142,7 @@ function mockScColumns(total: number): Record<string, Array<number | string | nu
   const defectIds = Array.from({ length: total }, (_, index) => index + 1);
   return {
     row_key: defectIds.map((id) => `row-${id}`),
+    map_id: defectIds,
     sample_id: defectIds.map((id) => `s-${id}`),
     defect_id: defectIds,
     rough_bin: defectIds.map((id) => id % 5),
@@ -270,7 +271,7 @@ export async function mockScDataProvider(
         return;
       }
       const limit = randomCount.count;
-      columns = { defect_id: (rows.defect_id ?? []).slice(0, limit) };
+      columns = { map_id: (rows.map_id ?? []).slice(0, limit) };
     } else if (sql.includes('AS "group_key"')) {
       columns = { group_key: [0, 1, 2], group_count: [334, 333, 333] };
     } else if (sql.startsWith("SELECT DISTINCT")) {
@@ -283,6 +284,7 @@ export async function mockScDataProvider(
       const names = sql.includes('"rough_bin"')
         ? [
             "row_key",
+            "map_id",
             "defect_id",
             "rough_bin",
             "class_number",
@@ -312,6 +314,7 @@ export async function mockScDataProvider(
         : sql.includes('"sample_id"')
           ? [
               "row_key",
+              "map_id",
               "sample_id",
               "defect_id",
               "review_image_ids_json",
@@ -321,6 +324,7 @@ export async function mockScDataProvider(
             ]
           : [
               "row_key",
+              "map_id",
               "defect_id",
               "annotation_label",
               "prediction_label",
@@ -338,6 +342,7 @@ export async function mockScDataProvider(
     } else {
       columns = selectedColumns(rows, [
         "row_key",
+        "map_id",
         "defect_id",
         "wafer_x",
         "wafer_y",

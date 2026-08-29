@@ -9,7 +9,10 @@
 -->
 <script setup lang="ts">
 import { computed, inject, ref } from "vue";
+import { useI18n } from "vue-i18n";
 import { DATA_PIPELINE_KEY } from "../../composables/useDataPipeline";
+
+const { t } = useI18n();
 
 const props = defineProps<{
   data?: Record<string, unknown> | null;
@@ -97,13 +100,11 @@ const tableData = computed<TableData | null>(() => {
     return {
       mode: "interactive",
       columns: parsedColumns,
-      rows: (rows as Array<Record<string, unknown>>)
-        .slice(0, maxRows.value)
-        .map((row) => ({
-          id: row.id as string,
-          cells: row.cells as Record<string, unknown>,
-          metadata: row.metadata as Record<string, unknown> | undefined,
-        })),
+      rows: (rows as Array<Record<string, unknown>>).slice(0, maxRows.value).map((row) => ({
+        id: row.id as string,
+        cells: row.cells as Record<string, unknown>,
+        metadata: row.metadata as Record<string, unknown> | undefined,
+      })),
     };
   }
 
@@ -239,7 +240,7 @@ const containerHeight = computed(() => {
 
 <template>
   <div class="dtw">
-    <div v-if="!tableData" class="dtw-empty">No table data</div>
+    <div v-if="!tableData" class="dtw-empty">{{ t("widgets.noTableData") }}</div>
     <div v-else class="dtw-scroll" :style="{ maxHeight: containerHeight }">
       <table class="dtw-table">
         <thead>
@@ -270,8 +271,10 @@ const containerHeight = computed(() => {
       </table>
     </div>
     <div v-if="tableData" class="dtw-footer">
-      <span>{{ (visibleRows?.length ?? 0) }} row{{ (visibleRows?.length ?? 0) === 1 ? "" : "s" }}</span>
-      <button v-if="selectedRowCount > 0" class="dtw-clear" @click="clearSelection">Clear</button>
+      <span>{{ t("widgets.rowCount", { count: visibleRows?.length ?? 0 }) }}</span>
+      <button v-if="selectedRowCount > 0" class="dtw-clear" @click="clearSelection">
+        {{ t("common.clear") }}
+      </button>
     </div>
   </div>
 </template>

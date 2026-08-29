@@ -11,12 +11,12 @@
   PanelHost does NOT depend on a `.cs` sidebar shell.
 -->
 <script setup lang="ts">
-import {
-  ref,
-  type Component,
-} from "vue";
+import { ref, type Component } from "vue";
+import { useI18n } from "vue-i18n";
 import type { SidebarPanelDescriptor } from "../../types/components";
 import WidgetErrorBoundary from "../widget-error-boundary/WidgetErrorBoundary.vue";
+
+const { t } = useI18n();
 
 // ---------------------------------------------------------------------------
 // Props
@@ -64,11 +64,12 @@ function resolveComponent(key: string): Component | null {
     >
       <div class="cs-panel__header" @click="togglePanel(panel)">
         <span class="cs-panel__title">{{ panel.title }}</span>
-        <span v-if="panel._agentOwned" class="cs-panel__agent-badge">AI</span>
+        <span v-if="panel._agentOwned" class="cs-panel__agent-badge">{{ t("widgets.ai") }}</span>
         <span
           class="cs-panel__chevron"
           :class="{ 'cs-panel__chevron--open': !isPanelCollapsed(panel) }"
-        >&#9660;</span>
+          >&#9660;</span
+        >
       </div>
 
       <div v-show="!isPanelCollapsed(panel)" class="cs-panel__body">
@@ -77,13 +78,10 @@ function resolveComponent(key: string): Component | null {
           :widget-id="panel.id"
           :widget-component="panel.component"
         >
-          <component
-            :is="resolveComponent(panel.component)"
-            v-bind="panel.props"
-          />
+          <component :is="resolveComponent(panel.component)" v-bind="panel.props" />
         </WidgetErrorBoundary>
         <div v-else class="cs-panel__missing">
-          Unknown widget: {{ panel.component }}
+          {{ t("widgets.unknownWidget", { widget: panel.component }) }}
         </div>
       </div>
     </div>

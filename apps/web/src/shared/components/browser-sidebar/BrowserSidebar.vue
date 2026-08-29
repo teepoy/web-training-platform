@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
 import type { Component } from "vue";
+import { useI18n } from "vue-i18n";
 import type { SidebarPanelDescriptor } from "../../types/components";
 import PanelHost from "../panel-host/PanelHost.vue";
+
+const { t } = useI18n();
 
 const DEFAULT_SIDEBAR_WIDTH = 280;
 const MIN_SIDEBAR_WIDTH = 200;
@@ -42,11 +45,14 @@ const sidebarCollapsed = computed({
 const isResizing = ref(false);
 const visualWidth = ref(props.sidebarWidth ?? DEFAULT_SIDEBAR_WIDTH);
 
-watch(() => props.sidebarWidth, (val) => {
-  if (!isResizing.value) {
-    visualWidth.value = val ?? DEFAULT_SIDEBAR_WIDTH;
-  }
-});
+watch(
+  () => props.sidebarWidth,
+  (val) => {
+    if (!isResizing.value) {
+      visualWidth.value = val ?? DEFAULT_SIDEBAR_WIDTH;
+    }
+  },
+);
 
 let startX = 0;
 let startWidth = 0;
@@ -81,7 +87,9 @@ function onResizeEnd(e: PointerEvent) {
 }
 
 const currentWidth = computed(() => {
-  return sidebarCollapsed.value ? (props.collapsedSidebarWidth ?? COLLAPSED_SIDEBAR_WIDTH) : visualWidth.value;
+  return sidebarCollapsed.value
+    ? (props.collapsedSidebarWidth ?? COLLAPSED_SIDEBAR_WIDTH)
+    : visualWidth.value;
 });
 </script>
 
@@ -102,11 +110,11 @@ const currentWidth = computed(() => {
       @pointercancel="onResizeEnd"
     />
     <div class="cs-header">
-      <span v-if="!sidebarCollapsed" class="cs-header__title">Dashboard</span>
+      <span v-if="!sidebarCollapsed" class="cs-header__title">{{ t("widgets.dashboard") }}</span>
       <button
         class="cs-header__toggle"
         @click="sidebarCollapsed = !sidebarCollapsed"
-        :title="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+        :title="sidebarCollapsed ? t('widgets.expandSidebar') : t('widgets.collapseSidebar')"
       >
         {{ sidebarCollapsed ? "&#9664;" : "&#9654;" }}
       </button>

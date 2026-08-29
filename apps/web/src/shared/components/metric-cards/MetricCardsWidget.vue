@@ -7,30 +7,33 @@
     columns — grid columns (default 2)
 -->
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed } from "vue";
+import { useI18n } from "vue-i18n";
 import type { MetricCardItem } from "../../types/sidebar-widgets";
 
-const props = defineProps<{
-  data?: Record<string, unknown> | null
-  config?: Record<string, unknown>
-  size?: 'compact' | 'normal' | 'large'
-}>()
+const { t } = useI18n();
 
-const columns = computed(() => Number(props.config?.columns ?? 2))
+const props = defineProps<{
+  data?: Record<string, unknown> | null;
+  config?: Record<string, unknown>;
+  size?: "compact" | "normal" | "large";
+}>();
+
+const columns = computed(() => Number(props.config?.columns ?? 2));
 
 const metrics = computed<MetricCardItem[]>(() => {
-  if (!props.data) return []
-  const raw = (props.data as Record<string, unknown>).inline ?? props.data
-  if (!raw || typeof raw !== 'object') return []
-  const arr = (raw as Record<string, unknown>).metrics
-  if (!Array.isArray(arr)) return []
-  return arr as MetricCardItem[]
-})
+  if (!props.data) return [];
+  const raw = (props.data as Record<string, unknown>).inline ?? props.data;
+  if (!raw || typeof raw !== "object") return [];
+  const arr = (raw as Record<string, unknown>).metrics;
+  if (!Array.isArray(arr)) return [];
+  return arr as MetricCardItem[];
+});
 </script>
 
 <template>
   <div class="mcw">
-    <div v-if="metrics.length === 0" class="mcw-empty">No metrics</div>
+    <div v-if="metrics.length === 0" class="mcw-empty">{{ t("widgets.noMetrics") }}</div>
     <div v-else class="mcw-grid" :style="{ gridTemplateColumns: `repeat(${columns}, 1fr)` }">
       <div v-for="(m, i) in metrics" :key="i" class="mcw-card">
         <div class="mcw-value" :style="m.color ? { color: m.color } : {}">{{ m.value }}</div>

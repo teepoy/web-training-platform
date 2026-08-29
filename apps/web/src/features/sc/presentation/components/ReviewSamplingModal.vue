@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, useSlots, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import {
   NAlert,
   NButton,
@@ -42,6 +43,8 @@ import {
 import type { ScSamplingRuleEditorContext } from "./sampling-rules/types";
 import GlobalFilterBar from "./GlobalFilterBar.vue";
 
+const { t } = useI18n();
+
 const props = withDefaults(
   defineProps<{
     show: boolean;
@@ -74,8 +77,6 @@ const props = withDefaults(
     confirmDisabled: false,
     activeCohortCount: 0,
     cohortStale: false,
-    title: "Annotation Sampling",
-    distributionLabel: "Final Class",
     showCandidateScope: true,
     showExtraFilter: true,
   },
@@ -136,6 +137,8 @@ const showModel = computed({
   get: () => props.show,
   set: (show: boolean) => emit("update:show", show),
 });
+const effectiveTitle = computed(() => props.title ?? t("sc.annotationSampling"));
+const effectiveDistributionLabel = computed(() => props.distributionLabel ?? t("sc.finalClass"));
 const scopeModel = computed({
   get: () => props.scope,
   set: (scope: ScSamplingCandidateScope) => emit("update:scope", scope),
@@ -145,10 +148,14 @@ const catalogItems = computed(() =>
     item.id === "final_class_distribution"
       ? {
           ...item,
-          title: `${props.distributionLabel} distribution`,
-          description: `Split a total N by ${props.distributionLabel} percentages, then draw randomly.`,
+          title: t("sc.distributionRuleTitle", { label: effectiveDistributionLabel.value }),
+          description: t("sc.distributionRuleHelp", { label: effectiveDistributionLabel.value }),
         }
-      : item,
+      : {
+          ...item,
+          title: t(`sc.samplingRules.${item.id}.title`),
+          description: t(`sc.samplingRules.${item.id}.description`),
+        },
   ),
 );
 const enabledRules = computed(() =>
@@ -168,12 +175,14 @@ const editingEditor = computed<ScSamplingRuleEditorDescriptor | null>(() =>
   editingRuleId.value ? scSamplingRuleEditor(editingRuleId.value) : null,
 );
 const configTitle = computed(() =>
-  editingDescriptor.value ? `Configure ${editingDescriptor.value.title}` : "Configure rule",
+  editingDescriptor.value
+    ? t("sc.configureRule", { rule: editingDescriptor.value.title })
+    : t("sc.configureRuleFallback"),
 );
 const editorContext = computed<ScSamplingRuleEditorContext>(() => ({
   classCodeOptions: classCodeOptions.value,
   finalClassOptions: finalClassOptions.value,
-  distributionLabel: props.distributionLabel,
+  distributionLabel: effectiveDistributionLabel.value,
   loading: groupLoading.value,
 }));
 const configurationError = computed(() => scSamplingProgramError(draft.value));
@@ -245,23 +254,23 @@ function isFinalDistributionRule(
 function ruleSummary(rule: ScSamplingRule): string {
   if (isPercentageRule(rule)) return `${rule.percentage}%`;
   if (isCountRule(rule)) return `N = ${rule.count}`;
-  if (isLimitRule(rule)) return `Maximum ${rule.limit}`;
+  if (isLimitRule(rule)) return t("sc.maximum", { count: rule.limit });
   if (isClassCodesRule(rule)) {
-    return rule.classCodes.length ? rule.classCodes.join(", ") : "Class Codes required";
+    return rule.classCodes.length ? rule.classCodes.join(", ") : t("sc.classCodesRequired");
   }
-  if (rule.type === "require_image") return "Images > 0";
+  if (rule.type === "require_image") return t("sc.imagesRequired");
   if (isSizeRangeRule(rule)) return `${rule.sizeField}: ${rule.minimum}–${rule.maximum}`;
   if (isLargePercentageRule(rule)) {
     return `${rule.sizeField} ≥ ${rule.minimum} · ${rule.percentage}%`;
   }
   if (isLargeCountRule(rule)) return `${rule.sizeField} ≥ ${rule.minimum} · N = ${rule.count}`;
-  return `${rule.count} total · ${rule.targets.length} classes`;
+  return t("sc.finalDistributionSummary", { count: rule.count, classes: rule.targets.length });
 }
 
 function phaseLabel(phase: "eligibility" | "selector" | "cap"): string {
-  if (phase === "eligibility") return "Filter step";
-  if (phase === "selector") return "Take step";
-  return "Limit step";
+  if (phase === "eligibility") return t("sc.filterStep");
+  if (phase === "selector") return t("sc.takeStep");
+  return t("sc.limitStep");
 }
 
 function stepNumber(index: number): string {
@@ -309,7 +318,9 @@ async function loadRuleOptions(rule: ScSamplingRule): Promise<void> {
     }
     finalClassOptions.value = groups.map((group) => ({
       label:
-        scMissingFilterOption("final_class")?.value === group.value ? "Unclassified" : group.value,
+        scMissingFilterOption("final_class")?.value === group.value
+          ? t("sc.unclassified")
+          : group.value,
       value: group.value,
     }));
     if (rule.targets.length === 0 && groups.length > 0) {
@@ -320,7 +331,7 @@ async function loadRuleOptions(rule: ScSamplingRule): Promise<void> {
       }));
     }
   } catch (error) {
-    message.error(error instanceof Error ? error.message : "Failed to load rule values");
+    message.error(error instanceof Error ? error.message : t("sc.ruleValuesLoadFailed"));
   } finally {
     if (version === loadVersion) groupLoading.value = false;
   }
@@ -371,21 +382,23 @@ watch(draft, (program) => emit("update:program", cloneScSamplingProgram(program)
   <NModal
     v-model:show="showModel"
     preset="card"
-    :title="title"
-    :aria-label="title"
+    :title="effectiveTitle"
+    :aria-label="effectiveTitle"
     :bordered="false"
     :style="reviewModalStyle"
     data-testid="review-sampling-modal"
   >
     <NTabs v-model:value="activeTab" type="line" animated>
-      <NTabPane name="rules" tab="Sampling rules">
+      <NTabPane name="rules" :tab="t('sc.samplingRulesTab')">
         <NCard v-if="showCandidateScope" size="small" :bordered="false" class="scope-card">
           <div class="section-heading">
             <div>
-              <strong>Candidate scope</strong>
-              <small>Rules operate on one explicit workbench scope.</small>
+              <strong>{{ t("sc.candidateScope") }}</strong>
+              <small>{{ t("sc.candidateScopeHelp") }}</small>
             </div>
-            <NText depth="3">{{ availableCount.toLocaleString() }} available</NText>
+            <NText depth="3">{{
+              t("sc.availableCount", { count: availableCount.toLocaleString() })
+            }}</NText>
           </div>
           <NRadioGroup
             v-model:value="scopeModel"
@@ -393,23 +406,24 @@ watch(draft, (program) => emit("update:program", cloneScSamplingProgram(program)
             class="scope-options"
             @update:value="handleScopeChange"
           >
-            <NRadioButton value="all">All</NRadioButton>
+            <NRadioButton value="all">{{ t("sc.all") }}</NRadioButton>
             <NRadioButton value="map" :disabled="mapSelectionCount === 0">
-              Map Selection<span v-if="mapSelectionCount > 0"> ({{ mapSelectionCount }})</span>
+              {{ t("sc.mapSelection")
+              }}<span v-if="mapSelectionCount > 0"> ({{ mapSelectionCount }})</span>
             </NRadioButton>
             <NRadioButton value="table" :disabled="!tableSelectionAvailable">
-              Table Selection
+              {{ t("sc.tableSelection") }}
             </NRadioButton>
           </NRadioGroup>
         </NCard>
 
         <div class="section-heading rules-heading">
           <div>
-            <strong>Active pipeline</strong>
-            <small>Runs from top to bottom. Every step receives the previous step's output.</small>
+            <strong>{{ t("sc.activePipeline") }}</strong>
+            <small>{{ t("sc.activePipelineHelp") }}</small>
           </div>
           <NButton secondary type="primary" @click="catalogVisible = true">
-            Add sampling rule
+            {{ t("sc.addSamplingRule") }}
           </NButton>
         </div>
 
@@ -427,7 +441,7 @@ watch(draft, (program) => emit("update:program", cloneScSamplingProgram(program)
                   size="tiny"
                   text
                   :disabled="index === 0"
-                  :aria-label="`Move ${item.title} up`"
+                  :aria-label="t('sc.moveRuleUp', { rule: item.title })"
                   :data-testid="`move-sampling-rule-${item.id}-up`"
                   @click="moveRule(index, -1)"
                 >
@@ -437,7 +451,7 @@ watch(draft, (program) => emit("update:program", cloneScSamplingProgram(program)
                   size="tiny"
                   text
                   :disabled="index === enabledRules.length - 1"
-                  :aria-label="`Move ${item.title} down`"
+                  :aria-label="t('sc.moveRuleDown', { rule: item.title })"
                   :data-testid="`move-sampling-rule-${item.id}-down`"
                   @click="moveRule(index, 1)"
                 >
@@ -468,32 +482,32 @@ watch(draft, (program) => emit("update:program", cloneScSamplingProgram(program)
                 size="small"
                 @click="openRule(rule.type)"
               >
-                Edit
+                {{ t("common.edit") }}
               </NButton>
               <NButton size="small" quaternary type="error" @click="removeRule(rule.type)">
-                Remove
+                {{ t("sc.remove") }}
               </NButton>
             </div>
           </article>
           <div v-if="enabledRules.length === 0" class="empty-state">
-            No rules enabled. Add a selector such as “All defects by count”.
+            {{ t("sc.noSamplingRules") }}
           </div>
         </div>
       </NTabPane>
 
-      <NTabPane v-if="showExtraFilter" name="extra" tab="Extra filter">
+      <NTabPane v-if="showExtraFilter" name="extra" :tab="t('sc.extraFilter')">
         <NCard :bordered="false" class="extra-filter-card">
           <div class="section-heading">
             <div>
-              <strong>Extra filter</strong>
-              <small>Apply the workbench filter before the 17 sampling rules.</small>
+              <strong>{{ t("sc.extraFilter") }}</strong>
+              <small>{{ t("sc.extraFilterHelp") }}</small>
             </div>
             <NButton
               size="small"
               :type="draft.extraFilterEnabled ? 'primary' : 'default'"
               @click="draft.extraFilterEnabled = !draft.extraFilterEnabled"
             >
-              {{ draft.extraFilterEnabled ? "Enabled" : "Disabled" }}
+              {{ draft.extraFilterEnabled ? t("sc.enabled") : t("sc.disabled") }}
             </NButton>
           </div>
           <GlobalFilterBar
@@ -512,7 +526,7 @@ watch(draft, (program) => emit("update:program", cloneScSamplingProgram(program)
         </NCard>
       </NTabPane>
 
-      <NTabPane v-if="hasAfterSamplingTab" name="after" tab="After sampling">
+      <NTabPane v-if="hasAfterSamplingTab" name="after" :tab="t('sc.afterSampling')">
         <slot name="after-sampling" />
       </NTabPane>
     </NTabs>
@@ -524,8 +538,7 @@ watch(draft, (program) => emit("update:program", cloneScSamplingProgram(program)
       class="cohort-stale-alert"
       data-testid="sampling-cohort-stale"
     >
-      The current {{ activeCohortCount.toLocaleString() }}-defect cohort uses previous settings.
-      Re-apply sampling to refresh it.
+      {{ t("sc.staleCohort", { count: activeCohortCount.toLocaleString() }) }}
     </NAlert>
 
     <NAlert v-if="configurationError" type="error" :show-icon="false" class="form-error">
@@ -535,17 +548,22 @@ watch(draft, (program) => emit("update:program", cloneScSamplingProgram(program)
     <template #footer>
       <div class="modal-footer">
         <NText depth="3">
-          {{ enabledRules.length }} rules · {{ availableCount.toLocaleString() }} candidates
+          {{
+            t("sc.samplingSummary", {
+              rules: enabledRules.length,
+              candidates: availableCount.toLocaleString(),
+            })
+          }}
         </NText>
         <div>
-          <NButton @click="showModel = false">Cancel</NButton>
+          <NButton @click="showModel = false">{{ t("common.cancel") }}</NButton>
           <NButton
             type="primary"
             :loading="loading"
             :disabled="availableCount === 0 || !!configurationError || confirmDisabled"
             @click="handleConfirm"
           >
-            {{ cohortIsStale ? "Re-apply sampling" : "Apply sampling" }}
+            {{ cohortIsStale ? t("sc.reapplySampling") : t("sc.applySampling") }}
           </NButton>
         </div>
       </div>
@@ -555,15 +573,14 @@ watch(draft, (program) => emit("update:program", cloneScSamplingProgram(program)
   <NModal
     v-model:show="catalogVisible"
     preset="card"
-    title="Add sampling rule"
-    aria-label="Add sampling rule"
+    :title="t('sc.addSamplingRule')"
+    :aria-label="t('sc.addSamplingRule')"
     :bordered="false"
     :style="catalogModalStyle"
     data-testid="sampling-rule-catalog"
   >
     <NAlert type="info" :show-icon="false">
-      New rules are appended to the pipeline. Reorder active rules to control which rows each next
-      step receives.
+      {{ t("sc.catalogHelp") }}
     </NAlert>
     <div class="catalog-grid">
       <article v-for="item in catalogItems" :key="item.id" class="catalog-item">
@@ -581,7 +598,7 @@ watch(draft, (program) => emit("update:program", cloneScSamplingProgram(program)
           :data-testid="`add-sampling-rule-${item.id}`"
           @click="addRule(item.id)"
         >
-          {{ enabledIds.has(item.id) ? "Enabled" : "Add" }}
+          {{ enabledIds.has(item.id) ? t("sc.enabled") : t("widgets.add") }}
         </NButton>
       </article>
     </div>
@@ -606,7 +623,7 @@ watch(draft, (program) => emit("update:program", cloneScSamplingProgram(program)
     <template #footer>
       <div class="modal-footer">
         <NText v-if="configurationError" type="error">{{ configurationError }}</NText>
-        <NButton type="primary" @click="configVisible = false">Done</NButton>
+        <NButton type="primary" @click="configVisible = false">{{ t("common.done") }}</NButton>
       </div>
     </template>
   </NModal>

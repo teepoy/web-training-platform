@@ -1,5 +1,6 @@
 import { computed, onMounted, ref, watch, type ComputedRef, type Ref } from "vue";
 import { useRoute } from "vue-router";
+import { useI18n } from "vue-i18n";
 import { useMessage } from "naive-ui";
 import type { DataTableColumns } from "naive-ui";
 import { getInspectionsApiV1ScInspectionsGet } from "@/generated/orval/endpoints/api";
@@ -149,6 +150,7 @@ export interface PreviewPageState {
 export function usePreviewPage(): PreviewPageState {
   const route = useRoute();
   const message = useMessage();
+  const { t } = useI18n();
 
   // ── Route ────────────────────────────────────────
 
@@ -192,7 +194,7 @@ export function usePreviewPage(): PreviewPageState {
     const key = lastOpenedSummaryKey.value;
     if (!key) return null;
     const row = summaries.value.find((item) => rowKey(item) === key);
-    if (!row) return "Last opened summary is outside the current result set";
+    if (!row) return t("sc.summaryOutsideResults");
     const lot = row.lot_id ? `${row.lot_id} / ` : "";
     return `${lot}W${row.wafer_key} · ${formatInspectionTime(row.inspection_time)}`;
   });
@@ -302,7 +304,7 @@ export function usePreviewPage(): PreviewPageState {
   const inspectionColumns = computed<DataTableColumns<InspectionSummaryItem>>(() => [
     {
       key: "inspection_time",
-      title: "Inspection Time",
+      title: t("sc.inspectionTime"),
       width: 200,
       ellipsis: { tooltip: true },
       sorter: (left, right) =>
@@ -311,7 +313,7 @@ export function usePreviewPage(): PreviewPageState {
     },
     {
       key: "lot_id",
-      title: "Lot ID",
+      title: t("sc.lotId"),
       width: 100,
       sorter: summaryStringSorter("lot_id"),
       filter: summaryStringFilter("lot_id"),
@@ -320,7 +322,7 @@ export function usePreviewPage(): PreviewPageState {
     },
     {
       key: "wafer_id",
-      title: "Wafer ID",
+      title: t("sc.waferId"),
       width: 80,
       sorter: summaryStringSorter("wafer_id"),
       filter: summaryStringFilter("wafer_id"),
@@ -329,7 +331,7 @@ export function usePreviewPage(): PreviewPageState {
     },
     {
       key: "layer_id",
-      title: "Layer ID",
+      title: t("sc.layerId"),
       width: 80,
       sorter: summaryStringSorter("layer_id"),
       filter: summaryStringFilter("layer_id"),
@@ -338,7 +340,7 @@ export function usePreviewPage(): PreviewPageState {
     },
     {
       key: "device",
-      title: "Device",
+      title: t("sc.device"),
       width: 90,
       sorter: summaryStringSorter("device"),
       filter: summaryStringFilter("device"),
@@ -347,20 +349,20 @@ export function usePreviewPage(): PreviewPageState {
     },
     {
       key: "defects",
-      title: "Defects",
+      title: t("sc.defects"),
       width: 80,
       sorter: summaryNumberSorter("defects"),
     },
     {
       key: "images",
-      title: "Images",
+      title: t("sc.images"),
       width: 120,
       ellipsis: { tooltip: true },
       sorter: summaryNumberSorter("images"),
     },
     {
       key: "eqp_id",
-      title: "Equipment ID",
+      title: t("sc.equipmentId"),
       width: 120,
       sorter: summaryStringSorter("eqp_id"),
       filter: summaryStringFilter("eqp_id"),
@@ -369,7 +371,7 @@ export function usePreviewPage(): PreviewPageState {
     },
     {
       key: "recipe_id",
-      title: "Recipe ID",
+      title: t("sc.recipeId"),
       width: 120,
       sorter: summaryStringSorter("recipe_id"),
       filter: summaryStringFilter("recipe_id"),
@@ -397,7 +399,7 @@ export function usePreviewPage(): PreviewPageState {
     tabs.value.unshift({
       id,
       type: "summary",
-      label: "Summary",
+      label: t("sc.summary"),
       pinned: true,
       samples: [],
       samplesTotal: 0,
@@ -698,10 +700,10 @@ export function usePreviewPage(): PreviewPageState {
     } catch (err) {
       summariesError.value =
         err instanceof DOMException && err.name === "AbortError"
-          ? "The inspection search timed out. Check the SC service and retry."
+          ? t("sc.inspectionSearchTimeout")
           : err instanceof Error
             ? err.message
-            : "Failed to fetch inspections";
+            : t("sc.inspectionLoadFailed");
       summaries.value = [];
     } finally {
       clearTimeout(timeoutId);
@@ -739,9 +741,7 @@ export function usePreviewPage(): PreviewPageState {
 
   createSummaryTab();
 
-  const storageModeOptions = [
-    { label: "Sparse Shard (file_shard_sparse)", value: "file_shard_sparse" },
-  ];
+  const storageModeOptions = [{ label: t("sc.sparseShard"), value: "file_shard_sparse" }];
 
   function sanitizeInspectionTime(inspectionTime: string): string {
     return inspectionTime.replace(/[\s:]/g, "-");
@@ -822,11 +822,11 @@ export function usePreviewPage(): PreviewPageState {
           remaining_count: 0,
         };
         if (notify) {
-          message.success(`Import complete: ${resp.imported_count ?? 0} samples imported`);
+          message.success(t("sc.importComplete", { count: resp.imported_count ?? 0 }));
         }
         return resp.dataset_id;
       }
-      throw new Error(resp.error || "Import failed");
+      throw new Error(resp.error || t("sc.importFailed"));
     } catch (err: unknown) {
       importError.value = err instanceof Error ? err.message : String(err);
       if (notify) message.error(importError.value);

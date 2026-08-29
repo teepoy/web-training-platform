@@ -497,7 +497,7 @@ test("shows and explicitly refreshes an outdated Collection Snapshot @mock", asy
   await authedPage.goto("/dataset-collections/collection-1");
 
   await expect(authedPage.getByText("Update available")).toBeVisible();
-  await expect(authedPage.getByText("1 linked Dataset has newer change numbers")).toBeVisible();
+  await expect(authedPage.getByText("1 linked Dataset has a newer change number.")).toBeVisible();
   await authedPage.getByTestId("refresh-collection-snapshot").click();
   await expect.poll(() => refreshBody).toEqual({ expected_definition_version: 1 });
   await expect(authedPage.getByText("Update available")).toBeHidden();

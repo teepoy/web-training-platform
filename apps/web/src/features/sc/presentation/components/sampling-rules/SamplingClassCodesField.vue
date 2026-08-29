@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { NSelect } from "naive-ui";
+import { useI18n } from "vue-i18n";
+
+const { t } = useI18n();
 
 defineProps<{
   value: number[];
@@ -13,14 +16,14 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <label class="field-label">Class Codes</label>
+  <label class="field-label">{{ t("sc.classCodes") }}</label>
   <NSelect
     :value="value"
     multiple
     filterable
     :loading="loading"
     :options="options"
-    placeholder="Select Class Codes"
+    :placeholder="t('sc.selectClassCodes')"
     @update:value="emit('update:value', $event)"
   />
 </template>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from "vue-i18n";
 import SamplingNumericField from "./SamplingNumericField.vue";
 
 withDefaults(
@@ -12,11 +13,12 @@ withDefaults(
 const emit = defineEmits<{
   (e: "update:percentage", value: number): void;
 }>();
+const { t } = useI18n();
 </script>
 
 <template>
   <SamplingNumericField
-    label="Percentage"
+    :label="t('sc.percentage')"
     :value="percentage"
     :minimum="0.01"
     :maximum="100"

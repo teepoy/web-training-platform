@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import { NRadioButton, NRadioGroup, NSelect, NSlider, NSwitch, NText } from "naive-ui";
+import { formatNumber } from "@/shared/i18n/format";
 import {
   colorBarBackground,
   GRAY_MAPPING_MODE_OPTIONS,
@@ -9,6 +11,8 @@ import {
   type GrayMappingMode,
   type GrayLUT,
 } from "./scGalleryToneMapping";
+
+const { t } = useI18n();
 
 const props = defineProps<{
   enabled: boolean;
@@ -41,8 +45,25 @@ const draftToneMapping = computed(() => ({
 const nativeWindow = computed(() => nativeGrayWindow(draftToneMapping.value, props.bitDepth));
 const adaptiveHelp = computed(() =>
   props.adaptiveScope === "defective-reference"
-    ? "Per defect; Defective and Reference share one range."
-    : "Each Difference image uses its own range.",
+    ? t("sc.adaptiveDefectHelp")
+    : t("sc.adaptiveImageHelp"),
+);
+const mappingModeOptions = computed(() =>
+  GRAY_MAPPING_MODE_OPTIONS.map((option) => ({
+    ...option,
+    label: t(option.value === "global" ? "sc.global" : "sc.adaptive"),
+  })),
+);
+const lutOptions = computed(() =>
+  GRAY_LUT_OPTIONS.map((option) => ({
+    ...option,
+    label:
+      option.value === "gray"
+        ? t("sc.grayscale")
+        : option.value === "gray-inverted"
+          ? t("sc.invertedGrayscale")
+          : option.label,
+  })),
 );
 
 watch(
@@ -70,7 +91,7 @@ function commitWindow(): void {
   <div class="gallery-color-settings" :class="{ 'gallery-color-settings--compact': compact }">
     <div class="gallery-color-row">
       <div>
-        <n-text class="gallery-color-label">Apply grayscale LUT</n-text>
+        <n-text class="gallery-color-label">{{ t("sc.grayscaleLut") }}</n-text>
       </div>
       <n-switch
         :value="enabled"
@@ -81,7 +102,7 @@ function commitWindow(): void {
     </div>
 
     <div class="gallery-color-field">
-      <n-text class="gallery-color-label">Range</n-text>
+      <n-text class="gallery-color-label">{{ t("sc.range") }}</n-text>
       <n-radio-group
         :value="mode"
         size="small"
@@ -89,7 +110,7 @@ function commitWindow(): void {
         @update:value="emit('update:mode', $event as GrayMappingMode)"
       >
         <n-radio-button
-          v-for="option in GRAY_MAPPING_MODE_OPTIONS"
+          v-for="option in mappingModeOptions"
           :key="option.value"
           :value="option.value"
           :label="option.label"
@@ -98,11 +119,11 @@ function commitWindow(): void {
     </div>
 
     <div class="gallery-color-field">
-      <n-text class="gallery-color-label">Color map</n-text>
+      <n-text class="gallery-color-label">{{ t("sc.colorMap") }}</n-text>
       <n-select
         :value="lut"
         size="small"
-        :options="[...GRAY_LUT_OPTIONS]"
+        :options="lutOptions"
         :disabled="!enabled"
         data-testid="gallery-gray-lut"
         @update:value="emit('update:lut', $event as GrayLUT)"
@@ -113,7 +134,7 @@ function commitWindow(): void {
       class="gallery-color-bar"
       :class="{ 'gallery-color-bar--disabled': !enabled || mode === 'adaptive' }"
     >
-      <n-text class="gallery-color-label">{{ bitDepth }}-bit window</n-text>
+      <n-text class="gallery-color-label">{{ t("sc.bitWindow", { bits: bitDepth }) }}</n-text>
       <div class="gallery-color-slider" :style="colorBarStyle" data-testid="gallery-color-bar">
         <n-slider
           :value="draftWindow"
@@ -123,7 +144,7 @@ function commitWindow(): void {
           :step="0.001"
           :disabled="!enabled || mode === 'adaptive'"
           :format-tooltip="(value: number) => value.toFixed(3)"
-          aria-label="Normalized grayscale window"
+          :aria-label="t('sc.grayscaleWindow')"
           @update:value="updateWindow"
           @dragend="commitWindow"
           @keyup="commitWindow"
@@ -141,15 +162,19 @@ function commitWindow(): void {
 
     <div class="gallery-color-native-values">
       <n-text depth="3">
-        {{ nativeWindow.min.toLocaleString() }}–{{ nativeWindow.max.toLocaleString() }}
+        {{ formatNumber(nativeWindow.min) }}–{{ formatNumber(nativeWindow.max) }}
       </n-text>
     </div>
     <div v-if="patches?.length" class="gallery-color-profiles">
       <div v-for="patch in patches" :key="patch.label" class="gallery-color-profile">
         <n-text>{{ patch.label }}</n-text>
         <n-text depth="3">
-          {{ patch.bit_depth }}-bit · {{ patch.z_min.toLocaleString() }}–{{
-            patch.z_max.toLocaleString()
+          {{
+            t("sc.bitRange", {
+              bits: patch.bit_depth,
+              min: formatNumber(patch.z_min),
+              max: formatNumber(patch.z_max),
+            })
           }}
         </n-text>
       </div>

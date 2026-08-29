@@ -144,15 +144,15 @@ const samplingTableSelectionAvailable = ref(false);
 const samplingExtraFilter = ref<ScGlobalFilter>(emptyScGlobalFilter());
 const isPreparingSampling = ref(false);
 const exportVisible = ref(false);
-const predictionExportFlows: FlowCard[] = widgetRegistry
-  .getExporters("prediction")
-  .map((exporter) => ({
+const predictionExportFlows = computed<FlowCard[]>(() =>
+  widgetRegistry.getExporters("prediction").map((exporter) => ({
     id: exporter.id,
-    label: exporter.label,
-    description: exporter.description,
+    label: exporter.labelKey ? t(exporter.labelKey) : exporter.label,
+    description: exporter.descriptionKey ? t(exporter.descriptionKey) : exporter.description,
     icon: exporter.icon,
     component: exporter.component,
-  }));
+  })),
+);
 const canExport = computed(
   () => !collectionId.value && supportsScPredictionExport(page.dataset.value ?? null),
 );
@@ -722,7 +722,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
 </template>
 
 <style scoped>
-/* ── Page skeleton (mirrors ClassifyView.vue) ──────── */
+/* ── Page skeleton ─────────────────────────────────── */
 .sc-classify-page {
   display: flex;
   flex-direction: column;

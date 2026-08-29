@@ -1,9 +1,9 @@
 <template>
-  <n-card title="Logs" :content-style="{ padding: 0 }">
+  <n-card :title="t('widgets.logs')" :content-style="{ padding: 0 }">
     <n-spin :show="isLoading">
       <div class="log-container">
         <template v-if="!isLoading && (!logs || logs.length === 0)">
-          <n-text depth="3" style="padding: 16px; display: block">No logs available</n-text>
+          <n-text depth="3" style="padding: 16px; display: block">{{ t("widgets.noLogs") }}</n-text>
         </template>
         <template v-else>
           <div v-for="(log, idx) in logs" :key="log.id ?? idx" class="log-line">
@@ -23,6 +23,7 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
+import { useI18n } from "vue-i18n";
 import { NCard, NSpin, NTag, NText } from "naive-ui";
 import {
   getGetRunLogsApiV1RunsRunIdLogsGetQueryKey,
@@ -31,6 +32,9 @@ import {
 import type { RunLogResponse as RunLog } from "@/generated/orval/models";
 import { useOrgStore } from "@/features/auth/application/org";
 import { orgScopedQueryKey } from "../../api";
+import { formatDateTime } from "../../i18n/format";
+
+const { t } = useI18n();
 
 // ---------------------------------------------------------------------------
 // Props
@@ -68,7 +72,7 @@ function levelInfo(level: number): {
 }
 
 function formatTimestamp(ts: string): string {
-  return new Date(ts).toLocaleString();
+  return formatDateTime(ts);
 }
 
 // ---------------------------------------------------------------------------

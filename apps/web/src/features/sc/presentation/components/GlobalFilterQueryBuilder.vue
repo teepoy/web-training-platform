@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import { NButton, NSelect } from "naive-ui";
 import {
   QueryBuilder,
@@ -25,6 +26,8 @@ import { scGlobalFilterColumns, type ScFilterColumnDefinition } from "./scSample
 import RangeFilterMenu from "@/shared/components/table-filter/RangeFilterMenu.vue";
 import SetFilterMenu from "@/shared/components/table-filter/SetFilterMenu.vue";
 import DefectIdFilterMenu from "./DefectIdFilterMenu.vue";
+
+const { t } = useI18n();
 
 interface ScQueryRuleValue {
   field: string | null;
@@ -220,7 +223,13 @@ function optionsFor(rule: ScQueryRule): Array<{ label: string; value: string | n
     .map((value) => ({
       label:
         scMissingFilterOption(field)?.value === value
-          ? (scMissingFilterOption(field)?.label ?? String(value))
+          ? t(
+              field === "annotation_label"
+                ? "sc.unlabeled"
+                : field === "prediction_label"
+                  ? "sc.noPrediction"
+                  : "sc.unclassified",
+            )
           : String(value),
       value,
     }));
@@ -351,7 +360,7 @@ watch(
   <div class="sc-filter-query-builder">
     <div class="sc-filter-query-builder__toolbar">
       <span v-if="activeCount > 0" class="sc-filter-query-builder__count">
-        {{ activeCount }} condition{{ activeCount === 1 ? "" : "s" }}
+        {{ t("sc.conditionCount", { count: activeCount }) }}
       </span>
       <NButton
         size="small"
@@ -360,7 +369,7 @@ watch(
         :disabled="!hasBuilderNodes"
         @click="clearAll"
       >
-        Clear all
+        {{ t("sc.clearAll") }}
       </NButton>
     </div>
 
@@ -379,7 +388,7 @@ watch(
             <span class="sc-filter-rule__operator">{{ itemOperator(rule) }}</span>
             <span class="sc-filter-rule__value">{{ itemValueSummary(rule) }}</span>
             <NButton size="tiny" secondary @click="toggleEditor(rule)">
-              {{ editingRuleId === rule.id ? "Close" : "Edit" }}
+              {{ editingRuleId === rule.id ? t("widgets.close") : t("common.edit") }}
             </NButton>
           </div>
 
@@ -387,7 +396,7 @@ watch(
             <NSelect
               class="sc-filter-rule__property-select"
               data-testid="query-rule-property"
-              placeholder="Property"
+              :placeholder="t('sc.property')"
               filterable
               :options="fieldOptions"
               :value="rule.value.field"

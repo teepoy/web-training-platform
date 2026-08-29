@@ -1,5 +1,6 @@
 import { computed, onMounted, provide, ref, watch, type ComputedRef } from "vue";
 import { useQuery } from "@tanstack/vue-query";
+import { useI18n } from "vue-i18n";
 import { queryWaferPoints } from "@/shared/api/datasets";
 import { useOrgStore } from "@/features/auth/application/org";
 import { orgScopedQueryKey } from "@/shared/api";
@@ -12,8 +13,7 @@ import {
   useSampleLoader,
   useDataPipeline,
 } from "@/shared";
-import type { BrowserItem, WaferPoint } from "@/shared/types/components";
-import { datasetPanels } from "@/legacy/features/classify/config";
+import type { BrowserItem, SidebarPanelDescriptor, WaferPoint } from "@/shared/types/components";
 
 interface UseDatasetBrowserOptions {
   datasetId: ComputedRef<string>;
@@ -21,6 +21,7 @@ interface UseDatasetBrowserOptions {
 }
 
 export function useDatasetBrowser({ datasetId, labelSpace }: UseDatasetBrowserOptions) {
+  const { t } = useI18n();
   const orgStore = useOrgStore();
   const pageDashboardData = ref<Record<string, unknown>>({});
   const browserSidebarDashboard: Record<string, unknown> = {
@@ -134,9 +135,37 @@ export function useDatasetBrowser({ datasetId, labelSpace }: UseDatasetBrowserOp
       .filter((point): point is WaferPoint => point !== null);
   });
 
-  const datasetSidebarPanels = computed(() => {
-    return injectWaferPanelData(datasetPanels, waferPoints.value, "browser-items");
-  });
+  const datasetPanels = computed<SidebarPanelDescriptor[]>(() => [
+    {
+      id: "label-distribution",
+      component: "label-distribution",
+      title: t("widgets.labelDistribution"),
+      props: { orientation: "horizontal", showValues: true, maxBars: 20 },
+    },
+    {
+      id: "wafer-map",
+      component: "wafer-map",
+      title: t("widgets.waferMap"),
+      order: 15,
+      size: "normal",
+      props: {
+        data: { inline: { points: [] } },
+        config: { dataKey: "wafer-points", maxPoints: 100000 },
+      },
+    },
+    {
+      id: "browser-summary",
+      component: "browser-summary",
+      title: t("widgets.browserSummary"),
+      order: 20,
+      size: "compact",
+      props: {},
+    },
+  ]);
+
+  const datasetSidebarPanels = computed(() =>
+    injectWaferPanelData(datasetPanels.value, waferPoints.value, "browser-items"),
+  );
 
   onMounted(() => {
     void sampleLoader.loadMore();

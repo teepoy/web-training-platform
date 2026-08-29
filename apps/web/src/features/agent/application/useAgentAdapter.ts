@@ -5,7 +5,7 @@
  *  - route-derived AgentContext
  *  - auth-session wiring (sessionId)
  *  - panel lifecycle (clear on navigation away from classify)
- *  - provide/inject for ClassifyView sidebar integration
+ *  - provide/inject for registered sidebar integrations
  */
 
 import { ref, computed, watch, provide, type InjectionKey, type Ref } from "vue";

@@ -11,107 +11,121 @@
     thumbSize — thumbnail size in px (default 80)
 -->
 <script setup lang="ts">
-import { computed, inject, type Ref } from 'vue'
+import { computed, inject, type Ref } from "vue";
+import { useI18n } from "vue-i18n";
 import { resolveImageUris } from "../../utils/image-adapters";
 import type { SidebarAnnotationGridItem } from "../../types/sidebar-widgets";
 
-const props = defineProps<{
-  data?: Record<string, unknown> | null
-  config?: Record<string, unknown>
-  size?: 'compact' | 'normal' | 'large'
-}>()
+const { t } = useI18n();
 
-const thumbSize = computed(() => Number(props.config?.thumbSize ?? 80))
+const props = defineProps<{
+  data?: Record<string, unknown> | null;
+  config?: Record<string, unknown>;
+  size?: "compact" | "normal" | "large";
+}>();
+
+const thumbSize = computed(() => Number(props.config?.thumbSize ?? 80));
 
 interface SampleViewerData {
-  sampleIds: string[]
-  mode: 'grid' | 'list'
+  sampleIds: string[];
+  mode: "grid" | "list";
   /** Optional pre-fetched sample objects with image_uris */
-  samples?: Array<{ id: string; image_uris?: string[]; image_srcs?: string[]; label?: string }>
+  samples?: Array<{ id: string; image_uris?: string[]; image_srcs?: string[]; label?: string }>;
 }
 
 interface SamplePreview {
-  id: string
-  image_uris?: string[]
-  image_srcs?: string[]
-  label?: string
+  id: string;
+  image_uris?: string[];
+  image_srcs?: string[];
+  label?: string;
 }
 
-const classifyItems = inject<Ref<SidebarAnnotationGridItem[]>>("classify-grid-items", computed(() => []))
+const classifyItems = inject<Ref<SidebarAnnotationGridItem[]>>(
+  "classify-grid-items",
+  computed(() => []),
+);
 
 const viewerData = computed<SampleViewerData | null>(() => {
-  if (!props.data) return null
-  const raw = (props.data as Record<string, unknown>).inline ?? props.data
-  if (!raw || typeof raw !== 'object') return null
-  const d = raw as Record<string, unknown>
-  const sampleIds = d.sampleIds ?? d.sample_ids ?? []
-  if (!Array.isArray(sampleIds)) return null
+  if (!props.data) return null;
+  const raw = (props.data as Record<string, unknown>).inline ?? props.data;
+  if (!raw || typeof raw !== "object") return null;
+  const d = raw as Record<string, unknown>;
+  const sampleIds = d.sampleIds ?? d.sample_ids ?? [];
+  if (!Array.isArray(sampleIds)) return null;
   return {
     sampleIds: sampleIds as string[],
-    mode: (d.mode as 'grid' | 'list') ?? 'grid',
-    samples: d.samples as SampleViewerData['samples'],
-  }
-})
+    mode: (d.mode as "grid" | "list") ?? "grid",
+    samples: d.samples as SampleViewerData["samples"],
+  };
+});
 
 const samples = computed<SamplePreview[]>(() => {
-  if (!viewerData.value) return []
+  if (!viewerData.value) return [];
   // If pre-fetched samples are provided, use them
   if (viewerData.value.samples && viewerData.value.samples.length > 0) {
-    return viewerData.value.samples.filter((sample): sample is SamplePreview => sample != null)
+    return viewerData.value.samples.filter((sample): sample is SamplePreview => sample != null);
   }
-  const allItems = classifyItems.value ?? []
-  const byId = new Map(allItems.map((item) => [item.id, item]))
-  const selected: SamplePreview[] = []
+  const allItems = classifyItems.value ?? [];
+  const byId = new Map(allItems.map((item) => [item.id, item]));
+  const selected: SamplePreview[] = [];
   viewerData.value.sampleIds.forEach((id) => {
-    const item = byId.get(id)
+    const item = byId.get(id);
     if (!item) {
-      return
+      return;
     }
     selected.push({
-        id,
-        image_srcs: item.imageSrcs,
-        label: item.draftLabel ?? item.predictionLabel ?? item.currentLabel ?? undefined,
-    })
-  })
+      id,
+      image_srcs: item.imageSrcs,
+      label: item.draftLabel ?? item.predictionLabel ?? item.currentLabel ?? undefined,
+    });
+  });
   if (selected.length > 0) {
-    return selected
+    return selected;
   }
   // Otherwise just show IDs as placeholders
-  return viewerData.value.sampleIds.map(id => ({ id, image_uris: [] as string[], label: undefined }))
-})
+  return viewerData.value.sampleIds.map((id) => ({
+    id,
+    image_uris: [] as string[],
+    label: undefined,
+  }));
+});
 
 function resolveThumb(sample: SamplePreview): string {
-  const direct = sample.image_srcs ?? []
-  if (direct.length > 0) return direct[0] || ''
-  const uris = sample.image_uris ?? []
-  if (uris.length === 0) return ''
-  const resolved = resolveImageUris(uris)
-  return resolved[0] || ''
+  const direct = sample.image_srcs ?? [];
+  if (direct.length > 0) return direct[0] || "";
+  const uris = sample.image_uris ?? [];
+  if (uris.length === 0) return "";
+  const resolved = resolveImageUris(uris);
+  return resolved[0] || "";
 }
 </script>
 
 <template>
   <div class="svw">
-    <div v-if="!viewerData || samples.length === 0" class="svw-empty">No samples to display</div>
+    <div v-if="!viewerData || samples.length === 0" class="svw-empty">
+      {{ t("widgets.noSamples") }}
+    </div>
     <div v-else :class="viewerData.mode === 'grid' ? 'svw-grid' : 'svw-list'">
-      <div
-        v-for="s in samples"
-        :key="s.id"
-        class="svw-item"
-      >
+      <div v-for="s in samples" :key="s.id" class="svw-item">
         <img
           v-if="resolveThumb(s)"
           :src="resolveThumb(s)"
           :style="{ width: thumbSize + 'px', height: thumbSize + 'px' }"
           class="svw-img"
         />
-        <div v-else class="svw-placeholder" :style="{ width: thumbSize + 'px', height: thumbSize + 'px' }">
+        <div
+          v-else
+          class="svw-placeholder"
+          :style="{ width: thumbSize + 'px', height: thumbSize + 'px' }"
+        >
           {{ s.id.slice(0, 6) }}
         </div>
         <div v-if="s.label" class="svw-label">{{ s.label }}</div>
       </div>
     </div>
-    <div v-if="viewerData" class="svw-footer">{{ samples.length }} sample(s)</div>
+    <div v-if="viewerData" class="svw-footer">
+      {{ t("widgets.sampleCount", { count: samples.length }) }}
+    </div>
   </div>
 </template>
 

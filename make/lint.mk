@@ -4,8 +4,12 @@
 check-duplicate-types: ## Check for duplicate types between shared/api and generated/orval
 	python3 scripts/check-duplicate-types.py
 
+.PHONY: check-web-i18n
+check-web-i18n: ## Reject static English copy in localized production UI scopes
+	python3 scripts/check-web-i18n-literals.py
+
 .PHONY: lint
-lint: ## Run fast lint on git diff files (ruff + prettier)
+lint: check-web-i18n ## Run fast lint on git diff files (ruff + prettier)
 	@CHANGED=$$(git diff --name-only --diff-filter=ACMR HEAD 2>/dev/null || true); \
 	if [ -z "$$CHANGED" ]; then \
 		echo "No changed files found."; \

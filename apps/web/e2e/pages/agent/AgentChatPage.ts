@@ -58,7 +58,7 @@ export class AgentChatPage extends BasePage {
   // ── Header ───────────────────────────────────────────────────────
 
   getHeaderTitle(): Locator {
-    return this.getDrawer().getByText("Agent Chat", { exact: true });
+    return this.getDrawer().locator("#agent-chat-title");
   }
 
   // ── Messages ─────────────────────────────────────────────────────
@@ -90,11 +90,11 @@ export class AgentChatPage extends BasePage {
   // ── Input ────────────────────────────────────────────────────────
 
   getInputField(): Locator {
-    return this.page.getByPlaceholder("Ask the agent...");
+    return this.page.getByTestId("agent-chat-input");
   }
 
   getSendButton(): Locator {
-    return this.page.getByRole("button", { name: "Send Agent message" });
+    return this.page.getByTestId("agent-chat-send");
   }
 
   async fillMessage(text: string): Promise<void> {

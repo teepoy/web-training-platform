@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import {
   NCollapse,
   NCollapseItem,
@@ -19,6 +20,8 @@ import {
 import { useTrackedTaskQuery } from "@/shared/api/hooks";
 import { useTaskStream } from "@/shared/composables/useTaskHandoff";
 import type { TaskTrackerNode } from "@/generated/orval/models";
+
+const { t } = useI18n();
 
 const props = defineProps<{
   show: boolean;
@@ -59,9 +62,7 @@ useTaskStream(
 );
 
 const activeDetail = computed(() => streamedDetail.value ?? detail.value ?? null);
-const insightStages = computed(() =>
-  (activeDetail.value?.derived.stages ?? []).slice(0, 2),
-);
+const insightStages = computed(() => (activeDetail.value?.derived.stages ?? []).slice(0, 2));
 const defaultExpanded = computed(() => {
   const activeStage = activeDetail.value?.derived.stage;
   if (activeStage && insightStages.value.some((stage) => stage.key === activeStage)) {
@@ -95,9 +96,7 @@ function currentStep(nodes: Array<{ status: string }>): number {
   return Math.max(1, completed);
 }
 
-function statusType(
-  status?: string,
-): "default" | "success" | "error" | "warning" | "info" {
+function statusType(status?: string): "default" | "success" | "error" | "warning" | "info" {
   if (status === "completed") return "success";
   if (status === "failed") return "error";
   if (status === "cancelled") return "warning";
@@ -105,9 +104,7 @@ function statusType(
   return "default";
 }
 
-function capacityType(
-  status?: string,
-): "default" | "success" | "error" | "warning" | "info" {
+function capacityType(status?: string): "default" | "success" | "error" | "warning" | "info" {
   if (status === "at_capacity") return "error";
   if (status === "busy") return "warning";
   if (status === "normal") return "success";
@@ -158,10 +155,7 @@ function waterfallRows(nodes: TaskTrackerNode[]) {
 
   return rows.map((row, index) => {
     const barX = waterfallLabelWidth + ((row.startMs - minMs) / domain) * plotWidth;
-    const barWidth = Math.max(
-      10,
-      ((row.endMs - row.startMs) / domain) * plotWidth,
-    );
+    const barWidth = Math.max(10, ((row.endMs - row.startMs) / domain) * plotWidth);
     return {
       ...row,
       y: waterfallTopOffset + index * waterfallRowHeight,
@@ -198,10 +192,7 @@ function waterfallTicks(nodes: TaskTrackerNode[]) {
 }
 
 function waterfallHeight(nodes: TaskTrackerNode[]) {
-  return Math.max(
-    120,
-    waterfallTopOffset + waterfallRows(nodes).length * waterfallRowHeight + 18,
-  );
+  return Math.max(120, waterfallTopOffset + waterfallRows(nodes).length * waterfallRowHeight + 18);
 }
 
 function waterfallColor(status: string) {
@@ -230,16 +221,13 @@ function formatDuration(durationMs: number) {
     <template #header>
       <NSpace justify="space-between" align="center" style="width: 100%">
         <NSpace vertical :size="2">
-          <NText strong>Train &amp; Predict</NText>
+          <NText strong>{{ t("sc.trainPredict") }}</NText>
           <NSpace size="small" align="center">
             <NTag size="small" :type="statusType(displayStatus)">
               {{ displayStatus }}
             </NTag>
-            <NTag
-              size="small"
-              :type="capacityType(activeDetail?.derived.capacity_status)"
-            >
-              Slots {{ workerSlotsLabel }}
+            <NTag size="small" :type="capacityType(activeDetail?.derived.capacity_status)">
+              {{ t("sc.slots") }} {{ workerSlotsLabel }}
             </NTag>
           </NSpace>
         </NSpace>
@@ -250,17 +238,17 @@ function formatDuration(durationMs: number) {
       <NSpace vertical size="large">
         <NGrid :cols="4" :x-gap="12">
           <NGi>
-            <NStatistic label="Queue" :value="workQueueName" />
+            <NStatistic :label="t('widgets.queue')" :value="workQueueName" />
           </NGi>
           <NGi>
             <NStatistic
-              label="Queue Priority"
+              :label="t('widgets.queuePriority')"
               :value="activeDetail?.derived.queue_priority_label || 'none'"
             />
           </NGi>
           <NGi>
             <NStatistic
-              label="Ahead In Queue"
+              :label="t('widgets.aheadInQueue')"
               :value="
                 activeDetail?.derived.queue_depth_ahead !== null &&
                 activeDetail?.derived.queue_depth_ahead !== undefined
@@ -270,7 +258,7 @@ function formatDuration(durationMs: number) {
             />
           </NGi>
           <NGi>
-            <NStatistic label="Worker Slots" :value="workerSlotsLabel" />
+            <NStatistic :label="t('sc.workerSlots')" :value="workerSlotsLabel" />
           </NGi>
         </NGrid>
 
@@ -286,7 +274,7 @@ function formatDuration(durationMs: number) {
               <div v-if="stage.key === 'execution_flow'">
                 <NEmpty
                   v-if="waterfallRows(stage.nodes ?? []).length === 0"
-                  description="No execution timing available"
+                  :description="t('widgets.noExecutionTiming')"
                 />
                 <div v-else class="rtp-waterfall-shell">
                   <svg
@@ -317,12 +305,7 @@ function formatDuration(durationMs: number) {
                       </text>
                     </g>
                     <g v-for="row in waterfallRows(stage.nodes ?? [])" :key="row.key">
-                      <text
-                        x="12"
-                        :y="row.y + 16"
-                        fill="rgba(255,255,255,0.92)"
-                        font-size="12"
-                      >
+                      <text x="12" :y="row.y + 16" fill="rgba(255,255,255,0.92)" font-size="12">
                         {{ row.label }}
                       </text>
                       <rect
@@ -362,12 +345,12 @@ function formatDuration(durationMs: number) {
             </NSpace>
           </NCollapseItem>
         </NCollapse>
-        <NEmpty v-else description="No task insight available yet" />
+        <NEmpty v-else :description="t('sc.noTaskInsight')" />
 
         <div class="rtp-progress">
           <div class="rtp-progress-header">
             <NSpace align="center" size="small">
-              <NText strong>Predict Progress</NText>
+              <NText strong>{{ t("sc.predictProgress") }}</NText>
               <NTag size="small" :type="statusType(predictionStatus)">
                 {{ predictionStatus || "not_started" }}
               </NTag>
@@ -388,7 +371,7 @@ function formatDuration(durationMs: number) {
               {{ predictionProgressLabel }}
             </NText>
             <NText depth="3" class="rtp-progress-label">
-              {{ predictionJobId ? predictionJobId.slice(0, 8) : "pending job" }}
+              {{ predictionJobId ? predictionJobId.slice(0, 8) : t("sc.pendingJob") }}
             </NText>
           </div>
         </div>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, markRaw, onBeforeUnmount, ref, watch } from "vue";
 import type { CSSProperties } from "vue";
+import { useI18n } from "vue-i18n";
 import { NButton, NIcon, NPopover, NText, NTooltip } from "naive-ui";
 import { getCoreRowModel, useVueTable, type ColumnDef } from "@tanstack/vue-table";
 import { useVirtualizer } from "@tanstack/vue-virtual";
@@ -19,9 +20,12 @@ import type {
 } from "@/features/sc/domain/workbenchDataSource";
 import type { ScSampleTableDataSource } from "@/features/sc/domain/workbenchInteraction";
 import { SC_SCROLL_QUERY_DEBOUNCE_MS } from "../composables/scrollQueryDebounce";
+import { formatNumber } from "@/shared/i18n/format";
 import RangeFilterMenu from "@/shared/components/table-filter/RangeFilterMenu.vue";
 import SetFilterMenu from "@/shared/components/table-filter/SetFilterMenu.vue";
 import DefectIdFilterMenu from "./DefectIdFilterMenu.vue";
+
+const { t } = useI18n();
 import {
   normalizeSampleTableFilterValue,
   renderSampleTableCell,
@@ -111,7 +115,7 @@ const tanstackColumns = computed<ColumnDef<ScSampleTablePresentationRow>[]>(() =
   if (props.enableSelection === true) {
     definitions.push({
       id: SELECTION_COLUMN_ID,
-      header: "Select",
+      header: t("sc.select"),
       size: SELECTION_COLUMN_WIDTH,
     });
   }
@@ -267,7 +271,7 @@ async function loadSourceColumns(): Promise<void> {
     }
   } catch (error) {
     if (version !== sourceColumnsRequestVersion || scopeKey !== props.dataSource.scopeKey) return;
-    pageError.value = error instanceof Error ? error.message : "Failed to load sample columns";
+    pageError.value = error instanceof Error ? error.message : t("sc.sampleColumnsLoadFailed");
   }
 }
 
@@ -293,7 +297,7 @@ async function loadPage(start: number): Promise<void> {
   loadingRequest = request;
   pageError.value = null;
   isFetching.value = true;
-  if (start === 0 && loadedRows.value.length === 0) streamStatus.value = "Loading sample rows...";
+  if (start === 0 && loadedRows.value.length === 0) streamStatus.value = t("sc.loadingSampleRows");
 
   try {
     const page = await props.dataSource.loadRows({
@@ -313,7 +317,7 @@ async function loadPage(start: number): Promise<void> {
     accumulateDiscoveredSetFilterValues(loadedRows.value);
   } catch (error) {
     if (!isAbortError(error) && version === requestVersion) {
-      pageError.value = error instanceof Error ? error.message : "Failed to load sample table rows";
+      pageError.value = error instanceof Error ? error.message : t("sc.sampleRowsLoadFailed");
     }
   } finally {
     if (loadController === controller) loadController = null;
@@ -364,7 +368,7 @@ async function resetRows(): Promise<void> {
   serverTotal.value = 0;
   pageError.value = null;
   isFetching.value = true;
-  streamStatus.value = "Loading sample rows...";
+  streamStatus.value = t("sc.loadingSampleRows");
   if (scrollRef.value) scrollRef.value.scrollTop = 0;
   await loadPage(0);
 }
@@ -536,9 +540,9 @@ function sortIcon(field: string) {
 
 function sortButtonLabel(field: string): string {
   const order = sortOrder(field);
-  if (order === "asc") return "Sorted ascending; click for descending";
-  if (order === "desc") return "Sorted descending; click to clear sorting";
-  return "Sort ascending";
+  if (order === "asc") return t("sc.sortedAscending");
+  if (order === "desc") return t("sc.sortedDescending");
+  return t("sc.sortAscending");
 }
 
 function rowIsSelected(id: string): boolean {
@@ -624,10 +628,10 @@ async function exportCsv(): Promise<void> {
       result.blob,
       props.exportFileName ?? `${props.dataSource.scopeKey}-sample-data`,
     );
-    csvExportStatus.value = `Exported ${result.total.toLocaleString()} rows`;
+    csvExportStatus.value = t("sc.exportedRows", { count: formatNumber(result.total) });
   } catch (error) {
     if (!isAbortError(error)) {
-      csvExportError.value = error instanceof Error ? error.message : "Failed to export CSV";
+      csvExportError.value = error instanceof Error ? error.message : t("sc.csvExportFailed");
     }
   } finally {
     if (csvExportController === controller) csvExportController = null;
@@ -749,7 +753,9 @@ defineExpose({
     :data-loaded-rows="loadedRows.length"
   >
     <div class="sst-tanstack-toolbar">
-      <NText depth="2" class="sst-tanstack-toolbar-label"> Sample Data ({{ serverTotal }}) </NText>
+      <NText depth="2" class="sst-tanstack-toolbar-label">{{
+        t("sc.sampleData", { count: formatNumber(serverTotal) })
+      }}</NText>
       <div class="sst-tanstack-toolbar-actions">
         <NTooltip v-if="enableSelection && selectedCount > 0" trigger="hover">
           <template #trigger>
@@ -758,7 +764,7 @@ defineExpose({
               quaternary
               circle
               type="primary"
-              :aria-label="`Clear selection (${selectedCount})`"
+              :aria-label="`${t('common.clearSelection')} (${selectedCount})`"
               data-testid="clear-sample-selection"
               @click="clearSelection"
             >
@@ -767,7 +773,7 @@ defineExpose({
               ></template>
             </NButton>
           </template>
-          Clear selection ({{ selectedCount }})
+          {{ t("common.clearSelection") }} ({{ selectedCount }})
         </NTooltip>
         <NTooltip trigger="hover">
           <template #trigger>
@@ -775,7 +781,7 @@ defineExpose({
               size="tiny"
               quaternary
               circle
-              aria-label="Export sample data as CSV"
+              :aria-label="t('sc.exportSampleCsv')"
               :loading="isExportingCsv"
               :disabled="serverTotal === 0 || activeColumnDefinitions.length === 0"
               data-testid="export-sample-data-csv"
@@ -786,7 +792,7 @@ defineExpose({
               ></template>
             </NButton>
           </template>
-          Export sample data as CSV
+          {{ t("sc.exportSampleCsv") }}
         </NTooltip>
         <NButton
           v-if="Object.keys(tableFilter).length > 0"
@@ -794,7 +800,7 @@ defineExpose({
           quaternary
           @click="clearAllFilters"
         >
-          Clear filters ({{ Object.keys(tableFilter).length }})
+          {{ t("common.clearFilters", { count: Object.keys(tableFilter).length }) }}
         </NButton>
         <NText v-if="streamStatus" depth="3" class="sst-tanstack-status-info">
           {{ streamStatus }}
@@ -804,8 +810,12 @@ defineExpose({
           depth="3"
           class="sst-tanstack-status-info"
         >
-          Exporting {{ csvExportProgress.completed.toLocaleString() }} /
-          {{ csvExportProgress.total.toLocaleString() }}
+          {{
+            t("sc.exportProgress", {
+              completed: formatNumber(csvExportProgress.completed),
+              total: formatNumber(csvExportProgress.total),
+            })
+          }}
         </NText>
         <NText v-else-if="csvExportStatus" depth="3" class="sst-tanstack-status-info">
           {{ csvExportStatus }}
@@ -829,7 +839,7 @@ defineExpose({
           <input
             class="sst-tanstack-checkbox"
             type="checkbox"
-            aria-label="Select all sample rows"
+            :aria-label="t('sc.selectAllSampleRows')"
             :checked="allRowsChecked"
             :indeterminate="someRowsChecked"
             @change="handleSelectAll"
@@ -872,7 +882,7 @@ defineExpose({
                     circle
                     class="sst-tanstack-filter-button"
                     :class="{ 'sst-tanstack-filter-button--active': isColumnFiltered('defect_id') }"
-                    aria-label="Filter Defect ID"
+                    :aria-label="t('sc.filterDefectId')"
                   >
                     <template #icon
                       ><NIcon><FunnelOutline /></NIcon
@@ -949,7 +959,13 @@ defineExpose({
                           scrollColumns[virtualColumn.index]?.id ?? '',
                         ),
                       }"
-                      :aria-label="`Filter ${definitionForColumn(scrollColumns[virtualColumn.index]?.id ?? '')?.title}`"
+                      :aria-label="
+                        t('sc.filterColumn', {
+                          column:
+                            definitionForColumn(scrollColumns[virtualColumn.index]?.id ?? '')
+                              ?.title ?? '',
+                        })
+                      "
                     >
                       <template #icon
                         ><NIcon><FunnelOutline /></NIcon
@@ -1025,7 +1041,9 @@ defineExpose({
               v-if="sampleTableRowKey(rowAt(virtualRow.index)) !== null"
               class="sst-tanstack-checkbox"
               type="checkbox"
-              :aria-label="`Select sample ${rowAt(virtualRow.index)?.defect_id}`"
+              :aria-label="
+                t('sc.selectSample', { sample: rowAt(virtualRow.index)?.defect_id ?? '' })
+              "
               :checked="rowIsSelected(sampleTableRowKey(rowAt(virtualRow.index))!)"
               @click.stop
               @change="handleRowCheckbox(rowAt(virtualRow.index), $event)"
@@ -1067,10 +1085,10 @@ defineExpose({
       </div>
 
       <div v-if="isFetching && loadedRows.length === 0" class="sst-tanstack-empty">
-        <NText depth="3">Loading sample rows...</NText>
+        <NText depth="3">{{ t("sc.loadingSampleRows") }}</NText>
       </div>
       <div v-else-if="!isFetching && serverTotal === 0" class="sst-tanstack-empty">
-        <NText depth="3">{{ pageError ?? "No sample rows" }}</NText>
+        <NText depth="3">{{ pageError ?? t("sc.noSampleRows") }}</NText>
       </div>
     </div>
 

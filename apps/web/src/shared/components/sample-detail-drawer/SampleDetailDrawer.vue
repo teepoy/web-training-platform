@@ -10,14 +10,14 @@
     "
   >
     <n-drawer-content
-      title="Sample Detail"
+      :title="t('widgets.sampleDetail')"
       :native-scrollbar="false"
       closable
       @close="emit('close')"
     >
       <n-scrollbar>
         <div v-if="!sampleId" style="padding: 24px">
-          <n-empty description="No sample selected" />
+          <n-empty :description="t('widgets.noSampleSelected')" />
         </div>
 
         <div v-else style="padding: 0 4px">
@@ -25,7 +25,7 @@
           <!-- 1. Image Preview                                                  -->
           <!-- ================================================================ -->
           <n-divider title-placement="left">
-            <span style="font-size: 13px; font-weight: 600">Image Preview</span>
+            <span style="font-size: 13px; font-weight: 600">{{ t("widgets.imagePreview") }}</span>
           </n-divider>
 
           <div style="margin-bottom: 16px">
@@ -36,7 +36,7 @@
               <n-spin size="medium" />
             </div>
             <div v-else-if="sampleQuery.isError.value" style="padding: 16px">
-              <n-alert type="error" title="Failed to load sample" />
+              <n-alert type="error" :title="t('widgets.sampleLoadFailed')" />
             </div>
             <template v-else-if="sample">
               <div
@@ -45,7 +45,7 @@
                   (resolvedUris.length === 1 && resolvedUris[0] === FALLBACK_PLACEHOLDER)
                 "
               >
-                <n-empty description="No images" />
+                <n-empty :description="t('widgets.noImages')" />
               </div>
               <n-image-group v-else>
                 <n-space wrap>
@@ -67,7 +67,7 @@
           <!-- 2. Metadata                                                       -->
           <!-- ================================================================ -->
           <n-divider title-placement="left">
-            <span style="font-size: 13px; font-weight: 600">Metadata</span>
+            <span style="font-size: 13px; font-weight: 600">{{ t("widgets.metadata") }}</span>
           </n-divider>
 
           <div style="margin-bottom: 16px">
@@ -97,7 +97,7 @@
           <!-- 3. Annotations                                                    -->
           <!-- ================================================================ -->
           <n-divider title-placement="left">
-            <span style="font-size: 13px; font-weight: 600">Annotations</span>
+            <span style="font-size: 13px; font-weight: 600">{{ t("widgets.annotations") }}</span>
           </n-divider>
 
           <div style="margin-bottom: 16px">
@@ -108,12 +108,12 @@
               <n-spin size="small" />
             </div>
             <div v-else-if="annotationsQuery.isError.value" style="padding: 8px">
-              <n-alert type="error" title="Failed to load annotations" />
+              <n-alert type="error" :title="t('widgets.annotationsLoadFailed')" />
             </div>
             <template v-else>
               <n-empty
                 v-if="annotations.length === 0"
-                description="No annotations yet"
+                :description="t('widgets.noAnnotations')"
                 style="margin-bottom: 12px"
               />
               <div
@@ -136,13 +136,13 @@
                       v-if="labelSpace.length > 0"
                       v-model:value="editingLabel"
                       :options="labelSpaceOptions"
-                      placeholder="Select label"
+                      :placeholder="t('widgets.selectLabel')"
                       size="small"
                     />
                     <n-input
                       v-else
                       v-model:value="editingLabel"
-                      placeholder="Enter label"
+                      :placeholder="t('widgets.enterLabel')"
                       size="small"
                     />
                     <div style="display: flex; gap: 6px">
@@ -152,9 +152,9 @@
                         :loading="updateAnnotationMutation.isPending.value"
                         @click="saveAnnotation(ann.id)"
                       >
-                        Save
+                        {{ t("common.save") }}
                       </n-button>
-                      <n-button size="small" @click="cancelEdit">Cancel</n-button>
+                      <n-button size="small" @click="cancelEdit">{{ t("common.cancel") }}</n-button>
                     </div>
                   </div>
                 </template>
@@ -173,16 +173,20 @@
                       {{ ann.id!.slice(0, 8) }}…
                     </div>
                   </div>
-                  <n-button size="small" quaternary @click="startEdit(ann)"> Edit </n-button>
+                  <n-button size="small" quaternary @click="startEdit(ann)">{{
+                    t("common.edit")
+                  }}</n-button>
                   <n-popconfirm
-                    positive-text="Delete"
-                    negative-text="Cancel"
+                    :positive-text="t('common.delete')"
+                    :negative-text="t('common.cancel')"
                     @positive-click="deleteAnnot(ann.id!)"
                   >
                     <template #trigger>
-                      <n-button size="small" quaternary type="error">Delete</n-button>
+                      <n-button size="small" quaternary type="error">{{
+                        t("common.delete")
+                      }}</n-button>
                     </template>
-                    Delete this annotation?
+                    {{ t("widgets.deleteAnnotationConfirm") }}
                   </n-popconfirm>
                 </template>
               </div>
@@ -192,21 +196,21 @@
                 style="padding: 12px; border: 1px dashed #ccc; border-radius: 6px; margin-top: 8px"
               >
                 <div style="font-size: 12px; color: #666; margin-bottom: 8px; font-weight: 600">
-                  Add Annotation
+                  {{ t("widgets.addAnnotation") }}
                 </div>
                 <div style="display: flex; flex-direction: column; gap: 8px">
                   <n-select
                     v-if="labelSpace.length > 0"
                     v-model:value="newAnnotationLabel"
                     :options="labelSpaceOptions"
-                    placeholder="Select label"
+                    :placeholder="t('widgets.selectLabel')"
                     size="small"
                     clearable
                   />
                   <n-input
                     v-else
                     v-model:value="newAnnotationLabel"
-                    placeholder="Enter label"
+                    :placeholder="t('widgets.enterLabel')"
                     size="small"
                   />
                   <n-button
@@ -216,7 +220,7 @@
                     :disabled="!newAnnotationLabel"
                     @click="addAnnotation"
                   >
-                    Add
+                    {{ t("widgets.add") }}
                   </n-button>
                 </div>
               </div>
@@ -228,7 +232,7 @@
           <!-- ================================================================ -->
           <template v-if="!isSparse">
             <n-divider title-placement="left">
-              <span style="font-size: 13px; font-weight: 600">Replace Image</span>
+              <span style="font-size: 13px; font-weight: 600">{{ t("widgets.replaceImage") }}</span>
             </n-divider>
 
             <div style="margin-bottom: 16px">
@@ -241,7 +245,7 @@
               />
               <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px">
                 <n-button size="small" @click="(replaceFileInputRef as HTMLInputElement)?.click()">
-                  Choose File
+                  {{ t("widgets.chooseFile") }}
                 </n-button>
                 <span v-if="replaceFile" style="font-size: 12px; color: #666">{{
                   replaceFile.name
@@ -267,7 +271,7 @@
                 :loading="uploadingImage"
                 @click="doUpload"
               >
-                Upload
+                {{ t("widgets.upload") }}
               </n-button>
             </div>
           </template>
@@ -277,7 +281,7 @@
           <!-- ================================================================ -->
           <template v-if="!isSparse">
             <n-divider title-placement="left">
-              <span style="font-size: 13px; font-weight: 600">Find Similar</span>
+              <span style="font-size: 13px; font-weight: 600">{{ t("widgets.findSimilar") }}</span>
             </n-divider>
 
             <div style="margin-bottom: 24px">
@@ -288,7 +292,7 @@
                 :loading="findSimilarLoading"
                 @click="doFindSimilar"
               >
-                Find Similar
+                {{ t("widgets.findSimilar") }}
               </n-button>
 
               <!-- Error -->
@@ -302,7 +306,7 @@
               <!-- Results panel -->
               <div v-if="similarNeighbors.length > 0" style="margin-top: 12px">
                 <div style="font-size: 12px; color: #888; margin-bottom: 8px">
-                  {{ similarNeighbors.length }} similar samples
+                  {{ t("widgets.similarSamples", { count: similarNeighbors.length }) }}
                 </div>
                 <div
                   v-for="nb in similarNeighbors"
@@ -341,7 +345,7 @@
                       {{ nb.sample_id.slice(0, 12) }}…
                     </div>
                     <div style="font-size: 12px; color: #333; margin-top: 2px">
-                      Score: {{ (nb.score * 100).toFixed(1) }}%
+                      {{ t("widgets.score", { score: (nb.score * 100).toFixed(1) }) }}
                     </div>
                   </div>
                 </div>
@@ -349,7 +353,7 @@
 
               <!-- Empty state after search -->
               <div v-else-if="findSimilarSearched && !findSimilarLoading" style="margin-top: 8px">
-                <n-empty description="No similar samples found" />
+                <n-empty :description="t('widgets.noSimilarSamples')" />
               </div>
             </div>
           </template>
@@ -361,6 +365,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import { useQueryClient } from "@tanstack/vue-query";
 import {
   NDrawer,
@@ -396,6 +401,9 @@ import type { Annotation } from "@/generated/orval/models";
 import { useOrgStore } from "@/features/auth/application/org";
 import { orgScopedQueryKey, toUserMessage } from "../../api";
 import { resolveImageUris, FALLBACK_PLACEHOLDER } from "../../utils/image-adapters";
+import { formatDateTime } from "../../i18n/format";
+
+const { t } = useI18n();
 
 // ---------------------------------------------------------------------------
 // Props / Emits
@@ -513,7 +521,7 @@ const updateAnnotationMutation = useUpdateAnnotationApiV1AnnotationsAnnotationId
       cancelEdit();
     },
     onError: (error) => {
-      message.error(toUserMessage(error, "Failed to update annotation"));
+      message.error(toUserMessage(error, t("widgets.annotationUpdateFailed")));
     },
   },
 });
@@ -532,7 +540,7 @@ const deleteAnnotationMutation = useDeleteAnnotationApiV1AnnotationsAnnotationId
       qc.invalidateQueries({ queryKey: annotationsQueryKey.value });
     },
     onError: (error) => {
-      message.error(toUserMessage(error, "Failed to delete annotation"));
+      message.error(toUserMessage(error, t("widgets.annotationDeleteFailed")));
     },
   },
 });
@@ -556,7 +564,7 @@ const createAnnotationMutation = useCreateAnnotationApiV1AnnotationsPost({
       newAnnotationLabel.value = "";
     },
     onError: (error) => {
-      message.error(toUserMessage(error, "Failed to create annotation"));
+      message.error(toUserMessage(error, t("widgets.annotationCreateFailed")));
     },
   },
 });
@@ -592,7 +600,7 @@ const uploadImageMutation = useUploadSampleImageApiV1DatasetsDatasetIdSamplesSam
       }
     },
     onError: (error) => {
-      message.error(toUserMessage(error, "Failed to upload the sample image"));
+      message.error(toUserMessage(error, t("widgets.imageUploadFailed")));
     },
   },
 });
@@ -655,7 +663,7 @@ async function doFindSimilar() {
     );
     similarNeighbors.value = neighbors;
   } catch (error) {
-    findSimilarError.value = toUserMessage(error, "Failed to find similar samples");
+    findSimilarError.value = toUserMessage(error, t("widgets.similarSearchFailed"));
   } finally {
     findSimilarLoading.value = false;
   }
@@ -665,11 +673,7 @@ async function doFindSimilar() {
 // Date formatter
 // ---------------------------------------------------------------------------
 function formatDate(iso: string): string {
-  try {
-    return new Date(iso).toLocaleString();
-  } catch {
-    return iso;
-  }
+  return formatDateTime(iso);
 }
 
 // ---------------------------------------------------------------------------

@@ -10,6 +10,7 @@
 -->
 <script setup lang="ts">
 import { computed, inject } from "vue";
+import { useI18n } from "vue-i18n";
 import VChart from "vue-echarts";
 import { use } from "echarts/core";
 import { BarChart } from "echarts/charts";
@@ -19,6 +20,8 @@ import type { EChartsOption } from "echarts";
 import type { ECElementEvent } from "echarts/core";
 import type { ClassifyDashboardContext } from "../../types/sidebar-widgets";
 import { DATA_PIPELINE_KEY } from "../../composables/useDataPipeline";
+
+const { t } = useI18n();
 
 use([CanvasRenderer, GridComponent, BarChart, TooltipComponent]);
 
@@ -87,16 +90,12 @@ const labelItems = computed<Array<{ label: string; count: number }>>(() => {
   if (sorted.length <= props.maxBars) return sorted;
 
   const visible = sorted.slice(0, props.maxBars - 1);
-  const otherCount = sorted
-    .slice(props.maxBars - 1)
-    .reduce((s, i) => s + i.count, 0);
-  visible.push({ label: "Other", count: otherCount });
+  const otherCount = sorted.slice(props.maxBars - 1).reduce((s, i) => s + i.count, 0);
+  visible.push({ label: t("widgets.other"), count: otherCount });
   return visible;
 });
 
-const totalLabeled = computed(() =>
-  labelItems.value.reduce((s, i) => s + i.count, 0),
-);
+const totalLabeled = computed(() => labelItems.value.reduce((s, i) => s + i.count, 0));
 
 const activeLabelFilter = computed(() => {
   const ann = labelNode.annotation.value;
@@ -106,7 +105,7 @@ const activeLabelFilter = computed(() => {
 
 function onChartClick(params: ECElementEvent): void {
   const label = typeof params.name === "string" ? params.name : null;
-  if (!label || label === "Other") {
+  if (!label || label === t("widgets.other")) {
     return;
   }
 
@@ -148,12 +147,8 @@ const chartOption = computed<EChartsOption>(() => {
     value: i.count,
     itemStyle: {
       color: BAR_COLORS[idx % BAR_COLORS.length],
-      opacity:
-        activeLabelFilter.value == null || activeLabelFilter.value === i.label
-          ? 1
-          : 0.3,
-      borderColor:
-        activeLabelFilter.value === i.label ? "#ffffff" : "transparent",
+      opacity: activeLabelFilter.value == null || activeLabelFilter.value === i.label ? 1 : 0.3,
+      borderColor: activeLabelFilter.value === i.label ? "#ffffff" : "transparent",
       borderWidth: activeLabelFilter.value === i.label ? 2 : 0,
     },
   }));
@@ -168,9 +163,7 @@ const chartOption = computed<EChartsOption>(() => {
         formatter(params: any) {
           const p = Array.isArray(params) ? params[0] : params;
           const pct =
-            totalLabeled.value > 0
-              ? ((p.value / totalLabeled.value) * 100).toFixed(1)
-              : "0";
+            totalLabeled.value > 0 ? ((p.value / totalLabeled.value) * 100).toFixed(1) : "0";
           return `${p.name}: <b>${p.value}</b> (${pct}%)`;
         },
       },
@@ -220,9 +213,7 @@ const chartOption = computed<EChartsOption>(() => {
       formatter(params: any) {
         const p = Array.isArray(params) ? params[0] : params;
         const pct =
-          totalLabeled.value > 0
-            ? ((p.value / totalLabeled.value) * 100).toFixed(1)
-            : "0";
+          totalLabeled.value > 0 ? ((p.value / totalLabeled.value) * 100).toFixed(1) : "0";
         return `${p.name}: <b>${p.value}</b> (${pct}%)`;
       },
     },
@@ -267,42 +258,30 @@ const chartOption = computed<EChartsOption>(() => {
   <div class="ldw">
     <!-- Loading -->
     <div v-if="ctx.isLoading && !ctx.stats" class="ldw-loading">
-      Loading label data...
+      {{ t("widgets.loadingLabelData") }}
     </div>
 
     <!-- Error -->
     <div v-else-if="ctx.isError" class="ldw-error">
-      <span>Failed to load stats</span>
-      <button class="ldw-error__retry" @click="ctx.refetch()">Retry</button>
+      <span>{{ t("widgets.failedStats") }}</span>
+      <button class="ldw-error__retry" @click="ctx.refetch()">{{ t("common.retry") }}</button>
     </div>
 
     <!-- No labels yet -->
     <div v-else-if="labelItems.length === 0" class="ldw-empty">
-      No annotations yet
+      {{ t("widgets.noAnnotations") }}
     </div>
 
     <!-- Bar chart -->
     <template v-else>
       <div class="ldw-chart" :style="{ height: chartHeight + 'px' }">
-        <VChart
-          class="ldw-chart__plot"
-          :option="chartOption"
-          autoresize
-          @click="onChartClick"
-        />
+        <VChart class="ldw-chart__plot" :option="chartOption" autoresize @click="onChartClick" />
       </div>
-      <button
-        v-if="activeLabelFilter != null"
-        class="ldw-filter-chip"
-        @click="clearActiveFilter"
-      >
-        Filtered by {{ activeLabelFilter }} · Clear
+      <button v-if="activeLabelFilter != null" class="ldw-filter-chip" @click="clearActiveFilter">
+        {{ t("widgets.filteredBy", { label: activeLabelFilter }) }}
       </button>
       <div class="ldw-summary">
-        {{ labelItems.length }} label{{
-          labelItems.length === 1 ? "" : "s"
-        }}
-        &middot; {{ totalLabeled }} sample{{ totalLabeled === 1 ? "" : "s" }}
+        {{ t("widgets.labelSampleSummary", { labels: labelItems.length, samples: totalLabeled }) }}
       </div>
     </template>
   </div>

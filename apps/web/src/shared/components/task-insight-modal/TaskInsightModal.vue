@@ -9,10 +9,10 @@
     <template #header>
       <n-space justify="space-between" align="center" style="width: 100%">
         <n-space vertical :size="2">
-          <n-text strong>{{ task?.display_name || "Task Insight" }}</n-text>
+          <n-text strong>{{ task?.display_name || t("widgets.taskInsight") }}</n-text>
           <n-space size="small" align="center">
             <n-tag size="small" :type="statusType(activeDetail?.derived.display_status)">{{
-              activeDetail?.derived.display_status || "unknown"
+              activeDetail?.derived.display_status || t("widgets.unknown")
             }}</n-tag>
           </n-space>
         </n-space>
@@ -24,7 +24,7 @@
             :loading="cancelMutation.isPending.value"
             @click="cancelMutation.mutate()"
           >
-            Interrupt
+            {{ t("widgets.interrupt") }}
           </n-button>
         </n-space>
       </n-space>
@@ -34,17 +34,17 @@
       <n-space vertical size="large">
         <n-grid :cols="3" :x-gap="12">
           <n-gi>
-            <n-statistic label="Queue" :value="task?.work_queue_name || '-'" />
+            <n-statistic :label="t('widgets.queue')" :value="task?.work_queue_name || '-'" />
           </n-gi>
           <n-gi>
             <n-statistic
-              label="Queue Priority"
+              :label="t('widgets.queuePriority')"
               :value="activeDetail?.derived.queue_priority_label || 'none'"
             />
           </n-gi>
           <n-gi>
             <n-statistic
-              label="Ahead In Queue"
+              :label="t('widgets.aheadInQueue')"
               :value="
                 activeDetail?.derived.queue_depth_ahead !== null &&
                 activeDetail?.derived.queue_depth_ahead !== undefined
@@ -67,7 +67,7 @@
               <div v-if="stage.key === 'execution_flow'">
                 <n-empty
                   v-if="waterfallRows(stage.nodes ?? []).length === 0"
-                  description="No execution timing available"
+                  :description="t('widgets.noExecutionTiming')"
                 />
                 <div v-else class="waterfall-shell">
                   <svg
@@ -142,7 +142,7 @@
 
         <n-grid cols="1 720:2" :x-gap="16" :y-gap="16" responsive="self">
           <n-gi>
-            <n-card title="Dynamic Console" size="small">
+            <n-card :title="t('widgets.dynamicConsole')" size="small">
               <n-space vertical size="small">
                 <n-text v-if="activeDetail?.derived.summary_metrics?.rate_hint" depth="3">{{
                   activeDetail?.derived.summary_metrics?.rate_hint
@@ -157,28 +157,28 @@
             </n-card>
           </n-gi>
           <n-gi>
-            <n-card title="Validation & Output" size="small">
+            <n-card :title="t('widgets.validationOutput')" size="small">
               <n-space vertical>
                 <n-grid :cols="3" :x-gap="12">
                   <n-gi
                     ><n-statistic
-                      label="Errors"
+                      :label="t('widgets.errors')"
                       :value="String(activeDetail?.derived.scorecard?.errors || 0)"
                   /></n-gi>
                   <n-gi
                     ><n-statistic
-                      label="Warnings"
+                      :label="t('widgets.warnings')"
                       :value="String(activeDetail?.derived.scorecard?.warnings || 0)"
                   /></n-gi>
                   <n-gi
                     ><n-statistic
-                      label="Artifacts"
+                      :label="t('widgets.artifacts')"
                       :value="String(activeDetail?.derived.artifacts?.length || 0)"
                   /></n-gi>
                 </n-grid>
                 <n-empty
                   v-if="(activeDetail?.derived.scorecard?.checks?.length || 0) === 0"
-                  description="No checks available"
+                  :description="t('widgets.noChecks')"
                 />
                 <n-space v-else vertical size="small">
                   <n-card
@@ -214,6 +214,7 @@ export const TASK_INSIGHT_STREAM_KEY: InjectionKey<
 
 <script setup lang="ts">
 import { computed, inject, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import { useQueryClient } from "@tanstack/vue-query";
 import { useMessage } from "naive-ui";
 import { useTrackedTaskQuery, taskTrackerKeys } from "../../api/hooks";
@@ -224,6 +225,8 @@ import type {
   TaskTrackerDetailResponse as TaskTrackerDetail,
   TaskTrackerSummaryResponse as TaskTrackerSummary,
 } from "@/generated/orval/models";
+
+const { t } = useI18n();
 
 const props = defineProps<{
   show: boolean;
