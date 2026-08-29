@@ -7,6 +7,8 @@ from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query, s
 from fastapi.responses import JSONResponse
 from starlette.types import Lifespan
 
+from .scenarios import ShowcaseScenarioRunner
+
 from .repository import (
     SimulatorConflictError,
     SimulatorNotInitializedError,
@@ -21,6 +23,8 @@ from .schemas import (
     InspectionResponse,
     PublicationResponse,
     PublishInspectionRequest,
+    ShowcaseScenarioRequest,
+    ShowcaseScenarioResponse,
     UpdateInspectionRequest,
 )
 
@@ -29,6 +33,7 @@ def create_control_app(
     *,
     repository: SimulatorRepository,
     api_token: str,
+    scenario_runner: ShowcaseScenarioRunner | None = None,
     lifespan: Lifespan[FastAPI] | None = None,
 ) -> FastAPI:
     app = FastAPI(title="SC Upstream Simulator", version="0.1.0", lifespan=lifespan)
@@ -123,6 +128,19 @@ def create_control_app(
         return InspectionResponse.from_domain(
             await repository.get_inspection(body.to_key())
         )
+
+    if scenario_runner is not None:
+
+        @control.post(
+            "/scenarios/dev-showcase",
+            response_model=ShowcaseScenarioResponse,
+        )
+        async def publish_dev_showcase(
+            body: ShowcaseScenarioRequest,
+        ) -> ShowcaseScenarioResponse:
+            return ShowcaseScenarioResponse.from_domain(
+                await scenario_runner.publish(body.to_domain())
+            )
 
     app.include_router(control)
     return app

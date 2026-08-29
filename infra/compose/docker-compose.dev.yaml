@@ -110,12 +110,20 @@ services:
     depends_on:
       sc-simulator-db-prepare:
         condition: service_completed_successfully
+      minio:
+        condition: service_healthy
     environment:
       SC_SIMULATOR_ALLOW_MUTATIONS: "1"
       SC_SIMULATOR_DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/sc_simulator
       SC_SIMULATOR_API_TOKEN: ${SC_SIMULATOR_API_TOKEN:-local-development-sc-simulator-token}
       SC_SIMULATOR_GRPC_PORT: "9091"
       SC_SIMULATOR_FLIGHT_PORT: "9093"
+      SC_SIMULATOR_S3_ENDPOINT: http://minio:9000
+      SC_SIMULATOR_S3_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      SC_SIMULATOR_S3_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      SC_SIMULATOR_S3_REGION: us-east-1
+      SC_SIMULATOR_PATCH_BUCKET: sc-patch-images
+      SC_SIMULATOR_REVIEW_BUCKET: sc-review-images
       SC_FLIGHT_BATCH_SIZE: "65536"
     command:
       [

@@ -7,6 +7,7 @@ from typing import Any
 
 from seedmaker import SeedConfig, SeedRunner, registry
 from seedmaker.images import png_data_uri
+from seedmaker.sc_simulator import publish_dev_showcase
 from seedmaker.utils import _find_by_name, _items_from_collection_response
 
 CLASS_LABELS = ["normal", "scratch", "particle", "residue", "crack", "void"]
@@ -61,6 +62,20 @@ def run(args: Any, runner: SeedRunner) -> int:
     sc_annotations = _positive_count(args.sc_annotations, "--sc-annotations")
     if sc_annotations > sc_samples:
         raise ValueError("--sc-annotations cannot exceed --sc-samples")
+
+    if args.sc_inspection_time is None:
+        raise ValueError("--sc-inspection-time is required for dev-showcase")
+    print("[5/13] Publishing deterministic SC upstream behavior ...")
+    publish_dev_showcase(
+        inspection_time=args.sc_inspection_time,
+        total_defects=sc_samples,
+        imaged_defects=args.sc_imaged_defects,
+        images_per_defect=args.sc_images_per_defect,
+        gallery_defects=args.sc_gallery_defects,
+        gallery_imaged_defects=args.sc_gallery_imaged_defects,
+        defects_per_archive=args.sc_defects_per_archive,
+        append_batch_size=args.sc_append_batch_size,
+    )
 
     print("[6/13] Seeding classification datasets ...")
     balanced = _ensure_dataset(
@@ -355,7 +370,7 @@ def _latest_inspection(
     items = response.json().get("items", [])
     if not items:
         raise RuntimeError(
-            "SC upstream returned no inspection; run make seed-wafer-mock first"
+            "SC upstream returned no inspection after simulator scenario publication"
         )
     return items[0]
 

@@ -23,7 +23,7 @@ test-web: ## Run frontend unit tests (vitest)
 
 .PHONY: test-seed-tools
 test-seed-tools: ## Run repository seed-tool unit tests
-	PYTHONPATH=devtools $(UV_RUN_INSTALLED) python -m pytest devtools/seedmaker/tests/test_sc_artifacts.py
+	PYTHONPATH=devtools $(UV_RUN_INSTALLED) python -m pytest devtools/seedmaker/tests/test_sc_simulator.py
 	PYTHONPATH=devtools $(UV_RUN_INSTALLED) --package sc-upstream python -m pytest devtools/seedmaker/tests/test_legacy_sc_sqlite.py
 
 .PHONY: benchmark-sc-prediction

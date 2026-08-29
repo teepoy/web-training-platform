@@ -2,9 +2,9 @@
 
 ## Progress
 
-- **Overall status:** In progress; the database, control, and platform-facing
-  read interfaces are complete. Seed/object generation and recurring
-  Collection discovery remain.
+- **Overall status:** In progress; the database, control, platform-facing read
+  interfaces, and simulator-owned showcase publication are complete. Recurring
+  Collection discovery remains.
 - **Completed intermediate slices:** resolved the PostgreSQL, HTTP API, CLI,
   latest-value, and five-minute automation decisions; recorded the current
   direct-write inventory; moved the artifact generator out of Compose code;
@@ -17,10 +17,11 @@
   The simulator now also serves published rows through the existing gRPC and
   Arrow Flight contracts, transports latest-update/change-token freshness, and
   performs metadata reads directly so mutable source values are never hidden by
-  the production query cache.
-- **Next milestone:** route every upstream seed record and generated object
-  reference through simulator behavior, then add the five-minute internal
-  Collection-discovery trigger.
+  the production query cache. A named, idempotent HTTP scenario now generates
+  deterministic defects, review images, patch archives, PostgreSQL metadata,
+  and object-store payloads inside the simulator and publishes them coherently;
+  the CLI and platform seed recipe use that same API.
+- **Next milestone:** add the five-minute internal Collection-discovery trigger.
 - **Done when:** every acceptance criterion below is verified. Package
   relocation is not simulator completion.
 
@@ -380,6 +381,12 @@ Proposed direction:
 - Retire overlapping image seed scripts after their unique scenarios and tests
   are migrated.
 
+Completed: `InspectionArtifactPublisher` is simulator-owned and writes the
+configured patch/review buckets before the draft is published. Archive and
+review metadata are appended to the same simulator inspection. Direct cache
+clearing is unnecessary because development reads use the simulator's direct
+metadata cache, and the old external artifact generator was removed.
+
 ### P1: Reduce `seed-dev` to platform setup plus simulator API calls
 
 Relevant files:
@@ -407,6 +414,12 @@ Proposed direction:
   execution.
 - Replace duplicated fixture counts, paths, timestamps, and bucket settings
   with scenario-owned inputs and one stable command surface.
+
+Completed: `dev-showcase` invokes the named simulator HTTP scenario, then
+creates platform-owned resources through the platform API. It performs no
+SQLite, object-store, cache-directory, or container mutation. The old SC fixture
+Make targets were removed; developers can invoke the same scenario directly
+with the simulator CLI.
 
 ### P1: Add behavioral scenarios for source automation
 

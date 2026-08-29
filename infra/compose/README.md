@@ -274,13 +274,10 @@ All services at a glance:
 - The object cache uses a 10 GiB high watermark, cleans down to 8 GiB, and is
   stored in the shared `sc-data-provider-cache` volume in development or below
   the platform data mount in production deployments.
-- `SC_WAFER_MOCK_DEFECTS` controls both the inspection fixture and patch zip
-  generation (300,000 by default); zip seeding validates the source defect IDs
-  are the contiguous range `1..N` before uploading objects or metadata, then
-  clears stale SC upstream inspection/zip metadata after the replacement
-  succeeds. `devtools/seedmaker/sc_artifacts.py --inspection-time <ISO timestamp>`
-  can seed an older inspection explicitly when immutable imported datasets still
-  reference it; the default remains the latest inspection for the wafer.
+- `make seed-dev` asks the authenticated simulator `dev-showcase` scenario to
+  publish the repeatable SC inspection. The simulator owns deterministic defect
+  rows, review objects, patch archives, and PostgreSQL metadata; Compose no
+  longer invokes direct SQLite/S3 seeders, clears caches, or restarts services.
 - Dev services default `LOG_LEVEL` to `INFO`, so data-provider memory records
   are visible. Set `LOG_LEVEL=DEBUG` when additional diagnostics are
   needed.

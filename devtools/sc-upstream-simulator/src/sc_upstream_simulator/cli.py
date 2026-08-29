@@ -52,6 +52,12 @@ def _parser() -> argparse.ArgumentParser:
 
     list_command = commands.add_parser("list")
     list_command.add_argument("--state", choices=("draft", "published"))
+
+    scenario = commands.add_parser(
+        "dev-showcase",
+        help="Publish the deterministic baseline and Gallery inspections",
+    )
+    scenario.add_argument("--file", required=True, help="JSON scenario request body")
     return parser
 
 
@@ -75,6 +81,8 @@ def _request(args: argparse.Namespace) -> tuple[str, str, dict[str, Any] | None]
         if args.state:
             path = f"{path}?state={args.state}"
         return "GET", path, None
+    if args.command == "dev-showcase":
+        return "POST", "/api/v1/scenarios/dev-showcase", _load_json(args.file)
     raise AssertionError(f"unsupported command: {args.command}")
 
 

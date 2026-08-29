@@ -11,11 +11,11 @@ uv run python scripts/seed.py --list
 uv run python scripts/seed.py <recipe>
 ```
 
-SC artifact and legacy SQLite compatibility commands are invoked as modules so
-their implementation remains inside this boundary:
+The SC showcase recipe calls the separately packaged simulator's authenticated
+HTTP scenario. The legacy SQLite compatibility command remains explicitly
+named and isolated:
 
 ```bash
-PYTHONPATH=devtools uv run python -m seedmaker.sc_artifacts --help
 PYTHONPATH=devtools uv run --package sc-upstream \
   python -m seedmaker.legacy_sc_sqlite --help
 ```

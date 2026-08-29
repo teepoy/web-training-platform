@@ -44,6 +44,9 @@ DEV_API_HOST_ENV := \
 	REDIS_HOST=localhost \
 	SC_UPSTREAM_ADDR=127.0.0.1:9091 \
 	SC_UPSTREAM_FLIGHT_ADDR=grpc://127.0.0.1:9093 \
+	SC_SIMULATOR_API_URL=http://127.0.0.1:8094 \
+	SC_SIMULATOR_API_TOKEN=local-development-sc-simulator-token \
+	SC_SIMULATOR_HTTP_TIMEOUT_SECONDS=300 \
 	IMAGE_PARSER_GRPC_ADDR=$(IMAGE_PARSER_GRPC_ADDR_HOST) \
 	SC_DATA_PROVIDER_CACHE_DIR=/tmp/sc-data-provider \
 	SC_DATA_PROVIDER_CACHE_NAMESPACE=sc-data-provider
@@ -51,14 +54,10 @@ DEV_API_HOST_ENV := \
 # Development seed data
 # Controls the repeatable SC inspection and showcase datasets created by seed targets.
 SC_WAFER_MOCK_DEFECTS            ?= 2500
-SC_WAFER_MOCK_INSPECTION_TIME    ?= 2026-08-01T04:00:00
-SC_GALLERY_PROFILE_DEFECTS       ?= 64
-SC_GALLERY_PROFILE_IMAGED        ?= 8
+SC_WAFER_MOCK_INSPECTION_TIME    ?= 2026-08-01T04:00:00+08:00
 DEV_SEED_CLASSIFICATION_SAMPLES  ?= 180
 DEV_SEED_REVIEW_SAMPLES          ?= 96
 DEV_SEED_SC_ANNOTATIONS          ?= 96
-SC_PATCH_ZIP_BUCKET              ?= sc-patch-images
-SC_PATCH_ZIP_S3_ENDPOINT         ?= http://$(MINIO_ENDPOINT_HOST)
 
 # Tests and benchmarks
 # Sets timeout diagnostics and acceptance thresholds for test and SC benchmark targets.
@@ -120,13 +119,9 @@ help: ## Show this help message
 	@printf '\n  Development seed data\n'
 	@printf '    \033[36m%-43s\033[0m %s\n' "SC_WAFER_MOCK_DEFECTS" "Number of defects in the repeatable mock SC inspection (default: 2500)"
 	@printf '    \033[36m%-43s\033[0m %s\n' "SC_WAFER_MOCK_INSPECTION_TIME" "Stable inspection timestamp used to make seed runs reusable"
-	@printf '    \033[36m%-43s\033[0m %s\n' "SC_GALLERY_PROFILE_DEFECTS" "Defects per 8/16-bit gallery profile inspection (default: 64)"
-	@printf '    \033[36m%-43s\033[0m %s\n' "SC_GALLERY_PROFILE_IMAGED" "Defects with Review images in each gallery profile inspection (default: 8)"
 	@printf '    \033[36m%-43s\033[0m %s\n' "DEV_SEED_CLASSIFICATION_SAMPLES" "Classification showcase sample count (default: 180)"
 	@printf '    \033[36m%-43s\033[0m %s\n' "DEV_SEED_REVIEW_SAMPLES" "Review showcase sample count (default: 96)"
 	@printf '    \033[36m%-43s\033[0m %s\n' "DEV_SEED_SC_ANNOTATIONS" "SC annotation count created by seed-dev (default: 96)"
-	@printf '    \033[36m%-43s\033[0m %s\n' "SC_PATCH_ZIP_BUCKET" "MinIO bucket receiving generated SC patch archives"
-	@printf '    \033[36m%-43s\033[0m %s\n' "SC_PATCH_ZIP_S3_ENDPOINT" "S3 endpoint used by seed-wafer-patch-zips"
 	@printf '\n  Tests and SC runtime benchmarks\n'
 	@printf '    \033[36m%-43s\033[0m %s\n' "TEST_TIMEOUT" "Hard timeout for API test execution in seconds (default: 300)"
 	@printf '    \033[36m%-43s\033[0m %s\n' "PYTEST_FAULTHANDLER_TIMEOUT" "Per-test stack-dump timeout in seconds (default: 120)"

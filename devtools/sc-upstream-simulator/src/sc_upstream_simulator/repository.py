@@ -4,7 +4,9 @@ from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import Literal, cast
 
-from sqlalchemy import select
+from dataclasses import dataclass
+
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -41,6 +43,13 @@ class SimulatorStateError(RuntimeError):
 
 class SimulatorNotInitializedError(RuntimeError):
     pass
+
+
+@dataclass(frozen=True)
+class InspectionChildCounts:
+    defects: int
+    review_images: int
+    patch_archives: int
 
 
 class SimulatorRepository:
@@ -283,6 +292,38 @@ class SimulatorRepository:
                     "simulator clock is missing; apply the database migrations"
                 )
 
+    async def child_counts(self, key: InspectionKey) -> InspectionChildCounts:
+        async with self._sessions() as session:
+            await self._require_inspection(session, key)
+            predicates = (
+                DefectORM.wafer_key == key.wafer_key,
+                DefectORM.inspection_time == key.inspection_time,
+            )
+            defects = await session.scalar(
+                select(func.count()).select_from(DefectORM).where(*predicates)
+            )
+            review_images = await session.scalar(
+                select(func.count())
+                .select_from(ReviewImageORM)
+                .where(
+                    ReviewImageORM.wafer_key == key.wafer_key,
+                    ReviewImageORM.inspection_time == key.inspection_time,
+                )
+            )
+            patch_archives = await session.scalar(
+                select(func.count())
+                .select_from(PatchArchiveORM)
+                .where(
+                    PatchArchiveORM.wafer_key == key.wafer_key,
+                    PatchArchiveORM.inspection_time == key.inspection_time,
+                )
+            )
+            return InspectionChildCounts(
+                defects=int(defects or 0),
+                review_images=int(review_images or 0),
+                patch_archives=int(patch_archives or 0),
+            )
+
     async def _next_change_token(self, session: AsyncSession) -> int:
         clock = await session.scalar(
             select(SimulatorClockORM).where(SimulatorClockORM.id == 1).with_for_update()
@@ -342,6 +383,19 @@ class SimulatorRepository:
                 InspectionORM.inspection_time == key.inspection_time,
             )
             .with_for_update()
+        )
+        if inspection is None:
+            raise SimulatorRecordNotFoundError("inspection does not exist")
+        return inspection
+
+    async def _require_inspection(
+        self, session: AsyncSession, key: InspectionKey
+    ) -> InspectionORM:
+        inspection = await session.scalar(
+            select(InspectionORM).where(
+                InspectionORM.wafer_key == key.wafer_key,
+                InspectionORM.inspection_time == key.inspection_time,
+            )
         )
         if inspection is None:
             raise SimulatorRecordNotFoundError("inspection does not exist")

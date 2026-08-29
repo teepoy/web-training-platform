@@ -14,6 +14,7 @@ from .domain import (
     Publication,
     ReviewImageDraft,
 )
+from .scenarios import ScenarioResult, ShowcaseScenario
 
 
 def _aware(value: datetime, field_name: str) -> datetime:
@@ -254,4 +255,44 @@ class PublicationResponse(StrictModel):
             published_at=publication.published_at,
             last_updated_at=publication.last_updated_at,
             change_token=publication.change_token,
+        )
+
+
+class ShowcaseScenarioRequest(StrictModel):
+    inspection_time: datetime
+    published_at: datetime
+    total_defects: int
+    imaged_defects: int
+    images_per_defect: int
+    gallery_defects: int
+    gallery_imaged_defects: int
+    defects_per_archive: int
+    append_batch_size: int
+
+    @field_validator("inspection_time", "published_at")
+    @classmethod
+    def timestamps_are_aware(cls, value: datetime) -> datetime:
+        return _aware(value, "scenario timestamp")
+
+    def to_domain(self) -> ShowcaseScenario:
+        return ShowcaseScenario(**self.model_dump())
+
+
+class ScenarioInspectionResponse(InspectionResponse):
+    reused: bool
+
+
+class ShowcaseScenarioResponse(StrictModel):
+    inspections: tuple[ScenarioInspectionResponse, ...]
+
+    @classmethod
+    def from_domain(cls, result: ScenarioResult) -> ShowcaseScenarioResponse:
+        return cls(
+            inspections=tuple(
+                ScenarioInspectionResponse(
+                    **InspectionResponse.from_domain(item.inspection).model_dump(),
+                    reused=item.reused,
+                )
+                for item in result.inspections
+            )
         )

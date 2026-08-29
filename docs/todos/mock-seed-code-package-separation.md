@@ -10,9 +10,11 @@
   demo request prefix. The production SC service is now transport-only, while
   its legacy SQLite adapter/schema live under `devtools/seedmaker`. The API
   in-memory artifact store and local training engine now live under
-  `tests/support` and are installed only by pytest's composition root.
-- **Next milestone:** finish simulator-owned seed behavior, then review web demo
-  pages and Storybook-only providers.
+  `tests/support` and are installed only by pytest's composition root. The SC
+  showcase now publishes all upstream rows and image/archive objects through a
+  named simulator HTTP scenario; the old SQLite/S3/cache/restart Make chain and
+  overlapping artifact generator were removed.
+- **Next milestone:** review web demo pages and Storybook-only providers.
 - **Done when:** every acceptance criterion below is verified. The artifact
   generator move alone does not satisfy the upstream simulator goal.
 
@@ -193,17 +195,14 @@ Proposed ownership:
   moved into the new package.
 - Update Make targets, tests, and documentation together after the package move.
 
-Completed: the active generator, legacy SQLite compatibility seeder, and their
-tests now live under `devtools/seedmaker/`. Compose retains only invocation and
-service wiring; the CLI behavior and Make targets remain compatible.
-
-Completion scope: this is package separation only. It does not complete the
-stateful upstream simulator goal. The current Make targets and generator still
-write SQLite fixture databases, MinIO objects, and cache state directly, while
-the normal SC upstream service still constructs mock SQLite repositories. Those
-paths remain scheduled for replacement by the separately named PostgreSQL
-simulator, its HTTP API/CLI, and API-driven development scenarios recorded in
-`stateful-upstream-simulator-and-source-automation.md`.
+Completed and superseded: deterministic patch/review object generation now
+lives inside `devtools/sc-upstream-simulator`. Its named `dev-showcase` HTTP
+scenario writes simulator-owned PostgreSQL records and MinIO objects before
+publishing the inspection. The thin simulator CLI calls the same endpoint, and
+the platform seed recipe calls that endpoint rather than a database or object
+store. The old `seed-wafer-*` Make targets, cache clearing, service restarts,
+and `devtools/seedmaker/sc_artifacts.py` were removed. The legacy SQLite seeder
+remains only as explicitly named compatibility tooling with isolated tests.
 
 ### P1: Web sandbox/demo pages live in the production feature tree
 

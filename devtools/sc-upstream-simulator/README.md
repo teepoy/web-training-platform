@@ -16,8 +16,10 @@ The current implementation provides:
 - a thin `sc-upstream-simulator` CLI that calls only that HTTP API.
 - the platform-facing gRPC metadata and Arrow Flight sample-read interfaces,
   backed by the same published PostgreSQL state.
+- a named, idempotent `dev-showcase` scenario that owns deterministic defects,
+  review images, patch archives, object-store writes, and coherent publication.
 
-Object generation and recurring source-discovery automation remain tracked in
+Recurring source-discovery automation remains tracked in
 `docs/todos/stateful-upstream-simulator-and-source-automation.md`.
 
 Apply migrations from the repository root:
@@ -54,8 +56,10 @@ uv run --project devtools/sc-upstream-simulator sc-upstream-simulator publish \
   --wafer-key 7 \
   --inspection-time 2026-08-29T01:02:00Z \
   --published-at 2026-08-29T01:05:00Z
+uv run --project devtools/sc-upstream-simulator \
+  sc-upstream-simulator dev-showcase --file showcase.json
 ```
 
-`create`, `append`, and `update` accept the corresponding JSON request object
-through `--file`. There is intentionally no Make wrapper and no direct database
-mutation mode.
+`create`, `append`, `update`, and `dev-showcase` accept their corresponding JSON
+request object through `--file`. There is intentionally no simulator Make
+wrapper and no direct database or object-store mutation mode.

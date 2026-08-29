@@ -10,8 +10,10 @@ from sc_upstream.direct_cache import DirectMetadataCache
 from sc_upstream.server import start_servers
 
 from .api import create_control_app
+from .artifacts import BotoObjectStore, InspectionArtifactPublisher
 from .repository import SimulatorRepository
 from .settings import SimulatorSettings
+from .scenarios import ShowcaseScenarioRunner
 from .upstream_adapter import SimulatorUpstreamAdapter
 
 
@@ -41,8 +43,24 @@ def create_app() -> FastAPI:
             adapter.close()
             await engine.dispose()
 
+    repository = SimulatorRepository(sessions)
+    object_store = BotoObjectStore(
+        endpoint_url=settings.object_store_endpoint,
+        access_key=settings.object_store_access_key,
+        secret_key=settings.object_store_secret_key,
+        region=settings.object_store_region,
+    )
+    scenario_runner = ShowcaseScenarioRunner(
+        repository=repository,
+        artifacts=InspectionArtifactPublisher(
+            object_store=object_store,
+            patch_bucket=settings.patch_bucket,
+            review_bucket=settings.review_bucket,
+        ),
+    )
     return create_control_app(
-        repository=SimulatorRepository(sessions),
+        repository=repository,
         api_token=settings.api_token,
+        scenario_runner=scenario_runner,
         lifespan=lifespan,
     )
