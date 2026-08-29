@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { NSelect, type SelectOption } from "naive-ui";
+import { useI18n } from "vue-i18n";
 import type { CreatorSummary } from "@/generated/orval/models";
 import { useAuthStore } from "@/features/auth/application/store";
 
@@ -26,12 +27,13 @@ const emit = defineEmits<{
 }>();
 
 const authStore = useAuthStore();
+const { t } = useI18n();
 
 const options = computed<SelectOption[]>(() => {
   const currentUser = authStore.user;
   const result: SelectOption[] = [
-    { label: `My ${props.resourceLabel}`, value: "me" },
-    { label: "All creators", value: "all" },
+    { label: t("creators.mine", { resource: props.resourceLabel }), value: "me" },
+    { label: t("creators.all"), value: "all" },
   ];
   for (const creator of props.creators) {
     if (creator.id === currentUser?.id) continue;

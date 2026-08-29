@@ -10,6 +10,7 @@ import {
 import { createPinia } from "pinia";
 import { createMemoryHistory, createRouter } from "vue-router";
 import { configureTransport } from "../src/shared/api/client";
+import { i18n } from "../src/app/i18n";
 
 const router = createRouter({
   history: createMemoryHistory(),
@@ -19,6 +20,7 @@ const router = createRouter({
 setup((app) => {
   app.use(createPinia());
   app.use(router);
+  app.use(i18n);
   app.use(VueQueryPlugin, {
     queryClient: new QueryClient({
       defaultOptions: {

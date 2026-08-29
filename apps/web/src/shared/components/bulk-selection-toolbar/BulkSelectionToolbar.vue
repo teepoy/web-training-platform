@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { NButton, NIcon, NSpace, NText, NTooltip } from "naive-ui";
 import { CloseCircleOutline } from "@vicons/ionicons5";
+import { useI18n } from "vue-i18n";
 
 defineProps<{
   selectedCount: number;
@@ -11,6 +12,7 @@ defineProps<{
 defineEmits<{
   clear: [];
 }>();
+const { t } = useI18n();
 </script>
 
 <template>
@@ -18,11 +20,11 @@ defineEmits<{
     v-if="selectedCount > 0"
     class="bulk-selection-toolbar"
     role="toolbar"
-    :aria-label="`${itemLabel} bulk actions`"
+    :aria-label="t('common.bulkActions', { item: itemLabel })"
     data-testid="bulk-selection-toolbar"
   >
     <NText strong>
-      {{ selectedCount }} {{ itemLabel }}{{ selectedCount === 1 ? "" : "s" }} selected
+      {{ t("common.selected", { count: selectedCount, item: itemLabel }, selectedCount) }}
     </NText>
     <NSpace align="center" :size="8">
       <slot />
@@ -32,7 +34,7 @@ defineEmits<{
             size="small"
             quaternary
             circle
-            aria-label="Clear selection"
+            :aria-label="t('common.clearSelection')"
             :disabled="loading"
             @click="$emit('clear')"
           >
@@ -41,7 +43,7 @@ defineEmits<{
             </template>
           </NButton>
         </template>
-        Clear selection
+        {{ t("common.clearSelection") }}
       </NTooltip>
     </NSpace>
   </div>

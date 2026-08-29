@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { NButton, NInput } from "naive-ui";
+import { useI18n } from "vue-i18n";
 import type { CreatorSummary } from "@/generated/orval/models";
 import CreatorScopeSelect from "@/shared/components/creator-scope-select";
 
@@ -22,6 +23,7 @@ const emit = defineEmits<{
   (event: "update:creatorScope", value: string): void;
   (event: "clear"): void;
 }>();
+const { t } = useI18n();
 </script>
 
 <template>
@@ -45,7 +47,7 @@ const emit = defineEmits<{
     />
     <slot name="filters" />
     <NButton v-if="activeFilterCount > 0" size="small" quaternary @click="emit('clear')">
-      Clear filters ({{ activeFilterCount }})
+      {{ t("common.clearFilters", { count: activeFilterCount }) }}
     </NButton>
     <div v-if="$slots.actions" class="resource-filter-bar__actions">
       <slot name="actions" />

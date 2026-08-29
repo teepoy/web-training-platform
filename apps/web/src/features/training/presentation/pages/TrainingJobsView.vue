@@ -2,24 +2,24 @@
   <n-space vertical size="large">
     <template v-if="!orgStore.currentOrgId">
       <div style="padding: 48px; text-align: center">
-        <n-empty description="You are not a member of any organization. Contact an admin." />
+        <n-empty :description="t('user.noOrganization')" />
       </div>
     </template>
     <template v-else>
-      <n-page-header v-if="!props.embedded" title="Training Jobs">
+      <n-page-header v-if="!props.embedded" :title="t('jobs.training')">
         <template #extra>
-          <n-button type="primary" :disabled="!canTrain" @click="showModal = true"
-            >Start New Job</n-button
-          >
+          <n-button type="primary" :disabled="!canTrain" @click="showModal = true">{{
+            t("jobs.startTraining")
+          }}</n-button>
         </template>
       </n-page-header>
       <div v-else class="embedded-section-header">
         <div>
-          <n-h3 class="embedded-section-title">Training runs</n-h3>
-          <n-text depth="3">Train this dataset and review its recent runs.</n-text>
+          <n-h3 class="embedded-section-title">{{ t("jobs.trainingRuns") }}</n-h3>
+          <n-text depth="3">{{ t("jobs.trainingDescription") }}</n-text>
         </div>
         <n-button type="primary" :disabled="!canTrain" @click="showModal = true">
-          Start New Job
+          {{ t("jobs.startTraining") }}
         </n-button>
       </div>
 
@@ -29,11 +29,11 @@
 
       <ResourceFilterBar
         :keyword="jobSearch"
-        keyword-placeholder="Search jobs"
+        :keyword-placeholder="t('jobs.search')"
         :creator-scope="creatorScope"
         :creators="[]"
         :active-filter-count="activeFilterCount"
-        resource-label="training jobs"
+        :resource-label="t('jobs.trainingResourceLabel')"
         @update:keyword="jobSearch = $event"
         @update:creator-scope="creatorScope = $event"
         @clear="clearFilters"
@@ -44,7 +44,7 @@
             clearable
             size="small"
             :options="statusOptions"
-            placeholder="All statuses"
+            :placeholder="t('jobs.allStatuses')"
             class="history-status-filter"
           />
         </template>
@@ -60,9 +60,9 @@
         :error="jobsErrorMessage"
         :active-filter-count="activeFilterCount"
         :empty-description="
-          props.datasetId ? 'No training runs for this dataset yet' : 'No training runs yet'
+          props.datasetId ? t('jobs.noDatasetTrainingRuns') : t('jobs.noTrainingRuns')
         "
-        no-results-description="No training runs match these filters"
+        :no-results-description="t('jobs.noMatchingTrainingRuns')"
         :scroll-x="props.embedded ? 820 : 980"
         remote
         @update:sorter="handleSorterChange"
@@ -71,9 +71,9 @@
       <n-modal
         v-model:show="showModal"
         preset="dialog"
-        title="Start New Job"
-        positive-text="Start"
-        negative-text="Cancel"
+        :title="t('jobs.startTraining')"
+        :positive-text="t('jobs.start')"
+        :negative-text="t('common.cancel')"
         :loading="createJobMutation.isPending.value"
         @positive-click="onSubmit"
         @negative-click="onCancel"
@@ -85,19 +85,19 @@
           label-placement="left"
           label-width="auto"
         >
-          <n-form-item v-if="!props.datasetId" label="Target" path="target">
+          <n-form-item v-if="!props.datasetId" :label="t('resources.target')" path="target">
             <ResourceTargetSelect v-model="formModel.target" :active="showModal" />
           </n-form-item>
-          <n-form-item label="Trainer" path="trainer_id">
+          <n-form-item :label="t('jobs.trainer')" path="trainer_id">
             <template v-if="props.datasetId && !trainersLoading && trainerOptions.length === 0">
-              <n-empty description="No compatible trainer for this dataset" />
+              <n-empty :description="t('jobs.noCompatibleTrainer')" />
             </template>
             <n-select
               v-else
               v-model:value="formModel.trainer_id"
               :options="trainerOptions"
               :loading="trainersLoading"
-              placeholder="Select a trainer"
+              :placeholder="t('jobs.selectTrainer')"
               filterable
             />
           </n-form-item>
@@ -117,6 +117,7 @@
 import { ref, computed, h, provide, watch } from "vue";
 import type { MaybeRef } from "vue";
 import { useRouter } from "vue-router";
+import { useI18n } from "vue-i18n";
 import { useQueryClient } from "@tanstack/vue-query";
 import type { DataTableColumns, FormInst, FormRules, SelectOption } from "naive-ui";
 import { useMessage, NButton, NTag } from "naive-ui";
@@ -146,8 +147,10 @@ import ResourceTargetSelect, {
 } from "@/shared/components/resource-target-select";
 import StatusBadge from "@/shared/components/status-badge";
 import { useRemoteListState } from "@/shared/composables/useRemoteListState";
+import { formatDateTime } from "@/shared/i18n/format";
 
 const router = useRouter();
+const { t } = useI18n();
 const message = useMessage();
 const qc = useQueryClient();
 const orgStore = useOrgStore();
@@ -233,11 +236,11 @@ watch(
   { immediate: true },
 );
 const jobsErrorMessage = computed(() =>
-  jobsError.value ? toUserMessage(jobsError.value, "Failed to load training runs") : null,
+  jobsError.value ? toUserMessage(jobsError.value, t("jobs.failedTrainingRuns")) : null,
 );
 
 const statusOptions = ["queued", "running", "completed", "failed", "cancelled"].map((status) => ({
-  label: status.replace(/^./, (value) => value.toUpperCase()),
+  label: t(`status.${status}`),
   value: status,
 }));
 const activeFilterCount = computed(
@@ -297,13 +300,13 @@ function hasTrainerViewType(trainer: Trainer): trainer is Trainer & { view_type:
 const columns = computed<DataTableColumns<TrainingJob>>(() => {
   const baseColumns: DataTableColumns<TrainingJob> = [
     {
-      title: "ID",
+      title: t("jobs.id"),
       key: "id",
       width: 120,
       render: (row) => (row.id ?? "").slice(0, 8) + "…",
     },
     {
-      title: "Status",
+      title: t("jobs.status"),
       key: "status",
       width: 130,
       sorter: true,
@@ -311,20 +314,20 @@ const columns = computed<DataTableColumns<TrainingJob>>(() => {
       render: (row) => h(StatusBadge, { status: row.status ?? "queued" }),
     },
     {
-      title: "Public",
+      title: t("jobs.public"),
       key: "is_public",
       width: 160,
       render: (row) => {
         const nodes = [];
         if (row.is_public) {
-          nodes.push(h(NTag, { type: "info", size: "small" }, { default: () => "Public" }));
+          nodes.push(h(NTag, { type: "info", size: "small" }, { default: () => t("jobs.public") }));
         }
         if (row.is_public && row.org_id !== orgStore.currentOrgId) {
           nodes.push(
             h(
               "span",
               { style: "margin-left: 4px; font-size: 12px; color: #aaa" },
-              `(${row.org_name ?? "Other Org"})`,
+              `(${row.org_name ?? t("jobs.otherOrganization")})`,
             ),
           );
         }
@@ -332,7 +335,7 @@ const columns = computed<DataTableColumns<TrainingJob>>(() => {
       },
     },
     {
-      title: "Target",
+      title: t("resources.target"),
       key: "dataset_id",
       ellipsis: { tooltip: true },
       render: (row) =>
@@ -343,29 +346,32 @@ const columns = computed<DataTableColumns<TrainingJob>>(() => {
         }),
     },
     {
-      title: "Trainer",
+      title: t("jobs.trainer"),
       key: "trainer_id",
       ellipsis: { tooltip: true },
       render: (row) => row.trainer_id,
     },
     {
-      title: "Creator",
+      title: t("jobs.creator"),
       key: "creator",
       width: 150,
       sorter: true,
       sortOrder: sorter.value?.columnKey === "creator" ? sorter.value.order : false,
-      render: (row) => (row.created_by === authStore.user?.id ? "You" : row.created_by || "system"),
+      render: (row) =>
+        row.created_by === authStore.user?.id
+          ? t("user.you")
+          : row.created_by || t("common.system"),
     },
     {
-      title: "Created At",
+      title: t("jobs.createdAt"),
       key: "created_at",
       width: 180,
       sorter: true,
       sortOrder: sorter.value?.columnKey === "created_at" ? sorter.value.order : false,
-      render: (row) => new Date(row.created_at!).toLocaleString(),
+      render: (row) => formatDateTime(row.created_at!),
     },
     {
-      title: "Actions",
+      title: t("common.actions"),
       key: "actions",
       width: 220,
       render: (row) => {
@@ -380,7 +386,7 @@ const columns = computed<DataTableColumns<TrainingJob>>(() => {
                 openJobDetail(row);
               },
             },
-            { default: () => "View" },
+            { default: () => t("jobs.view") },
           ),
           h(
             NButton,
@@ -393,7 +399,7 @@ const columns = computed<DataTableColumns<TrainingJob>>(() => {
                 openInsight(row);
               },
             },
-            { default: () => "Task Progress" },
+            { default: () => t("jobs.taskProgress") },
           ),
         ];
         return h("span", { style: "display: inline-flex; gap: 8px" }, nodes);
@@ -415,20 +421,20 @@ const formModel = ref({
 });
 
 const formRules: FormRules = {
-  target: [{ required: true, message: "Please select a target", trigger: ["blur", "change"] }],
-  trainer_id: [{ required: true, message: "Please select a trainer", trigger: ["blur", "change"] }],
+  target: [{ required: true, message: t("jobs.selectTarget"), trigger: ["blur", "change"] }],
+  trainer_id: [{ required: true, message: t("jobs.selectTrainer"), trigger: ["blur", "change"] }],
 };
 
 const createJobMutation = useCreateTrainingJobApiV1TrainingJobsPost({
   mutation: {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: jobsQueryPrefix.value });
-      message.success("Job started");
+      message.success(t("jobs.started"));
       showModal.value = false;
       resetForm();
     },
     onError: (error) => {
-      message.error(toUserMessage(error, "Failed to start job"));
+      message.error(toUserMessage(error, t("jobs.startFailed")));
     },
   },
 });
@@ -478,7 +484,7 @@ function trainingTaskSummary(row: TrainingJob): TaskTrackerSummary {
     id: row.id ?? "",
     task_kind: "training",
     execution_kind: "training-default",
-    display_name: `Training ${row.trainer_id}`,
+    display_name: t("jobs.trainingTask", { trainer: row.trainer_id }),
     display_status: row.status ?? "queued",
     stage:
       row.status === "completed" || row.status === "failed"

@@ -2,6 +2,7 @@
 import { computed, ref, watch } from "vue";
 import { refDebounced } from "@vueuse/core";
 import { NAlert, NRadioButton, NRadioGroup, NSelect, NText } from "naive-ui";
+import { useI18n } from "vue-i18n";
 import {
   useListCollectionsApiV1DatasetCollectionsGet,
   useListDatasetsApiV1DatasetsGet,
@@ -24,6 +25,7 @@ const emit = defineEmits<{
 }>();
 
 const orgStore = useOrgStore();
+const { t } = useI18n();
 const resourceKind = ref<"dataset" | "collection">(props.modelValue?.kind ?? "dataset");
 const selectedId = ref<string | null>(props.modelValue?.id ?? null);
 const search = ref("");
@@ -173,8 +175,8 @@ watch(
 <template>
   <div class="resource-target-select">
     <NRadioGroup v-model:value="resourceKind" name="resource-kind" size="small">
-      <NRadioButton value="dataset">Dataset</NRadioButton>
-      <NRadioButton value="collection">Collection</NRadioButton>
+      <NRadioButton value="dataset">{{ t("resources.dataset") }}</NRadioButton>
+      <NRadioButton value="collection">{{ t("resources.collection") }}</NRadioButton>
     </NRadioGroup>
     <NSelect
       v-model:value="selectedId"
@@ -184,14 +186,16 @@ watch(
           ? datasetsQuery.isLoading.value
           : collectionsQuery.isLoading.value
       "
-      :placeholder="resourceKind === 'dataset' ? 'Select a dataset' : 'Select a collection'"
+      :placeholder="
+        resourceKind === 'dataset' ? t('resources.selectDataset') : t('resources.selectCollection')
+      "
       filterable
       remote
       clearable
       @search="search = $event"
     />
     <NText v-if="modelValue?.kind === 'collection'" depth="3">
-      Snapshot r{{ modelValue.revisionNumber }} will be pinned for this run.
+      {{ t("resources.pinnedSnapshot", { revision: modelValue.revisionNumber }) }}
     </NText>
     <NAlert
       v-else-if="
@@ -202,7 +206,7 @@ watch(
       "
       type="warning"
     >
-      This collection has no ready snapshot. Create a ready revision before starting a run.
+      {{ t("resources.noReadySnapshot") }}
     </NAlert>
   </div>
 </template>

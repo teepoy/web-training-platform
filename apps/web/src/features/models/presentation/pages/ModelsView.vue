@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/vue-query";
 import { useRouter } from "vue-router";
 import type { DataTableRowKey } from "naive-ui";
 import { NButton, NInput, NModal, NPopconfirm, NSpace, NText, useMessage } from "naive-ui";
+import { useI18n } from "vue-i18n";
 import {
   deleteModelApiV1ModelsModelIdDelete,
   useDeleteModelApiV1ModelsModelIdDelete,
@@ -19,6 +20,7 @@ import { runBatchAction } from "@/shared/utils/runBatchAction";
 import ModelSearchSurface from "../components/ModelSearchSurface.vue";
 
 const message = useMessage();
+const { t } = useI18n();
 const queryClient = useQueryClient();
 const router = useRouter();
 const authStore = useAuthStore();
@@ -55,9 +57,7 @@ async function deleteSelectedModels(selectedModels: ModelResponse[]): Promise<vo
   const selected = selectedModels.filter((model) => model.created_by === authStore.user?.id);
   if (selected.length === 0 || batchDeletePending.value) return;
   if (
-    !window.confirm(
-      `Delete ${selected.length} selected model${selected.length === 1 ? "" : "s"}? Stored model artifacts will also be removed.`,
-    )
+    !window.confirm(t("models.confirmDeleteSelected", { count: selected.length }, selected.length))
   ) {
     return;
   }
@@ -71,13 +71,16 @@ async function deleteSelectedModels(selectedModels: ModelResponse[]): Promise<vo
     if (result.succeeded.length > 0) invalidateModelQueries();
     if (result.failed.length === 0) {
       message.success(
-        `${result.succeeded.length} model${result.succeeded.length === 1 ? "" : "s"} deleted`,
+        t("models.deletedCount", { count: result.succeeded.length }, result.succeeded.length),
       );
     } else if (result.succeeded.length === 0) {
-      message.error(toUserMessage(result.failed[0]?.error, "Failed to delete selected models"));
+      message.error(toUserMessage(result.failed[0]?.error, t("models.deleteSelectedFailed")));
     } else {
       message.warning(
-        `${result.succeeded.length} deleted; ${result.failed.length} could not be deleted and remain selected`,
+        t("models.partialDelete", {
+          deleted: result.succeeded.length,
+          failed: result.failed.length,
+        }),
       );
     }
   } finally {
@@ -88,26 +91,26 @@ async function deleteSelectedModels(selectedModels: ModelResponse[]): Promise<vo
 const renameMutation = useUpdateModelApiV1ModelsModelIdPatch({
   mutation: {
     onSuccess: () => {
-      message.success("Model renamed");
+      message.success(t("models.renamed"));
       invalidateModelQueries();
       resetRename();
     },
-    onError: (error) => message.error(toUserMessage(error, "Failed to rename model")),
+    onError: (error) => message.error(toUserMessage(error, t("models.renameFailed"))),
   },
 });
 const deleteMutation = useDeleteModelApiV1ModelsModelIdDelete({
   mutation: {
     onSuccess: () => {
-      message.success("Model deleted");
+      message.success(t("models.deleted"));
       invalidateModelQueries();
     },
-    onError: (error) => message.error(toUserMessage(error, "Failed to delete model")),
+    onError: (error) => message.error(toUserMessage(error, t("models.deleteFailed"))),
   },
 });
 
 function openRename(model: ModelResponse): void {
   if (model.created_by !== authStore.user?.id) {
-    message.error("Only the model creator can rename this model");
+    message.error(t("models.creatorRenameOnly"));
     return;
   }
   renameTarget.value = model;
@@ -133,7 +136,7 @@ function submitRename(): false {
 <template>
   <DatasetPageShell :is-loading="false" :has-org="!!orgStore.currentOrgId">
     <div class="models-view">
-      <DatasetToolbar title="Models" />
+      <DatasetToolbar :title="t('models.title')" />
       <ModelSearchSurface
         v-model:checked-row-keys="checkedModelIds"
         mode="management"
@@ -144,7 +147,7 @@ function submitRename(): false {
         <template #bulk-actions="{ selectedModels, clearSelection }">
           <BulkSelectionToolbar
             :selected-count="selectedModels.length"
-            item-label="model"
+            :item-label="t('models.model')"
             :loading="batchDeletePending"
             @clear="clearSelection"
           >
@@ -154,13 +157,15 @@ function submitRename(): false {
               :loading="batchDeletePending"
               @click="deleteSelectedModels(selectedModels)"
             >
-              Delete selected
+              {{ t("models.deleteSelected") }}
             </NButton>
           </BulkSelectionToolbar>
         </template>
         <template #row-actions="{ model }">
           <NSpace v-if="model.created_by === authStore.user?.id" :size="6" :wrap="false">
-            <NButton size="small" quaternary @click="openRename(model)">Rename</NButton>
+            <NButton size="small" quaternary @click="openRename(model)">
+              {{ t("common.rename") }}
+            </NButton>
             <NPopconfirm @positive-click="deleteMutation.mutate({ modelId: model.id })">
               <template #trigger>
                 <NButton
@@ -172,10 +177,10 @@ function submitRename(): false {
                     deleteMutation.variables.value?.modelId === model.id
                   "
                 >
-                  Delete
+                  {{ t("common.delete") }}
                 </NButton>
               </template>
-              Delete model '{{ modelDisplayName(model) }}'?
+              {{ t("models.confirmDelete", { name: modelDisplayName(model) }) }}
             </NPopconfirm>
           </NSpace>
           <NText v-else depth="3">—</NText>
@@ -186,14 +191,19 @@ function submitRename(): false {
     <NModal
       v-model:show="renameVisible"
       preset="dialog"
-      title="Rename Model"
-      positive-text="Save"
-      negative-text="Cancel"
+      :title="t('models.renameTitle')"
+      :positive-text="t('common.save')"
+      :negative-text="t('common.cancel')"
       :loading="renameMutation.isPending.value"
       @positive-click="submitRename"
       @negative-click="resetRename"
     >
-      <NInput v-model:value="renameName" placeholder="Model name" maxlength="255" show-count />
+      <NInput
+        v-model:value="renameName"
+        :placeholder="t('models.namePlaceholder')"
+        maxlength="255"
+        show-count
+      />
     </NModal>
   </DatasetPageShell>
 </template>

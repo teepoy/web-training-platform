@@ -9,6 +9,7 @@ import { createPinia } from "pinia";
 import { createRouter, createMemoryHistory } from "vue-router";
 import naiveUI from "naive-ui";
 import { VueQueryPlugin } from "@tanstack/vue-query";
+import { i18n } from "@/app/i18n";
 import { createTestQueryClient } from "./query-client";
 
 // ast-grep-ignore: disable-reexport
@@ -69,26 +70,16 @@ export async function mountWithProviders(
 
   await router.push(initialRoute ?? "/");
 
-  const builtinPlugins: any[] = [
-    pinia,
-    router,
-    naiveUI,
-    [VueQueryPlugin, { queryClient }],
-  ];
+  const builtinPlugins: any[] = [pinia, router, naiveUI, i18n, [VueQueryPlugin, { queryClient }]];
 
   const wrapper: VueWrapper<ComponentPublicInstance> = mount(component, {
     props,
     slots,
     global: {
-      plugins: [
-        ...builtinPlugins,
-        ...(userGlobal?.plugins ?? []),
-      ],
+      plugins: [...builtinPlugins, ...(userGlobal?.plugins ?? [])],
       stubs: userGlobal?.stubs,
       ...Object.fromEntries(
-        Object.entries(userGlobal ?? {}).filter(
-          ([key]) => key !== "plugins" && key !== "stubs",
-        ),
+        Object.entries(userGlobal ?? {}).filter(([key]) => key !== "plugins" && key !== "stubs"),
       ),
     },
     attachTo: document.body,

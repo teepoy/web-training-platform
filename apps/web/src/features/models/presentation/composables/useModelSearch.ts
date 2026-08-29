@@ -1,6 +1,7 @@
 import { computed, reactive, ref, toValue, watch, type MaybeRefOrGetter } from "vue";
 import { refDebounced } from "@vueuse/core";
 import type { DataTableSortState, PaginationProps } from "naive-ui";
+import { useI18n } from "vue-i18n";
 import {
   getListModelsApiV1ModelsGetQueryKey,
   useListModelCreatorsApiV1ModelsCreatorsGet,
@@ -36,6 +37,7 @@ function modelSortField(
 }
 
 export function useModelSearch(options: UseModelSearchOptions) {
+  const { t } = useI18n();
   const authStore = useAuthStore();
   const orgStore = useOrgStore();
   const keyword = ref("");
@@ -113,9 +115,9 @@ export function useModelSearch(options: UseModelSearchOptions) {
   );
   const hasFilters = computed(() => activeFilterCount.value > 0);
   const emptyDescription = computed(() => {
-    if (hasFilters.value) return "No models match the current filters";
-    if (compatibleViewIds.value.length > 0) return "No compatible models are available";
-    return "No models have been created yet";
+    if (hasFilters.value) return t("models.noMatches");
+    if (compatibleViewIds.value.length > 0) return t("models.noCompatible");
+    return t("models.noModels");
   });
 
   watch(

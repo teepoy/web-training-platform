@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { useI18n } from "vue-i18n";
 
 const props = defineProps<{
   datasetId?: string | null;
   collectionId?: string | null;
   collectionRevisionId?: string | null;
 }>();
+const { t } = useI18n();
 
 const route = computed(() =>
   props.collectionId
@@ -17,10 +19,10 @@ const route = computed(() =>
 const label = computed(() => {
   if (props.collectionId) {
     const revision = props.collectionRevisionId?.slice(0, 8) ?? "unknown";
-    return `Collection ${props.collectionId.slice(0, 8)}… · revision ${revision}`;
+    return `${t("resources.collection")} ${props.collectionId.slice(0, 8)}… · ${t("resources.revision", { revision })}`;
   }
-  if (props.datasetId) return `Dataset ${props.datasetId.slice(0, 8)}…`;
-  return "Deleted target";
+  if (props.datasetId) return `${t("resources.dataset")} ${props.datasetId.slice(0, 8)}…`;
+  return t("resources.deletedTarget");
 });
 </script>
 

@@ -2,11 +2,13 @@
 import { computed, h, ref, useSlots, watch } from "vue";
 import type { DataTableColumns, DataTableRowKey } from "naive-ui";
 import { NAlert, NButton, NDataTable, NEmpty, NText } from "naive-ui";
+import { useI18n } from "vue-i18n";
 import { useGetModelApiV1ModelsModelIdGet } from "@/generated/orval/endpoints/api";
 import type { ModelResponse } from "@/generated/orval/models";
 import { useAuthStore } from "@/features/auth/application/store";
 import { useOrgStore } from "@/features/auth/application/org";
 import { orgScopedQueryKey } from "@/shared/api";
+import { formatDateTime } from "@/shared/i18n/format";
 import ModelSearchFilters from "./ModelSearchFilters.vue";
 import { useModelSearch } from "../composables/useModelSearch";
 
@@ -38,6 +40,7 @@ const emit = defineEmits<{
 }>();
 
 const slots = useSlots();
+const { t } = useI18n();
 const authStore = useAuthStore();
 const orgStore = useOrgStore();
 const selectedRecord = ref<ModelResponse | null>(null);
@@ -96,7 +99,7 @@ function modelDisplayName(model: ModelResponse): string {
 }
 
 function modelCreatorName(model: ModelResponse): string {
-  return model.creator_name?.trim() || model.created_by?.trim() || "system";
+  return model.creator_name?.trim() || model.created_by?.trim() || t("common.system");
 }
 
 function modelSourceName(model: ModelResponse): string {
@@ -108,8 +111,8 @@ function modelSourceName(model: ModelResponse): string {
 }
 
 function sourceLabel(model: ModelResponse): string {
-  if (model.dataset_id) return `Dataset · ${modelSourceName(model)}`;
-  if (model.collection_id) return `Collection · ${modelSourceName(model)}`;
+  if (model.dataset_id) return `${t("resources.dataset")} · ${modelSourceName(model)}`;
+  if (model.collection_id) return `${t("resources.collection")} · ${modelSourceName(model)}`;
   return modelSourceName(model);
 }
 
@@ -148,7 +151,7 @@ const columns = computed<DataTableColumns<ModelResponse>>(() => {
           : undefined,
     },
     {
-      title: "Model",
+      title: t("models.model"),
       key: "name",
       minWidth: 180,
       sorter: sortable,
@@ -164,7 +167,7 @@ const columns = computed<DataTableColumns<ModelResponse>>(() => {
         ]),
     },
     {
-      title: "Training source",
+      title: t("models.trainingSource"),
       key: "source",
       minWidth: 190,
       sorter: sortable,
@@ -188,7 +191,7 @@ const columns = computed<DataTableColumns<ModelResponse>>(() => {
             ),
     },
     {
-      title: "Trainer",
+      title: t("jobs.trainer"),
       key: "trainer",
       minWidth: 130,
       sorter: sortable,
@@ -196,7 +199,7 @@ const columns = computed<DataTableColumns<ModelResponse>>(() => {
       render: (model) => model.trainer_name,
     },
     {
-      title: "Creator",
+      title: t("jobs.creator"),
       key: "creator",
       minWidth: 130,
       sorter: sortable,
@@ -204,18 +207,18 @@ const columns = computed<DataTableColumns<ModelResponse>>(() => {
       render: modelCreatorName,
     },
     {
-      title: "Created",
+      title: t("settings.created"),
       key: "created_at",
       width: 170,
       sorter: sortable,
       sortOrder:
         search.sorter.value?.columnKey === "created_at" ? search.sorter.value.order : false,
-      render: (model) => (model.created_at ? new Date(model.created_at).toLocaleString() : "—"),
+      render: (model) => (model.created_at ? formatDateTime(model.created_at) : "—"),
     },
   ];
   if (props.mode === "management" && slots["row-actions"]) {
     result.push({
-      title: "Actions",
+      title: t("common.actions"),
       key: "actions",
       width: 150,
       fixed: "right",
@@ -229,7 +232,7 @@ const columns = computed<DataTableColumns<ModelResponse>>(() => {
 <template>
   <div class="model-search-surface" :data-mode="mode" data-testid="model-search-surface">
     <NText v-if="compatibleViewIds.length > 0" depth="3">
-      Only models compatible with the selected resource are shown.
+      {{ t("models.compatibleOnly") }}
     </NText>
     <ModelSearchFilters
       :keyword="search.keyword.value"
@@ -270,9 +273,7 @@ const columns = computed<DataTableColumns<ModelResponse>>(() => {
       </template>
     </NDataTable>
     <NText v-if="search.models.value.length > 0" class="mobile-table-hint" depth="3">
-      Swipe sideways to see model details{{
-        mode === "management" ? " and management actions" : ""
-      }}.
+      {{ mode === "management" ? t("models.mobileManagementHint") : t("models.mobileHint") }}
     </NText>
   </div>
 </template>

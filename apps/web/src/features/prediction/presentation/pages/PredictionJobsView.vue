@@ -2,29 +2,33 @@
   <n-space vertical size="large">
     <template v-if="!orgStore.currentOrgId">
       <div class="no-org-state">
-        <n-empty description="You are not a member of any organization. Contact an admin." />
+        <n-empty :description="t('user.noOrganization')" />
       </div>
     </template>
     <template v-else>
-      <n-page-header v-if="!props.embedded" title="Prediction Jobs">
+      <n-page-header v-if="!props.embedded" :title="t('jobs.prediction')">
         <template #extra>
-          <n-button type="primary" @click="showModal = true"> Start Prediction </n-button>
+          <n-button type="primary" @click="showModal = true">
+            {{ t("jobs.startPrediction") }}
+          </n-button>
         </template>
       </n-page-header>
       <div v-else class="embedded-section-header">
         <div>
-          <n-h3 class="embedded-section-title">Prediction runs</n-h3>
-          <n-text depth="3">Run a model on this dataset and review its recent outputs.</n-text>
+          <n-h3 class="embedded-section-title">{{ t("jobs.predictionRuns") }}</n-h3>
+          <n-text depth="3">{{ t("jobs.predictionDescription") }}</n-text>
         </div>
-        <n-button type="primary" @click="showModal = true">Start Prediction</n-button>
+        <n-button type="primary" @click="showModal = true">
+          {{ t("jobs.startPrediction") }}
+        </n-button>
       </div>
       <ResourceFilterBar
         :keyword="jobSearch"
-        keyword-placeholder="Search jobs"
+        :keyword-placeholder="t('jobs.search')"
         :creator-scope="creatorScope"
         :creators="[]"
         :active-filter-count="activeFilterCount"
-        resource-label="prediction jobs"
+        :resource-label="t('jobs.predictionResourceLabel')"
         @update:keyword="jobSearch = $event"
         @update:creator-scope="creatorScope = $event"
         @clear="clearFilters"
@@ -35,7 +39,7 @@
             clearable
             size="small"
             :options="statusOptions"
-            placeholder="All statuses"
+            :placeholder="t('jobs.allStatuses')"
             class="history-status-filter"
           />
         </template>
@@ -51,9 +55,9 @@
         :pagination="jobsPagination"
         :row-key="predictionJobRowKey"
         :empty-description="
-          props.datasetId ? 'No prediction runs for this dataset yet' : 'No prediction runs yet'
+          props.datasetId ? t('jobs.noDatasetPredictionRuns') : t('jobs.noPredictionRuns')
         "
-        no-results-description="No prediction runs match these filters"
+        :no-results-description="t('jobs.noMatchingPredictionRuns')"
         :scroll-x="props.embedded ? 640 : 760"
         remote
         @update:sorter="handleSorterChange"
@@ -63,7 +67,7 @@
     <n-modal
       v-model:show="showModal"
       preset="card"
-      title="Choose a model for prediction"
+      :title="t('jobs.choosePredictionModel')"
       class="model-picker-modal"
       :style="{
         width: 'min(960px, calc(100vw - 32px))',
@@ -78,10 +82,10 @@
         label-width="auto"
       >
         <template v-if="orgStore.currentOrgId">
-          <n-form-item v-if="!props.datasetId" label="Target" path="target">
+          <n-form-item v-if="!props.datasetId" :label="t('resources.target')" path="target">
             <ResourceTargetSelect v-model="formModel.target" :active="showModal" />
           </n-form-item>
-          <n-form-item label="Model" path="model_id" label-placement="top">
+          <n-form-item :label="t('jobs.model')" path="model_id" label-placement="top">
             <RemoteModelPicker
               v-model="formModel.model_id"
               :active="showModal"
@@ -92,7 +96,7 @@
         </template>
         <template v-else>
           <div style="padding: 16px 0; text-align: center; color: var(--n-text-color-2)">
-            Select an organization first.
+            {{ t("user.selectOrganization") }}
           </div>
         </template>
       </n-form>
@@ -100,18 +104,20 @@
         <n-space justify="space-between" align="center">
           <n-text depth="3">
             {{
-              selectedModel ? `Selected: ${modelDisplayName(selectedModel)}` : "Select one model"
+              selectedModel
+                ? t("jobs.selectedModel", { name: modelDisplayName(selectedModel) })
+                : t("jobs.selectOneModel")
             }}
           </n-text>
           <n-space>
-            <n-button @click="onCancel">Cancel</n-button>
+            <n-button @click="onCancel">{{ t("common.cancel") }}</n-button>
             <n-button
               type="primary"
               :disabled="!formModel.model_id || (!props.datasetId && !formModel.target)"
               :loading="runMutation.isPending.value"
               @click="onSubmit"
             >
-              Start with selected model
+              {{ t("jobs.startWithSelectedModel") }}
             </n-button>
           </n-space>
         </n-space>
@@ -125,6 +131,7 @@
 <script setup lang="ts">
 import { ref, computed, h, provide, watch } from "vue";
 import { useQueryClient } from "@tanstack/vue-query";
+import { useI18n } from "vue-i18n";
 import type { DataTableColumns, FormInst, FormRules } from "naive-ui";
 import { useMessage, NButton, NText } from "naive-ui";
 import { useOrgStore } from "@/features/auth/application/org";
@@ -153,6 +160,7 @@ import ResourceTargetSelect, {
 } from "@/shared/components/resource-target-select";
 import StatusBadge from "@/shared/components/status-badge";
 import { useRemoteListState } from "@/shared/composables/useRemoteListState";
+import { formatDateTime } from "@/shared/i18n/format";
 
 const props = withDefaults(
   defineProps<{
@@ -164,6 +172,7 @@ const props = withDefaults(
 );
 
 const message = useMessage();
+const { t } = useI18n();
 const qc = useQueryClient();
 const orgStore = useOrgStore();
 const authStore = useAuthStore();
@@ -224,7 +233,7 @@ const isLoading = computed(() => jobsQuery.isLoading.value);
 const visibleJobs = computed<PredictionJob[]>(() => jobsQuery.data.value?.items ?? []);
 const jobsErrorMessage = computed(() =>
   jobsQuery.error.value
-    ? toUserMessage(jobsQuery.error.value, "Failed to load prediction runs")
+    ? toUserMessage(jobsQuery.error.value, t("jobs.failedPredictionRuns"))
     : null,
 );
 
@@ -237,7 +246,7 @@ watch(
 );
 
 const statusOptions = ["queued", "running", "completed", "failed", "cancelled"].map((status) => ({
-  label: status.replace(/^./, (value) => value.toUpperCase()),
+  label: t(`status.${status}`),
   value: status,
 }));
 const activeFilterCount = computed(
@@ -274,13 +283,13 @@ function modelDisplayName(model: ModelResponse): string {
 const columns = computed<DataTableColumns<PredictionJob>>(() => {
   const baseColumns: DataTableColumns<PredictionJob> = [
     {
-      title: "ID",
+      title: t("jobs.id"),
       key: "id",
       width: 120,
       render: (row) => h(NText, { title: row.id }, { default: () => `${row.id.slice(0, 8)}…` }),
     },
     {
-      title: "Status",
+      title: t("jobs.status"),
       key: "status",
       width: 130,
       sorter: true,
@@ -288,7 +297,7 @@ const columns = computed<DataTableColumns<PredictionJob>>(() => {
       render: (row) => h(StatusBadge, { status: row.status }),
     },
     {
-      title: "Target",
+      title: t("resources.target"),
       key: "dataset_id",
       ellipsis: { tooltip: true },
       render: (row) =>
@@ -299,30 +308,33 @@ const columns = computed<DataTableColumns<PredictionJob>>(() => {
         }),
     },
     {
-      title: "Model ID",
+      title: t("jobs.modelId"),
       key: "model_id",
       ellipsis: { tooltip: true },
       render: (row) =>
         h(NText, { title: row.model_id }, { default: () => `${row.model_id.slice(0, 8)}…` }),
     },
     {
-      title: "Creator",
+      title: t("jobs.creator"),
       key: "creator",
       width: 150,
       sorter: true,
       sortOrder: jobSorter.value?.columnKey === "creator" ? jobSorter.value.order : false,
-      render: (row) => (row.created_by === authStore.user?.id ? "You" : row.created_by || "system"),
+      render: (row) =>
+        row.created_by === authStore.user?.id
+          ? t("user.you")
+          : row.created_by || t("common.system"),
     },
     {
-      title: "Created At",
+      title: t("jobs.createdAt"),
       key: "created_at",
       width: 180,
       sorter: true,
       sortOrder: jobSorter.value?.columnKey === "created_at" ? jobSorter.value.order : false,
-      render: (row) => new Date(row.created_at).toLocaleString(),
+      render: (row) => formatDateTime(row.created_at),
     },
     {
-      title: "Actions",
+      title: t("common.actions"),
       key: "actions",
       width: 150,
       fixed: "right",
@@ -338,7 +350,7 @@ const columns = computed<DataTableColumns<PredictionJob>>(() => {
                 openInsight(row);
               },
             },
-            { default: () => "Task Progress" },
+            { default: () => t("jobs.taskProgress") },
           ),
         ]),
     },
@@ -352,8 +364,8 @@ const insightVisible = ref(false);
 const selectedTask = ref<TaskTrackerSummary | null>(null);
 
 const formRules: FormRules = {
-  target: [{ required: true, message: "Please select a target", trigger: ["change"] }],
-  model_id: [{ required: true, message: "Please select a model", trigger: ["blur", "change"] }],
+  target: [{ required: true, message: t("jobs.selectTarget"), trigger: ["change"] }],
+  model_id: [{ required: true, message: t("jobs.selectModel"), trigger: ["blur", "change"] }],
 };
 
 const runMutation = useRunPredictionsApiV1PredictionsRunPost({
@@ -362,12 +374,12 @@ const runMutation = useRunPredictionsApiV1PredictionsRunPost({
       qc.invalidateQueries({
         queryKey: orgScopedQueryKey(orgStore.currentOrgId, ["prediction-jobs"]),
       });
-      message.success("Prediction started");
+      message.success(t("jobs.predictionStarted"));
       showModal.value = false;
       resetForm();
     },
     onError: (error) => {
-      message.error(toUserMessage(error, "Failed to start prediction"));
+      message.error(toUserMessage(error, t("jobs.predictionStartFailed")));
     },
   },
 });
@@ -413,7 +425,7 @@ function predictionTaskSummary(row: PredictionJob): TaskTrackerSummary {
     id: row.id,
     task_kind: "prediction",
     execution_kind: "predict-batch",
-    display_name: "Prediction",
+    display_name: t("jobs.predictionTask"),
     display_status: row.status,
     stage:
       row.status === "completed" || row.status === "failed"

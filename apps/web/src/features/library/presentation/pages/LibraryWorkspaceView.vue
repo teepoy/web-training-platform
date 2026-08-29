@@ -2,20 +2,20 @@
   <main class="library-workspace">
     <header class="library-header">
       <div>
-        <p class="library-eyebrow">Data resources</p>
-        <h1>Library</h1>
-        <p class="library-description">Find and manage datasets and collections in one place.</p>
+        <p class="library-eyebrow">{{ t("library.eyebrow") }}</p>
+        <h1>{{ t("library.title") }}</h1>
+        <p class="library-description">{{ t("library.description") }}</p>
       </div>
     </header>
 
-    <nav class="library-tabs" aria-label="Library resource types">
+    <nav class="library-tabs" :aria-label="t('library.resourceTypes')">
       <button
         type="button"
         :class="{ active: activeTab === 'datasets' }"
         data-testid="library-tab-datasets"
         @click="activeTab = 'datasets'"
       >
-        Datasets
+        {{ t("library.datasets") }}
       </button>
       <button
         type="button"
@@ -23,21 +23,23 @@
         data-testid="library-tab-collections"
         @click="activeTab = 'collections'"
       >
-        Collections
+        {{ t("library.collections") }}
       </button>
     </nav>
 
     <section class="library-resource-panel">
       <ResourceFilterBar
         :keyword="searchQuery"
-        :keyword-placeholder="activeTab === 'datasets' ? 'Search datasets' : 'Search collections'"
+        :keyword-placeholder="
+          activeTab === 'datasets' ? t('library.searchDatasets') : t('library.searchCollections')
+        "
         :creator-scope="creatorScope"
         :creators="libraryCreators"
         :creators-loading="datasetCreatorsLoading || collectionCreatorsLoading"
         :active-filter-count="activeFilterCount"
-        resource-label="resources"
+        :resource-label="t('resources.resources')"
         search-test-id="library-search"
-        aria-label="Library filters"
+        :aria-label="t('library.filters')"
         @update:keyword="searchQuery = $event"
         @update:creator-scope="creatorScope = $event"
         @clear="clearFilters"
@@ -49,7 +51,7 @@
             data-testid="library-new-collection"
             @click="collectionListRef?.openCreate()"
           >
-            New collection
+            {{ t("library.newCollection") }}
           </NButton>
         </template>
       </ResourceFilterBar>
@@ -72,6 +74,7 @@ import { computed, ref, watch } from "vue";
 import { refDebounced } from "@vueuse/core";
 import { useRoute, useRouter, type LocationQueryRaw } from "vue-router";
 import { NButton } from "naive-ui";
+import { useI18n } from "vue-i18n";
 import {
   useListCollectionCreatorsApiV1DatasetCollectionsCreatorsGet,
   useListDatasetCreatorsApiV1DatasetsCreatorsGet,
@@ -88,6 +91,7 @@ import { useCreatorScopeQuery } from "@/shared/composables/useCreatorScopeQuery"
 type LibraryTab = "datasets" | "collections";
 
 const route = useRoute();
+const { t } = useI18n();
 const router = useRouter();
 const authStore = useAuthStore();
 const orgStore = useOrgStore();

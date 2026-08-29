@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { NButton, NInput, NSelect } from "naive-ui";
+import { computed } from "vue";
+import { useI18n } from "vue-i18n";
 import type { CreatorSummary } from "@/generated/orval/models";
 import CreatorScopeSelect from "@/shared/components/creator-scope-select";
 import type { ModelSourceType } from "../composables/useModelSearch";
@@ -20,10 +22,11 @@ const emit = defineEmits<{
   (event: "clear"): void;
 }>();
 
-const sourceOptions = [
-  { label: "Dataset", value: "dataset" },
-  { label: "Collection", value: "collection" },
-];
+const { t } = useI18n();
+const sourceOptions = computed(() => [
+  { label: t("resources.dataset"), value: "dataset" },
+  { label: t("resources.collection"), value: "collection" },
+]);
 </script>
 
 <template>
@@ -32,7 +35,7 @@ const sourceOptions = [
       :value="keyword"
       size="small"
       clearable
-      placeholder="Search models"
+      :placeholder="t('models.search')"
       @update:value="emit('update:keyword', $event)"
     />
     <NSelect
@@ -40,18 +43,18 @@ const sourceOptions = [
       size="small"
       clearable
       :options="sourceOptions"
-      placeholder="All training sources"
+      :placeholder="t('models.allSources')"
       @update:value="emit('update:sourceType', $event as ModelSourceType | null)"
     />
     <CreatorScopeSelect
       :model-value="creatorScope"
       :creators="creators"
       :loading="creatorsLoading"
-      resource-label="models"
+      :resource-label="t('resources.models')"
       @update:model-value="emit('update:creatorScope', $event)"
     />
     <NButton v-if="activeFilterCount > 0" size="small" quaternary @click="emit('clear')">
-      Clear filters ({{ activeFilterCount }})
+      {{ t("common.clearFilters", { count: activeFilterCount }) }}
     </NButton>
   </div>
 </template>
