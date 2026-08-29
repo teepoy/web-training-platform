@@ -20,7 +20,7 @@ criteria are satisfied.
 | [Legacy configuration and code cleanup](legacy-configuration-and-code-cleanup.md)   | In progress | Configuration ownership and misleading visual prefixes cleaned up   | Continue bounded unused-code audits       |
 | [Mock, seed, and demo package separation](mock-seed-code-package-separation.md)     | Complete    | Dev/test/simulator code has explicit package and composition owners | —                                         |
 | [Visual reuse and resource parity](visual-component-reuse-and-resource-parity.md)   | Complete    | Shared list/model/filter/target contracts and names are verified    | —                                         |
-| [Internationalization](internationalization-and-localization.md)                    | In progress | Core resource lists, jobs, and operations screens are localized     | Detail workflows, shared widgets, then SC |
+| [Internationalization](internationalization-and-localization.md)                    | In progress | Detail/data flows and primary SC workbench screens are localized     | Remaining shared and dense SC widgets     |
 | [Stateful upstream simulator](stateful-upstream-simulator-and-source-automation.md) | Complete    | Stateful API/CLI simulator and five-minute discovery poll verified  | —                                         |
 | [SC identity-only materialization](sc-sample-identity-only-materialization.md)      | Complete    | Identity-only storage and latest-source resolution verified         | —                                         |
 

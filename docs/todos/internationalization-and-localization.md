@@ -11,9 +11,13 @@
   percentage, file-size, and relative-time formatting; localized Library,
   Dataset/Collection lists, model search/management, training/prediction,
   Dashboard, automations, task explorer, schedules, reusable target/status/list
-  controls, bulk selection, and shared table filters.
-- **Next milestone:** complete Dataset/Collection detail workflows and shared
-  widgets, then the SC workspace and literal-string enforcement.
+  controls, bulk selection, and shared table filters; completed Dataset,
+  Collection, and Job detail workflows, Dataset import/export flows, and the
+  primary SC discovery, inspection, reclassification, annotation, legend, map,
+  and global-filter surfaces. Catalog tests now require locale key and
+  interpolation parity.
+- **Next milestone:** complete the remaining dense SC controls and reusable
+  shared widgets, then add a bounded production-literal enforcement check.
 - **Done when:** every acceptance criterion below is verified; this phase covers
   frontend-visible strings only.
 
