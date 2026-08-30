@@ -56,11 +56,15 @@ func TestPredictionImageStreamWarmCache300KToPython(t *testing.T) {
 	}
 	t.Cleanup(cache.Close)
 	for _, ref := range refs {
+		descriptor, err := store.DescribeArchive(context.Background(), ref)
+		if err != nil {
+			t.Fatalf("describe fixture %s: %v", ref.S3Key, err)
+		}
 		lease, err := cache.Acquire(context.Background(), artifactcache.Ref{
-			EntryID: legacyrangezip.EntryID, SourceIdentity: ref.S3Bucket + "/" + ref.S3Key,
-			Revision: store.revision(ref.S3Key), Kind: artifactcache.KindFile,
+			EntryID: legacyrangezip.EntryID, SourceIdentity: descriptor.Identity,
+			Revision: descriptor.Revision, Kind: artifactcache.KindFile,
 		}, func(ctx context.Context, destination string) error {
-			return store.DownloadPatchObject(ctx, ref.S3Bucket, ref.S3Key, destination)
+			return store.DownloadArchive(ctx, ref, destination)
 		})
 		if err != nil {
 			t.Fatalf("warm fixture %s: %v", ref.S3Key, err)
@@ -121,7 +125,7 @@ func TestPredictionImageStreamWarmCache300KToPython(t *testing.T) {
 	t.Logf("warm-cache prediction image stream: %s", output)
 }
 
-func mustLegacyFactory(t *testing.T, catalog legacyrangezip.Catalog, store legacyrangezip.ObjectStore) *legacyrangezip.Factory {
+func mustLegacyFactory(t *testing.T, catalog legacyrangezip.Catalog, store legacyrangezip.ArchiveSource) *legacyrangezip.Factory {
 	t.Helper()
 	factory, err := legacyrangezip.NewFactory(catalog, store, 8)
 	if err != nil {
@@ -149,19 +153,21 @@ type acceptanceObjectStore struct{ fixtures map[string]string }
 
 func (s *acceptanceObjectStore) revision(key string) string { return "fixture-v1:" + key }
 
-func (s *acceptanceObjectStore) DescribePatchObject(_ context.Context, _, key string) (legacyrangezip.ObjectRevision, error) {
+func (s *acceptanceObjectStore) DescribeArchive(_ context.Context, ref *scv1.ZipRef) (legacyrangezip.ArchiveDescriptor, error) {
+	key := ref.S3Key
 	path, ok := s.fixtures[key]
 	if !ok {
-		return legacyrangezip.ObjectRevision{}, fmt.Errorf("unknown fixture %q", key)
+		return legacyrangezip.ArchiveDescriptor{}, fmt.Errorf("unknown fixture %q", key)
 	}
 	info, err := os.Stat(path)
 	if err != nil {
-		return legacyrangezip.ObjectRevision{}, err
+		return legacyrangezip.ArchiveDescriptor{}, err
 	}
-	return legacyrangezip.ObjectRevision{Revision: s.revision(key), Size: info.Size()}, nil
+	return legacyrangezip.ArchiveDescriptor{Identity: ref.S3Bucket + "/" + key, Revision: s.revision(key), Size: info.Size()}, nil
 }
 
-func (s *acceptanceObjectStore) DownloadPatchObject(ctx context.Context, _, key, destination string) (resultErr error) {
+func (s *acceptanceObjectStore) DownloadArchive(ctx context.Context, ref *scv1.ZipRef, destination string) (resultErr error) {
+	key := ref.S3Key
 	sourcePath, ok := s.fixtures[key]
 	if !ok {
 		return fmt.Errorf("unknown fixture %q", key)

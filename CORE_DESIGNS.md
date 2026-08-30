@@ -358,7 +358,9 @@ image ID），不得经过 FastAPI 或 Display traffic lane。
 
 SC 图片来源由 `(inspection_time, wafer_key)` 标识。image-parser 打开 context 时只查询一次
 Inspection 并取得精确 `eqp_id`，再从代码拥有的 exact registry 选择 Equipment image entry。
-EntryFactory 组合设备固定的 Artifact downloader 与 Artifact parser；多个明确列出的设备 ID
+EntryFactory 组合设备固定的 `ArchiveSource` 与 Artifact parser；Review 图片通过独立的
+`ReviewImageSource` port 读取。locator 解释、远端下载和凭据属于被组合的 source adapter，
+核心 parser/display 不得假设 S3 bucket/key。多个明确列出的设备 ID
 可以注册到同一 factory，空 ID、重复 ID 与未知设备直接失败。设备规则不得由启动配置、文件
 扩展名、request 字段或 sniffing 改变。当前 legacy entry 固定使用 500-defect range ZIP 与
 `PatchReference` / `PatchDefective` / `PatchDifference` 成员命名。仓库另提供固定
@@ -375,8 +377,8 @@ Entry，而不是恢复通用 format switch。
 
 Artifact downloader 把 upstream source 描述为稳定 `ArtifactRef(entry_id, source_identity,
 revision, kind)` 并将文件或目录流式写入 staging path；Artifact parser 只从本地已发布 artifact
-读取目标图片。对象存储 revision 优先使用 VersionId，其次 ETag；两者都没有时，文件可使用
-可靠的 source `mtime + size`。目录必须由 provider 给出 generation、manifest revision 或可靠
+读取目标图片。source adapter 必须给出稳定 revision；对象存储 adapter 可以优先使用 VersionId，
+其次 ETag，两者都没有时，文件可使用可靠的 source `mtime + size`。目录必须由 provider 给出 generation、manifest revision 或可靠
 整体更新时间。下载后的本地 mtime 只用于 eviction，不能作为 source freshness。
 
 image-parser 的统一 Artifact Cache Manager 在下载前获取 target-keyed process singleflight 与

@@ -39,36 +39,37 @@ type Catalog interface {
 	GetInspectionPatchZips(ctx context.Context, inspectionTime, lotID, waferID, device, layerID string) (*scv1.GetInspectionPatchZipsResponse, error)
 }
 
-type ObjectRevision struct {
+type ArchiveDescriptor struct {
+	Identity string
 	Revision string
 	Size     int64
 }
 
-type ObjectStore interface {
-	DescribePatchObject(ctx context.Context, bucket, key string) (ObjectRevision, error)
-	DownloadPatchObject(ctx context.Context, bucket, key, destination string) error
+type ArchiveSource interface {
+	DescribeArchive(ctx context.Context, ref *scv1.ZipRef) (ArchiveDescriptor, error)
+	DownloadArchive(ctx context.Context, ref *scv1.ZipRef, destination string) error
 }
 
 type Factory struct {
 	catalog  Catalog
-	objects  ObjectStore
+	archives ArchiveSource
 	profiles *memorylru.Cache[string, equipment.InspectionImageProfile]
 	loads    singleflight.Group
 }
 
-func NewFactory(catalog Catalog, objects ObjectStore, profileCacheEntries int) (*Factory, error) {
-	if catalog == nil || objects == nil {
+func NewFactory(catalog Catalog, archives ArchiveSource, profileCacheEntries int) (*Factory, error) {
+	if catalog == nil || archives == nil {
 		return nil, fmt.Errorf("legacy range-ZIP entry dependencies are required")
 	}
 	profiles, err := memorylru.New[string, equipment.InspectionImageProfile](profileCacheEntries)
 	if err != nil {
 		return nil, fmt.Errorf("create legacy range-ZIP image profile cache: %w", err)
 	}
-	return &Factory{catalog: catalog, objects: objects, profiles: profiles}, nil
+	return &Factory{catalog: catalog, archives: archives, profiles: profiles}, nil
 }
 
 func (f *Factory) Open(ctx context.Context, params equipment.OpenParams) (imagestream.Context, error) {
-	if f.catalog == nil || f.objects == nil {
+	if f.catalog == nil || f.archives == nil {
 		return nil, &imagestream.ContextError{Code: "entry_unavailable", Message: "legacy range-ZIP entry dependencies are required"}
 	}
 	roles, err := normalizeRoles(params.Roles)
@@ -94,7 +95,7 @@ func (f *Factory) Open(ctx context.Context, params equipment.OpenParams) (images
 		roles:       roles,
 		refs:        append([]*scv1.ZipRef(nil), refs.Zips...),
 		cache:       params.Cache,
-		objects:     f.objects,
+		archives:    f.archives,
 	}, nil
 }
 
@@ -119,15 +120,15 @@ func (f *Factory) Profile(ctx context.Context, params equipment.ProfileParams) (
 	described := make([]describedArchive, len(refs.Zips))
 	hash := sha256.New()
 	for index, ref := range refs.Zips {
-		if ref == nil || strings.TrimSpace(ref.S3Bucket) == "" || strings.TrimSpace(ref.S3Key) == "" {
-			return equipment.InspectionImageProfile{}, &imagestream.ContextError{Code: "source_unavailable", Message: fmt.Sprintf("patch archive %d has an invalid object reference", index)}
+		if ref == nil {
+			return equipment.InspectionImageProfile{}, &imagestream.ContextError{Code: "source_unavailable", Message: fmt.Sprintf("patch archive %d has no source reference", index)}
 		}
-		revision, err := f.objects.DescribePatchObject(ctx, ref.S3Bucket, ref.S3Key)
+		descriptor, err := f.archives.DescribeArchive(ctx, ref)
 		if err != nil {
 			return equipment.InspectionImageProfile{}, &imagestream.ContextError{Code: "source_unavailable", Message: fmt.Sprintf("describe patch archive %d: %v", index, err)}
 		}
-		described[index] = describedArchive{ref: ref, revision: revision}
-		_, _ = fmt.Fprintf(hash, "%s\x00%s\x00%s\x00", ref.S3Bucket, ref.S3Key, revision.Revision)
+		described[index] = describedArchive{ref: ref, descriptor: descriptor}
+		_, _ = fmt.Fprintf(hash, "%s\x00%s\x00", descriptor.Identity, descriptor.Revision)
 	}
 	cacheKey := fmt.Sprintf("%x", hash.Sum(nil))
 	if cached, ok := f.profiles.Get(cacheKey); ok {
@@ -151,18 +152,18 @@ func (f *Factory) Profile(ctx context.Context, params equipment.ProfileParams) (
 }
 
 type describedArchive struct {
-	ref      *scv1.ZipRef
-	revision ObjectRevision
+	ref        *scv1.ZipRef
+	descriptor ArchiveDescriptor
 }
 
 func (f *Factory) scanProfile(ctx context.Context, cache artifactcache.Cache, archives []describedArchive) (equipment.InspectionImageProfile, error) {
 	aggregates := make(map[profileKey]profileAggregate)
 	for index, archive := range archives {
 		lease, err := cache.Acquire(ctx, artifactcache.Ref{
-			EntryID: EntryID, SourceIdentity: archive.ref.S3Bucket + "/" + archive.ref.S3Key,
-			Revision: archive.revision.Revision, Kind: artifactcache.KindFile,
+			EntryID: EntryID, SourceIdentity: archive.descriptor.Identity,
+			Revision: archive.descriptor.Revision, Kind: artifactcache.KindFile,
 		}, func(ctx context.Context, destination string) error {
-			return f.objects.DownloadPatchObject(ctx, archive.ref.S3Bucket, archive.ref.S3Key, destination)
+			return f.archives.DownloadArchive(ctx, archive.ref, destination)
 		})
 		if err != nil {
 			return equipment.InspectionImageProfile{}, &imagestream.ContextError{Code: "source_unavailable", Message: fmt.Sprintf("cache patch archive %d: %v", index, err)}
@@ -207,7 +208,7 @@ type entryContext struct {
 	roles       []roleSpec
 	refs        []*scv1.ZipRef
 	cache       artifactcache.Cache
-	objects     ObjectStore
+	archives    ArchiveSource
 }
 
 func (c *entryContext) EquipmentID() string { return c.equipmentID }
@@ -294,17 +295,17 @@ func (c *entryContext) Resolve(ctx context.Context, requests []imagestream.Sampl
 }
 
 func (c *entryContext) resolveArchive(ctx context.Context, ref *scv1.ZipRef) (artifactcache.Lease, error) {
-	if strings.TrimSpace(ref.S3Bucket) == "" || strings.TrimSpace(ref.S3Key) == "" {
-		return nil, &imagestream.ContextError{Code: "source_unavailable", Message: "patch archive has an invalid object reference"}
+	if ref == nil {
+		return nil, &imagestream.ContextError{Code: "source_unavailable", Message: "patch archive has no source reference"}
 	}
-	revision, err := c.objects.DescribePatchObject(ctx, ref.S3Bucket, ref.S3Key)
+	descriptor, err := c.archives.DescribeArchive(ctx, ref)
 	if err != nil {
 		return nil, &imagestream.ContextError{Code: "source_unavailable", Message: fmt.Sprintf("describe patch archive: %v", err)}
 	}
 	lease, err := c.cache.Acquire(ctx, artifactcache.Ref{
-		EntryID: EntryID, SourceIdentity: ref.S3Bucket + "/" + ref.S3Key, Revision: revision.Revision, Kind: artifactcache.KindFile,
+		EntryID: EntryID, SourceIdentity: descriptor.Identity, Revision: descriptor.Revision, Kind: artifactcache.KindFile,
 	}, func(ctx context.Context, destination string) error {
-		return c.objects.DownloadPatchObject(ctx, ref.S3Bucket, ref.S3Key, destination)
+		return c.archives.DownloadArchive(ctx, ref, destination)
 	})
 	if err != nil {
 		return nil, &imagestream.ContextError{Code: "source_unavailable", Message: fmt.Sprintf("cache patch archive: %v", err)}

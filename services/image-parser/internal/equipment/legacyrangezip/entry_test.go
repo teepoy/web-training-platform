@@ -30,11 +30,11 @@ type objects struct {
 	downloads int
 }
 
-func (o *objects) DescribePatchObject(context.Context, string, string) (legacyrangezip.ObjectRevision, error) {
-	return legacyrangezip.ObjectRevision{Revision: "etag-1", Size: int64(len(o.archive))}, nil
+func (o *objects) DescribeArchive(_ context.Context, ref *scv1.ZipRef) (legacyrangezip.ArchiveDescriptor, error) {
+	return legacyrangezip.ArchiveDescriptor{Identity: ref.S3Bucket + "/" + ref.S3Key, Revision: "etag-1", Size: int64(len(o.archive))}, nil
 }
 
-func (o *objects) DownloadPatchObject(_ context.Context, _, _, destination string) error {
+func (o *objects) DownloadArchive(_ context.Context, _ *scv1.ZipRef, destination string) error {
 	o.downloads++
 	return os.WriteFile(destination, o.archive, 0o600)
 }

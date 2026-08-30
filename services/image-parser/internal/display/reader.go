@@ -47,20 +47,20 @@ type UpstreamSource interface {
 	GetReviewImageFileSpec(ctx context.Context, inspectionTime string, waferKey, defectID, imageID int32) (*scv1.GetReviewImageFileSpecResponse, error)
 }
 
-type ReviewObjectStore interface {
-	ReadObject(ctx context.Context, bucket, key string) ([]byte, error)
+type ReviewImageSource interface {
+	ReadReviewImage(ctx context.Context, sourceRef string) ([]byte, error)
 }
 
-func New(upstream UpstreamSource, reviewObjects ReviewObjectStore, streams imagestream.Engine) (*Service, error) {
-	return NewForUseCase(upstream, reviewObjects, streams, imagestream.UseCaseDisplay)
+func New(upstream UpstreamSource, reviewImages ReviewImageSource, streams imagestream.Engine) (*Service, error) {
+	return NewForUseCase(upstream, reviewImages, streams, imagestream.UseCaseDisplay)
 }
 
-func NewForUseCase(upstream UpstreamSource, reviewObjects ReviewObjectStore, streams imagestream.Engine, useCase imagestream.UseCase) (*Service, error) {
+func NewForUseCase(upstream UpstreamSource, reviewImages ReviewImageSource, streams imagestream.Engine, useCase imagestream.UseCase) (*Service, error) {
 	if upstream == nil {
 		return nil, fmt.Errorf("display upstream source is required")
 	}
-	if reviewObjects == nil {
-		return nil, fmt.Errorf("display review object store is required")
+	if reviewImages == nil {
+		return nil, fmt.Errorf("display review image source is required")
 	}
 	if streams == nil {
 		return nil, fmt.Errorf("display image stream engine is required")
@@ -69,7 +69,7 @@ func NewForUseCase(upstream UpstreamSource, reviewObjects ReviewObjectStore, str
 	if limits.MaxBatchItems == 0 {
 		return nil, fmt.Errorf("%s image stream batch limit must be positive", useCase)
 	}
-	return &Service{upstream: upstream, reviewObjects: reviewObjects, streams: streams, useCase: useCase}, nil
+	return &Service{upstream: upstream, reviewImages: reviewImages, streams: streams, useCase: useCase}, nil
 }
 
 func NormalizeImageType(imageType string) string {

@@ -2,7 +2,7 @@ root = "."
 tmp_dir = "tmp"
 
 [build]
-cmd = "go build -o ./tmp/image-parser ./cmd/server"
+cmd = "go build -tags upstream_mock -o ./tmp/image-parser ./cmd/server"
 bin = "./tmp/image-parser"
 delay = 1000
 exclude_dir = ["tmp", "vendor"]

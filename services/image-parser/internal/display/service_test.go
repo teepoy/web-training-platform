@@ -19,9 +19,9 @@ func (displayUpstreamStub) GetReviewImageFileSpec(context.Context, string, int32
 	return nil, fmt.Errorf("unexpected review lookup")
 }
 
-type reviewStoreStub struct{}
+type reviewSourceStub struct{}
 
-func (reviewStoreStub) ReadObject(context.Context, string, string) ([]byte, error) {
+func (reviewSourceStub) ReadReviewImage(context.Context, string) ([]byte, error) {
 	return nil, fmt.Errorf("unexpected review read")
 }
 
@@ -60,7 +60,7 @@ func (*recordingStreamContext) Close() error { return nil }
 
 func TestExportReaderUsesExportLaneAndBoundedBatches(t *testing.T) {
 	engine := &recordingStreamEngine{}
-	reader, err := NewForUseCase(displayUpstreamStub{}, reviewStoreStub{}, engine, imagestream.UseCaseExport)
+	reader, err := NewForUseCase(displayUpstreamStub{}, reviewSourceStub{}, engine, imagestream.UseCaseExport)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -45,16 +45,6 @@ MINIO_ENDPOINT=minio:9000
 MINIO_REGION=us-east-1
 MINIO_ACCESS_KEY=<access-key>
 MINIO_SECRET_KEY=<secret-key>
-SC_PATCH_S3_ENDPOINT=minio:9000
-SC_PATCH_S3_REGION=us-east-1
-SC_PATCH_S3_ACCESS_KEY=<access-key>
-SC_PATCH_S3_SECRET_KEY=<secret-key>
-SC_PATCH_S3_BUCKET=sc-patch-images
-SC_REVIEW_S3_ENDPOINT=minio:9000
-SC_REVIEW_S3_REGION=us-east-1
-SC_REVIEW_S3_ACCESS_KEY=<access-key>
-SC_REVIEW_S3_SECRET_KEY=<secret-key>
-SC_REVIEW_S3_BUCKET=sc-review-images
 
 # Independent image-parser artifact cache capacities.
 IMAGE_PARSER_DISPLAY_CACHE_MAX_BYTES=4294967296

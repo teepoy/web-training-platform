@@ -12,11 +12,11 @@ import (
 )
 
 type Service struct {
-	upstream      UpstreamSource
-	reviewObjects ReviewObjectStore
-	streams       imagestream.Engine
-	useCase       imagestream.UseCase
-	nextID        atomic.Uint64
+	upstream     UpstreamSource
+	reviewImages ReviewImageSource
+	streams      imagestream.Engine
+	useCase      imagestream.UseCase
+	nextID       atomic.Uint64
 }
 
 func (r *Service) GetImageBytes(ctx context.Context, keys []ImageKey) []ImageBytes {
@@ -158,21 +158,9 @@ func (r *Service) getReviewImageBytes(ctx context.Context, inspectionTime string
 	if err != nil {
 		return nil, fmt.Errorf("query review image: %w", err)
 	}
-	bucket, key := parseS3Filespec(response.ImageFilespec)
-	if bucket == "" || key == "" {
-		return nil, fmt.Errorf("invalid image_filespec: %s", response.ImageFilespec)
+	sourceRef := strings.TrimSpace(response.ImageFilespec)
+	if sourceRef == "" {
+		return nil, fmt.Errorf("review image source reference is empty")
 	}
-	return r.reviewObjects.ReadObject(ctx, bucket, key)
-}
-
-func parseS3Filespec(filespec string) (bucket, key string) {
-	value := filespec
-	if withoutScheme, ok := strings.CutPrefix(value, "s3://"); ok {
-		value = withoutScheme
-	}
-	index := strings.Index(value, "/")
-	if index < 0 {
-		return value, ""
-	}
-	return value[:index], value[index+1:]
+	return r.reviewImages.ReadReviewImage(ctx, sourceRef)
 }

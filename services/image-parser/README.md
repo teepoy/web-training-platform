@@ -146,9 +146,10 @@ symlinks, fsyncs, and atomically renames. A directory is measured recursively
 and evicted as one indivisible artifact. Coordination and staging files are
 never counted or deleted as cache objects.
 
-Source revision precedence is S3 VersionId, then ETag, then reliable source
-LastModified plus size. Local cache mtime is only LRU/TTL metadata. Directory
-entries require a provider generation or manifest revision.
+Source adapters must return a stable identity and revision. An object-store
+adapter can use VersionId, then ETag, then reliable source LastModified plus
+size. Local cache mtime is only LRU/TTL metadata. Directory entries require a
+provider generation or manifest revision.
 
 Base cache variables are `CACHE_DIR`, `CACHE_TTL`,
 `CACHE_CLEANUP_INTERVAL`, and `CACHE_MAX_BYTES`. Each semantic namespace can
@@ -159,15 +160,18 @@ override `DISPLAY_CACHE_*`, `PREDICTION_CACHE_*`, `TRAINING_CACHE_*`, or
 
 The service fails startup when a required connection is absent:
 
-| Variable                                                      | Purpose                                                         |
-| ------------------------------------------------------------- | --------------------------------------------------------------- |
-| `SC_UPSTREAM_ADDR`                                            | Inspection, equipment, archive catalog, and review locator gRPC |
-| `SC_PATCH_S3_ENDPOINT`, `REGION`, `ACCESS_KEY`, `SECRET_KEY`  | Patch archive source                                            |
-| `SC_REVIEW_S3_ENDPOINT`, `REGION`, `ACCESS_KEY`, `SECRET_KEY` | Review image source                                             |
-| `JWT_SECRET_KEY`                                              | Shared HS256 key for browser HTTP image authentication          |
+| Variable           | Purpose                                                         |
+| ------------------ | --------------------------------------------------------------- |
+| `SC_UPSTREAM_ADDR` | Inspection, equipment, archive catalog, and review locator gRPC |
+| `JWT_SECRET_KEY`   | Shared HS256 key for browser HTTP image authentication          |
 
-The S3 fields may explicitly use the corresponding `MINIO_*` environment
-values. There are no mock credentials or localhost defaults. `GRPC_LISTEN`
+Patch archives and Review images are production-owned `ArchiveSource` and
+`ReviewImageSource` ports. The default production build does not link a source
+implementation and fails explicitly until the deployment supplies real
+adapters. Development implementations remain outside the production package
+and runtime image.
+
+There are no mock credentials or localhost defaults. `GRPC_LISTEN`
 accepts `tcp://<address>` or `unix:///absolute/socket/path`; a Unix listener
 removes only a stale socket and refuses to replace a regular file.
 

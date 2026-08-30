@@ -20,7 +20,6 @@ import (
 	"image-parser/internal/handler"
 	"image-parser/internal/imagestream"
 	"image-parser/internal/metrics"
-	"image-parser/internal/objectstore"
 
 	"github.com/gin-gonic/gin"
 	"google.golang.org/grpc"
@@ -57,15 +56,10 @@ func wire() *serverApp {
 		log.Fatalf("failed to init upstream client: %v", err)
 	}
 
-	patchStore, err := objectstore.NewPatchStoreFromEnvironment()
+	patchArchives, err := newPatchArchiveSource()
 	if err != nil {
 		_ = upstream.Close()
-		log.Fatalf("failed to init patch object store: %v", err)
-	}
-	reviewStore, err := objectstore.NewReviewStoreFromEnvironment()
-	if err != nil {
-		_ = upstream.Close()
-		log.Fatalf("failed to init review object store: %v", err)
+		log.Fatalf("failed to init patch archive source: %v", err)
 	}
 	streamCaches := make(map[imagestream.UseCase]*artifactcache.Manager, 4)
 	for _, useCase := range []imagestream.UseCase{imagestream.UseCaseDisplay, imagestream.UseCasePrediction, imagestream.UseCaseTraining, imagestream.UseCaseExport} {
@@ -86,7 +80,7 @@ func wire() *serverApp {
 		streamCaches[useCase] = manager
 		metrics.RegisterArtifactCache(string(useCase), manager)
 	}
-	legacyFactory, err := equipmentlegacy.NewFactory(upstream, patchStore, 128)
+	legacyFactory, err := equipmentlegacy.NewFactory(upstream, patchArchives, 128)
 	if err != nil {
 		log.Fatalf("failed to init legacy range-ZIP image entry: %v", err)
 	}
@@ -128,11 +122,11 @@ func wire() *serverApp {
 	if err != nil {
 		log.Fatalf("failed to init governed image stream engine: %v", err)
 	}
-	cachedReviewStore, err := objectstore.NewCachedReader(reviewStore, streamCaches[imagestream.UseCaseDisplay], "sc.review-object.v1")
+	reviewImages, err := newReviewImageSource(streamCaches[imagestream.UseCaseDisplay])
 	if err != nil {
-		log.Fatalf("failed to init cached review object reader: %v", err)
+		log.Fatalf("failed to init review image source: %v", err)
 	}
-	displayReader, err := display.New(upstream, cachedReviewStore, governedEngine)
+	displayReader, err := display.New(upstream, reviewImages, governedEngine)
 	if err != nil {
 		_ = upstream.Close()
 		for _, manager := range streamCaches {
@@ -140,11 +134,11 @@ func wire() *serverApp {
 		}
 		log.Fatalf("failed to init display image reader: %v", err)
 	}
-	cachedExportReviewStore, err := objectstore.NewCachedReader(reviewStore, streamCaches[imagestream.UseCaseExport], "sc.review-object.v1")
+	exportReviewImages, err := newReviewImageSource(streamCaches[imagestream.UseCaseExport])
 	if err != nil {
-		log.Fatalf("failed to init export review object reader: %v", err)
+		log.Fatalf("failed to init export review image source: %v", err)
 	}
-	exportReader, err := display.NewForUseCase(upstream, cachedExportReviewStore, governedEngine, imagestream.UseCaseExport)
+	exportReader, err := display.NewForUseCase(upstream, exportReviewImages, governedEngine, imagestream.UseCaseExport)
 	if err != nil {
 		log.Fatalf("failed to init export image reader: %v", err)
 	}
