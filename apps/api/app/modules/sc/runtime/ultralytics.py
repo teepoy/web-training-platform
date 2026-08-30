@@ -375,9 +375,9 @@ async def _yolo_sc_predictor(
             )
         rows = source.rows
         if ctx.sample_filter is not None:
-            if source.dataset_type != "image_sc":
+            if source.dataset_type not in {"image_sc", "image_sc_collection"}:
                 raise ValueError(
-                    "sample_filter is only supported for direct image_sc datasets"
+                    "sample_filter is only supported for image_sc runtime sources"
                 )
             rows = parse_and_apply_workflow_sample_filter(
                 cast(Any, rows),

@@ -117,8 +117,10 @@ class TrainingSubmissionService:
                     f"'{predictor.input_view.view_id}', collection revision provides "
                     f"'{revision.target_view_id}'"
                 )
-        if command.sample_filter is not None and (
-            dataset is None or dataset.dataset_type != "image_sc"
+        if (
+            command.sample_filter is not None
+            and dataset is not None
+            and dataset.dataset_type != "image_sc"
         ):
             raise ValueError("sample_filter is only supported for image_sc datasets")
 
