@@ -185,10 +185,11 @@ Dataset。历史 Dataset 不批量回填 Revision、import identity 或内容指
 revision-aware 写入/任务流程时才按需建立 Revision #1，不伪造更早历史。
 
 平台不通过逐图片 hash 或 Dataset 内容 fingerprint 判重。自动导入只在一条
-Resource automation/Collection 链路内使用 Source connector、provider record key、
-Source version 与 Import profile version 建立 Import receipt 和数据库唯一约束，防止
-重放/并发创建重复 Dataset；不同 Automation/Collection 不共享自动导入的 Dataset。
-Dataset name 不是 identity。
+Resource automation/Collection 链路内使用 Source connector、provider-owned canonical
+record key 与 Import profile version 建立 Import receipt 和数据库唯一约束，防止重放/
+并发创建重复 Dataset；不同 Automation/Collection 不共享自动导入的 Dataset。Dataset
+name 和 mutable Source version 都不是 identity。SC canonical record key 是
+`(inspection_time, wafer_key)` 复合 Inspection PK。
 
 Dataset/annotation/Model transfer uses registered frontend importer/exporter
 descriptors rather than page-owned format switches. The first portable Dataset
@@ -244,12 +245,20 @@ schema 和 canonical label space 组成的数据 contract；成员兼容性由 D
 - Membership 可以手动 Link，也可由版本化 typed rule 从一个 Source connector + Import
   profile 发现 Source record。Rule 只使用 provider descriptor 声明的字段/类型/operator
   和通用 All/Any 条件树，不接受 SQL、JSONPath 或 Python。自动发现第一阶段只增加成员，
-  不自动 unlink；手工移除规则成员会建立 Collection-scoped suppression。
+  不自动 unlink；手工移除成员不建立永久 suppression，未来规则再次匹配时允许重新加入。
 - 同一 Collection 中相同 Source identity 只保留一个活跃规则成员；不同 Collection 各自
   导入 Dataset。Rule activation 只处理未来数据，历史范围通过独立 Backfill 处理。
   Backfill 固定 rule version、connector、Import profile、IANA timezone 与 UTC `[start,end)`
   范围，使用独立 cursor，不推进 live watermark；内部 execution window 不暴露为产品
-  Partition。Partial success 可发布成功成员，失败 Source record 单独 Retry。
+  Partition。Collection rule 页面提供匹配数量 Preview 和显式全量确认后提交 Backfill；
+  全局 Automations 只显示历史与 Retry。Partial success 可发布成功成员，失败 Source record
+  单独 Retry。
+- Live discovery 按 provider 的 publication order 使用 keyset cursor，tie-breaker 必须包含
+  canonical Source PK；不得仅用业务发生时间或 offset position 推进。SC publication cursor
+  使用 `published_at + inspection_time + wafer_key`，因此 inspection 延迟发布仍会被发现，
+  每次轮询重放最近五分钟 publication window，重放/重叠交付由 receipt 与 membership
+  唯一约束吸收。Cursor 只在对应记录和 receipts 持久化后推进且不得倒退；upstream 字段
+  变化由消费者动态读取最新值，不创建 Source version 状态。
 - SC source-routing automation 可把一个精确的 `(Source connector, layer_id,
 device)` 组合分配给 Collection；它是
   Collection-bound membership recipe，不是恢复 generic Sensor 产品。一个 Collection
@@ -263,6 +272,10 @@ device)` 组合分配给 Collection；它是
   membership/definition/mapping Revision 变化后按用户选择的每日/每周本地时间 gated
   运行，产出 Candidate Model，不自动替换 default Model。仅 Dataset Revision refresh 不
   标记 candidate training dirty。
+- 新 admission 的 incremental prediction 是 Revision publication 的直接 downstream，
+  不增加第二个 polling Sensor。Revision 发布后创建持久化 prediction batch/dispatch 状态，
+  再向独立低优先级 Prefect prediction queue 提交 child jobs；dispatch 失败不回滚 Revision，
+  但必须在产品状态中可见并可单独 Retry，不能只写日志。
 
 Dataset view samples 必须通过 dataset registry / dataset class / adapter 动态投影。不能为每个 view 新增 hardcoded route 作为主要集成方式。
 

@@ -10,7 +10,6 @@ from app.modules.source_discovery.domain.models import (
     ImportReceipt,
     MembershipRule,
     MembershipRuleVersion,
-    MembershipSuppression,
     ScAutomationPartition,
     SourceConnector,
     SourceMembership,
@@ -160,7 +159,6 @@ class SourceDiscoveryRepository(Protocol):
         rule_id: str,
         connector_id: str,
         source_record_key: str,
-        source_version: str | None,
         import_profile_version_id: str,
     ) -> tuple[str, str | None, str | None] | None: ...
 
@@ -171,7 +169,6 @@ class SourceDiscoveryRepository(Protocol):
         rule_id: str,
         connector_id: str,
         source_record_key: str,
-        source_version: str | None,
         import_profile_version_id: str,
         status: str,
         dataset_id: str | None,
@@ -179,20 +176,3 @@ class SourceDiscoveryRepository(Protocol):
         first_run_id: str,
         updated_at: datetime,
     ) -> None: ...
-
-    async def get_active_suppression(
-        self, collection_id: str, connector_id: str, source_record_key: str
-    ) -> MembershipSuppression | None: ...
-
-    async def create_suppression(
-        self, suppression: MembershipSuppression
-    ) -> MembershipSuppression: ...
-
-    async def clear_suppression(
-        self,
-        suppression_id: str,
-        *,
-        collection_id: str,
-        actor_id: str,
-        cleared_at: datetime,
-    ) -> MembershipSuppression | None: ...

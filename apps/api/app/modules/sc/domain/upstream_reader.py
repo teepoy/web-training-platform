@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Callable, Sequence
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
@@ -10,6 +11,19 @@ import pyarrow as pa
 from app.modules.sc.domain.models import ScInspectionRecord
 
 ScSampleProgressCallback = Callable[[int], None]
+
+
+@dataclass(frozen=True, slots=True)
+class ScInspectionKey:
+    inspection_time: datetime
+    wafer_key: int
+
+
+@dataclass(frozen=True, slots=True)
+class ScInspectionPublicationCursor:
+    published_at: datetime
+    inspection_time: datetime
+    wafer_key: int
 
 
 class ScUpstreamReader(Protocol):
@@ -68,3 +82,23 @@ class ScUpstreamReader(Protocol):
         inspection_time: datetime,
         wafer_key: int,
     ) -> pl.LazyFrame: ...
+
+
+class ScDiscoveryUpstreamReader(ScUpstreamReader, Protocol):
+    async def list_inspection_page(
+        self,
+        *,
+        start_time: datetime,
+        end_time: datetime,
+        after: ScInspectionKey | None,
+        page_size: int,
+    ) -> pl.DataFrame: ...
+
+    async def list_published_inspection_page(
+        self,
+        *,
+        published_from: datetime,
+        published_until: datetime,
+        after: ScInspectionPublicationCursor | None,
+        page_size: int,
+    ) -> pl.DataFrame: ...

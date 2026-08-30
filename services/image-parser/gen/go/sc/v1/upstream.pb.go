@@ -21,6 +21,55 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type InspectionDiscoveryOrder int32
+
+const (
+	InspectionDiscoveryOrder_INSPECTION_DISCOVERY_ORDER_UNSPECIFIED InspectionDiscoveryOrder = 0
+	InspectionDiscoveryOrder_INSPECTION_DISCOVERY_ORDER_PRIMARY_KEY InspectionDiscoveryOrder = 1
+	InspectionDiscoveryOrder_INSPECTION_DISCOVERY_ORDER_PUBLICATION InspectionDiscoveryOrder = 2
+)
+
+// Enum value maps for InspectionDiscoveryOrder.
+var (
+	InspectionDiscoveryOrder_name = map[int32]string{
+		0: "INSPECTION_DISCOVERY_ORDER_UNSPECIFIED",
+		1: "INSPECTION_DISCOVERY_ORDER_PRIMARY_KEY",
+		2: "INSPECTION_DISCOVERY_ORDER_PUBLICATION",
+	}
+	InspectionDiscoveryOrder_value = map[string]int32{
+		"INSPECTION_DISCOVERY_ORDER_UNSPECIFIED": 0,
+		"INSPECTION_DISCOVERY_ORDER_PRIMARY_KEY": 1,
+		"INSPECTION_DISCOVERY_ORDER_PUBLICATION": 2,
+	}
+)
+
+func (x InspectionDiscoveryOrder) Enum() *InspectionDiscoveryOrder {
+	p := new(InspectionDiscoveryOrder)
+	*p = x
+	return p
+}
+
+func (x InspectionDiscoveryOrder) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (InspectionDiscoveryOrder) Descriptor() protoreflect.EnumDescriptor {
+	return file_sc_v1_upstream_proto_enumTypes[0].Descriptor()
+}
+
+func (InspectionDiscoveryOrder) Type() protoreflect.EnumType {
+	return &file_sc_v1_upstream_proto_enumTypes[0]
+}
+
+func (x InspectionDiscoveryOrder) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use InspectionDiscoveryOrder.Descriptor instead.
+func (InspectionDiscoveryOrder) EnumDescriptor() ([]byte, []int) {
+	return file_sc_v1_upstream_proto_rawDescGZIP(), []int{0}
+}
+
 type HealthRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -889,6 +938,218 @@ func (x *ListInspectionsRequest) GetDevice() string {
 	return ""
 }
 
+type InspectionPrimaryKeyCursor struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	InspectionTime string                 `protobuf:"bytes,1,opt,name=inspection_time,json=inspectionTime,proto3" json:"inspection_time,omitempty"`
+	WaferKey       int32                  `protobuf:"varint,2,opt,name=wafer_key,json=waferKey,proto3" json:"wafer_key,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *InspectionPrimaryKeyCursor) Reset() {
+	*x = InspectionPrimaryKeyCursor{}
+	mi := &file_sc_v1_upstream_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InspectionPrimaryKeyCursor) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InspectionPrimaryKeyCursor) ProtoMessage() {}
+
+func (x *InspectionPrimaryKeyCursor) ProtoReflect() protoreflect.Message {
+	mi := &file_sc_v1_upstream_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InspectionPrimaryKeyCursor.ProtoReflect.Descriptor instead.
+func (*InspectionPrimaryKeyCursor) Descriptor() ([]byte, []int) {
+	return file_sc_v1_upstream_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *InspectionPrimaryKeyCursor) GetInspectionTime() string {
+	if x != nil {
+		return x.InspectionTime
+	}
+	return ""
+}
+
+func (x *InspectionPrimaryKeyCursor) GetWaferKey() int32 {
+	if x != nil {
+		return x.WaferKey
+	}
+	return 0
+}
+
+type InspectionPublicationCursor struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	PublishedAt    string                 `protobuf:"bytes,1,opt,name=published_at,json=publishedAt,proto3" json:"published_at,omitempty"`
+	InspectionTime string                 `protobuf:"bytes,2,opt,name=inspection_time,json=inspectionTime,proto3" json:"inspection_time,omitempty"`
+	WaferKey       int32                  `protobuf:"varint,3,opt,name=wafer_key,json=waferKey,proto3" json:"wafer_key,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *InspectionPublicationCursor) Reset() {
+	*x = InspectionPublicationCursor{}
+	mi := &file_sc_v1_upstream_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InspectionPublicationCursor) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InspectionPublicationCursor) ProtoMessage() {}
+
+func (x *InspectionPublicationCursor) ProtoReflect() protoreflect.Message {
+	mi := &file_sc_v1_upstream_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InspectionPublicationCursor.ProtoReflect.Descriptor instead.
+func (*InspectionPublicationCursor) Descriptor() ([]byte, []int) {
+	return file_sc_v1_upstream_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *InspectionPublicationCursor) GetPublishedAt() string {
+	if x != nil {
+		return x.PublishedAt
+	}
+	return ""
+}
+
+func (x *InspectionPublicationCursor) GetInspectionTime() string {
+	if x != nil {
+		return x.InspectionTime
+	}
+	return ""
+}
+
+func (x *InspectionPublicationCursor) GetWaferKey() int32 {
+	if x != nil {
+		return x.WaferKey
+	}
+	return 0
+}
+
+type ListDiscoveryInspectionsRequest struct {
+	state            protoimpl.MessageState       `protogen:"open.v1"`
+	Order            InspectionDiscoveryOrder     `protobuf:"varint,1,opt,name=order,proto3,enum=sc.v1.InspectionDiscoveryOrder" json:"order,omitempty"`
+	StartTime        string                       `protobuf:"bytes,2,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
+	EndTime          string                       `protobuf:"bytes,3,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"`
+	PublishedFrom    string                       `protobuf:"bytes,4,opt,name=published_from,json=publishedFrom,proto3" json:"published_from,omitempty"`
+	PublishedUntil   string                       `protobuf:"bytes,5,opt,name=published_until,json=publishedUntil,proto3" json:"published_until,omitempty"`
+	AfterPrimaryKey  *InspectionPrimaryKeyCursor  `protobuf:"bytes,6,opt,name=after_primary_key,json=afterPrimaryKey,proto3" json:"after_primary_key,omitempty"`
+	AfterPublication *InspectionPublicationCursor `protobuf:"bytes,7,opt,name=after_publication,json=afterPublication,proto3" json:"after_publication,omitempty"`
+	PageSize         int32                        `protobuf:"varint,8,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *ListDiscoveryInspectionsRequest) Reset() {
+	*x = ListDiscoveryInspectionsRequest{}
+	mi := &file_sc_v1_upstream_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListDiscoveryInspectionsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListDiscoveryInspectionsRequest) ProtoMessage() {}
+
+func (x *ListDiscoveryInspectionsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sc_v1_upstream_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListDiscoveryInspectionsRequest.ProtoReflect.Descriptor instead.
+func (*ListDiscoveryInspectionsRequest) Descriptor() ([]byte, []int) {
+	return file_sc_v1_upstream_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *ListDiscoveryInspectionsRequest) GetOrder() InspectionDiscoveryOrder {
+	if x != nil {
+		return x.Order
+	}
+	return InspectionDiscoveryOrder_INSPECTION_DISCOVERY_ORDER_UNSPECIFIED
+}
+
+func (x *ListDiscoveryInspectionsRequest) GetStartTime() string {
+	if x != nil {
+		return x.StartTime
+	}
+	return ""
+}
+
+func (x *ListDiscoveryInspectionsRequest) GetEndTime() string {
+	if x != nil {
+		return x.EndTime
+	}
+	return ""
+}
+
+func (x *ListDiscoveryInspectionsRequest) GetPublishedFrom() string {
+	if x != nil {
+		return x.PublishedFrom
+	}
+	return ""
+}
+
+func (x *ListDiscoveryInspectionsRequest) GetPublishedUntil() string {
+	if x != nil {
+		return x.PublishedUntil
+	}
+	return ""
+}
+
+func (x *ListDiscoveryInspectionsRequest) GetAfterPrimaryKey() *InspectionPrimaryKeyCursor {
+	if x != nil {
+		return x.AfterPrimaryKey
+	}
+	return nil
+}
+
+func (x *ListDiscoveryInspectionsRequest) GetAfterPublication() *InspectionPublicationCursor {
+	if x != nil {
+		return x.AfterPublication
+	}
+	return nil
+}
+
+func (x *ListDiscoveryInspectionsRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
 type InspectionSummary struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	InspectionTime string                 `protobuf:"bytes,1,opt,name=inspection_time,json=inspectionTime,proto3" json:"inspection_time,omitempty"`
@@ -911,13 +1172,14 @@ type InspectionSummary struct {
 	OriginIndexY   int32                  `protobuf:"varint,18,opt,name=origin_index_y,json=originIndexY,proto3" json:"origin_index_y,omitempty"`
 	LatestUpdate   int32                  `protobuf:"varint,19,opt,name=latest_update,json=latestUpdate,proto3" json:"latest_update,omitempty"`
 	ChangeToken    int64                  `protobuf:"varint,20,opt,name=change_token,json=changeToken,proto3" json:"change_token,omitempty"`
+	PublishedAt    string                 `protobuf:"bytes,21,opt,name=published_at,json=publishedAt,proto3" json:"published_at,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
 
 func (x *InspectionSummary) Reset() {
 	*x = InspectionSummary{}
-	mi := &file_sc_v1_upstream_proto_msgTypes[13]
+	mi := &file_sc_v1_upstream_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -929,7 +1191,7 @@ func (x *InspectionSummary) String() string {
 func (*InspectionSummary) ProtoMessage() {}
 
 func (x *InspectionSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_sc_v1_upstream_proto_msgTypes[13]
+	mi := &file_sc_v1_upstream_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -942,7 +1204,7 @@ func (x *InspectionSummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InspectionSummary.ProtoReflect.Descriptor instead.
 func (*InspectionSummary) Descriptor() ([]byte, []int) {
-	return file_sc_v1_upstream_proto_rawDescGZIP(), []int{13}
+	return file_sc_v1_upstream_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *InspectionSummary) GetInspectionTime() string {
@@ -1085,6 +1347,13 @@ func (x *InspectionSummary) GetChangeToken() int64 {
 	return 0
 }
 
+func (x *InspectionSummary) GetPublishedAt() string {
+	if x != nil {
+		return x.PublishedAt
+	}
+	return ""
+}
+
 type ListInspectionsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Items         []*InspectionSummary   `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
@@ -1094,7 +1363,7 @@ type ListInspectionsResponse struct {
 
 func (x *ListInspectionsResponse) Reset() {
 	*x = ListInspectionsResponse{}
-	mi := &file_sc_v1_upstream_proto_msgTypes[14]
+	mi := &file_sc_v1_upstream_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1106,7 +1375,7 @@ func (x *ListInspectionsResponse) String() string {
 func (*ListInspectionsResponse) ProtoMessage() {}
 
 func (x *ListInspectionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sc_v1_upstream_proto_msgTypes[14]
+	mi := &file_sc_v1_upstream_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1119,7 +1388,7 @@ func (x *ListInspectionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListInspectionsResponse.ProtoReflect.Descriptor instead.
 func (*ListInspectionsResponse) Descriptor() ([]byte, []int) {
-	return file_sc_v1_upstream_proto_rawDescGZIP(), []int{14}
+	return file_sc_v1_upstream_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *ListInspectionsResponse) GetItems() []*InspectionSummary {
@@ -1201,7 +1470,24 @@ const file_sc_v1_upstream_proto_rawDesc = "" +
 	"\x06lot_id\x18\x03 \x01(\tR\x05lotId\x12\x19\n" +
 	"\bwafer_id\x18\x04 \x01(\tR\awaferId\x12\x19\n" +
 	"\blayer_id\x18\x05 \x01(\tR\alayerId\x12\x16\n" +
-	"\x06device\x18\x06 \x01(\tR\x06device\"\xe0\x04\n" +
+	"\x06device\x18\x06 \x01(\tR\x06device\"b\n" +
+	"\x1aInspectionPrimaryKeyCursor\x12'\n" +
+	"\x0finspection_time\x18\x01 \x01(\tR\x0einspectionTime\x12\x1b\n" +
+	"\twafer_key\x18\x02 \x01(\x05R\bwaferKey\"\x86\x01\n" +
+	"\x1bInspectionPublicationCursor\x12!\n" +
+	"\fpublished_at\x18\x01 \x01(\tR\vpublishedAt\x12'\n" +
+	"\x0finspection_time\x18\x02 \x01(\tR\x0einspectionTime\x12\x1b\n" +
+	"\twafer_key\x18\x03 \x01(\x05R\bwaferKey\"\x9f\x03\n" +
+	"\x1fListDiscoveryInspectionsRequest\x125\n" +
+	"\x05order\x18\x01 \x01(\x0e2\x1f.sc.v1.InspectionDiscoveryOrderR\x05order\x12\x1d\n" +
+	"\n" +
+	"start_time\x18\x02 \x01(\tR\tstartTime\x12\x19\n" +
+	"\bend_time\x18\x03 \x01(\tR\aendTime\x12%\n" +
+	"\x0epublished_from\x18\x04 \x01(\tR\rpublishedFrom\x12'\n" +
+	"\x0fpublished_until\x18\x05 \x01(\tR\x0epublishedUntil\x12M\n" +
+	"\x11after_primary_key\x18\x06 \x01(\v2!.sc.v1.InspectionPrimaryKeyCursorR\x0fafterPrimaryKey\x12O\n" +
+	"\x11after_publication\x18\a \x01(\v2\".sc.v1.InspectionPublicationCursorR\x10afterPublication\x12\x1b\n" +
+	"\tpage_size\x18\b \x01(\x05R\bpageSize\"\x83\x05\n" +
 	"\x11InspectionSummary\x12'\n" +
 	"\x0finspection_time\x18\x01 \x01(\tR\x0einspectionTime\x12\x1b\n" +
 	"\twafer_key\x18\x02 \x01(\x05R\bwaferKey\x12\x15\n" +
@@ -1225,9 +1511,14 @@ const file_sc_v1_upstream_proto_rawDesc = "" +
 	"\x0eorigin_index_x\x18\x11 \x01(\x05R\foriginIndexX\x12$\n" +
 	"\x0eorigin_index_y\x18\x12 \x01(\x05R\foriginIndexY\x12#\n" +
 	"\rlatest_update\x18\x13 \x01(\x05R\flatestUpdate\x12!\n" +
-	"\fchange_token\x18\x14 \x01(\x03R\vchangeToken\"I\n" +
+	"\fchange_token\x18\x14 \x01(\x03R\vchangeToken\x12!\n" +
+	"\fpublished_at\x18\x15 \x01(\tR\vpublishedAt\"I\n" +
 	"\x17ListInspectionsResponse\x12.\n" +
-	"\x05items\x18\x01 \x03(\v2\x18.sc.v1.InspectionSummaryR\x05items2\x84\x04\n" +
+	"\x05items\x18\x01 \x03(\v2\x18.sc.v1.InspectionSummaryR\x05items*\x9e\x01\n" +
+	"\x18InspectionDiscoveryOrder\x12*\n" +
+	"&INSPECTION_DISCOVERY_ORDER_UNSPECIFIED\x10\x00\x12*\n" +
+	"&INSPECTION_DISCOVERY_ORDER_PRIMARY_KEY\x10\x01\x12*\n" +
+	"&INSPECTION_DISCOVERY_ORDER_PUBLICATION\x10\x022\xe8\x04\n" +
 	"\n" +
 	"ScUpstream\x125\n" +
 	"\x06Health\x12\x14.sc.v1.HealthRequest\x1a\x15.sc.v1.HealthResponse\x12J\n" +
@@ -1235,7 +1526,8 @@ const file_sc_v1_upstream_proto_rawDesc = "" +
 	"\x16GetInspectionPatchZips\x12$.sc.v1.GetInspectionPatchZipsRequest\x1a%.sc.v1.GetInspectionPatchZipsResponse\x12e\n" +
 	"\x16GetReviewImageFileSpec\x12$.sc.v1.GetReviewImageFileSpecRequest\x1a%.sc.v1.GetReviewImageFileSpecResponse\x12S\n" +
 	"\x10ListReviewImages\x12\x1e.sc.v1.ListReviewImagesRequest\x1a\x1f.sc.v1.ListReviewImagesResponse\x12P\n" +
-	"\x0fListInspections\x12\x1d.sc.v1.ListInspectionsRequest\x1a\x1e.sc.v1.ListInspectionsResponseB&Z$ft-platform/protos/gen/go/sc/v1;scv1b\x06proto3"
+	"\x0fListInspections\x12\x1d.sc.v1.ListInspectionsRequest\x1a\x1e.sc.v1.ListInspectionsResponse\x12b\n" +
+	"\x18ListDiscoveryInspections\x12&.sc.v1.ListDiscoveryInspectionsRequest\x1a\x1e.sc.v1.ListInspectionsResponseB&Z$ft-platform/protos/gen/go/sc/v1;scv1b\x06proto3"
 
 var (
 	file_sc_v1_upstream_proto_rawDescOnce sync.Once
@@ -1249,45 +1541,55 @@ func file_sc_v1_upstream_proto_rawDescGZIP() []byte {
 	return file_sc_v1_upstream_proto_rawDescData
 }
 
-var file_sc_v1_upstream_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
+var file_sc_v1_upstream_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_sc_v1_upstream_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
 var file_sc_v1_upstream_proto_goTypes = []any{
-	(*HealthRequest)(nil),                  // 0: sc.v1.HealthRequest
-	(*HealthResponse)(nil),                 // 1: sc.v1.HealthResponse
-	(*GetInspectionRequest)(nil),           // 2: sc.v1.GetInspectionRequest
-	(*GetInspectionResponse)(nil),          // 3: sc.v1.GetInspectionResponse
-	(*GetInspectionPatchZipsRequest)(nil),  // 4: sc.v1.GetInspectionPatchZipsRequest
-	(*ZipRef)(nil),                         // 5: sc.v1.ZipRef
-	(*GetInspectionPatchZipsResponse)(nil), // 6: sc.v1.GetInspectionPatchZipsResponse
-	(*GetReviewImageFileSpecRequest)(nil),  // 7: sc.v1.GetReviewImageFileSpecRequest
-	(*GetReviewImageFileSpecResponse)(nil), // 8: sc.v1.GetReviewImageFileSpecResponse
-	(*ListReviewImagesRequest)(nil),        // 9: sc.v1.ListReviewImagesRequest
-	(*ReviewImageRef)(nil),                 // 10: sc.v1.ReviewImageRef
-	(*ListReviewImagesResponse)(nil),       // 11: sc.v1.ListReviewImagesResponse
-	(*ListInspectionsRequest)(nil),         // 12: sc.v1.ListInspectionsRequest
-	(*InspectionSummary)(nil),              // 13: sc.v1.InspectionSummary
-	(*ListInspectionsResponse)(nil),        // 14: sc.v1.ListInspectionsResponse
+	(InspectionDiscoveryOrder)(0),           // 0: sc.v1.InspectionDiscoveryOrder
+	(*HealthRequest)(nil),                   // 1: sc.v1.HealthRequest
+	(*HealthResponse)(nil),                  // 2: sc.v1.HealthResponse
+	(*GetInspectionRequest)(nil),            // 3: sc.v1.GetInspectionRequest
+	(*GetInspectionResponse)(nil),           // 4: sc.v1.GetInspectionResponse
+	(*GetInspectionPatchZipsRequest)(nil),   // 5: sc.v1.GetInspectionPatchZipsRequest
+	(*ZipRef)(nil),                          // 6: sc.v1.ZipRef
+	(*GetInspectionPatchZipsResponse)(nil),  // 7: sc.v1.GetInspectionPatchZipsResponse
+	(*GetReviewImageFileSpecRequest)(nil),   // 8: sc.v1.GetReviewImageFileSpecRequest
+	(*GetReviewImageFileSpecResponse)(nil),  // 9: sc.v1.GetReviewImageFileSpecResponse
+	(*ListReviewImagesRequest)(nil),         // 10: sc.v1.ListReviewImagesRequest
+	(*ReviewImageRef)(nil),                  // 11: sc.v1.ReviewImageRef
+	(*ListReviewImagesResponse)(nil),        // 12: sc.v1.ListReviewImagesResponse
+	(*ListInspectionsRequest)(nil),          // 13: sc.v1.ListInspectionsRequest
+	(*InspectionPrimaryKeyCursor)(nil),      // 14: sc.v1.InspectionPrimaryKeyCursor
+	(*InspectionPublicationCursor)(nil),     // 15: sc.v1.InspectionPublicationCursor
+	(*ListDiscoveryInspectionsRequest)(nil), // 16: sc.v1.ListDiscoveryInspectionsRequest
+	(*InspectionSummary)(nil),               // 17: sc.v1.InspectionSummary
+	(*ListInspectionsResponse)(nil),         // 18: sc.v1.ListInspectionsResponse
 }
 var file_sc_v1_upstream_proto_depIdxs = []int32{
-	5,  // 0: sc.v1.GetInspectionPatchZipsResponse.zips:type_name -> sc.v1.ZipRef
-	10, // 1: sc.v1.ListReviewImagesResponse.images:type_name -> sc.v1.ReviewImageRef
-	13, // 2: sc.v1.ListInspectionsResponse.items:type_name -> sc.v1.InspectionSummary
-	0,  // 3: sc.v1.ScUpstream.Health:input_type -> sc.v1.HealthRequest
-	2,  // 4: sc.v1.ScUpstream.GetInspection:input_type -> sc.v1.GetInspectionRequest
-	4,  // 5: sc.v1.ScUpstream.GetInspectionPatchZips:input_type -> sc.v1.GetInspectionPatchZipsRequest
-	7,  // 6: sc.v1.ScUpstream.GetReviewImageFileSpec:input_type -> sc.v1.GetReviewImageFileSpecRequest
-	9,  // 7: sc.v1.ScUpstream.ListReviewImages:input_type -> sc.v1.ListReviewImagesRequest
-	12, // 8: sc.v1.ScUpstream.ListInspections:input_type -> sc.v1.ListInspectionsRequest
-	1,  // 9: sc.v1.ScUpstream.Health:output_type -> sc.v1.HealthResponse
-	3,  // 10: sc.v1.ScUpstream.GetInspection:output_type -> sc.v1.GetInspectionResponse
-	6,  // 11: sc.v1.ScUpstream.GetInspectionPatchZips:output_type -> sc.v1.GetInspectionPatchZipsResponse
-	8,  // 12: sc.v1.ScUpstream.GetReviewImageFileSpec:output_type -> sc.v1.GetReviewImageFileSpecResponse
-	11, // 13: sc.v1.ScUpstream.ListReviewImages:output_type -> sc.v1.ListReviewImagesResponse
-	14, // 14: sc.v1.ScUpstream.ListInspections:output_type -> sc.v1.ListInspectionsResponse
-	9,  // [9:15] is the sub-list for method output_type
-	3,  // [3:9] is the sub-list for method input_type
-	3,  // [3:3] is the sub-list for extension type_name
-	3,  // [3:3] is the sub-list for extension extendee
-	0,  // [0:3] is the sub-list for field type_name
+	6,  // 0: sc.v1.GetInspectionPatchZipsResponse.zips:type_name -> sc.v1.ZipRef
+	11, // 1: sc.v1.ListReviewImagesResponse.images:type_name -> sc.v1.ReviewImageRef
+	0,  // 2: sc.v1.ListDiscoveryInspectionsRequest.order:type_name -> sc.v1.InspectionDiscoveryOrder
+	14, // 3: sc.v1.ListDiscoveryInspectionsRequest.after_primary_key:type_name -> sc.v1.InspectionPrimaryKeyCursor
+	15, // 4: sc.v1.ListDiscoveryInspectionsRequest.after_publication:type_name -> sc.v1.InspectionPublicationCursor
+	17, // 5: sc.v1.ListInspectionsResponse.items:type_name -> sc.v1.InspectionSummary
+	1,  // 6: sc.v1.ScUpstream.Health:input_type -> sc.v1.HealthRequest
+	3,  // 7: sc.v1.ScUpstream.GetInspection:input_type -> sc.v1.GetInspectionRequest
+	5,  // 8: sc.v1.ScUpstream.GetInspectionPatchZips:input_type -> sc.v1.GetInspectionPatchZipsRequest
+	8,  // 9: sc.v1.ScUpstream.GetReviewImageFileSpec:input_type -> sc.v1.GetReviewImageFileSpecRequest
+	10, // 10: sc.v1.ScUpstream.ListReviewImages:input_type -> sc.v1.ListReviewImagesRequest
+	13, // 11: sc.v1.ScUpstream.ListInspections:input_type -> sc.v1.ListInspectionsRequest
+	16, // 12: sc.v1.ScUpstream.ListDiscoveryInspections:input_type -> sc.v1.ListDiscoveryInspectionsRequest
+	2,  // 13: sc.v1.ScUpstream.Health:output_type -> sc.v1.HealthResponse
+	4,  // 14: sc.v1.ScUpstream.GetInspection:output_type -> sc.v1.GetInspectionResponse
+	7,  // 15: sc.v1.ScUpstream.GetInspectionPatchZips:output_type -> sc.v1.GetInspectionPatchZipsResponse
+	9,  // 16: sc.v1.ScUpstream.GetReviewImageFileSpec:output_type -> sc.v1.GetReviewImageFileSpecResponse
+	12, // 17: sc.v1.ScUpstream.ListReviewImages:output_type -> sc.v1.ListReviewImagesResponse
+	18, // 18: sc.v1.ScUpstream.ListInspections:output_type -> sc.v1.ListInspectionsResponse
+	18, // 19: sc.v1.ScUpstream.ListDiscoveryInspections:output_type -> sc.v1.ListInspectionsResponse
+	13, // [13:20] is the sub-list for method output_type
+	6,  // [6:13] is the sub-list for method input_type
+	6,  // [6:6] is the sub-list for extension type_name
+	6,  // [6:6] is the sub-list for extension extendee
+	0,  // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_sc_v1_upstream_proto_init() }
@@ -1300,13 +1602,14 @@ func file_sc_v1_upstream_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_sc_v1_upstream_proto_rawDesc), len(file_sc_v1_upstream_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   15,
+			NumEnums:      1,
+			NumMessages:   18,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_sc_v1_upstream_proto_goTypes,
 		DependencyIndexes: file_sc_v1_upstream_proto_depIdxs,
+		EnumInfos:         file_sc_v1_upstream_proto_enumTypes,
 		MessageInfos:      file_sc_v1_upstream_proto_msgTypes,
 	}.Build()
 	File_sc_v1_upstream_proto = out.File

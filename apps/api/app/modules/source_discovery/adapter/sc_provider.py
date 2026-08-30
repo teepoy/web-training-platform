@@ -2,14 +2,18 @@ from __future__ import annotations
 
 import re
 from collections.abc import AsyncIterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import cast
 from zoneinfo import ZoneInfo
 
 import polars as pl
 
 from app.modules.sc.domain.models import _coerce_naive_to_upstream_tz
-from app.modules.sc.domain.upstream_reader import ScUpstreamReader
+from app.modules.sc.domain.upstream_reader import (
+    ScDiscoveryUpstreamReader,
+    ScInspectionKey,
+    ScInspectionPublicationCursor,
+)
 from app.modules.sc.port.local import ScImportPort
 from app.modules.source_discovery.domain.models import (
     FilterCombinator,
@@ -43,6 +47,7 @@ _FIELD_COLUMNS = {
 }
 _SC_TIMEZONE = ZoneInfo("Asia/Shanghai")
 _SOURCE_DISCOVERY_BATCH_ROWS = 256
+_PUBLICATION_REPLAY_OVERLAP = timedelta(minutes=5)
 
 _TEXT_OPERATORS = (
     FilterOperator.EQ,
@@ -103,7 +108,9 @@ SC_SOURCE_PROVIDER_DESCRIPTOR = SourceProviderDescriptor(
 
 
 class ScSourceRecordProvider:
-    def __init__(self, upstream: ScUpstreamReader, importer: ScImportPort) -> None:
+    def __init__(
+        self, upstream: ScDiscoveryUpstreamReader, importer: ScImportPort
+    ) -> None:
         self._upstream = upstream
         self._importer = importer
 
@@ -111,7 +118,53 @@ class ScSourceRecordProvider:
     def descriptor(self) -> SourceProviderDescriptor:
         return SC_SOURCE_PROVIDER_DESCRIPTOR
 
-    async def discover(
+    async def discover_live(
+        self,
+        *,
+        connector: SourceConnector,
+        condition: FilterGroup,
+        publication_start_utc: datetime,
+        publication_end_utc: datetime,
+        after_cursor: dict[str, object] | None,
+    ) -> AsyncIterator[SourceDiscoveryBatch]:
+        del connector
+        stored_cursor = _publication_cursor(after_cursor)
+        published_from = publication_start_utc
+        if stored_cursor is not None:
+            published_from = max(
+                publication_start_utc,
+                stored_cursor.published_at - _PUBLICATION_REPLAY_OVERLAP,
+            )
+        page_after: ScInspectionPublicationCursor | None = None
+        while True:
+            page = await self._upstream.list_published_inspection_page(
+                published_from=published_from,
+                published_until=publication_end_utc,
+                after=page_after,
+                page_size=_SOURCE_DISCOVERY_BATCH_ROWS,
+            )
+            if page.is_empty():
+                return
+            page_after = _publication_cursor_from_row(page.row(-1, named=True))
+            checkpoint = (
+                page_after
+                if stored_cursor is None
+                or _cursor_key(page_after) > _cursor_key(stored_cursor)
+                else stored_cursor
+            )
+            matched = (
+                await page.lazy().filter(_condition_expr(condition)).collect_async()
+            )
+            yield SourceDiscoveryBatch(
+                records=tuple(
+                    self._record(row) for row in matched.iter_rows(named=True)
+                ),
+                checkpoint=_publication_checkpoint(checkpoint),
+            )
+            if page.height < _SOURCE_DISCOVERY_BATCH_ROWS:
+                return
+
+    async def discover_backfill(
         self,
         *,
         connector: SourceConnector,
@@ -120,26 +173,28 @@ class ScSourceRecordProvider:
         end_utc: datetime,
     ) -> AsyncIterator[SourceDiscoveryBatch]:
         del connector
-        frame = await self._filtered_frame(
-            condition=condition,
-            start_utc=start_utc,
-            end_utc=end_utc,
-        )
-        offset = 0
+        after: ScInspectionKey | None = None
         while True:
-            matched = await frame.slice(
-                offset, _SOURCE_DISCOVERY_BATCH_ROWS
-            ).collect_async()
-            if matched.is_empty():
+            page = await self._upstream.list_inspection_page(
+                start_time=start_utc.astimezone(_SC_TIMEZONE),
+                end_time=end_utc.astimezone(_SC_TIMEZONE),
+                after=after,
+                page_size=_SOURCE_DISCOVERY_BATCH_ROWS,
+            )
+            if page.is_empty():
                 return
+            after = _inspection_key_from_row(page.row(-1, named=True))
+            matched = (
+                await page.lazy().filter(_condition_expr(condition)).collect_async()
+            )
             yield SourceDiscoveryBatch(
                 records=tuple(
                     self._record(row) for row in matched.iter_rows(named=True)
                 ),
+                checkpoint=None,
             )
-            if matched.height < _SOURCE_DISCOVERY_BATCH_ROWS:
+            if page.height < _SOURCE_DISCOVERY_BATCH_ROWS:
                 return
-            offset += matched.height
 
     async def estimate(
         self,
@@ -150,20 +205,22 @@ class ScSourceRecordProvider:
         end_utc: datetime,
         representative_limit: int,
     ) -> SourceEstimate:
-        del connector
-        frame = await self._filtered_frame(
+        records: list[SourceRecord] = []
+        matched_count = 0
+        async for batch in self.discover_backfill(
+            connector=connector,
             condition=condition,
             start_utc=start_utc,
             end_utc=end_utc,
-        )
-        count_frame, sample_frame = await _collect_estimate(frame, representative_limit)
-        matched_count = int(count_frame.item()) if count_frame.height else 0
+        ):
+            matched_count += len(batch.records)
+            remaining = representative_limit - len(records)
+            if remaining > 0:
+                records.extend(batch.records[:remaining])
         return SourceEstimate(
             as_of_utc=datetime.now(UTC),
             matched_count=matched_count,
-            representative_records=tuple(
-                self._record(row) for row in sample_frame.iter_rows(named=True)
-            ),
+            representative_records=tuple(records),
         )
 
     async def import_record(
@@ -205,27 +262,17 @@ class ScSourceRecordProvider:
             imported_count=result.imported_count,
         )
 
-    async def _filtered_frame(
-        self,
-        *,
-        condition: FilterGroup,
-        start_utc: datetime,
-        end_utc: datetime,
-    ) -> pl.LazyFrame:
-        source_start = start_utc.astimezone(_SC_TIMEZONE)
-        source_end = end_utc.astimezone(_SC_TIMEZONE)
-        frame = await self._upstream.list_inspections(source_start, source_end)
-        return frame.filter(_condition_expr(condition)).sort(
-            ["inspection_time", "wafer_key"]
-        )
-
     @staticmethod
     def _record(row: dict[str, object]) -> SourceRecord:
         raw_time = row.get("inspection_time")
         if isinstance(raw_time, datetime):
-            source_time = _coerce_naive_to_upstream_tz(raw_time)
+            source_time = _coerce_naive_to_upstream_tz(raw_time).astimezone(
+                _SC_TIMEZONE
+            )
         elif isinstance(raw_time, str):
-            source_time = _coerce_naive_to_upstream_tz(datetime.fromisoformat(raw_time))
+            source_time = _coerce_naive_to_upstream_tz(
+                datetime.fromisoformat(raw_time)
+            ).astimezone(_SC_TIMEZONE)
         else:
             raise ValueError("SC Source record has no inspection_time")
         wafer_key = row.get("wafer_key")
@@ -242,19 +289,87 @@ class ScSourceRecordProvider:
         layer = attributes.get("layer_id") or "unlayered"
         return SourceRecord(
             record_key=f"{inspection_time}::{wafer_key}",
-            source_version=None,
             observed_at=source_time.astimezone(UTC),
             display_name=f"{lot}-{wafer}-{layer}-{source_time:%Y%m%d-%H%M%S}",
             attributes=attributes,
         )
 
 
-async def _collect_estimate(
-    frame: pl.LazyFrame, representative_limit: int
-) -> tuple[pl.DataFrame, pl.DataFrame]:
-    count = await frame.select(pl.len().alias("matched_count")).collect_async()
-    sample = await frame.limit(representative_limit).collect_async()
-    return count, sample
+def _inspection_time(value: object, field: str) -> datetime:
+    if isinstance(value, datetime):
+        return _coerce_naive_to_upstream_tz(value).astimezone(_SC_TIMEZONE)
+    if isinstance(value, str):
+        return _coerce_naive_to_upstream_tz(datetime.fromisoformat(value)).astimezone(
+            _SC_TIMEZONE
+        )
+    raise ValueError(f"SC inspection page is missing {field}")
+
+
+def _inspection_key_from_row(row: dict[str, object]) -> ScInspectionKey:
+    wafer_key = row.get("wafer_key")
+    if not isinstance(wafer_key, int) or isinstance(wafer_key, bool):
+        raise ValueError("SC inspection page is missing wafer_key")
+    return ScInspectionKey(
+        inspection_time=_inspection_time(row.get("inspection_time"), "inspection_time"),
+        wafer_key=wafer_key,
+    )
+
+
+def _publication_cursor_from_row(
+    row: dict[str, object],
+) -> ScInspectionPublicationCursor:
+    key = _inspection_key_from_row(row)
+    published_at = row.get("published_at")
+    if isinstance(published_at, str):
+        published_at = datetime.fromisoformat(published_at)
+    if not isinstance(published_at, datetime) or published_at.tzinfo is None:
+        raise ValueError("SC inspection page is missing timezone-aware published_at")
+    return ScInspectionPublicationCursor(
+        published_at=published_at.astimezone(UTC),
+        inspection_time=key.inspection_time,
+        wafer_key=key.wafer_key,
+    )
+
+
+def _publication_cursor(
+    value: dict[str, object] | None,
+) -> ScInspectionPublicationCursor | None:
+    if value is None:
+        return None
+    try:
+        published_at = datetime.fromisoformat(cast(str, value["published_at"]))
+        inspection_time = datetime.fromisoformat(cast(str, value["inspection_time"]))
+        wafer_key = value["wafer_key"]
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError("Stored SC publication cursor is invalid") from exc
+    if (
+        published_at.tzinfo is None
+        or inspection_time.tzinfo is None
+        or not isinstance(wafer_key, int)
+        or isinstance(wafer_key, bool)
+    ):
+        raise ValueError("Stored SC publication cursor is invalid")
+    return ScInspectionPublicationCursor(
+        published_at=published_at.astimezone(UTC),
+        inspection_time=inspection_time.astimezone(_SC_TIMEZONE),
+        wafer_key=wafer_key,
+    )
+
+
+def _publication_checkpoint(
+    cursor: ScInspectionPublicationCursor,
+) -> dict[str, object]:
+    return {
+        "published_at": cursor.published_at.isoformat(),
+        "inspection_time": cursor.inspection_time.isoformat(),
+        "wafer_key": cursor.wafer_key,
+    }
+
+
+def _cursor_key(
+    cursor: ScInspectionPublicationCursor,
+) -> tuple[datetime, datetime, int]:
+    return cursor.published_at, cursor.inspection_time, cursor.wafer_key
 
 
 def _condition_expr(node: FilterNode) -> pl.Expr:

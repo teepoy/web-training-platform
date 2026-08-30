@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime
+from enum import StrEnum
 from typing import Any, Protocol
 
 import polars as pl
@@ -13,6 +14,36 @@ import pyarrow as pa
 class SampleBatchStream:
     schema: pa.Schema
     batches: Iterator[pl.DataFrame]
+
+
+class InspectionDiscoveryOrder(StrEnum):
+    PRIMARY_KEY = "primary_key"
+    PUBLICATION = "publication"
+
+
+@dataclass(frozen=True, slots=True)
+class InspectionPrimaryKeyCursor:
+    inspection_time: datetime
+    wafer_key: int
+
+
+@dataclass(frozen=True, slots=True)
+class InspectionPublicationCursor:
+    published_at: datetime
+    inspection_time: datetime
+    wafer_key: int
+
+
+@dataclass(frozen=True, slots=True)
+class InspectionDiscoveryQuery:
+    order: InspectionDiscoveryOrder
+    page_size: int
+    start_time: datetime | None = None
+    end_time: datetime | None = None
+    published_from: datetime | None = None
+    published_until: datetime | None = None
+    after_primary_key: InspectionPrimaryKeyCursor | None = None
+    after_publication: InspectionPublicationCursor | None = None
 
 
 class UpstreamDB(Protocol):
@@ -29,6 +60,10 @@ class UpstreamDB(Protocol):
         layer_id: str = "",
         device: str = "",
     ) -> pl.LazyFrame: ...
+
+    async def list_discovery_inspections(
+        self, query: InspectionDiscoveryQuery
+    ) -> pl.DataFrame: ...
 
     async def list_samples(
         self,

@@ -21,7 +21,6 @@ from app.modules.source_discovery.domain.models import (
     ImportReceipt,
     MembershipRule,
     MembershipRuleVersion,
-    MembershipSuppression,
     ScAutomationPartition,
     SourceConnector,
     SourceMembership,
@@ -37,7 +36,6 @@ from app.shared.db.models.source_discovery import (
     CollectionImportReceiptORM,
     CollectionMembershipRuleORM,
     CollectionMembershipRuleVersionORM,
-    CollectionMembershipSuppressionORM,
     CollectionSourceMembershipORM,
     ScAutomationPartitionORM,
     SourceConnectorORM,
@@ -162,7 +160,6 @@ def _run_item(row: CollectionDiscoveryRunItemORM) -> DiscoveryRunItem:
         run_id=row.run_id,
         connector_id=row.connector_id,
         source_record_key=row.source_record_key,
-        source_version=row.source_version,
         observed_at=_db_utc(row.observed_at),
         source_payload=cast(dict[str, object], row.source_payload),
         status=row.status,
@@ -180,7 +177,6 @@ def _import_receipt(row: CollectionImportReceiptORM) -> ImportReceipt:
         collection_id=row.collection_id,
         connector_id=row.connector_id,
         source_record_key=row.source_record_key,
-        source_version=row.source_version_key or None,
         import_profile_version_id=row.import_profile_version_id,
         status=row.status,
         dataset_id=row.dataset_id,
@@ -195,26 +191,11 @@ def _source_membership(row: CollectionSourceMembershipORM) -> SourceMembership:
         collection_id=row.collection_id,
         connector_id=row.connector_id,
         source_record_key=row.source_record_key,
-        source_version=row.source_version,
         dataset_id=row.dataset_id,
         member_id=row.member_id,
         admitted_by_rule_id=row.admitted_by_rule_id,
         admitted_by_run_id=row.admitted_by_run_id,
         created_at=_db_utc(row.created_at),
-    )
-
-
-def _suppression(row: CollectionMembershipSuppressionORM) -> MembershipSuppression:
-    return MembershipSuppression(
-        id=row.id,
-        collection_id=row.collection_id,
-        connector_id=row.connector_id,
-        source_record_key=row.source_record_key,
-        reason=row.reason,
-        created_by=row.created_by,
-        created_at=_db_utc(row.created_at),
-        cleared_by=row.cleared_by,
-        cleared_at=(_db_utc(row.cleared_at) if row.cleared_at is not None else None),
     )
 
 
@@ -668,10 +649,6 @@ class SourceDiscoverySqlRepository:
                     == receipt.source_record_key
                 )
                 .where(
-                    CollectionImportReceiptORM.source_version_key
-                    == (receipt.source_version or "")
-                )
-                .where(
                     CollectionImportReceiptORM.import_profile_version_id
                     == receipt.import_profile_version_id
                 )
@@ -693,7 +670,6 @@ class SourceDiscoverySqlRepository:
                 collection_id=receipt.collection_id,
                 connector_id=receipt.connector_id,
                 source_record_key=receipt.source_record_key,
-                source_version_key=receipt.source_version or "",
                 import_profile_version_id=receipt.import_profile_version_id,
                 status=receipt.status,
                 dataset_id=receipt.dataset_id,
@@ -720,10 +696,6 @@ class SourceDiscoverySqlRepository:
                     .where(
                         CollectionImportReceiptORM.source_record_key
                         == receipt.source_record_key
-                    )
-                    .where(
-                        CollectionImportReceiptORM.source_version_key
-                        == (receipt.source_version or "")
                     )
                     .where(
                         CollectionImportReceiptORM.import_profile_version_id
@@ -760,7 +732,6 @@ class SourceDiscoverySqlRepository:
         rule_id: str,
         connector_id: str,
         source_record_key: str,
-        source_version: str | None,
         import_profile_version_id: str,
     ) -> tuple[str, str | None, str | None] | None:
         async with self._session_factory() as session:
@@ -770,10 +741,6 @@ class SourceDiscoverySqlRepository:
                 .where(CollectionDiscoveryReceiptORM.connector_id == connector_id)
                 .where(
                     CollectionDiscoveryReceiptORM.source_record_key == source_record_key
-                )
-                .where(
-                    CollectionDiscoveryReceiptORM.source_version_key
-                    == (source_version or "")
                 )
                 .where(
                     CollectionDiscoveryReceiptORM.import_profile_version_id
@@ -791,7 +758,6 @@ class SourceDiscoverySqlRepository:
         rule_id: str,
         connector_id: str,
         source_record_key: str,
-        source_version: str | None,
         import_profile_version_id: str,
         status: str,
         dataset_id: str | None,
@@ -808,10 +774,6 @@ class SourceDiscoverySqlRepository:
                     CollectionDiscoveryReceiptORM.source_record_key == source_record_key
                 )
                 .where(
-                    CollectionDiscoveryReceiptORM.source_version_key
-                    == (source_version or "")
-                )
-                .where(
                     CollectionDiscoveryReceiptORM.import_profile_version_id
                     == import_profile_version_id
                 )
@@ -824,7 +786,6 @@ class SourceDiscoverySqlRepository:
                     rule_id=rule_id,
                     connector_id=connector_id,
                     source_record_key=source_record_key,
-                    source_version_key=source_version or "",
                     import_profile_version_id=import_profile_version_id,
                     status=status,
                     dataset_id=dataset_id,
@@ -851,10 +812,6 @@ class SourceDiscoverySqlRepository:
                         == source_record_key
                     )
                     .where(
-                        CollectionDiscoveryReceiptORM.source_version_key
-                        == (source_version or "")
-                    )
-                    .where(
                         CollectionDiscoveryReceiptORM.import_profile_version_id
                         == import_profile_version_id
                     )
@@ -867,55 +824,3 @@ class SourceDiscoverySqlRepository:
                 existing.member_id = member_id
                 existing.updated_at = updated_at
                 await session.commit()
-
-    async def get_active_suppression(
-        self, collection_id: str, connector_id: str, source_record_key: str
-    ) -> MembershipSuppression | None:
-        async with self._session_factory() as session:
-            row = await session.scalar(
-                select(CollectionMembershipSuppressionORM)
-                .where(
-                    CollectionMembershipSuppressionORM.collection_id == collection_id
-                )
-                .where(CollectionMembershipSuppressionORM.connector_id == connector_id)
-                .where(
-                    CollectionMembershipSuppressionORM.source_record_key
-                    == source_record_key
-                )
-                .where(CollectionMembershipSuppressionORM.cleared_at.is_(None))
-            )
-            return _suppression(row) if row is not None else None
-
-    async def create_suppression(
-        self, suppression: MembershipSuppression
-    ) -> MembershipSuppression:
-        async with self._session_factory() as session:
-            row = CollectionMembershipSuppressionORM(**asdict(suppression))
-            session.add(row)
-            await session.commit()
-            return _suppression(row)
-
-    async def clear_suppression(
-        self,
-        suppression_id: str,
-        *,
-        collection_id: str,
-        actor_id: str,
-        cleared_at: datetime,
-    ) -> MembershipSuppression | None:
-        async with self._session_factory() as session:
-            row = await session.scalar(
-                select(CollectionMembershipSuppressionORM)
-                .where(CollectionMembershipSuppressionORM.id == suppression_id)
-                .where(
-                    CollectionMembershipSuppressionORM.collection_id == collection_id
-                )
-                .where(CollectionMembershipSuppressionORM.cleared_at.is_(None))
-                .with_for_update()
-            )
-            if row is None:
-                return None
-            row.cleared_by = actor_id
-            row.cleared_at = cleared_at
-            await session.commit()
-            return _suppression(row)

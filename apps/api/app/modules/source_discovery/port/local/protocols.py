@@ -10,7 +10,6 @@ from app.modules.source_discovery.domain.models import (
     ImportProfileVersion,
     MembershipRule,
     MembershipRuleVersion,
-    MembershipSuppression,
     ScAutomationPartition,
     SourceConnector,
     SourceEstimate,
@@ -144,24 +143,3 @@ class SourceDiscoveryManagementPort(Protocol):
     ) -> DiscoveryExecution: ...
 
     async def get_run(self, run_id: str, org_id: str) -> DiscoveryExecution: ...
-
-    async def suppress_source_member(
-        self,
-        *,
-        collection_id: str,
-        connector_id: str,
-        source_record_key: str,
-        org_id: str,
-        actor_id: str,
-        expected_definition_version: int,
-        reason: str,
-    ) -> MembershipSuppression: ...
-
-    async def clear_suppression(
-        self,
-        *,
-        collection_id: str,
-        suppression_id: str,
-        org_id: str,
-        actor_id: str,
-    ) -> MembershipSuppression: ...

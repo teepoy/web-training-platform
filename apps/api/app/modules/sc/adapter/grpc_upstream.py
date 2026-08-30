@@ -14,7 +14,11 @@ from grpc import StatusCode
 from grpc import aio as grpc_aio
 
 from app.modules.sc.domain.models import _coerce_naive_to_upstream_tz
-from app.modules.sc.domain.upstream_reader import ScSampleProgressCallback
+from app.modules.sc.domain.upstream_reader import (
+    ScInspectionKey,
+    ScInspectionPublicationCursor,
+    ScSampleProgressCallback,
+)
 from proto_stubs.sc.v1 import upstream_pb2 as pb
 from proto_stubs.sc.v1 import upstream_pb2_grpc as pb_grpc
 
@@ -31,6 +35,35 @@ def _empty_record_batch(schema: pa.Schema) -> pa.RecordBatch:
     return pa.RecordBatch.from_arrays(
         [pa.array([], type=field.type) for field in schema],
         schema=schema,
+    )
+
+
+def _inspection_page(response: pb.ListInspectionsResponse) -> pl.DataFrame:
+    return pl.DataFrame(
+        [
+            {
+                "inspection_time": _parse_upstream_datetime(item.inspection_time),
+                "wafer_key": item.wafer_key,
+                "lot_id": item.lot_id,
+                "wafer_id": item.wafer_id,
+                "device": item.device,
+                "layer_id": item.layer_id,
+                "inspect_equip_id": item.eqp_id,
+                "recipe_id": item.recipe_id,
+                "defects": item.defects,
+                "images": item.images,
+                "center_x": item.center_x,
+                "center_y": item.center_y,
+                "origin_x": item.origin_x,
+                "origin_y": item.origin_y,
+                "die_size_x": item.die_size_x,
+                "die_size_y": item.die_size_y,
+                "latest_update": item.latest_update,
+                "change_token": item.change_token,
+                "published_at": datetime.fromisoformat(item.published_at),
+            }
+            for item in response.items
+        ]
     )
 
 
@@ -106,6 +139,55 @@ class GrpcScUpstream:
             for i in resp.items
         ]
         return pl.DataFrame(rows).lazy()
+
+    async def list_inspection_page(
+        self,
+        *,
+        start_time: datetime,
+        end_time: datetime,
+        after: ScInspectionKey | None,
+        page_size: int,
+    ) -> pl.DataFrame:
+        request = pb.ListDiscoveryInspectionsRequest(
+            order=pb.INSPECTION_DISCOVERY_ORDER_PRIMARY_KEY,
+            start_time=start_time.isoformat(),
+            end_time=end_time.isoformat(),
+            page_size=page_size,
+        )
+        if after is not None:
+            request.after_primary_key.CopyFrom(
+                pb.InspectionPrimaryKeyCursor(
+                    inspection_time=after.inspection_time.isoformat(),
+                    wafer_key=after.wafer_key,
+                )
+            )
+        response = await self._ensure_channel().ListDiscoveryInspections(request)
+        return _inspection_page(response)
+
+    async def list_published_inspection_page(
+        self,
+        *,
+        published_from: datetime,
+        published_until: datetime,
+        after: ScInspectionPublicationCursor | None,
+        page_size: int,
+    ) -> pl.DataFrame:
+        request = pb.ListDiscoveryInspectionsRequest(
+            order=pb.INSPECTION_DISCOVERY_ORDER_PUBLICATION,
+            published_from=published_from.isoformat(),
+            published_until=published_until.isoformat(),
+            page_size=page_size,
+        )
+        if after is not None:
+            request.after_publication.CopyFrom(
+                pb.InspectionPublicationCursor(
+                    published_at=after.published_at.isoformat(),
+                    inspection_time=after.inspection_time.isoformat(),
+                    wafer_key=after.wafer_key,
+                )
+            )
+        response = await self._ensure_channel().ListDiscoveryInspections(request)
+        return _inspection_page(response)
 
     async def get_inspection(
         self, inspection_time: datetime, wafer_key: int

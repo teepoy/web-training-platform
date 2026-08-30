@@ -25,7 +25,10 @@ from app.modules.sc.app.services.sc_import_service import ScImportService
 from app.modules.sc.app.services.prediction_export_service import (
     ScPredictionExportService,
 )
-from app.modules.sc.domain.upstream_reader import ScUpstreamReader
+from app.modules.sc.domain.upstream_reader import (
+    ScDiscoveryUpstreamReader,
+    ScUpstreamReader,
+)
 from app.modules.sc.materialization.app.services.sc_inspection_materializer import (
     ScInspectionMaterializer,
 )
@@ -208,6 +211,13 @@ class ScModule(Module):
     @singleton
     def provide_sc_upstream_reader(self, context: ScContext) -> ScUpstreamReader:
         return context.upstream_reader
+
+    @provider
+    @singleton
+    def provide_sc_discovery_upstream_reader(
+        self, context: ScContext
+    ) -> ScDiscoveryUpstreamReader:
+        return cast(ScDiscoveryUpstreamReader, context.upstream_reader)
 
     @provider
     @singleton

@@ -63,6 +63,11 @@ class ScUpstreamStub(object):
                 request_serializer=sc_dot_v1_dot_upstream__pb2.ListInspectionsRequest.SerializeToString,
                 response_deserializer=sc_dot_v1_dot_upstream__pb2.ListInspectionsResponse.FromString,
                 _registered_method=True)
+        self.ListDiscoveryInspections = channel.unary_unary(
+                '/sc.v1.ScUpstream/ListDiscoveryInspections',
+                request_serializer=sc_dot_v1_dot_upstream__pb2.ListDiscoveryInspectionsRequest.SerializeToString,
+                response_deserializer=sc_dot_v1_dot_upstream__pb2.ListInspectionsResponse.FromString,
+                _registered_method=True)
 
 
 class ScUpstreamServicer(object):
@@ -104,6 +109,12 @@ class ScUpstreamServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def ListDiscoveryInspections(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_ScUpstreamServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -135,6 +146,11 @@ def add_ScUpstreamServicer_to_server(servicer, server):
             'ListInspections': grpc.unary_unary_rpc_method_handler(
                     servicer.ListInspections,
                     request_deserializer=sc_dot_v1_dot_upstream__pb2.ListInspectionsRequest.FromString,
+                    response_serializer=sc_dot_v1_dot_upstream__pb2.ListInspectionsResponse.SerializeToString,
+            ),
+            'ListDiscoveryInspections': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListDiscoveryInspections,
+                    request_deserializer=sc_dot_v1_dot_upstream__pb2.ListDiscoveryInspectionsRequest.FromString,
                     response_serializer=sc_dot_v1_dot_upstream__pb2.ListInspectionsResponse.SerializeToString,
             ),
     }
@@ -299,6 +315,33 @@ class ScUpstream(object):
             target,
             '/sc.v1.ScUpstream/ListInspections',
             sc_dot_v1_dot_upstream__pb2.ListInspectionsRequest.SerializeToString,
+            sc_dot_v1_dot_upstream__pb2.ListInspectionsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListDiscoveryInspections(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/sc.v1.ScUpstream/ListDiscoveryInspections',
+            sc_dot_v1_dot_upstream__pb2.ListDiscoveryInspectionsRequest.SerializeToString,
             sc_dot_v1_dot_upstream__pb2.ListInspectionsResponse.FromString,
             options,
             channel_credentials,

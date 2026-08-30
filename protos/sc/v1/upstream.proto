@@ -11,6 +11,7 @@ service ScUpstream {
   rpc GetReviewImageFileSpec(GetReviewImageFileSpecRequest) returns (GetReviewImageFileSpecResponse);
   rpc ListReviewImages(ListReviewImagesRequest) returns (ListReviewImagesResponse);
   rpc ListInspections(ListInspectionsRequest) returns (ListInspectionsResponse);
+  rpc ListDiscoveryInspections(ListDiscoveryInspectionsRequest) returns (ListInspectionsResponse);
 }
 
 message HealthRequest {}
@@ -101,6 +102,34 @@ message ListInspectionsRequest {
   string device = 6;
 }
 
+enum InspectionDiscoveryOrder {
+  INSPECTION_DISCOVERY_ORDER_UNSPECIFIED = 0;
+  INSPECTION_DISCOVERY_ORDER_PRIMARY_KEY = 1;
+  INSPECTION_DISCOVERY_ORDER_PUBLICATION = 2;
+}
+
+message InspectionPrimaryKeyCursor {
+  string inspection_time = 1;
+  int32 wafer_key = 2;
+}
+
+message InspectionPublicationCursor {
+  string published_at = 1;
+  string inspection_time = 2;
+  int32 wafer_key = 3;
+}
+
+message ListDiscoveryInspectionsRequest {
+  InspectionDiscoveryOrder order = 1;
+  string start_time = 2;
+  string end_time = 3;
+  string published_from = 4;
+  string published_until = 5;
+  InspectionPrimaryKeyCursor after_primary_key = 6;
+  InspectionPublicationCursor after_publication = 7;
+  int32 page_size = 8;
+}
+
 message InspectionSummary {
   string inspection_time = 1;
   int32 wafer_key = 2;
@@ -122,6 +151,7 @@ message InspectionSummary {
   int32 origin_index_y = 18;
   int32 latest_update = 19;
   int64 change_token = 20;
+  string published_at = 21;
 }
 
 message ListInspectionsResponse {

@@ -20,7 +20,17 @@ class SourceRecordProvider(Protocol):
     @property
     def descriptor(self) -> SourceProviderDescriptor: ...
 
-    def discover(
+    def discover_live(
+        self,
+        *,
+        connector: SourceConnector,
+        condition: FilterGroup,
+        publication_start_utc: datetime,
+        publication_end_utc: datetime,
+        after_cursor: dict[str, object] | None,
+    ) -> AsyncIterator[SourceDiscoveryBatch]: ...
+
+    def discover_backfill(
         self,
         *,
         connector: SourceConnector,

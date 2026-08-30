@@ -136,7 +136,6 @@ class ScAutomationPartition:
 @dataclass(frozen=True, slots=True)
 class SourceRecord:
     record_key: str
-    source_version: str | None
     observed_at: datetime
     display_name: str
     attributes: dict[str, object]
@@ -145,6 +144,7 @@ class SourceRecord:
 @dataclass(frozen=True, slots=True)
 class SourceDiscoveryBatch:
     records: tuple[SourceRecord, ...]
+    checkpoint: dict[str, object] | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -189,7 +189,6 @@ class DiscoveryRunItem:
     run_id: str
     connector_id: str
     source_record_key: str
-    source_version: str | None
     observed_at: datetime
     source_payload: dict[str, object]
     status: str
@@ -206,7 +205,6 @@ class ImportReceipt:
     collection_id: str
     connector_id: str
     source_record_key: str
-    source_version: str | None
     import_profile_version_id: str
     status: str
     dataset_id: str | None
@@ -220,25 +218,11 @@ class SourceMembership:
     collection_id: str
     connector_id: str
     source_record_key: str
-    source_version: str | None
     dataset_id: str
     member_id: str
     admitted_by_rule_id: str
     admitted_by_run_id: str
     created_at: datetime
-
-
-@dataclass(frozen=True, slots=True)
-class MembershipSuppression:
-    id: str
-    collection_id: str
-    connector_id: str
-    source_record_key: str
-    created_by: str
-    created_at: datetime
-    reason: str = ""
-    cleared_by: str | None = None
-    cleared_at: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)

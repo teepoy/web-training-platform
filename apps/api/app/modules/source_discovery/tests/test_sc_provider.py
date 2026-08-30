@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
+from typing import cast
 
 import polars as pl
 import pytest
@@ -16,6 +17,10 @@ from app.modules.source_discovery.domain.models import (
     SourceRecord,
 )
 from app.modules.sc.domain.entities.sc_import import ScImportStatus
+from app.modules.sc.domain.upstream_reader import (
+    ScInspectionKey,
+    ScInspectionPublicationCursor,
+)
 
 
 class _Upstream:
@@ -46,6 +51,36 @@ class _Upstream:
             .filter(pl.col("inspection_time") < end_time.replace(tzinfo=None))
         )
 
+    async def list_inspection_page(
+        self,
+        *,
+        start_time: datetime,
+        end_time: datetime,
+        after: ScInspectionKey | None,
+        page_size: int,
+    ) -> pl.DataFrame:
+        frame = await self.list_inspections(start_time, end_time)
+        if after is not None:
+            frame = frame.filter(
+                (pl.col("inspection_time") > after.inspection_time.replace(tzinfo=None))
+                | (
+                    (pl.col("inspection_time") == after.inspection_time.replace(tzinfo=None))
+                    & (pl.col("wafer_key") > after.wafer_key)
+                )
+            )
+        return await frame.sort(["inspection_time", "wafer_key"]).limit(page_size).collect_async()
+
+    async def list_published_inspection_page(
+        self,
+        *,
+        published_from: datetime,
+        published_until: datetime,
+        after: ScInspectionPublicationCursor | None,
+        page_size: int,
+    ) -> pl.DataFrame:
+        del published_from, published_until, after, page_size
+        return pl.DataFrame()
+
 
 class _Importer:
     async def submit_import(self, *args: object, **kwargs: object) -> object:
@@ -70,6 +105,82 @@ class _ManyUpstream:
                 "layer_id": ["M1"] * 600,
             }
         ).lazy()
+
+    async def list_inspection_page(
+        self,
+        *,
+        start_time: datetime,
+        end_time: datetime,
+        after: ScInspectionKey | None,
+        page_size: int,
+    ) -> pl.DataFrame:
+        frame = await self.list_inspections(start_time, end_time)
+        if after is not None:
+            frame = frame.filter(
+                (pl.col("inspection_time") > after.inspection_time.replace(tzinfo=None))
+                | (
+                    (pl.col("inspection_time") == after.inspection_time.replace(tzinfo=None))
+                    & (pl.col("wafer_key") > after.wafer_key)
+                )
+            )
+        return await frame.sort(["inspection_time", "wafer_key"]).limit(page_size).collect_async()
+
+    async def list_published_inspection_page(
+        self,
+        *,
+        published_from: datetime,
+        published_until: datetime,
+        after: ScInspectionPublicationCursor | None,
+        page_size: int,
+    ) -> pl.DataFrame:
+        del published_from, published_until, after, page_size
+        return pl.DataFrame()
+
+
+class _PublishedUpstream:
+    def __init__(self, rows: list[dict[str, object]]) -> None:
+        self.rows = rows
+        self.after: list[ScInspectionPublicationCursor | None] = []
+
+    async def list_published_inspection_page(
+        self,
+        *,
+        published_from: datetime,
+        published_until: datetime,
+        after: ScInspectionPublicationCursor | None,
+        page_size: int,
+    ) -> pl.DataFrame:
+        self.after.append(after)
+        rows = [
+            row
+            for row in self.rows
+            if published_from
+            <= cast(datetime, row["published_at"])
+            < published_until
+            and (
+                after is None
+                or (
+                    row["published_at"],
+                    row["inspection_time"],
+                    row["wafer_key"],
+                )
+                > (after.published_at, after.inspection_time, after.wafer_key)
+            )
+        ]
+        rows.sort(
+            key=lambda row: (
+                row["published_at"],
+                row["inspection_time"],
+                row["wafer_key"],
+            )
+        )
+        return pl.DataFrame(rows[:page_size])
+
+    async def list_inspection_page(self, **_kwargs: object) -> pl.DataFrame:
+        return pl.DataFrame()
+
+    async def list_inspections(self, *_args: object, **_kwargs: object) -> pl.LazyFrame:
+        return pl.DataFrame(self.rows).lazy()
 
 
 class _CapturingImporter:
@@ -113,7 +224,7 @@ async def test_sc_discovery_uses_local_wall_clock_and_utc_half_open_range() -> N
     )
     records = [
         record
-        async for batch in provider.discover(
+        async for batch in provider.discover_backfill(
             connector=connector,
             condition=condition,
             start_utc=datetime(2026, 8, 15, 0, 0, tzinfo=UTC),
@@ -159,7 +270,6 @@ async def test_sc_discovery_import_leaves_parser_selection_to_service() -> None:
     )
     record = SourceRecord(
         record_key="record",
-        source_version=None,
         observed_at=now,
         display_name="Imported wafer",
         attributes={
@@ -197,7 +307,7 @@ async def test_sc_discovery_pages_all_matches_without_one_eager_batch() -> None:
     )
     batches = [
         batch
-        async for batch in provider.discover(
+        async for batch in provider.discover_backfill(
             connector=connector,
             condition=FilterGroup(
                 combinator=FilterCombinator.ALL,
@@ -213,3 +323,111 @@ async def test_sc_discovery_pages_all_matches_without_one_eager_batch() -> None:
     assert len(batches) > 1
     assert max(len(batch.records) for batch in batches) < 600
     assert sum(len(batch.records) for batch in batches) == 600
+
+
+@pytest.mark.asyncio
+async def test_sc_live_discovery_keysets_publication_with_inspection_identity_ties() -> None:
+    published_at = datetime(2026, 8, 30, 1, tzinfo=UTC)
+    rows = [
+        {
+            "published_at": published_at,
+            "inspection_time": datetime(
+                2026, 8, 1, 8, tzinfo=timezone(timedelta(hours=8))
+            ),
+            "wafer_key": wafer_key,
+            "layer_id": "M1",
+        }
+        for wafer_key in range(1, 301)
+    ]
+    upstream = _PublishedUpstream(rows)
+    provider = ScSourceRecordProvider(upstream, _Importer())  # type: ignore[arg-type]
+    now = datetime.now(UTC)
+    connector = SourceConnector(
+        id="connector",
+        org_id="org",
+        provider_id="sc",
+        name="SC",
+        config={},
+        enabled=True,
+        created_by="user",
+        created_at=now,
+        updated_at=now,
+    )
+
+    batches = [
+        batch
+        async for batch in provider.discover_live(
+            connector=connector,
+            condition=FilterGroup(
+                FilterCombinator.ALL,
+                (FilterPredicate("layer_id", FilterOperator.EQ, "M1"),),
+            ),
+            publication_start_utc=published_at - timedelta(minutes=1),
+            publication_end_utc=published_at + timedelta(minutes=1),
+            after_cursor=None,
+        )
+    ]
+
+    record_keys = [record.record_key for batch in batches for record in batch.records]
+    assert len(record_keys) == len(set(record_keys)) == 300
+    assert record_keys[0] == "2026-08-01T08:00:00+08:00::1"
+    assert record_keys[-1] == "2026-08-01T08:00:00+08:00::300"
+    assert batches[-1].checkpoint == {
+        "published_at": published_at.isoformat(),
+        "inspection_time": "2026-08-01T08:00:00+08:00",
+        "wafer_key": 300,
+    }
+    assert len(upstream.after) > 1
+
+
+@pytest.mark.asyncio
+async def test_sc_live_discovery_replays_five_minute_publication_overlap() -> None:
+    stored_published_at = datetime(2026, 8, 30, 1, tzinfo=UTC)
+    inspection_time = datetime(
+        2026, 8, 1, 8, tzinfo=timezone(timedelta(hours=8))
+    )
+    delayed = {
+        "published_at": stored_published_at - timedelta(minutes=1),
+        "inspection_time": inspection_time,
+        "wafer_key": 1,
+        "layer_id": "M1",
+    }
+    upstream = _PublishedUpstream([delayed])
+    provider = ScSourceRecordProvider(upstream, _Importer())  # type: ignore[arg-type]
+    now = datetime.now(UTC)
+    connector = SourceConnector(
+        id="connector",
+        org_id="org",
+        provider_id="sc",
+        name="SC",
+        config={},
+        enabled=True,
+        created_by="user",
+        created_at=now,
+        updated_at=now,
+    )
+    stored_cursor = {
+        "published_at": stored_published_at.isoformat(),
+        "inspection_time": inspection_time.isoformat(),
+        "wafer_key": 2,
+    }
+
+    batches = [
+        batch
+        async for batch in provider.discover_live(
+            connector=connector,
+            condition=FilterGroup(
+                FilterCombinator.ALL,
+                (FilterPredicate("layer_id", FilterOperator.EQ, "M1"),),
+            ),
+            publication_start_utc=stored_published_at - timedelta(hours=1),
+            publication_end_utc=stored_published_at + timedelta(minutes=1),
+            after_cursor=stored_cursor,
+        )
+    ]
+
+    assert upstream.after == [None]
+    assert [record.record_key for record in batches[0].records] == [
+        "2026-08-01T08:00:00+08:00::1"
+    ]
+    assert batches[0].checkpoint == stored_cursor

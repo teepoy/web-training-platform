@@ -16,7 +16,6 @@ from app.modules.source_discovery.domain.models import (
     ImportProfileVersion,
     MembershipRule,
     MembershipRuleVersion,
-    MembershipSuppression,
     ScAutomationPartition,
     SourceConnector,
     SourceEstimate,
@@ -283,7 +282,6 @@ class BackfillPreviewRequest(BackfillRangeRequest):
 
 class SourceRecordResponse(BaseModel):
     record_key: str
-    source_version: str | None
     observed_at: datetime
     display_name: str
     attributes: dict[str, JsonValue]
@@ -292,7 +290,6 @@ class SourceRecordResponse(BaseModel):
     def from_domain(cls, value: SourceRecord) -> SourceRecordResponse:
         return cls(
             record_key=value.record_key,
-            source_version=value.source_version,
             observed_at=value.observed_at,
             display_name=value.display_name,
             attributes=cast(dict[str, JsonValue], value.attributes),
@@ -319,7 +316,6 @@ class BackfillPreviewResponse(BaseModel):
 class DiscoveryRunItemResponse(BaseModel):
     id: str
     source_record_key: str
-    source_version: str | None
     observed_at: datetime
     status: str
     dataset_id: str | None
@@ -331,7 +327,6 @@ class DiscoveryRunItemResponse(BaseModel):
         return cls(
             id=value.id,
             source_record_key=value.source_record_key,
-            source_version=value.source_version,
             observed_at=value.observed_at,
             status=value.status,
             dataset_id=value.dataset_id,
@@ -384,37 +379,4 @@ class DiscoveryRunResponse(BaseModel):
             created_at=run.created_at,
             completed_at=run.completed_at,
             items=[DiscoveryRunItemResponse.from_domain(item) for item in value.items],
-        )
-
-
-class SuppressSourceMemberRequest(BaseModel):
-    connector_id: str = Field(min_length=1, max_length=64)
-    source_record_key: str = Field(min_length=1, max_length=512)
-    expected_definition_version: int = Field(ge=0)
-    reason: str = Field(max_length=2000)
-
-
-class MembershipSuppressionResponse(BaseModel):
-    id: str
-    collection_id: str
-    connector_id: str
-    source_record_key: str
-    reason: str
-    created_by: str
-    created_at: datetime
-    cleared_by: str | None
-    cleared_at: datetime | None
-
-    @classmethod
-    def from_domain(cls, value: MembershipSuppression) -> MembershipSuppressionResponse:
-        return cls(
-            id=value.id,
-            collection_id=value.collection_id,
-            connector_id=value.connector_id,
-            source_record_key=value.source_record_key,
-            reason=value.reason,
-            created_by=value.created_by,
-            created_at=value.created_at,
-            cleared_by=value.cleared_by,
-            cleared_at=value.cleared_at,
         )

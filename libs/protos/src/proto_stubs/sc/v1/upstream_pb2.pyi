@@ -7,6 +7,7 @@ from collections import abc as _abc
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import message as _message
 from google.protobuf.internal import containers as _containers
+from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
 import builtins as _builtins
 import sys
 import typing as _typing
@@ -17,6 +18,23 @@ else:
     from typing_extensions import TypeAlias as _TypeAlias, Never as _Never
 
 DESCRIPTOR: _descriptor.FileDescriptor
+
+class _InspectionDiscoveryOrder:
+    ValueType = _typing.NewType("ValueType", _builtins.int)
+    V: _TypeAlias = ValueType  # noqa: Y015
+
+class _InspectionDiscoveryOrderEnumTypeWrapper(_enum_type_wrapper._EnumTypeWrapper[_InspectionDiscoveryOrder.ValueType], _builtins.type):
+    DESCRIPTOR: _descriptor.EnumDescriptor
+    INSPECTION_DISCOVERY_ORDER_UNSPECIFIED: _InspectionDiscoveryOrder.ValueType  # 0
+    INSPECTION_DISCOVERY_ORDER_PRIMARY_KEY: _InspectionDiscoveryOrder.ValueType  # 1
+    INSPECTION_DISCOVERY_ORDER_PUBLICATION: _InspectionDiscoveryOrder.ValueType  # 2
+
+class InspectionDiscoveryOrder(_InspectionDiscoveryOrder, metaclass=_InspectionDiscoveryOrderEnumTypeWrapper): ...
+
+INSPECTION_DISCOVERY_ORDER_UNSPECIFIED: InspectionDiscoveryOrder.ValueType  # 0
+INSPECTION_DISCOVERY_ORDER_PRIMARY_KEY: InspectionDiscoveryOrder.ValueType  # 1
+INSPECTION_DISCOVERY_ORDER_PUBLICATION: InspectionDiscoveryOrder.ValueType  # 2
+Global___InspectionDiscoveryOrder: _TypeAlias = InspectionDiscoveryOrder  # noqa: Y015
 
 @_typing.final
 class HealthRequest(_message.Message):
@@ -378,6 +396,95 @@ class ListInspectionsRequest(_message.Message):
 Global___ListInspectionsRequest: _TypeAlias = ListInspectionsRequest  # noqa: Y015
 
 @_typing.final
+class InspectionPrimaryKeyCursor(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    INSPECTION_TIME_FIELD_NUMBER: _builtins.int
+    WAFER_KEY_FIELD_NUMBER: _builtins.int
+    inspection_time: _builtins.str
+    wafer_key: _builtins.int
+    def __init__(
+        self,
+        *,
+        inspection_time: _builtins.str = ...,
+        wafer_key: _builtins.int = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["inspection_time", b"inspection_time", "wafer_key", b"wafer_key"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___InspectionPrimaryKeyCursor: _TypeAlias = InspectionPrimaryKeyCursor  # noqa: Y015
+
+@_typing.final
+class InspectionPublicationCursor(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    PUBLISHED_AT_FIELD_NUMBER: _builtins.int
+    INSPECTION_TIME_FIELD_NUMBER: _builtins.int
+    WAFER_KEY_FIELD_NUMBER: _builtins.int
+    published_at: _builtins.str
+    inspection_time: _builtins.str
+    wafer_key: _builtins.int
+    def __init__(
+        self,
+        *,
+        published_at: _builtins.str = ...,
+        inspection_time: _builtins.str = ...,
+        wafer_key: _builtins.int = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["inspection_time", b"inspection_time", "published_at", b"published_at", "wafer_key", b"wafer_key"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___InspectionPublicationCursor: _TypeAlias = InspectionPublicationCursor  # noqa: Y015
+
+@_typing.final
+class ListDiscoveryInspectionsRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    ORDER_FIELD_NUMBER: _builtins.int
+    START_TIME_FIELD_NUMBER: _builtins.int
+    END_TIME_FIELD_NUMBER: _builtins.int
+    PUBLISHED_FROM_FIELD_NUMBER: _builtins.int
+    PUBLISHED_UNTIL_FIELD_NUMBER: _builtins.int
+    AFTER_PRIMARY_KEY_FIELD_NUMBER: _builtins.int
+    AFTER_PUBLICATION_FIELD_NUMBER: _builtins.int
+    PAGE_SIZE_FIELD_NUMBER: _builtins.int
+    order: Global___InspectionDiscoveryOrder.ValueType
+    start_time: _builtins.str
+    end_time: _builtins.str
+    published_from: _builtins.str
+    published_until: _builtins.str
+    page_size: _builtins.int
+    @_builtins.property
+    def after_primary_key(self) -> Global___InspectionPrimaryKeyCursor: ...
+    @_builtins.property
+    def after_publication(self) -> Global___InspectionPublicationCursor: ...
+    def __init__(
+        self,
+        *,
+        order: Global___InspectionDiscoveryOrder.ValueType = ...,
+        start_time: _builtins.str = ...,
+        end_time: _builtins.str = ...,
+        published_from: _builtins.str = ...,
+        published_until: _builtins.str = ...,
+        after_primary_key: Global___InspectionPrimaryKeyCursor | None = ...,
+        after_publication: Global___InspectionPublicationCursor | None = ...,
+        page_size: _builtins.int = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["after_primary_key", b"after_primary_key", "after_publication", b"after_publication"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["after_primary_key", b"after_primary_key", "after_publication", b"after_publication", "end_time", b"end_time", "order", b"order", "page_size", b"page_size", "published_from", b"published_from", "published_until", b"published_until", "start_time", b"start_time"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    def WhichOneof(self, oneof_group: _Never) -> None: ...
+
+Global___ListDiscoveryInspectionsRequest: _TypeAlias = ListDiscoveryInspectionsRequest  # noqa: Y015
+
+@_typing.final
 class InspectionSummary(_message.Message):
     DESCRIPTOR: _descriptor.Descriptor
 
@@ -401,6 +508,7 @@ class InspectionSummary(_message.Message):
     ORIGIN_INDEX_Y_FIELD_NUMBER: _builtins.int
     LATEST_UPDATE_FIELD_NUMBER: _builtins.int
     CHANGE_TOKEN_FIELD_NUMBER: _builtins.int
+    PUBLISHED_AT_FIELD_NUMBER: _builtins.int
     inspection_time: _builtins.str
     wafer_key: _builtins.int
     lot_id: _builtins.str
@@ -421,6 +529,7 @@ class InspectionSummary(_message.Message):
     origin_index_y: _builtins.int
     latest_update: _builtins.int
     change_token: _builtins.int
+    published_at: _builtins.str
     def __init__(
         self,
         *,
@@ -444,10 +553,11 @@ class InspectionSummary(_message.Message):
         origin_index_y: _builtins.int = ...,
         latest_update: _builtins.int = ...,
         change_token: _builtins.int = ...,
+        published_at: _builtins.str = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["center_x", b"center_x", "center_y", b"center_y", "change_token", b"change_token", "defects", b"defects", "device", b"device", "die_size_x", b"die_size_x", "die_size_y", b"die_size_y", "eqp_id", b"eqp_id", "images", b"images", "inspection_time", b"inspection_time", "latest_update", b"latest_update", "layer_id", b"layer_id", "lot_id", b"lot_id", "origin_index_x", b"origin_index_x", "origin_index_y", b"origin_index_y", "origin_x", b"origin_x", "origin_y", b"origin_y", "recipe_id", b"recipe_id", "wafer_id", b"wafer_id", "wafer_key", b"wafer_key"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["center_x", b"center_x", "center_y", b"center_y", "change_token", b"change_token", "defects", b"defects", "device", b"device", "die_size_x", b"die_size_x", "die_size_y", b"die_size_y", "eqp_id", b"eqp_id", "images", b"images", "inspection_time", b"inspection_time", "latest_update", b"latest_update", "layer_id", b"layer_id", "lot_id", b"lot_id", "origin_index_x", b"origin_index_x", "origin_index_y", b"origin_index_y", "origin_x", b"origin_x", "origin_y", b"origin_y", "published_at", b"published_at", "recipe_id", b"recipe_id", "wafer_id", b"wafer_id", "wafer_key", b"wafer_key"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     def WhichOneof(self, oneof_group: _Never) -> None: ...
 

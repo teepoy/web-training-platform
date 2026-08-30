@@ -57,11 +57,10 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
-def _record(key: str, *, version: str = "v1") -> SourceRecord:
+def _record(key: str) -> SourceRecord:
     index = int(key.removeprefix("record-"))
     return SourceRecord(
         record_key=key,
-        source_version=version,
         observed_at=datetime(2026, 8, 15, index, tzinfo=UTC),
         display_name=f"Dataset {key}",
         attributes={"layer": "M1", "index": index},
@@ -87,11 +86,51 @@ class _Provider:
 
     def __init__(self, records: tuple[SourceRecord, ...]) -> None:
         self.records = records
+        self.publication_times: dict[str, datetime] = {
+            record.record_key: record.observed_at for record in records
+        }
         self.fail_keys: set[str] = set()
         self.imports: list[tuple[str, str]] = []
         self.require_streaming_consumption = False
+        self.fail_live_after_batches: int | None = None
 
-    async def discover(
+    async def discover_live(
+        self,
+        *,
+        connector: SourceConnector,
+        condition: FilterGroup,
+        publication_start_utc: datetime,
+        publication_end_utc: datetime,
+        after_cursor: dict[str, object] | None,
+    ) -> AsyncIterator[SourceDiscoveryBatch]:
+        del connector, condition
+        after_position = (
+            str(after_cursor["position"])
+            if after_cursor is not None
+            else None
+        )
+        ordered = sorted(
+            (
+                (self.publication_times[record.record_key], record.record_key, record)
+                for record in self.records
+                if publication_start_utc
+                <= self.publication_times[record.record_key]
+                < publication_end_utc
+            ),
+            key=lambda item: (item[0], item[1]),
+        )
+        if after_position is not None:
+            positions = [record_key for _, record_key, _ in ordered]
+            ordered = ordered[positions.index(after_position) + 1 :]
+        for index, (_, record_key, record) in enumerate(ordered):
+            if self.fail_live_after_batches == index:
+                raise RuntimeError("live provider failed")
+            yield SourceDiscoveryBatch(
+                records=(record,),
+                checkpoint={"position": record_key},
+            )
+
+    async def discover_backfill(
         self,
         *,
         connector: SourceConnector,
@@ -108,7 +147,7 @@ class _Provider:
         for index, record in enumerate(matched):
             if self.require_streaming_consumption:
                 assert len(self.imports) == index
-            yield SourceDiscoveryBatch(records=(record,))
+            yield SourceDiscoveryBatch(records=(record,), checkpoint=None)
 
     async def estimate(
         self,
@@ -120,7 +159,7 @@ class _Provider:
         representative_limit: int,
     ) -> SourceEstimate:
         records: list[SourceRecord] = []
-        async for batch in self.discover(
+        async for batch in self.discover_backfill(
             connector=connector,
             condition=condition,
             start_utc=start_utc,
@@ -524,6 +563,100 @@ async def test_live_discovery_records_overlap_as_skipped() -> None:
 
 
 @pytest.mark.asyncio
+async def test_live_discovery_finds_delayed_publication_once_and_checkpoints_last_record() -> None:
+    org_id = "org"
+    provider = _Provider(())
+    collections = _Collections("collection-a", org_id)
+    service, repository, engine = await _service(provider, collections)
+    try:
+        _, _, rule_id = await _configured_rule(
+            service, collection_id=collections.collection.id, org_id=org_id
+        )
+        rule = await repository.get_rule(rule_id, "collection-a", org_id)
+        assert rule is not None
+        delayed = _record("record-1")
+        provider.records = (delayed,)
+        provider.publication_times = {
+            delayed.record_key: rule.activated_at + timedelta(minutes=1)
+        }
+
+        first = await service.run_live(
+            collection_id="collection-a",
+            rule_id=rule_id,
+            org_id=org_id,
+            actor_id="system:collection-discovery",
+            as_of_utc=rule.activated_at + timedelta(minutes=2),
+        )
+        replay = await service.run_live(
+            collection_id="collection-a",
+            rule_id=rule_id,
+            org_id=org_id,
+            actor_id="system:collection-discovery",
+            as_of_utc=rule.activated_at + timedelta(minutes=3),
+        )
+
+        assert first.run.status == "completed"
+        assert first.run.stats["imported"] == 1
+        assert replay.run.status == "completed"
+        assert replay.run.stats["scanned"] == 0
+        assert len(provider.imports) == 1
+        stored_rule = await repository.get_rule(rule_id, "collection-a", org_id)
+        assert stored_rule is not None
+        assert stored_rule.live_cursor == {"position": delayed.record_key}
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_live_discovery_does_not_advance_checkpoint_after_provider_failure() -> None:
+    org_id = "org"
+    provider = _Provider(())
+    collections = _Collections("collection-a", org_id)
+    service, repository, engine = await _service(provider, collections)
+    try:
+        _, _, rule_id = await _configured_rule(
+            service, collection_id=collections.collection.id, org_id=org_id
+        )
+        rule = await repository.get_rule(rule_id, "collection-a", org_id)
+        assert rule is not None
+        records = (_record("record-1"), _record("record-2"))
+        provider.records = records
+        provider.publication_times = {
+            record.record_key: rule.activated_at + timedelta(minutes=1)
+            for record in records
+        }
+        provider.fail_live_after_batches = 1
+
+        failed = await service.run_live(
+            collection_id="collection-a",
+            rule_id=rule_id,
+            org_id=org_id,
+            actor_id="system:collection-discovery",
+            as_of_utc=rule.activated_at + timedelta(minutes=2),
+        )
+        stored_rule = await repository.get_rule(rule_id, "collection-a", org_id)
+        assert failed.run.status == "failed"
+        assert stored_rule is not None and stored_rule.live_cursor is None
+
+        provider.fail_live_after_batches = None
+        recovered = await service.run_live(
+            collection_id="collection-a",
+            rule_id=rule_id,
+            org_id=org_id,
+            actor_id="system:collection-discovery",
+            as_of_utc=rule.activated_at + timedelta(minutes=3),
+        )
+
+        assert recovered.run.status == "completed"
+        assert len(provider.imports) == 2
+        stored_rule = await repository.get_rule(rule_id, "collection-a", org_id)
+        assert stored_rule is not None
+        assert stored_rule.live_cursor == {"position": "record-2"}
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
 async def test_collection_discovery_poller_runs_every_active_rule() -> None:
     org_id = "org"
     collections = _Collections("collection-a", org_id)
@@ -700,7 +833,7 @@ async def test_same_source_is_not_shared_across_collections() -> None:
 
 
 @pytest.mark.asyncio
-async def test_source_change_and_revision_failure_require_attention_and_recover() -> None:
+async def test_replayed_source_uses_existing_membership_and_revision_failure_recovers() -> None:
     org_id = "org"
     provider = _Provider((_record("record-1"),))
     collections = _Collections("collection-a", org_id)
@@ -735,8 +868,7 @@ async def test_source_change_and_revision_failure_require_attention_and_recover(
         assert collections.link_calls == 1
         assert len(provider.imports) == 1
 
-        provider.records = (_record("record-1", version="v2"),)
-        changed = await service.run_backfill(
+        replayed = await service.run_backfill(
             collection_id="collection-a",
             rule_id=rule_id,
             org_id=org_id,
@@ -745,9 +877,8 @@ async def test_source_change_and_revision_failure_require_attention_and_recover(
             end_utc=end,
             timezone_name="UTC",
         )
-        assert changed.run.status == "needs_attention"
-        assert changed.run.stats["source_changed"] == 1
-        assert "Re-import" in (changed.run.error_detail or "")
+        assert replayed.run.status == "completed"
+        assert replayed.run.stats["skipped"] == 1
         assert collections.link_calls == 1
     finally:
         await engine.dispose()

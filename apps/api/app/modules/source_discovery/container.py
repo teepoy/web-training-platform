@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from injector import Module, provider, singleton
 
-from app.modules.sc.domain.upstream_reader import ScUpstreamReader
+from app.modules.sc.domain.upstream_reader import ScDiscoveryUpstreamReader
 from app.modules.sc.port.local import ScImportPort
 from app.modules.source_discovery.adapter.sc_provider import ScSourceRecordProvider
 from app.modules.source_discovery.adapter.sql_repository import (
@@ -41,7 +41,7 @@ class SourceDiscoveryModule(Module):
     @provider
     @singleton
     def provide_provider_catalog(
-        self, upstream: ScUpstreamReader, importer: ScImportPort
+        self, upstream: ScDiscoveryUpstreamReader, importer: ScImportPort
     ) -> SourceProviderCatalog:
         return SourceProviderCatalog((ScSourceRecordProvider(upstream, importer),))
 

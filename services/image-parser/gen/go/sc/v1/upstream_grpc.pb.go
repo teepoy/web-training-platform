@@ -19,12 +19,13 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	ScUpstream_Health_FullMethodName                 = "/sc.v1.ScUpstream/Health"
-	ScUpstream_GetInspection_FullMethodName          = "/sc.v1.ScUpstream/GetInspection"
-	ScUpstream_GetInspectionPatchZips_FullMethodName = "/sc.v1.ScUpstream/GetInspectionPatchZips"
-	ScUpstream_GetReviewImageFileSpec_FullMethodName = "/sc.v1.ScUpstream/GetReviewImageFileSpec"
-	ScUpstream_ListReviewImages_FullMethodName       = "/sc.v1.ScUpstream/ListReviewImages"
-	ScUpstream_ListInspections_FullMethodName        = "/sc.v1.ScUpstream/ListInspections"
+	ScUpstream_Health_FullMethodName                   = "/sc.v1.ScUpstream/Health"
+	ScUpstream_GetInspection_FullMethodName            = "/sc.v1.ScUpstream/GetInspection"
+	ScUpstream_GetInspectionPatchZips_FullMethodName   = "/sc.v1.ScUpstream/GetInspectionPatchZips"
+	ScUpstream_GetReviewImageFileSpec_FullMethodName   = "/sc.v1.ScUpstream/GetReviewImageFileSpec"
+	ScUpstream_ListReviewImages_FullMethodName         = "/sc.v1.ScUpstream/ListReviewImages"
+	ScUpstream_ListInspections_FullMethodName          = "/sc.v1.ScUpstream/ListInspections"
+	ScUpstream_ListDiscoveryInspections_FullMethodName = "/sc.v1.ScUpstream/ListDiscoveryInspections"
 )
 
 // ScUpstreamClient is the client API for ScUpstream service.
@@ -37,6 +38,7 @@ type ScUpstreamClient interface {
 	GetReviewImageFileSpec(ctx context.Context, in *GetReviewImageFileSpecRequest, opts ...grpc.CallOption) (*GetReviewImageFileSpecResponse, error)
 	ListReviewImages(ctx context.Context, in *ListReviewImagesRequest, opts ...grpc.CallOption) (*ListReviewImagesResponse, error)
 	ListInspections(ctx context.Context, in *ListInspectionsRequest, opts ...grpc.CallOption) (*ListInspectionsResponse, error)
+	ListDiscoveryInspections(ctx context.Context, in *ListDiscoveryInspectionsRequest, opts ...grpc.CallOption) (*ListInspectionsResponse, error)
 }
 
 type scUpstreamClient struct {
@@ -107,6 +109,16 @@ func (c *scUpstreamClient) ListInspections(ctx context.Context, in *ListInspecti
 	return out, nil
 }
 
+func (c *scUpstreamClient) ListDiscoveryInspections(ctx context.Context, in *ListDiscoveryInspectionsRequest, opts ...grpc.CallOption) (*ListInspectionsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListInspectionsResponse)
+	err := c.cc.Invoke(ctx, ScUpstream_ListDiscoveryInspections_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ScUpstreamServer is the server API for ScUpstream service.
 // All implementations must embed UnimplementedScUpstreamServer
 // for forward compatibility.
@@ -117,6 +129,7 @@ type ScUpstreamServer interface {
 	GetReviewImageFileSpec(context.Context, *GetReviewImageFileSpecRequest) (*GetReviewImageFileSpecResponse, error)
 	ListReviewImages(context.Context, *ListReviewImagesRequest) (*ListReviewImagesResponse, error)
 	ListInspections(context.Context, *ListInspectionsRequest) (*ListInspectionsResponse, error)
+	ListDiscoveryInspections(context.Context, *ListDiscoveryInspectionsRequest) (*ListInspectionsResponse, error)
 	mustEmbedUnimplementedScUpstreamServer()
 }
 
@@ -144,6 +157,9 @@ func (UnimplementedScUpstreamServer) ListReviewImages(context.Context, *ListRevi
 }
 func (UnimplementedScUpstreamServer) ListInspections(context.Context, *ListInspectionsRequest) (*ListInspectionsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListInspections not implemented")
+}
+func (UnimplementedScUpstreamServer) ListDiscoveryInspections(context.Context, *ListDiscoveryInspectionsRequest) (*ListInspectionsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListDiscoveryInspections not implemented")
 }
 func (UnimplementedScUpstreamServer) mustEmbedUnimplementedScUpstreamServer() {}
 func (UnimplementedScUpstreamServer) testEmbeddedByValue()                    {}
@@ -274,6 +290,24 @@ func _ScUpstream_ListInspections_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ScUpstream_ListDiscoveryInspections_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListDiscoveryInspectionsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ScUpstreamServer).ListDiscoveryInspections(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ScUpstream_ListDiscoveryInspections_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ScUpstreamServer).ListDiscoveryInspections(ctx, req.(*ListDiscoveryInspectionsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ScUpstream_ServiceDesc is the grpc.ServiceDesc for ScUpstream service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -304,6 +338,10 @@ var ScUpstream_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListInspections",
 			Handler:    _ScUpstream_ListInspections_Handler,
+		},
+		{
+			MethodName: "ListDiscoveryInspections",
+			Handler:    _ScUpstream_ListDiscoveryInspections_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

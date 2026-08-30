@@ -248,7 +248,6 @@ class CollectionDiscoveryRunItemORM(Base):
         String(64), ForeignKey("source_connectors.id", ondelete="RESTRICT")
     )
     source_record_key: Mapped[str] = mapped_column(String(512), nullable=False)
-    source_version: Mapped[str | None] = mapped_column(String(512), nullable=True)
     observed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )
@@ -278,7 +277,6 @@ class CollectionImportReceiptORM(Base):
             "collection_id",
             "connector_id",
             "source_record_key",
-            "source_version_key",
             "import_profile_version_id",
             name="uq_collection_import_identity",
         ),
@@ -298,9 +296,6 @@ class CollectionImportReceiptORM(Base):
         String(64), ForeignKey("source_connectors.id", ondelete="RESTRICT")
     )
     source_record_key: Mapped[str] = mapped_column(String(512), nullable=False)
-    source_version_key: Mapped[str] = mapped_column(
-        String(512), nullable=False, default="", server_default=""
-    )
     import_profile_version_id: Mapped[str] = mapped_column(
         String(64),
         ForeignKey("source_import_profile_versions.id", ondelete="RESTRICT"),
@@ -326,7 +321,6 @@ class CollectionDiscoveryReceiptORM(Base):
             "rule_id",
             "connector_id",
             "source_record_key",
-            "source_version_key",
             "import_profile_version_id",
             name="uq_collection_discovery_receipt",
         ),
@@ -345,9 +339,6 @@ class CollectionDiscoveryReceiptORM(Base):
         String(64), ForeignKey("source_connectors.id", ondelete="RESTRICT")
     )
     source_record_key: Mapped[str] = mapped_column(String(512), nullable=False)
-    source_version_key: Mapped[str] = mapped_column(
-        String(512), nullable=False, default="", server_default=""
-    )
     import_profile_version_id: Mapped[str] = mapped_column(
         String(64),
         ForeignKey("source_import_profile_versions.id", ondelete="RESTRICT"),
@@ -390,7 +381,6 @@ class CollectionSourceMembershipORM(Base):
         String(64), ForeignKey("source_connectors.id", ondelete="RESTRICT")
     )
     source_record_key: Mapped[str] = mapped_column(String(512), nullable=False)
-    source_version: Mapped[str | None] = mapped_column(String(512), nullable=True)
     dataset_id: Mapped[str] = mapped_column(
         String(64), ForeignKey("datasets.id", ondelete="RESTRICT")
     )
@@ -405,39 +395,4 @@ class CollectionSourceMembershipORM(Base):
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
-    )
-
-
-class CollectionMembershipSuppressionORM(Base):
-    __tablename__ = "collection_membership_suppressions"
-    __table_args__ = (
-        Index(
-            "uq_collection_active_suppression",
-            "collection_id",
-            "connector_id",
-            "source_record_key",
-            unique=True,
-            sqlite_where=text("cleared_at IS NULL"),
-            postgresql_where=text("cleared_at IS NULL"),
-        ),
-    )
-
-    id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    collection_id: Mapped[str] = mapped_column(
-        String(64),
-        ForeignKey("dataset_collections.id", ondelete="CASCADE"),
-        index=True,
-    )
-    connector_id: Mapped[str] = mapped_column(
-        String(64), ForeignKey("source_connectors.id", ondelete="RESTRICT")
-    )
-    source_record_key: Mapped[str] = mapped_column(String(512), nullable=False)
-    reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    created_by: Mapped[str] = mapped_column(String(255), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=utc_now
-    )
-    cleared_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    cleared_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
     )

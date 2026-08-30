@@ -4,12 +4,10 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { SourceRecordResponseSourceVersion } from './sourceRecordResponseSourceVersion';
 import type { SourceRecordResponseAttributes } from './sourceRecordResponseAttributes';
 
 export interface SourceRecordResponse {
   record_key: string;
-  source_version: SourceRecordResponseSourceVersion;
   observed_at: string;
   display_name: string;
   attributes: SourceRecordResponseAttributes;

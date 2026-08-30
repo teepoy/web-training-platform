@@ -6,10 +6,15 @@ from typing import Any, AsyncIterator, cast
 from unittest.mock import AsyncMock
 
 import grpc
+import polars as pl
 import pytest
 
 from proto_stubs.sc.v1 import upstream_pb2 as pb
 from sc_upstream.service import ScUpstreamService
+from sc_upstream.upstream_db import (
+    InspectionDiscoveryOrder,
+    InspectionDiscoveryQuery,
+)
 
 
 @pytest.mark.parametrize(
@@ -87,3 +92,53 @@ def test_missing_inspection_awaits_not_found_abort() -> None:
     context.abort.assert_awaited_once_with(
         grpc.StatusCode.NOT_FOUND, "inspection not found"
     )
+
+
+class _DiscoveryDB:
+    def __init__(self) -> None:
+        self.query: InspectionDiscoveryQuery | None = None
+
+    async def list_discovery_inspections(
+        self, query: InspectionDiscoveryQuery
+    ) -> pl.DataFrame:
+        self.query = query
+        return pl.DataFrame(
+            [
+                {
+                    "inspection_time": "2026-08-01T08:00:00+08:00",
+                    "wafer_key": 3,
+                    "published_at": "2026-08-30T01:00:00+00:00",
+                    "layer_id": "M1",
+                }
+            ]
+        )
+
+
+@pytest.mark.asyncio
+async def test_discovery_page_transports_publication_cursor_and_identity() -> None:
+    database = _DiscoveryDB()
+    service = ScUpstreamService(
+        cast(Any, database), cast(Any, object()), cast(Any, object())
+    )
+
+    response = await service.ListDiscoveryInspections(
+        pb.ListDiscoveryInspectionsRequest(
+            order=pb.INSPECTION_DISCOVERY_ORDER_PUBLICATION,
+            published_from="2026-08-30T00:00:00+00:00",
+            published_until="2026-08-30T02:00:00+00:00",
+            after_publication=pb.InspectionPublicationCursor(
+                published_at="2026-08-30T00:30:00+00:00",
+                inspection_time="2026-08-01T07:00:00+08:00",
+                wafer_key=2,
+            ),
+            page_size=256,
+        ),
+        AsyncMock(),
+    )
+
+    assert database.query is not None
+    assert database.query.order is InspectionDiscoveryOrder.PUBLICATION
+    assert database.query.after_publication is not None
+    assert database.query.after_publication.wafer_key == 2
+    assert response.items[0].published_at == "2026-08-30T01:00:00+00:00"
+    assert response.items[0].inspection_time == "2026-08-01T08:00:00+08:00"

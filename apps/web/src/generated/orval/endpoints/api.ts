@@ -121,7 +121,6 @@ import type {
   MarkLeftResponse,
   MemberResponse,
   MembershipRuleResponse,
-  MembershipSuppressionResponse,
   ModelResponse,
   ModelUploadTemplateResponse,
   OAuthProviderInfo,
@@ -188,7 +187,6 @@ import type {
   SparseSummaryResponse,
   StreamInspectionMapPointsProgressApiV1ScInspectionsInspectionTimeWaferKeyMapPointsStreamGetParams,
   StreamScDatasetPlotPointsProgressApiV1ScDatasetsDatasetIdPlotPointsStreamGetParams,
-  SuppressSourceMemberRequest,
   SurfaceStateDocumentInput,
   SurfaceStateDocumentOutput,
   SyncAnnotationsResponse,
@@ -12365,148 +12363,6 @@ export const useRunMembershipBackfillApiV1DatasetCollectionsCollectionIdMembersh
       > => {
 
       const mutationOptions = getRunMembershipBackfillApiV1DatasetCollectionsCollectionIdMembershipRulesRuleIdBackfillsPostMutationOptions(options);
-
-      return useMutation(mutationOptions);
-    }
-
-/**
- * @summary Suppress Source Member
- */
-export const getSuppressSourceMemberApiV1DatasetCollectionsCollectionIdMembershipSuppressionsPostUrl = (collectionId: string,) => {
-
-
-  return `/api/v1/dataset-collections/${collectionId}/membership-suppressions`
-}
-
-export const suppressSourceMemberApiV1DatasetCollectionsCollectionIdMembershipSuppressionsPost = async (collectionId: string,
-    suppressSourceMemberRequest: SuppressSourceMemberRequest, options?: RequestInit): Promise<MembershipSuppressionResponse> => {
-
-  return orvalFetcher<MembershipSuppressionResponse>(getSuppressSourceMemberApiV1DatasetCollectionsCollectionIdMembershipSuppressionsPostUrl(collectionId),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(
-      suppressSourceMemberRequest,)
-  }
-);}
-
-
-
-
-export const getSuppressSourceMemberApiV1DatasetCollectionsCollectionIdMembershipSuppressionsPostMutationOptions = <TError = ErrorType<HTTPValidationError>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof suppressSourceMemberApiV1DatasetCollectionsCollectionIdMembershipSuppressionsPost>>, TError,{collectionId: string;data: BodyType<SuppressSourceMemberRequest>}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
-): UseMutationOptions<Awaited<ReturnType<typeof suppressSourceMemberApiV1DatasetCollectionsCollectionIdMembershipSuppressionsPost>>, TError,{collectionId: string;data: BodyType<SuppressSourceMemberRequest>}, TContext> => {
-
-const mutationKey = ['suppressSourceMemberApiV1DatasetCollectionsCollectionIdMembershipSuppressionsPost'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof suppressSourceMemberApiV1DatasetCollectionsCollectionIdMembershipSuppressionsPost>>, {collectionId: string;data: BodyType<SuppressSourceMemberRequest>}> = (props) => {
-          const {collectionId,data} = props ?? {};
-
-          return  suppressSourceMemberApiV1DatasetCollectionsCollectionIdMembershipSuppressionsPost(collectionId,data,requestOptions)
-        }
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type SuppressSourceMemberApiV1DatasetCollectionsCollectionIdMembershipSuppressionsPostMutationResult = NonNullable<Awaited<ReturnType<typeof suppressSourceMemberApiV1DatasetCollectionsCollectionIdMembershipSuppressionsPost>>>
-    export type SuppressSourceMemberApiV1DatasetCollectionsCollectionIdMembershipSuppressionsPostMutationBody = BodyType<SuppressSourceMemberRequest>
-    export type SuppressSourceMemberApiV1DatasetCollectionsCollectionIdMembershipSuppressionsPostMutationError = ErrorType<HTTPValidationError>
-
-    /**
- * @summary Suppress Source Member
- */
-export const useSuppressSourceMemberApiV1DatasetCollectionsCollectionIdMembershipSuppressionsPost = <TError = ErrorType<HTTPValidationError>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof suppressSourceMemberApiV1DatasetCollectionsCollectionIdMembershipSuppressionsPost>>, TError,{collectionId: string;data: BodyType<SuppressSourceMemberRequest>}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
-): UseMutationReturnType<
-        Awaited<ReturnType<typeof suppressSourceMemberApiV1DatasetCollectionsCollectionIdMembershipSuppressionsPost>>,
-        TError,
-        {collectionId: string;data: BodyType<SuppressSourceMemberRequest>},
-        TContext
-      > => {
-
-      const mutationOptions = getSuppressSourceMemberApiV1DatasetCollectionsCollectionIdMembershipSuppressionsPostMutationOptions(options);
-
-      return useMutation(mutationOptions);
-    }
-
-/**
- * @summary Clear Membership Suppression
- */
-export const getClearMembershipSuppressionApiV1DatasetCollectionsCollectionIdMembershipSuppressionsSuppressionIdDeleteUrl = (collectionId: string,
-    suppressionId: string,) => {
-
-
-  return `/api/v1/dataset-collections/${collectionId}/membership-suppressions/${suppressionId}`
-}
-
-export const clearMembershipSuppressionApiV1DatasetCollectionsCollectionIdMembershipSuppressionsSuppressionIdDelete = async (collectionId: string,
-    suppressionId: string, options?: RequestInit): Promise<MembershipSuppressionResponse> => {
-
-  return orvalFetcher<MembershipSuppressionResponse>(getClearMembershipSuppressionApiV1DatasetCollectionsCollectionIdMembershipSuppressionsSuppressionIdDeleteUrl(collectionId,suppressionId),
-  {
-    ...options,
-    method: 'DELETE'
-
-
-  }
-);}
-
-
-
-
-export const getClearMembershipSuppressionApiV1DatasetCollectionsCollectionIdMembershipSuppressionsSuppressionIdDeleteMutationOptions = <TError = ErrorType<HTTPValidationError>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof clearMembershipSuppressionApiV1DatasetCollectionsCollectionIdMembershipSuppressionsSuppressionIdDelete>>, TError,{collectionId: string;suppressionId: string}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
-): UseMutationOptions<Awaited<ReturnType<typeof clearMembershipSuppressionApiV1DatasetCollectionsCollectionIdMembershipSuppressionsSuppressionIdDelete>>, TError,{collectionId: string;suppressionId: string}, TContext> => {
-
-const mutationKey = ['clearMembershipSuppressionApiV1DatasetCollectionsCollectionIdMembershipSuppressionsSuppressionIdDelete'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof clearMembershipSuppressionApiV1DatasetCollectionsCollectionIdMembershipSuppressionsSuppressionIdDelete>>, {collectionId: string;suppressionId: string}> = (props) => {
-          const {collectionId,suppressionId} = props ?? {};
-
-          return  clearMembershipSuppressionApiV1DatasetCollectionsCollectionIdMembershipSuppressionsSuppressionIdDelete(collectionId,suppressionId,requestOptions)
-        }
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type ClearMembershipSuppressionApiV1DatasetCollectionsCollectionIdMembershipSuppressionsSuppressionIdDeleteMutationResult = NonNullable<Awaited<ReturnType<typeof clearMembershipSuppressionApiV1DatasetCollectionsCollectionIdMembershipSuppressionsSuppressionIdDelete>>>
-
-    export type ClearMembershipSuppressionApiV1DatasetCollectionsCollectionIdMembershipSuppressionsSuppressionIdDeleteMutationError = ErrorType<HTTPValidationError>
-
-    /**
- * @summary Clear Membership Suppression
- */
-export const useClearMembershipSuppressionApiV1DatasetCollectionsCollectionIdMembershipSuppressionsSuppressionIdDelete = <TError = ErrorType<HTTPValidationError>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof clearMembershipSuppressionApiV1DatasetCollectionsCollectionIdMembershipSuppressionsSuppressionIdDelete>>, TError,{collectionId: string;suppressionId: string}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
-): UseMutationReturnType<
-        Awaited<ReturnType<typeof clearMembershipSuppressionApiV1DatasetCollectionsCollectionIdMembershipSuppressionsSuppressionIdDelete>>,
-        TError,
-        {collectionId: string;suppressionId: string},
-        TContext
-      > => {
-
-      const mutationOptions = getClearMembershipSuppressionApiV1DatasetCollectionsCollectionIdMembershipSuppressionsSuppressionIdDeleteMutationOptions(options);
 
       return useMutation(mutationOptions);
     }

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import AsyncIterator
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -35,7 +36,6 @@ from app.modules.source_discovery.domain.models import (
     ImportReceipt,
     MembershipRule,
     MembershipRuleVersion,
-    MembershipSuppression,
     ScAutomationPartition,
     SourceConnector,
     SourceDiscoveryBatch,
@@ -50,6 +50,12 @@ from app.modules.source_discovery.domain.repository import SourceDiscoveryReposi
 
 def _utcnow() -> datetime:
     return datetime.now(UTC)
+
+
+@dataclass(frozen=True, slots=True)
+class _ProcessedRecords:
+    execution: DiscoveryExecution
+    checkpoint: dict[str, object] | None
 
 
 class SourceDiscoveryService:
@@ -368,16 +374,8 @@ class SourceDiscoveryService:
             raise SourceDiscoveryConflictError(
                 "rule_not_active", "Membership rule is not active"
             )
-        cursor_time = rule.activated_at
-        if rule.live_cursor is not None:
-            raw_cursor = rule.live_cursor.get("end_utc")
-            if not isinstance(raw_cursor, str):
-                raise SourceDiscoveryConflictError(
-                    "invalid_live_cursor", "Stored live cursor is invalid"
-                )
-            cursor_time = datetime.fromisoformat(raw_cursor)
-        cursor_time = _require_utc(cursor_time, "live cursor")
-        if as_of_utc <= cursor_time:
+        publication_start = _require_utc(rule.activated_at, "rule activation")
+        if as_of_utc <= publication_start:
             raise SourceDiscoveryValidationError(
                 "invalid_live_range", "as_of_utc must be after the live cursor"
             )
@@ -390,7 +388,7 @@ class SourceDiscoveryService:
                 kind="live",
                 actor_id=actor_id,
                 as_of_utc=as_of_utc,
-                start_utc=cursor_time,
+                start_utc=publication_start,
                 end_utc=as_of_utc,
                 timezone_name=None,
                 parent_run_id=None,
@@ -406,7 +404,7 @@ class SourceDiscoveryService:
                     kind="live",
                     status="skipped",
                     as_of_utc=as_of_utc,
-                    range_start_utc=cursor_time,
+                    range_start_utc=publication_start,
                     range_end_utc=as_of_utc,
                     timezone_name=None,
                     parent_run_id=exc.run_id,
@@ -423,13 +421,14 @@ class SourceDiscoveryService:
             )
             return DiscoveryExecution(run=skipped)
         try:
-            batches = self._providers.get(connector.provider_id).discover(
+            batches = self._providers.get(connector.provider_id).discover_live(
                 connector=connector,
                 condition=version.condition,
-                start_utc=cursor_time,
-                end_utc=as_of_utc,
+                publication_start_utc=publication_start,
+                publication_end_utc=as_of_utc,
+                after_cursor=rule.live_cursor,
             )
-            execution = await self._process_records(
+            processed = await self._process_records(
                 run=run,
                 rule=rule,
                 version=version,
@@ -442,11 +441,13 @@ class SourceDiscoveryService:
         except Exception as exc:
             execution = await self._fail_run(run, exc)
         else:
-            await self._repository.update_live_cursor(
-                rule.id,
-                org_id=org_id,
-                cursor={"end_utc": as_of_utc.isoformat()},
-            )
+            execution = processed.execution
+            if processed.checkpoint is not None:
+                await self._repository.update_live_cursor(
+                    rule.id,
+                    org_id=org_id,
+                    cursor=processed.checkpoint,
+                )
         return execution
 
     async def preview_backfill(
@@ -511,22 +512,24 @@ class SourceDiscoveryService:
             parent_run_id=None,
         )
         try:
-            batches = provider.discover(
+            batches = provider.discover_backfill(
                 connector=connector,
                 condition=version.condition,
                 start_utc=start_utc,
                 end_utc=end_utc,
             )
-            return await self._process_records(
-                run=run,
-                rule=rule,
-                version=version,
-                connector=connector,
-                profile=profile,
-                batches=batches,
-                actor_id=actor_id,
-                retry_failed=False,
-            )
+            return (
+                await self._process_records(
+                    run=run,
+                    rule=rule,
+                    version=version,
+                    connector=connector,
+                    profile=profile,
+                    batches=batches,
+                    actor_id=actor_id,
+                    retry_failed=False,
+                )
+            ).execution
         except Exception as exc:
             return await self._fail_run(run, exc)
 
@@ -585,16 +588,18 @@ class SourceDiscoveryService:
             parent_run_id=parent.id,
         )
         records = tuple(_record_from_payload(item.source_payload) for item in failed)
-        return await self._process_records(
-            run=retry_run,
-            rule=rule,
-            version=version,
-            connector=connector,
-            profile=profile,
-            batches=_single_batch(records),
-            actor_id=actor_id,
-            retry_failed=True,
-        )
+        return (
+            await self._process_records(
+                run=retry_run,
+                rule=rule,
+                version=version,
+                connector=connector,
+                profile=profile,
+                batches=_single_batch(records),
+                actor_id=actor_id,
+                retry_failed=True,
+            )
+        ).execution
 
     async def get_run(self, run_id: str, org_id: str) -> DiscoveryExecution:
         run = await self._repository.get_run(run_id, org_id)
@@ -607,71 +612,6 @@ class SourceDiscoveryService:
             items=tuple(await self._repository.list_run_items(run.id)),
         )
 
-    async def suppress_source_member(
-        self,
-        *,
-        collection_id: str,
-        connector_id: str,
-        source_record_key: str,
-        org_id: str,
-        actor_id: str,
-        expected_definition_version: int,
-        reason: str,
-    ) -> MembershipSuppression:
-        await self._connector(connector_id, org_id)
-        existing = await self._repository.get_active_suppression(
-            collection_id, connector_id, source_record_key
-        )
-        if existing is not None:
-            return existing
-        source = await self._repository.get_source_membership(
-            collection_id, connector_id, source_record_key
-        )
-        if source is None:
-            raise SourceDiscoveryNotFoundError(
-                "source_member_not_found", "Rule-discovered Collection member not found"
-            )
-        await self._collections.unlink_member_for_automation(
-            collection_id,
-            source.member_id,
-            org_id,
-            actor_id=actor_id,
-            expected_definition_version=expected_definition_version,
-        )
-        now = _utcnow()
-        return await self._repository.create_suppression(
-            MembershipSuppression(
-                id=str(uuid4()),
-                collection_id=collection_id,
-                connector_id=connector_id,
-                source_record_key=source_record_key,
-                reason=reason,
-                created_by=actor_id,
-                created_at=now,
-            )
-        )
-
-    async def clear_suppression(
-        self,
-        *,
-        collection_id: str,
-        suppression_id: str,
-        org_id: str,
-        actor_id: str,
-    ) -> MembershipSuppression:
-        await self._collections.get_collection(collection_id, org_id)
-        cleared = await self._repository.clear_suppression(
-            suppression_id,
-            collection_id=collection_id,
-            actor_id=actor_id,
-            cleared_at=_utcnow(),
-        )
-        if cleared is None:
-            raise SourceDiscoveryNotFoundError(
-                "suppression_not_found", "Active membership suppression not found"
-            )
-        return cleared
-
     async def _process_records(
         self,
         *,
@@ -683,19 +623,18 @@ class SourceDiscoveryService:
         batches: AsyncIterator[SourceDiscoveryBatch],
         actor_id: str,
         retry_failed: bool,
-    ) -> DiscoveryExecution:
+    ) -> _ProcessedRecords:
         stats = {
             "scanned": 0,
             "matched": 0,
-            "suppressed": 0,
             "skipped": 0,
             "reused": 0,
-            "source_changed": 0,
             "imported": 0,
             "linked": 0,
             "succeeded": 0,
             "failed": 0,
         }
+        checkpoint: dict[str, object] | None = None
         async for batch in batches:
             stats["scanned"] += len(batch.records)
             stats["matched"] += len(batch.records)
@@ -706,7 +645,6 @@ class SourceDiscoveryService:
                         run_id=run.id,
                         connector_id=connector.id,
                         source_record_key=record.record_key,
-                        source_version=record.source_version,
                         observed_at=record.observed_at,
                         source_payload=_record_payload(record),
                         status="pending",
@@ -737,21 +675,19 @@ class SourceDiscoveryService:
                         item.member_id,
                         str(exc),
                     )
-                if item.status == "suppressed":
-                    stats["suppressed"] += 1
-                elif item.status == "replayed":
+                if item.status == "replayed":
                     stats["skipped"] += 1
                 elif item.status == "reused":
                     stats["reused"] += 1
                     stats["succeeded"] += 1
-                elif item.status == "source_changed":
-                    stats["source_changed"] += 1
                 elif item.status == "succeeded":
                     stats["imported"] += 1
                     stats["linked"] += 1
                     stats["succeeded"] += 1
                 elif item.status == "failed":
                     stats["failed"] += 1
+            if batch.checkpoint is not None:
+                checkpoint = batch.checkpoint
 
         revision_id: str | None = None
         error_detail: str | None = None
@@ -779,18 +715,6 @@ class SourceDiscoveryService:
                 )
 
         status = _run_status(stats, needs_attention=needs_attention)
-        if stats["source_changed"]:
-            needs_attention = True
-            status = "needs_attention"
-            source_changed_detail = (
-                f"{stats['source_changed']} Source record(s) changed; explicit "
-                "Re-import is required"
-            )
-            error_detail = (
-                f"{error_detail}; {source_changed_detail}"
-                if error_detail
-                else source_changed_detail
-            )
         finished = await self._repository.finish_run(
             run.id,
             status=status,
@@ -799,9 +723,12 @@ class SourceDiscoveryService:
             error_detail=error_detail,
             completed_at=_utcnow(),
         )
-        return DiscoveryExecution(
-            run=finished,
-            items=tuple(await self._repository.list_run_items(run.id)),
+        return _ProcessedRecords(
+            execution=DiscoveryExecution(
+                run=finished,
+                items=tuple(await self._repository.list_run_items(run.id)),
+            ),
+            checkpoint=checkpoint,
         )
 
     async def _retry_publication(
@@ -850,17 +777,12 @@ class SourceDiscoveryService:
                 completed_at=_utcnow(),
             )
             return DiscoveryExecution(run=failed)
-        source_changed = parent.stats.get("source_changed", 0)
         completed = await self._repository.finish_run(
             retry_run.id,
-            status="needs_attention" if source_changed else "completed",
+            status="completed",
             stats=dict(parent.stats),
             collection_revision_id=revision.id,
-            error_detail=(
-                f"{source_changed} Source record(s) changed; explicit Re-import is required"
-                if source_changed
-                else None
-            ),
+            error_detail=None,
             completed_at=_utcnow(),
         )
         return DiscoveryExecution(run=completed)
@@ -882,7 +804,6 @@ class SourceDiscoveryService:
             rule_id=rule.id,
             connector_id=connector.id,
             source_record_key=record.record_key,
-            source_version=record.source_version,
             import_profile_version_id=profile.id,
         )
         if receipt is not None and not (retry_failed and receipt[0] == "failed"):
@@ -900,37 +821,10 @@ class SourceDiscoveryService:
                     "Previous attempt failed; use failed-item Retry",
                 )
 
-        suppression = await self._repository.get_active_suppression(
-            run.collection_id, connector.id, record.record_key
-        )
-        if suppression is not None:
-            await self._write_discovery_receipt(
-                run, rule, profile, connector, record, "suppressed", None, None
-            )
-            return await self._update_item(item, "suppressed", None, None, None)
-
         source = await self._repository.get_source_membership(
             run.collection_id, connector.id, record.record_key
         )
         if source is not None:
-            if source.source_version != record.source_version:
-                await self._write_discovery_receipt(
-                    run,
-                    rule,
-                    profile,
-                    connector,
-                    record,
-                    "source_changed",
-                    source.dataset_id,
-                    source.member_id,
-                )
-                return await self._update_item(
-                    item,
-                    "source_changed",
-                    source.dataset_id,
-                    source.member_id,
-                    "Source version changed; explicit Re-import is required",
-                )
             await self._write_discovery_receipt(
                 run,
                 rule,
@@ -951,7 +845,6 @@ class SourceDiscoveryService:
                 collection_id=run.collection_id,
                 connector_id=connector.id,
                 source_record_key=record.record_key,
-                source_version=record.source_version,
                 import_profile_version_id=profile.id,
                 status="staging",
                 dataset_id=None,
@@ -1050,7 +943,6 @@ class SourceDiscoveryService:
                     collection_id=run.collection_id,
                     connector_id=connector.id,
                     source_record_key=record.record_key,
-                    source_version=record.source_version,
                     dataset_id=dataset_id,
                     member_id=member.id,
                     admitted_by_rule_id=rule.id,
@@ -1106,7 +998,6 @@ class SourceDiscoveryService:
             rule_id=rule.id,
             connector_id=connector.id,
             source_record_key=record.record_key,
-            source_version=record.source_version,
             import_profile_version_id=profile.id,
             status=status,
             dataset_id=dataset_id,
@@ -1288,7 +1179,6 @@ def _backfill_range(
 def _record_payload(record: SourceRecord) -> dict[str, object]:
     return {
         "record_key": record.record_key,
-        "source_version": record.source_version,
         "observed_at": record.observed_at.isoformat(),
         "display_name": record.display_name,
         "attributes": record.attributes,
@@ -1300,20 +1190,17 @@ def _record_from_payload(payload: dict[str, object]) -> SourceRecord:
     observed_at = payload.get("observed_at")
     display_name = payload.get("display_name")
     attributes = payload.get("attributes")
-    source_version = payload.get("source_version")
     if (
         not isinstance(record_key, str)
         or not isinstance(observed_at, str)
         or not isinstance(display_name, str)
         or not isinstance(attributes, dict)
-        or (source_version is not None and not isinstance(source_version, str))
     ):
         raise SourceDiscoveryValidationError(
             "invalid_retry_payload", "Stored failed Source record is invalid"
         )
     return SourceRecord(
         record_key=record_key,
-        source_version=source_version,
         observed_at=datetime.fromisoformat(observed_at),
         display_name=display_name,
         attributes=attributes,
@@ -1323,7 +1210,7 @@ def _record_from_payload(payload: dict[str, object]) -> SourceRecord:
 async def _single_batch(
     records: tuple[SourceRecord, ...],
 ) -> AsyncIterator[SourceDiscoveryBatch]:
-    yield SourceDiscoveryBatch(records=records)
+    yield SourceDiscoveryBatch(records=records, checkpoint=None)
 
 
 def _run_status(stats: dict[str, int], *, needs_attention: bool) -> str:

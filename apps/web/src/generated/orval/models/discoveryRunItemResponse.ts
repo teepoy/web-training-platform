@@ -4,7 +4,6 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { DiscoveryRunItemResponseSourceVersion } from './discoveryRunItemResponseSourceVersion';
 import type { DiscoveryRunItemResponseDatasetId } from './discoveryRunItemResponseDatasetId';
 import type { DiscoveryRunItemResponseMemberId } from './discoveryRunItemResponseMemberId';
 import type { DiscoveryRunItemResponseErrorDetail } from './discoveryRunItemResponseErrorDetail';
@@ -12,7 +11,6 @@ import type { DiscoveryRunItemResponseErrorDetail } from './discoveryRunItemResp
 export interface DiscoveryRunItemResponse {
   id: string;
   source_record_key: string;
-  source_version: DiscoveryRunItemResponseSourceVersion;
   observed_at: string;
   status: string;
   dataset_id: DiscoveryRunItemResponseDatasetId;

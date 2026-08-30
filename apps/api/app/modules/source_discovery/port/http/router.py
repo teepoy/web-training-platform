@@ -28,12 +28,10 @@ from app.modules.source_discovery.port.http.schemas import (
     DiscoveryRunResponse,
     ImportProfileVersionResponse,
     MembershipRuleResponse,
-    MembershipSuppressionResponse,
     RunLiveDiscoveryRequest,
     ScAutomationPartitionResponse,
     SourceConnectorResponse,
     SourceProviderDescriptorResponse,
-    SuppressSourceMemberRequest,
 )
 from app.shared.api.schemas import Organization, User
 
@@ -379,52 +377,3 @@ async def retry_failed_discovery_items(
     except SourceDiscoveryError as exc:
         raise _http_error(exc) from exc
     return DiscoveryRunResponse.from_domain(result)
-
-
-@collections_router.post(
-    "/{collection_id}/membership-suppressions",
-    response_model=MembershipSuppressionResponse,
-)
-async def suppress_source_member(
-    collection_id: str,
-    payload: SuppressSourceMemberRequest,
-    service: SourceDiscoveryServiceDep,
-    current_user: Annotated[User, Depends(get_current_user)],
-    org: Annotated[Organization, Depends(get_current_org)],
-) -> MembershipSuppressionResponse:
-    try:
-        suppression = await service.suppress_source_member(
-            collection_id=collection_id,
-            connector_id=payload.connector_id,
-            source_record_key=payload.source_record_key,
-            org_id=org.id,
-            actor_id=current_user.id,
-            expected_definition_version=payload.expected_definition_version,
-            reason=payload.reason,
-        )
-    except SourceDiscoveryError as exc:
-        raise _http_error(exc) from exc
-    return MembershipSuppressionResponse.from_domain(suppression)
-
-
-@collections_router.delete(
-    "/{collection_id}/membership-suppressions/{suppression_id}",
-    response_model=MembershipSuppressionResponse,
-)
-async def clear_membership_suppression(
-    collection_id: str,
-    suppression_id: str,
-    service: SourceDiscoveryServiceDep,
-    current_user: Annotated[User, Depends(get_current_user)],
-    org: Annotated[Organization, Depends(get_current_org)],
-) -> MembershipSuppressionResponse:
-    try:
-        suppression = await service.clear_suppression(
-            collection_id=collection_id,
-            suppression_id=suppression_id,
-            org_id=org.id,
-            actor_id=current_user.id,
-        )
-    except SourceDiscoveryError as exc:
-        raise _http_error(exc) from exc
-    return MembershipSuppressionResponse.from_domain(suppression)
