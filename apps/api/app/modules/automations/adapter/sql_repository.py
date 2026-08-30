@@ -160,7 +160,10 @@ class AutomationOverviewSqlRepository:
             .subquery()
         )
         batch_status = case(
-            (func.coalesce(item_counts.c.total, 0) == 0, literal("pending")),
+            (
+                func.coalesce(item_counts.c.total, 0) == 0,
+                CollectionPredictionBatchORM.status,
+            ),
             (item_counts.c.completed == item_counts.c.total, literal("completed")),
             (item_counts.c.failed == item_counts.c.total, literal("failed")),
             (item_counts.c.failed > 0, literal("partial")),
@@ -192,6 +195,13 @@ class AutomationOverviewSqlRepository:
                 batch_attention.label("needs_attention"),
                 batch_attention.label("retry_supported"),
                 case(
+                    (
+                        (func.coalesce(item_counts.c.total, 0) == 0)
+                        & (CollectionPredictionBatchORM.status == "failed"),
+                        literal(
+                            "Prediction preparation failed before child jobs were created"
+                        ),
+                    ),
                     (
                         batch_attention,
                         literal("One or more Dataset predictions need attention"),

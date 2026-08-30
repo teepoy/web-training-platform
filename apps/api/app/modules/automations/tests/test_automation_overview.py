@@ -134,6 +134,20 @@ async def test_overview_uses_fixed_query_count_and_filters_unified_runs() -> Non
                         )
                     )
             session.add(
+                CollectionPredictionBatchORM(
+                    id="preparation-failed-batch",
+                    collection_id=collection_id,
+                    collection_revision_id="preparation-failed-revision",
+                    model_id="preparation-failed-model",
+                    kind="incremental",
+                    request_id="preparation-failed-revision",
+                    status="failed",
+                    created_by="user-1",
+                    created_at=now + timedelta(minutes=1),
+                    updated_at=now + timedelta(minutes=2),
+                )
+            )
+            session.add(
                 CollectionDiscoveryRunORM(
                     id="other-run",
                     org_id=other_org_id,
@@ -171,7 +185,7 @@ async def test_overview_uses_fixed_query_count_and_filters_unified_runs() -> Non
         finally:
             event.remove(engine.sync_engine, "before_cursor_execute", count_selects)
 
-        assert total == 24
+        assert total == 25
         assert len(items) == 10
         assert select_count == 2
         assert {item.target_label for item in items} == {"Incoming wafer review"}
@@ -184,10 +198,18 @@ async def test_overview_uses_fixed_query_count_and_filters_unified_runs() -> Non
             recipe_kind=None,
             query="wafer",
         )
-        assert attention_total == 2
+        assert attention_total == 3
         assert {item.recipe_kind for item in attention} == {"backfill", "prediction"}
         retry_by_kind = {item.recipe_kind: item.retry_supported for item in attention}
         assert retry_by_kind == {"backfill": False, "prediction": True}
+        preparation_failure = next(
+            item for item in attention if item.id == "preparation-failed-batch"
+        )
+        assert preparation_failure.status == "failed"
+        assert preparation_failure.retry_supported is True
+        assert preparation_failure.detail == (
+            "Prediction preparation failed before child jobs were created"
+        )
 
         refreshed, refreshed_total = await service.list_runs(
             org_id,

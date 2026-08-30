@@ -3,11 +3,16 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime
 import json
+from unittest.mock import AsyncMock
 
 from fastapi.testclient import TestClient
 
 from app.main import app
 from app.modules.auth.port.http.deps import get_current_user
+from app.modules.dataset_collections.domain.models import CollectionPredictionBatch
+from app.modules.dataset_collections.port.http.deps import (
+    get_collection_model_management,
+)
 from app.shared.api.schemas import User
 from tests.conftest import (
     DEFAULT_ORG_ID,
@@ -479,3 +484,50 @@ def test_collection_default_model_can_be_set_and_cleared_without_prediction() ->
         assert cleared.status_code == 200, cleared.text
         assert cleared.json()["default_model_id"] is None
         assert cleared.json()["model_binding_version"] == 2
+
+
+def test_failed_incremental_preparation_is_queryable_as_prediction_batch() -> None:
+    now = datetime(2024, 1, 1)
+    batch = CollectionPredictionBatch(
+        id="batch-preparation-failed",
+        collection_id="collection-1",
+        collection_revision_id="revision-1",
+        model_id="model-1",
+        kind="incremental",
+        request_id="revision-1",
+        status="failed",
+        created_by="user-1",
+        created_at=now,
+        updated_at=now,
+    )
+    service = AsyncMock()
+    service.list_batches.return_value = [(batch, [])]
+    original_override = app.dependency_overrides.get(get_collection_model_management)
+    app.dependency_overrides[get_collection_model_management] = lambda: service
+    try:
+        with TestClient(app) as client:
+            response = client.get(
+                "/api/v1/dataset-collections/collection-1/prediction-batches"
+            )
+    finally:
+        if original_override is None:
+            app.dependency_overrides.pop(get_collection_model_management, None)
+        else:
+            app.dependency_overrides[get_collection_model_management] = original_override
+
+    assert response.status_code == 200, response.text
+    assert response.json() == [
+        {
+            "id": "batch-preparation-failed",
+            "collection_id": "collection-1",
+            "collection_revision_id": "revision-1",
+            "model_id": "model-1",
+            "kind": "incremental",
+            "request_id": "revision-1",
+            "status": "failed",
+            "created_by": "user-1",
+            "created_at": "2024-01-01T00:00:00",
+            "updated_at": "2024-01-01T00:00:00",
+            "items": [],
+        }
+    ]

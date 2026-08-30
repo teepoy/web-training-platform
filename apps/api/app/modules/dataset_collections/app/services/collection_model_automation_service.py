@@ -136,45 +136,138 @@ class CollectionModelAutomationService:
         )
         if existing is not None:
             return existing[0]
-        revision = await self._resolve_revision(
-            collection_id, org_id, revision_id=revision_id
+        now = _utcnow()
+        pending_batch = CollectionPredictionBatch(
+            id=str(uuid4()),
+            collection_id=collection.id,
+            collection_revision_id=revision_id,
+            model_id=collection.default_model_id,
+            kind="incremental",
+            request_id=revision_id,
+            status="pending",
+            created_by=actor_id,
+            created_at=now,
+            updated_at=now,
         )
-        await self._require_current_revision(revision, org_id)
-        revisions = await self._repository.list_revisions(collection_id, org_id)
-        previous = next(
-            (
-                candidate
-                for candidate in revisions
-                if candidate.status == "ready"
-                and candidate.revision_number < revision.revision_number
-            ),
-            None,
-        )
-        previous_member_ids = {
-            entry["member_id"]
-            for entry in await self._revision_entries(previous, org_id)
-        }
-        new_entries = [
-            entry
-            for entry in await self._revision_entries(revision, org_id)
-            if entry["member_id"] not in previous_member_ids
-        ]
-        eligible = await self._without_exact_prediction(
-            collection,
+        (
+            persisted,
+            _items,
+            created,
+        ) = await self._repository.create_or_get_prediction_batch(
+            pending_batch,
+            (),
             org_id,
-            new_entries,
         )
-        if not eligible:
-            return None
-        return await self._create_and_dispatch_batch(
-            collection=collection,
-            revision=revision,
+        if not created:
+            return persisted
+        await self._prepare_incremental_batch(
+            persisted,
             org_id=org_id,
             actor_id=actor_id,
-            kind="incremental",
-            request_id=revision.id,
-            entries=eligible,
+            submission_origin=PredictionSubmissionOrigin.AUTOMATION,
+            require_current_revision=True,
         )
+        return (await self.get_batch(persisted.id, org_id))[0]
+
+    async def _prepare_incremental_batch(
+        self,
+        batch: CollectionPredictionBatch,
+        *,
+        org_id: str,
+        actor_id: str,
+        submission_origin: PredictionSubmissionOrigin,
+        require_current_revision: bool,
+    ) -> None:
+        try:
+            revision = await self._resolve_revision(
+                batch.collection_id,
+                org_id,
+                revision_id=batch.collection_revision_id,
+            )
+            if require_current_revision:
+                await self._require_current_revision(revision, org_id)
+            revisions = await self._repository.list_revisions(
+                batch.collection_id,
+                org_id,
+            )
+            previous = next(
+                (
+                    candidate
+                    for candidate in revisions
+                    if candidate.status == "ready"
+                    and candidate.revision_number < revision.revision_number
+                ),
+                None,
+            )
+            previous_member_ids = {
+                entry["member_id"]
+                for entry in await self._revision_entries(previous, org_id)
+            }
+            new_entries = [
+                entry
+                for entry in await self._revision_entries(revision, org_id)
+                if entry["member_id"] not in previous_member_ids
+            ]
+            eligible = await self._without_exact_prediction(
+                batch.collection_id,
+                batch.model_id,
+                org_id,
+                new_entries,
+            )
+        except Exception:
+            await self._repository.update_prediction_batch_status(
+                batch.id,
+                "failed",
+            )
+            _logger.exception(
+                "Incremental prediction preparation failed for Collection Revision %s",
+                batch.collection_revision_id,
+            )
+            return
+        if not eligible:
+            await self._repository.update_prediction_batch_status(
+                batch.id,
+                "completed",
+            )
+            return
+        prepared_at = _utcnow()
+        prepared_items = tuple(
+            CollectionPredictionBatchItem(
+                id=str(uuid4()),
+                batch_id=batch.id,
+                member_id=entry["member_id"],
+                dataset_id=entry["dataset_id"],
+                dataset_revision_id=entry["dataset_revision_id"],
+                prediction_job_id=None,
+                status="pending",
+                attempt_count=0,
+                error_detail=None,
+                created_at=prepared_at,
+                updated_at=prepared_at,
+            )
+            for entry in eligible
+        )
+        try:
+            persisted_items = await self._repository.add_prediction_batch_items(
+                batch.id,
+                prepared_items,
+            )
+        except Exception:
+            await self._repository.update_prediction_batch_status(batch.id, "failed")
+            _logger.exception(
+                "Incremental prediction preparation could not persist child work for "
+                "Collection Revision %s",
+                batch.collection_revision_id,
+            )
+            return
+        await self._dispatch_items(
+            batch,
+            persisted_items,
+            org_id=org_id,
+            actor_id=actor_id,
+            submission_origin=submission_origin,
+        )
+        await self._refresh_batch_status(batch.id, org_id)
 
     async def create_reconciliation_batch(
         self,
@@ -258,7 +351,13 @@ class CollectionModelAutomationService:
             for entry in await self._revision_entries(revision, org_id)
         }
         entries = [entries_by_dataset[dataset_id] for dataset_id in dataset_ids]
-        eligible = await self._without_exact_prediction(collection, org_id, entries)
+        assert collection.default_model_id is not None
+        eligible = await self._without_exact_prediction(
+            collection.id,
+            collection.default_model_id,
+            org_id,
+            entries,
+        )
         if len(eligible) != len(entries):
             raise DatasetCollectionValidationError(
                 "prediction_already_running",
@@ -287,6 +386,15 @@ class CollectionModelAutomationService:
         batch, items = await self.get_batch(batch_id, org_id)
         collection = await self._require_collection(batch.collection_id, org_id)
         self._require_owner(collection, actor_id)
+        if batch.kind == "incremental" and batch.status == "failed" and not items:
+            await self._prepare_incremental_batch(
+                batch,
+                org_id=org_id,
+                actor_id=actor_id,
+                submission_origin=PredictionSubmissionOrigin.MANUAL,
+                require_current_revision=False,
+            )
+            return await self.get_batch(batch.id, org_id)
         retryable = [item for item in items if item.status in {"failed", "cancelled"}]
         if not retryable:
             raise DatasetCollectionValidationError(
@@ -313,7 +421,7 @@ class CollectionModelAutomationService:
                 "Collection prediction batch not found"
             )
         batch, items = result
-        return replace(batch, status=self._derive_batch_status(items)), items
+        return replace(batch, status=self._derive_batch_status(batch, items)), items
 
     async def list_batches(
         self,
@@ -323,7 +431,7 @@ class CollectionModelAutomationService:
         await self._require_collection(collection_id, org_id)
         batches = await self._repository.list_prediction_batches(collection_id, org_id)
         return [
-            (replace(batch, status=self._derive_batch_status(items)), items)
+            (replace(batch, status=self._derive_batch_status(batch, items)), items)
             for batch, items in batches
         ]
 
@@ -430,19 +538,19 @@ class CollectionModelAutomationService:
             )
 
     async def _refresh_batch_status(self, batch_id: str, org_id: str) -> None:
-        _batch, items = await self.get_batch(batch_id, org_id)
-        status = self._derive_batch_status(items)
+        batch, items = await self.get_batch(batch_id, org_id)
+        status = self._derive_batch_status(batch, items)
         await self._repository.update_prediction_batch_status(batch_id, status)
 
     async def _without_exact_prediction(
         self,
-        collection: DatasetCollection,
+        collection_id: str,
+        model_id: str,
         org_id: str,
         entries: list[dict[str, str]],
     ) -> list[dict[str, str]]:
-        assert collection.default_model_id is not None
         observations = await self._repository.list_prediction_observations(
-            collection.id,
+            collection_id,
             org_id,
             tuple(entry["dataset_id"] for entry in entries),
         )
@@ -452,7 +560,7 @@ class CollectionModelAutomationService:
         exact = {
             (observation.member_id, observation.dataset_id)
             for observation in observations
-            if observation.model_id == collection.default_model_id
+            if observation.model_id == model_id
             and observation.status
             in {
                 JobStatus.QUEUED.value,
@@ -583,10 +691,13 @@ class CollectionModelAutomationService:
         )
 
     @staticmethod
-    def _derive_batch_status(items: list[CollectionPredictionBatchItem]) -> str:
+    def _derive_batch_status(
+        batch: CollectionPredictionBatch,
+        items: list[CollectionPredictionBatchItem],
+    ) -> str:
         statuses = {item.status for item in items}
         if not statuses:
-            return "pending"
+            return batch.status
         if statuses <= {JobStatus.COMPLETED.value}:
             return "completed"
         if statuses <= {JobStatus.FAILED.value, JobStatus.CANCELLED.value}:

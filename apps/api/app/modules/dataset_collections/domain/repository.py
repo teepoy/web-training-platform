@@ -141,6 +141,12 @@ class DatasetCollectionRepository(Protocol):
         tuple[CollectionPredictionBatch, list[CollectionPredictionBatchItem]] | None
     ): ...
 
+    async def add_prediction_batch_items(
+        self,
+        batch_id: str,
+        items: tuple[CollectionPredictionBatchItem, ...],
+    ) -> list[CollectionPredictionBatchItem]: ...
+
     async def list_prediction_batches(
         self,
         collection_id: str,

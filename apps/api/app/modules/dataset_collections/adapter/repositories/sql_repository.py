@@ -789,6 +789,53 @@ class DatasetCollectionSqlRepository:
             items = await self._prediction_batch_items(session, row.id)
             return _prediction_batch(row), items
 
+    async def add_prediction_batch_items(
+        self,
+        batch_id: str,
+        items: tuple[CollectionPredictionBatchItem, ...],
+    ) -> list[CollectionPredictionBatchItem]:
+        async with self._session_factory() as session:
+            batch = await session.get(CollectionPredictionBatchORM, batch_id)
+            if batch is None:
+                raise DatasetCollectionNotFoundError(
+                    "Collection prediction batch not found"
+                )
+            existing = await self._prediction_batch_items(session, batch_id)
+            if existing:
+                return existing
+            session.add_all(
+                [
+                    CollectionPredictionBatchItemORM(
+                        id=item.id,
+                        batch_id=item.batch_id,
+                        member_id=item.member_id,
+                        dataset_id=item.dataset_id,
+                        dataset_revision_id=item.dataset_revision_id,
+                        prediction_job_id=item.prediction_job_id,
+                        status=item.status,
+                        attempt_count=item.attempt_count,
+                        error_detail=item.error_detail,
+                        created_at=item.created_at,
+                        updated_at=item.updated_at,
+                    )
+                    for item in items
+                ]
+            )
+            batch.status = "pending"
+            batch.updated_at = _utcnow()
+            try:
+                await session.commit()
+            except IntegrityError:
+                await session.rollback()
+                concurrently_created = await self._prediction_batch_items(
+                    session,
+                    batch_id,
+                )
+                if concurrently_created:
+                    return concurrently_created
+                raise
+            return list(items)
+
     async def list_prediction_batches(
         self,
         collection_id: str,
