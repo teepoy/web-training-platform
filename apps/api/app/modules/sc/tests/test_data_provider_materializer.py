@@ -67,12 +67,18 @@ def _ready_revision(manifest_uri: str) -> DatasetCollectionRevision:
     )
 
 
-def _inspection(wafer_key: int, *, latest_update: int = 1) -> ScInspectionRecord:
+def _inspection(
+    wafer_key: int,
+    *,
+    latest_update: int = 1,
+    change_token: int = 101,
+) -> ScInspectionRecord:
     return ScInspectionRecord(
         inspection_time=datetime(2026, 8, 1, 4, 0, tzinfo=timezone.utc),
         wafer_key=wafer_key,
         device=f"device-{wafer_key}",
         latest_update=latest_update,
+        change_token=change_token,
     )
 
 
@@ -101,6 +107,54 @@ async def test_collection_materialization_has_no_browser_row_count_guard() -> No
         )
 
     storage_factory.open.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_inspection_source_caches_use_authoritative_change_token(
+    tmp_path: Path,
+) -> None:
+    upstream_reader = AsyncMock(spec=ScUpstreamReader)
+    upstream_reader.get_inspection.return_value = _inspection(
+        1,
+        latest_update=7,
+        change_token=701,
+    )
+    upstream_reader.get_sample_count.return_value = 0
+    upstream_reader.list_review_images.return_value = pl.DataFrame(
+        {"defect_id": pl.Series([], dtype=pl.Int32), "image_id": pl.Series([], dtype=pl.Int64)}
+    ).lazy()
+    cache = AsyncMock(spec=ScDataObjectCache)
+    cache.get_or_build_file.return_value = _cached_object(
+        tmp_path / "samples.parquet", "samples"
+    )
+
+    async def get_or_build(**kwargs) -> CachedDataObject:
+        await kwargs["builder"]()
+        return _cached_object(tmp_path / "reviews.parquet", "reviews")
+
+    cache.get_or_build.side_effect = get_or_build
+    materializer = ScDataMaterializer(
+        upstream_reader=upstream_reader,
+        storage_factory=AsyncMock(spec=DatasetStorageFactoryPort),
+        collection_revision_reader=AsyncMock(spec=DatasetCollectionRevisionReaderPort),
+        cache=cache,
+        batch_rows=50_000,
+    )
+
+    await materializer.materialize(
+        ScDataScope.inspection(
+            inspection_time="2026-08-01T04:00:00+00:00",
+            wafer_key=1,
+            org_id="org-1",
+        ),
+        revision=0,
+    )
+
+    source_keys = {
+        cache.get_or_build_file.await_args.kwargs["logical_key"],
+        cache.get_or_build.await_args.kwargs["logical_key"],
+    }
+    assert all(key.endswith("source-701") for key in source_keys)
 
 
 @pytest.mark.asyncio
@@ -420,7 +474,11 @@ async def test_dataset_materialization_projects_membership_and_reads_latest_sour
     storage_factory = AsyncMock(spec=DatasetStorageFactoryPort)
     storage_factory.open.return_value = storage
     upstream_reader = AsyncMock(spec=ScUpstreamReader)
-    upstream_reader.get_inspection.return_value = _inspection(1, latest_update=2)
+    upstream_reader.get_inspection.return_value = _inspection(
+        1,
+        latest_update=2,
+        change_token=702,
+    )
     upstream_reader.get_sample_count.return_value = 1
 
     async def stream_samples(*_args: object, **_kwargs: object):
@@ -434,7 +492,7 @@ async def test_dataset_materialization_projects_membership_and_reads_latest_sour
             ]
         )
 
-    upstream_reader.stream_sample_batches.side_effect = stream_samples
+    upstream_reader.stream_membership_sample_batches.side_effect = stream_samples
     upstream_reader.list_review_images.return_value = pl.DataFrame(
         {"defect_id": [42], "image_id": [100]}
     ).lazy()
@@ -481,7 +539,16 @@ async def test_dataset_materialization_projects_membership_and_reads_latest_sour
         if ":samples-base:" in call.kwargs["logical_key"]
     ]
     assert source_keys == [
-        "dataset:org-1/dataset-1:samples-base:v7-latest-source:source-2"
+        "dataset:org-1/dataset-1:samples-base:v7-latest-source:source-702"
+    ]
+    review_keys = [
+        call.kwargs["logical_key"]
+        for call in cache.get_or_build.await_args_list
+        if ":review-images:" in call.kwargs["logical_key"]
+    ]
+    assert review_keys == [
+        "inspection:2026-08-01T04:00:00+08:00/1:review-images:"
+        "v2-row-key:source-702"
     ]
 
 
@@ -517,7 +584,9 @@ async def test_collection_revision_materializes_combined_rows_and_overlays(
     revision_reader.get_revision.return_value = _ready_revision("memory://revision")
     upstream_reader = AsyncMock(spec=ScUpstreamReader)
     upstream_reader.get_inspection.side_effect = lambda _time, wafer_key: _inspection(
-        wafer_key
+        wafer_key,
+        latest_update=wafer_key,
+        change_token=200 + wafer_key,
     )
     upstream_reader.get_sample_count.return_value = 1
 
@@ -538,7 +607,7 @@ async def test_collection_revision_materializes_combined_rows_and_overlays(
             ]
         )
 
-    upstream_reader.stream_sample_batches.side_effect = stream_samples
+    upstream_reader.stream_membership_sample_batches.side_effect = stream_samples
     upstream_reader.list_review_images.side_effect = lambda _time, wafer_key: (
         pl.DataFrame({"defect_id": [42], "image_id": [wafer_key * 100]}).lazy()
     )
@@ -599,3 +668,14 @@ async def test_collection_revision_materializes_combined_rows_and_overlays(
         "dataset-a::sample-1",
         "dataset-b::sample-9",
     ]
+    source_keys = {
+        call.kwargs["logical_key"]
+        for call in (
+            *cache.get_or_build_file.await_args_list,
+            *cache.get_or_build.await_args_list,
+        )
+        if ":samples-base:" in call.kwargs["logical_key"]
+        or ":review-images:" in call.kwargs["logical_key"]
+    }
+    assert len(source_keys) == 2
+    assert all(key.endswith("source-e60cfb7968e67431") for key in source_keys)

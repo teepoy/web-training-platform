@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import ANY, AsyncMock
 
@@ -17,6 +18,7 @@ from app.modules.sc.app.services.sc_plot_points_service import (
     ScPlotPointsService,
     _apply_sample_table_sort,
 )
+from app.modules.sc.domain.models import ScInspectionRecord
 from app.modules.sc.port.http.deps import get_sc_plot_points_service
 from app.modules.sc.proto_adapter import make_wafer_map_response_pb
 from proto_stubs.sc.v1.sample_pb2 import WaferMapResponse
@@ -331,8 +333,8 @@ def test_plot_columns_uses_images_not_review_images() -> None:
 
 
 @pytest.mark.asyncio
-async def test_build_plot_points_response_with_geometry_in_dataset_meta() -> None:
-    """Geometry stored in dataset_meta propagates to WaferMapResponse."""
+async def test_build_plot_points_response_uses_current_upstream_geometry() -> None:
+    """Map geometry follows the source inspection, not stale Dataset metadata."""
     from unittest.mock import AsyncMock
 
     from app.modules.storage.adapter.factory import DatasetStorageFactory
@@ -375,12 +377,12 @@ async def test_build_plot_points_response_with_geometry_in_dataset_meta() -> Non
             "source_inspection_time": "2026-01-01T00:00:00+00:00",
             "source_wafer_key": 1,
             "geometry": {
-                "center_x": 5000,
-                "center_y": 3000,
-                "origin_x": -1000,
-                "origin_y": -2000,
-                "die_size_x": 8000,
-                "die_size_y": 6000,
+                "center_x": 1,
+                "center_y": 1,
+                "origin_x": 1,
+                "origin_y": 1,
+                "die_size_x": 1,
+                "die_size_y": 1,
                 "origin_index_x": 0,
                 "origin_index_y": 0,
                 "wafer_radius_nm": 200_000_000,
@@ -405,7 +407,23 @@ async def test_build_plot_points_response_with_geometry_in_dataset_meta() -> Non
             yield batch
 
     mock_upstream.get_sample_count = AsyncMock(return_value=df.height)
-    mock_upstream.stream_sample_batches = sample_stream
+    mock_upstream.stream_membership_sample_batches = sample_stream
+    mock_upstream.get_inspection = AsyncMock(
+        return_value=ScInspectionRecord(
+            inspection_time=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            wafer_key=1,
+            center_x=5000,
+            center_y=3000,
+            origin_x=-1000,
+            origin_y=-2000,
+            die_size_x=8000,
+            die_size_y=6000,
+            origin_index_x=0,
+                origin_index_y=0,
+                device="device-a",
+                change_token=1,
+        )
+    )
 
     svc = ScPlotPointsService(
         repository=mock_repo,  # type: ignore
@@ -429,14 +447,98 @@ async def test_build_plot_points_response_with_geometry_in_dataset_meta() -> Non
     assert msg.geometry.origin_y == -2000
     assert msg.geometry.die_size_x == 8000
     assert msg.geometry.die_size_y == 6000
-    assert msg.geometry.wafer_radius_nm == 200_000_000
+    assert msg.geometry.wafer_radius_nm == 150_000_000
     assert list(msg.wafer_points)[5] == 0
     assert list(msg.wafer_points)[11] == 1
 
 
 @pytest.mark.asyncio
-async def test_build_plot_points_response_rejects_missing_geometry() -> None:
-    """Missing geometry key in dataset_meta is rejected instead of defaulted."""
+async def test_reticle_box_filter_uses_current_upstream_geometry() -> None:
+    from app.modules.storage.adapter.factory import DatasetStorageFactory
+    from app.shared.api.schemas import Dataset, DatasetStorageMode
+    from app.modules.datasets.adapter.repositories.dataset_sql_repository import (
+        DatasetSqlRepository,
+    )
+
+    membership = pl.DataFrame({"sample_id": ["42"], "defect_id": [42]}).lazy()
+    current = pl.DataFrame(
+        {
+            "defect_id": [42],
+            "wafer_x": [150],
+            "wafer_y": [150],
+            "die_x": [5],
+            "die_y": [5],
+        }
+    )
+    storage = AsyncMock()
+    storage.list_samples.return_value = membership
+    storage_factory = AsyncMock(spec=DatasetStorageFactory)
+    storage_factory.open.return_value = storage
+    dataset = Dataset(
+        id=_DATASET_ID,
+        name="box-current-geometry",
+        dataset_type="image_sc",
+        storage_mode=DatasetStorageMode.FILE_SHARD_SPARSE,
+        dataset_meta={
+            "source_inspection_time": "2026-01-01T00:00:00+00:00",
+            "source_wafer_key": 1,
+            "geometry": {
+                "center_x": 0,
+                "center_y": 0,
+                "origin_x": 0,
+                "origin_y": 0,
+                "die_size_x": 100,
+                "die_size_y": 100,
+                "origin_index_x": 0,
+                "origin_index_y": 0,
+            },
+        },
+    )
+    repository = AsyncMock(spec=DatasetSqlRepository)
+    repository.get_dataset.return_value = dataset
+    upstream = AsyncMock()
+    upstream.get_inspection.return_value = ScInspectionRecord(
+        inspection_time=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        wafer_key=1,
+        center_x=0,
+        center_y=0,
+        origin_x=100,
+        origin_y=100,
+        die_size_x=10,
+        die_size_y=10,
+        origin_index_x=0,
+        origin_index_y=0,
+        device="device-a",
+        change_token=1,
+    )
+
+    async def stream_current(*_args, **_kwargs):
+        yield current.to_arrow().to_batches()[0]
+
+    upstream.stream_membership_sample_batches = stream_current
+    service = ScPlotPointsService(
+        repository=repository,
+        storage_factory=storage_factory,
+        upstream_reader=upstream,
+        source_batch_rows=100,
+    )
+
+    defect_ids = await service.filter_dataset_box(
+        _DATASET_ID,
+        "org",
+        mode="reticle",
+        x=25,
+        y=5,
+        width=0,
+        height=0,
+    )
+
+    assert defect_ids == ["42"]
+
+
+@pytest.mark.asyncio
+async def test_build_plot_points_response_rejects_missing_upstream_inspection() -> None:
+    """A missing current inspection is not replaced by persisted geometry."""
     from unittest.mock import AsyncMock
 
     from app.modules.storage.adapter.factory import DatasetStorageFactory
@@ -468,36 +570,42 @@ async def test_build_plot_points_response_rejects_missing_geometry() -> None:
     mock_storage_factory = AsyncMock(spec=DatasetStorageFactory)
     mock_storage_factory.open = AsyncMock(return_value=mock_storage)
 
-    # dataset_meta WITHOUT geometry key
     dataset = Dataset(
         id=_DATASET_ID,
         name="test-no-geometry",
         dataset_type="image_sc",
         storage_mode=DatasetStorageMode.FILE_SHARD_SPARSE,
-        dataset_meta={"task_type": "sc", "label_space": []},
+        dataset_meta={
+            "task_type": "sc",
+            "label_space": [],
+            "source_inspection_time": "2026-01-01T00:00:00+00:00",
+            "source_wafer_key": 1,
+        },
     )
 
     mock_repo = AsyncMock(spec=DatasetSqlRepository)
     mock_repo.get_dataset = AsyncMock(return_value=dataset)
 
+    upstream = AsyncMock()
+    upstream.get_inspection.return_value = None
     svc = ScPlotPointsService(
         repository=mock_repo,  # type: ignore
         storage_factory=mock_storage_factory,  # type: ignore
-        upstream_reader=AsyncMock(),
+        upstream_reader=upstream,
         source_batch_rows=100,
     )
 
-    with pytest.raises(ScPlotPointsRejectedError, match="dataset_meta.geometry"):
+    with pytest.raises(ScPlotPointsRejectedError, match="upstream inspection not found"):
         await svc.build_plot_points_response(
             dataset_id=_DATASET_ID,
             org_id="org",
-            upstream_reader=AsyncMock(),
+            upstream_reader=upstream,
         )
 
 
 @pytest.mark.asyncio
-async def test_build_plot_points_response_rejects_incomplete_geometry() -> None:
-    """Incomplete geometry must not silently default center/die values."""
+async def test_build_plot_points_response_rejects_invalid_upstream_geometry() -> None:
+    """Invalid current geometry must not fall back to Dataset metadata."""
     from unittest.mock import AsyncMock
 
     from app.modules.storage.adapter.factory import DatasetStorageFactory
@@ -534,6 +642,8 @@ async def test_build_plot_points_response_rejects_incomplete_geometry() -> None:
         dataset_meta={
             "task_type": "sc",
             "label_space": [],
+            "source_inspection_time": "2026-01-01T00:00:00+00:00",
+            "source_wafer_key": 1,
             "geometry": {
                 "origin_x": 0,
                 "origin_y": 0,
@@ -548,16 +658,25 @@ async def test_build_plot_points_response_rejects_incomplete_geometry() -> None:
     mock_repo = AsyncMock(spec=DatasetSqlRepository)
     mock_repo.get_dataset = AsyncMock(return_value=dataset)
 
+    upstream = AsyncMock()
+    upstream.get_inspection.return_value = ScInspectionRecord(
+        inspection_time=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        wafer_key=1,
+        die_size_x=0,
+        die_size_y=1,
+        device="device-a",
+        change_token=1,
+    )
     svc = ScPlotPointsService(
         repository=mock_repo,  # type: ignore
         storage_factory=mock_storage_factory,  # type: ignore
-        upstream_reader=AsyncMock(),
+        upstream_reader=upstream,
         source_batch_rows=100,
     )
 
-    with pytest.raises(ScPlotPointsRejectedError, match="missing keys"):
+    with pytest.raises(ScPlotPointsRejectedError, match="die sizes must be positive"):
         await svc.build_plot_points_response(
             dataset_id=_DATASET_ID,
             org_id="org",
-            upstream_reader=AsyncMock(),
+            upstream_reader=upstream,
         )

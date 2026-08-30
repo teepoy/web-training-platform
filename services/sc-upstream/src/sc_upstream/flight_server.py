@@ -32,6 +32,14 @@ class UpstreamFlightServer(flight.FlightServerBase):
 
         inspection_time = datetime.fromisoformat(req["inspection_time"])
         wafer_key: int = req["wafer_key"]
+        if req["type"] == "list_membership_samples":
+            return self._membership_stream(
+                inspection_time=inspection_time,
+                wafer_key=wafer_key,
+                defect_ids=req["defect_ids"],
+                projection=req["projection"],
+                batch_rows=req["batch_rows"],
+            )
         offset: int = req["offset"]
         count: int | None = req["count"]
         batch_rows: int = req["batch_rows"]
@@ -150,6 +158,33 @@ class UpstreamFlightServer(flight.FlightServerBase):
 
         return flight.GeneratorStream(schema, _stream_batches())
 
+    def _membership_stream(
+        self,
+        *,
+        inspection_time: datetime,
+        wafer_key: int,
+        defect_ids: list[int],
+        projection: list[str] | None,
+        batch_rows: int,
+    ) -> flight.FlightDataStream:
+        sample_stream = self._db.open_membership_samples_stream(
+            inspection_time,
+            wafer_key,
+            defect_ids=defect_ids,
+            projection=projection,
+            batch_size=batch_rows,
+        )
+
+        def _stream_batches() -> Iterator[pa.Table]:
+            try:
+                for frame in sample_stream.batches:
+                    yield frame.to_arrow()
+            finally:
+                with suppress(Exception):
+                    sample_stream.batches.close()  # type: ignore[attr-defined]
+
+        return flight.GeneratorStream(sample_stream.schema, _stream_batches())
+
 
 def _lazyframe_stream(frame: Any, *, batch_rows: int) -> flight.FlightDataStream:
     schema = pl.DataFrame(schema=frame.collect_schema()).to_arrow().schema
@@ -178,7 +213,8 @@ def _parse_ticket(ticket: flight.Ticket) -> dict[str, Any]:
         raise ValueError("invalid Flight ticket JSON") from exc
     if not isinstance(req, dict):
         raise ValueError("Flight ticket must decode to a JSON object")
-    if req.get("type") != "list_samples":
+    ticket_type = req.get("type")
+    if ticket_type not in {"list_samples", "list_membership_samples"}:
         raise ValueError(f"unknown ticket type: {req.get('type')}")
     inspection_time = req.get("inspection_time")
     if not isinstance(inspection_time, str) or not inspection_time:
@@ -190,14 +226,6 @@ def _parse_ticket(ticket: flight.Ticket) -> dict[str, Any]:
     wafer_key = req.get("wafer_key")
     if not isinstance(wafer_key, int):
         raise ValueError("list_samples Flight ticket requires integer wafer_key")
-    offset = req.get("offset", 0)
-    if not isinstance(offset, int) or offset < 0:
-        raise ValueError("list_samples Flight ticket requires non-negative offset")
-    count = req.get("count")
-    if count is not None and (not isinstance(count, int) or count < 0):
-        raise ValueError(
-            "list_samples Flight ticket count must be null or non-negative"
-        )
     batch_rows = req.get("batch_rows")
     if batch_rows is None:
         batch_rows = int(os.environ["SC_FLIGHT_BATCH_SIZE"])
@@ -215,8 +243,39 @@ def _parse_ticket(ticket: flight.Ticket) -> dict[str, Any]:
             raise ValueError(
                 "list_samples Flight ticket projection contains duplicates"
             )
-    req["offset"] = offset
-    req["count"] = count
     req["batch_rows"] = batch_rows
     req["projection"] = projection
+    if ticket_type == "list_membership_samples":
+        defect_ids = req.get("defect_ids")
+        if (
+            not isinstance(defect_ids, list)
+            or not defect_ids
+            or not all(
+                isinstance(value, int) and not isinstance(value, bool)
+                for value in defect_ids
+            )
+        ):
+            raise ValueError(
+                "list_membership_samples Flight ticket requires integer defect_ids"
+            )
+        if len(defect_ids) > batch_rows:
+            raise ValueError(
+                "list_membership_samples defect_ids must fit within batch_rows"
+            )
+        if len(set(defect_ids)) != len(defect_ids):
+            raise ValueError(
+                "list_membership_samples Flight ticket contains duplicate defect_ids"
+            )
+        req["defect_ids"] = defect_ids
+        return req
+    offset = req.get("offset", 0)
+    if not isinstance(offset, int) or offset < 0:
+        raise ValueError("list_samples Flight ticket requires non-negative offset")
+    count = req.get("count")
+    if count is not None and (not isinstance(count, int) or count < 0):
+        raise ValueError(
+            "list_samples Flight ticket count must be null or non-negative"
+        )
+    req["offset"] = offset
+    req["count"] = count
     return req

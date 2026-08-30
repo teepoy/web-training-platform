@@ -5,6 +5,7 @@ import logging
 from datetime import datetime
 from time import perf_counter
 from typing import Any, Protocol, cast
+from uuid import uuid4
 
 from injector import inject
 import polars as pl
@@ -16,9 +17,6 @@ from app.modules.sc.domain.entities.sc_import import ScImportStatus
 from app.modules.sc.domain.models import _coerce_naive_to_upstream_tz
 from app.modules.sc.domain.upstream_reader import ScUpstreamReader
 from app.modules.sc.port.local import ScImportProgressCallback
-from app.modules.sc.app.services.import_rows import (
-    _geometry_from_inspection,
-)
 from app.modules.sc.schema import (
     SC_SOURCE_SCHEMA_VERSION,
     _build_v4_pyarrow_schema,
@@ -84,8 +82,18 @@ def _transform_upstream_batch(
         raise ValueError(f"SC upstream batch is missing columns: {sorted(missing)}")
 
     del inspection_time, wafer_key
-    defect_id = pl.col("defect_id").cast(pl.Utf8)
-    output = frame.select(defect_id.alias("sample_id"), defect_id.alias("defect_id"))
+    defect_ids = frame["defect_id"].cast(pl.Utf8)
+    sample_ids = pl.Series(
+        "sample_id",
+        [str(uuid4()) for _ in range(defect_ids.len())],
+        dtype=pl.Utf8,
+    )
+    output = pl.DataFrame(
+        {
+            "sample_id": sample_ids,
+            "defect_id": defect_ids.alias("defect_id"),
+        }
+    )
     table = cast(pa.Table, output.to_arrow())
     if schema is None:
         return table
@@ -203,7 +211,6 @@ class ScImportService:
                     dataset_name=dataset_name,
                     imported_count=0,
                 )
-            inspection = await self._upstream.get_inspection(insp_dt, source_wafer_key)
         except Exception as exc:
             logger.exception("SC import upstream pre-check failed")
             return await self._fail(
@@ -221,7 +228,6 @@ class ScImportService:
                 org_id=org_id,
                 created_by=created_by,
                 label_space=label_space,
-                inspection=inspection,
             )
         except Exception as exc:
             logger.exception("SC dataset creation failed")
@@ -421,7 +427,11 @@ class ScImportService:
                         index_row_group_rows=self._index_row_group_rows,
                     )
                 write_started = perf_counter()
-                shard_entry = await session.append(table, row_id_column="sample_id")
+                shard_entry = await session.append(
+                    table,
+                    row_id_column="sample_id",
+                    upstream_item_id_column="defect_id",
+                )
                 write_seconds += perf_counter() - write_started
                 shard_entries.append(shard_entry)
                 total_rows += table.num_rows
@@ -483,7 +493,6 @@ class ScImportService:
         org_id: str,
         created_by: str,
         label_space: list[str] | None,
-        inspection: Any | None,
     ) -> Dataset:
         dataset = Dataset(
             name=dataset_name,
@@ -515,8 +524,6 @@ class ScImportService:
             "source_inspection_time": source_inspection_time,
             "source_wafer_key": source_wafer_key,
         }
-        if inspection is not None:
-            dataset_meta["geometry"] = _geometry_from_inspection(inspection)
         await self._repo.update_dataset_meta(
             dataset.id,
             dataset_meta,

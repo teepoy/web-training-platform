@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterator, Sequence
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from typing import Any, cast
@@ -41,6 +42,27 @@ class _Upstream:
                 }
             ]
         )
+
+    async def stream_membership_sample_batches(
+        self,
+        _time: datetime,
+        wafer_key: int,
+        *,
+        defect_ids: Sequence[int],
+        batch_rows: int,
+        projection: Sequence[str] | None = None,
+    ) -> AsyncIterator[pa.RecordBatch]:
+        del batch_rows
+        assert list(defect_ids) == [42]
+        row = {
+            "defect_id": 42,
+            "inspection_time": "2026-08-07T00:00:00+08:00",
+            "wafer_key": wafer_key,
+            "rough_bin": 9,
+        }
+        if projection is not None:
+            row = {column: row[column] for column in projection}
+        yield pa.RecordBatch.from_pylist([row])
 
 
 @pytest.mark.asyncio

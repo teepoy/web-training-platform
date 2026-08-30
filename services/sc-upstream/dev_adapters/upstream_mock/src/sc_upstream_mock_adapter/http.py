@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator, Mapping, Sequence
 from datetime import datetime, timezone
 import json
 import os
@@ -100,6 +100,23 @@ class HttpUpstreamAdapter:
         except HTTPError as exc:
             if exc.code == 404:
                 return None
+            detail = exc.read().decode("utf-8", errors="replace")
+            raise RuntimeError(f"upstream mock returned {exc.code}: {detail}") from exc
+
+    def _post(self, path: str, body: Mapping[str, object]) -> Any:
+        request = Request(
+            f"{self._base_url}{path}",
+            data=json.dumps(body).encode(),
+            method="POST",
+            headers={
+                "Authorization": f"Bearer {self._token}",
+                "Content-Type": "application/json",
+            },
+        )
+        try:
+            with urlopen(request, timeout=self._timeout_seconds) as response:
+                return json.load(response)
+        except HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
             raise RuntimeError(f"upstream mock returned {exc.code}: {detail}") from exc
 
@@ -218,6 +235,49 @@ class HttpUpstreamAdapter:
                 offset=offset,
                 count=count,
             ),
+        )
+
+    def open_membership_samples_stream(
+        self,
+        inspection_time: datetime,
+        wafer_key: int,
+        *,
+        defect_ids: Sequence[int],
+        projection: Sequence[str] | None,
+        batch_size: int,
+    ) -> SampleBatchStream:
+        if batch_size <= 0:
+            raise ValueError("batch_size must be positive")
+        if not defect_ids:
+            raise ValueError("defect_ids must not be empty")
+        selected = list(projection) if projection is not None else list(_SAMPLE_SCHEMA)
+        unknown = set(selected).difference(_SAMPLE_SCHEMA)
+        if unknown:
+            raise ValueError(f"unsupported sample projection: {sorted(unknown)}")
+        result = self._post(
+            "/upstream/v1/inspection-samples/query",
+            {
+                "inspection_time": _isoformat(inspection_time),
+                "wafer_key": wafer_key,
+                "defect_ids": list(defect_ids),
+                "projection": selected,
+            },
+        )
+        rows = result["rows"]
+        for row in rows:
+            if "inspection_time" in row:
+                value = datetime.fromisoformat(row["inspection_time"])
+                if value.tzinfo is None:
+                    value = value.replace(tzinfo=timezone.utc)
+                row["inspection_time"] = value
+        frame = pl.DataFrame(
+            rows,
+            schema={column: _SAMPLE_SCHEMA[column] for column in selected},
+            strict=False,
+        )
+        return SampleBatchStream(
+            schema=frame.to_arrow().schema,
+            batches=iter(frame.iter_slices(n_rows=batch_size)),
         )
 
     def _sample_batches(

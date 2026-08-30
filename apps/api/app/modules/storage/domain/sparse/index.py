@@ -107,3 +107,43 @@ class SparseIndexReader:
         return [
             str(value) for value in table[SPARSE_INDEX_SAMPLE_ID_COLUMN].to_pylist()
         ]
+
+    async def lookup_by_upstream_item_ids(
+        self,
+        entry: SparseIndexEntry,
+        upstream_item_ids: list[str] | set[str],
+        *,
+        storage: ArtifactStorage,
+    ) -> dict[str, str]:
+        """Map unique upstream item identities to platform sample identities."""
+        wanted = sorted({str(item_id) for item_id in upstream_item_ids})
+        if not wanted:
+            return {}
+        path = await self._local_path(entry, storage)
+        table = await asyncio.to_thread(
+            pq.read_table,
+            path,
+            columns=[
+                SPARSE_INDEX_SAMPLE_ID_COLUMN,
+                SPARSE_INDEX_UPSTREAM_ID_COLUMN,
+            ],
+            filters=[(SPARSE_INDEX_UPSTREAM_ID_COLUMN, "in", wanted)],
+        )
+        result: dict[str, str] = {}
+        for sample_id, upstream_item_id in zip(
+            table[SPARSE_INDEX_SAMPLE_ID_COLUMN].to_pylist(),
+            table[SPARSE_INDEX_UPSTREAM_ID_COLUMN].to_pylist(),
+            strict=True,
+        ):
+            if upstream_item_id is None:
+                continue
+            upstream_key = str(upstream_item_id)
+            platform_id = str(sample_id)
+            existing = result.get(upstream_key)
+            if existing is not None and existing != platform_id:
+                raise ValueError(
+                    "sparse index contains duplicate upstream item identity: "
+                    f"{upstream_key}"
+                )
+            result[upstream_key] = platform_id
+        return result

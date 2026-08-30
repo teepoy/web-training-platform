@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
+from uuid import UUID
 
 import pyarrow as pa
 import pytest
@@ -90,7 +91,7 @@ def test_v4_schema_is_identity_only() -> None:
     assert schema.names == ["sample_id", "defect_id"]
 
 
-def test_transform_upstream_batch_persists_only_identity_columns() -> None:
+def test_transform_upstream_batch_generates_unique_opaque_platform_sample_ids() -> None:
     batch = pa.RecordBatch.from_pylist(
         [
             {
@@ -107,7 +108,18 @@ def test_transform_upstream_batch_persists_only_identity_columns() -> None:
                 "cluster": 9,
                 "images": 6,
                 "future_metric": 12.5,
-            }
+            },
+            {
+                "defect_id": 43,
+                "wafer_x": 101,
+                "wafer_y": 201,
+                "die_x": 2,
+                "die_y": 3,
+                "rough_bin": 4,
+                "class_number": 5,
+                "test_id": 6,
+                "lot_id": "LOT-1",
+            },
         ]
     )
 
@@ -118,7 +130,12 @@ def test_transform_upstream_batch_persists_only_identity_columns() -> None:
     )
 
     assert table.column_names == ["sample_id", "defect_id"]
-    assert table.to_pylist() == [{"sample_id": "42", "defect_id": "42"}]
+    rows = table.to_pylist()
+    assert [row["defect_id"] for row in rows] == ["42", "43"]
+    sample_ids = [str(row["sample_id"]) for row in rows]
+    assert len(set(sample_ids)) == 2
+    assert set(sample_ids).isdisjoint({"42", "43"})
+    assert all(UUID(sample_id).version == 4 for sample_id in sample_ids)
 
 
 def test_transform_upstream_batch_ignores_compatible_extra_field_changes() -> None:
@@ -161,7 +178,9 @@ def test_transform_upstream_batch_ignores_compatible_extra_field_changes() -> No
         schema=first_table.schema,
     )
 
-    assert table.to_pylist() == [{"sample_id": "2", "defect_id": "2"}]
+    row = table.to_pylist()[0]
+    assert row["defect_id"] == "2"
+    assert UUID(str(row["sample_id"])).version == 4
 
 
 def test_find_images_by_role_remains_available_for_v2_readers() -> None:

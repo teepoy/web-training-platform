@@ -46,29 +46,10 @@ class ScUpstreamService(pb_grpc.ScUpstreamServicer):
             )
             return pb.GetInspectionResponse()
 
-        it = request.inspection_time
-        wk = request.wafer_key
-        cached = await self._cache.get_inspection(it, wk)
-        if cached is not None:
-            return _to_inspection_response(cached)
-
-        async with self._cache.fill_lock("inspect", it, str(wk)) as acquired:
-            if not acquired:
-                record = await self._cache.wait_for_fill(
-                    lambda: self._cache.get_inspection(it, wk)
-                )
-                if record is not None:
-                    return _to_inspection_response(record)
-            else:
-                cached = await self._cache.get_inspection(it, wk)
-                if cached is not None:
-                    return _to_inspection_response(cached)
-            record = await self._db.get_inspection(dt, wk)
+        record = await self._db.get_inspection(dt, request.wafer_key)
         if record is None:
             await context.abort(grpc.StatusCode.NOT_FOUND, "inspection not found")
             return pb.GetInspectionResponse()
-
-        await self._cache.set_inspection(it, wk, record)
         return _to_inspection_response(record)
 
     async def ListInspections(
@@ -276,33 +257,7 @@ class ScUpstreamService(pb_grpc.ScUpstreamServicer):
             )
             return pb.GetReviewImageFileSpecResponse()
 
-        images = await self._cache.get_list_review_images(
-            request.inspection_time, request.wafer_key
-        )
-        if images is not None:
-            for img in images:
-                if (
-                    img["defect_id"] == request.defect_id
-                    and img["image_id"] == request.image_id
-                ):
-                    return pb.GetReviewImageFileSpecResponse(
-                        image_filespec=img["image_filespec"]
-                    )
-            await context.abort(grpc.StatusCode.NOT_FOUND, "review image not found")
-            return pb.GetReviewImageFileSpecResponse()
-
-        it = request.inspection_time
-        wk = request.wafer_key
-        async with self._cache.fill_lock("review", it, str(wk)) as acquired:
-            if not acquired:
-                images = await self._cache.wait_for_fill(
-                    lambda: self._cache.get_list_review_images(it, wk)
-                )
-            else:
-                images = await self._cache.get_list_review_images(it, wk)
-            if images is None:
-                images = await self._db.list_review_images(dt, wk)
-        await self._cache.set_list_review_images(it, wk, images)
+        images = await self._db.list_review_images(dt, request.wafer_key)
         for img in images:
             if (
                 img["defect_id"] == request.defect_id
@@ -325,20 +280,7 @@ class ScUpstreamService(pb_grpc.ScUpstreamServicer):
             )
             return pb.ListReviewImagesResponse()
 
-        it = request.inspection_time
-        wk = request.wafer_key
-        images = await self._cache.get_list_review_images(it, wk)
-        if images is None:
-            async with self._cache.fill_lock("review", it, str(wk)) as acquired:
-                if not acquired:
-                    images = await self._cache.wait_for_fill(
-                        lambda: self._cache.get_list_review_images(it, wk)
-                    )
-                else:
-                    images = await self._cache.get_list_review_images(it, wk)
-                if images is None:
-                    images = await self._db.list_review_images(dt, wk)
-            await self._cache.set_list_review_images(it, wk, images)
+        images = await self._db.list_review_images(dt, request.wafer_key)
 
         defect_id = request.defect_id if request.defect_id else 0
         refs = [

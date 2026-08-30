@@ -162,3 +162,4 @@ class ScInspectionRecord(BaseModel):
     origin_index_x: int = 0
     origin_index_y: int = 0
     latest_update: int = 0
+    change_token: int = Field(gt=0)

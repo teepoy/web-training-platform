@@ -64,6 +64,16 @@ class ScUpstreamReader(Protocol):
         on_progress: ScSampleProgressCallback | None = None,
     ) -> AsyncIterator[pa.RecordBatch]: ...
 
+    def stream_membership_sample_batches(
+        self,
+        inspection_time: datetime,
+        wafer_key: int,
+        *,
+        defect_ids: Sequence[int],
+        batch_rows: int,
+        projection: Sequence[str] | None = None,
+    ) -> AsyncIterator[pa.RecordBatch]: ...
+
     async def list_samples(
         self,
         inspection_time: datetime,

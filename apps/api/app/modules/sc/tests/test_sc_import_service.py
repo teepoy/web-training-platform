@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import cast
 
 import polars as pl
 import pytest
@@ -11,7 +12,6 @@ from app.modules.datasets.domain.entities import (
     DatasetRevisionOperation,
 )
 from app.modules.datasets.port.local import DatasetRevisionPublisherPort
-from app.modules.sc.domain.models import ScInspectionRecord
 from app.shared.api.schemas import Dataset
 
 
@@ -218,6 +218,33 @@ class _MockUpstream:
                     on_progress(loaded)
                 yield batch
 
+    async def stream_membership_sample_batches(
+        self,
+        inspection_time,
+        wafer_key,
+        *,
+        defect_ids,
+        batch_rows,
+        projection=None,
+    ):
+        requested = {int(defect_id) for defect_id in defect_ids}
+        async for batch in self.stream_sample_batches(
+            inspection_time,
+            wafer_key,
+            count=self._row_count,
+            batch_rows=batch_rows,
+            projection=projection,
+        ):
+            frame = cast(pl.DataFrame, pl.from_arrow(batch)).filter(
+                pl.col("defect_id").is_in(requested)
+            )
+            if projection is not None:
+                frame = frame.select(
+                    *[column for column in projection if column in frame.columns]
+                )
+            for result_batch in frame.to_arrow().to_batches():
+                yield result_batch
+
     async def list_samples(
         self,
         inspection_time,
@@ -376,28 +403,10 @@ async def test_boundary_exact_30k_stays_direct_only() -> None:
 
 
 @pytest.mark.asyncio
-async def test_direct_import_persists_geometry_metadata() -> None:
-    """Direct (sync) import should persist wafer geometry in dataset_meta."""
+async def test_direct_import_persists_only_source_identity_metadata() -> None:
+    """Import must not freeze mutable upstream geometry in Dataset metadata."""
 
-    mock_inspection = ScInspectionRecord(
-        inspection_time=datetime(2024, 1, 15, 8, 30, 0, tzinfo=timezone.utc),
-        wafer_key=1,
-        lot_id="LOT-001",
-        wafer_id="W-001",
-        center_x=500,
-        center_y=500,
-        origin_x=0,
-        origin_y=0,
-        die_size_x=100,
-        die_size_y=100,
-        device="DEVICE-A",
-        origin_index_x=0,
-        origin_index_y=0,
-        defects=100,
-        images=4,
-    )
-
-    upstream = _MockUpstream(inspection_return=mock_inspection)
+    upstream = _MockUpstream(row_count=100)
     repo = _MockRepository()
 
     service = _make_service(upstream_reader=upstream, repository=repo)
@@ -411,33 +420,10 @@ async def test_direct_import_persists_geometry_metadata() -> None:
     )
 
     assert repo.updated_meta is not None
-    assert "geometry" in repo.updated_meta
-    geometry = repo.updated_meta["geometry"]
-
-    expected_keys = {
-        "center_x",
-        "center_y",
-        "origin_x",
-        "origin_y",
-        "die_size_x",
-        "die_size_y",
-        "origin_index_x",
-        "origin_index_y",
-        "wafer_id",
-        "lot_id",
-        "device",
+    assert repo.updated_meta == {
+        "source_inspection_time": "2024-01-15T08:30:00",
+        "source_wafer_key": 1,
     }
-    assert set(geometry.keys()) == expected_keys, (
-        f"Expected {expected_keys}, got {set(geometry.keys())}"
-    )
-
-    assert geometry["center_x"] == 500
-    assert geometry["center_y"] == 500
-    assert geometry["die_size_x"] == 100
-    assert geometry["die_size_y"] == 100
-    assert geometry["lot_id"] == "LOT-001"
-    assert geometry["wafer_id"] == "W-001"
-    assert geometry["device"] == "DEVICE-A"
 
 
 @pytest.mark.asyncio
@@ -459,6 +445,7 @@ async def test_hybrid_shuffle_exhausted_early() -> None:
 @pytest.mark.asyncio
 async def test_direct_import_uses_shuffled_ids() -> None:
     import io
+    from uuid import UUID
 
     import pyarrow.parquet as pq
 
@@ -504,6 +491,17 @@ async def test_direct_import_uses_shuffled_ids() -> None:
     parquet = pq.ParquetFile(io.BytesIO(payload_store.shards[0]))
     assert parquet.schema_arrow.metadata == {b"schema_version": b"v4_identity"}
     assert parquet.schema_arrow.names == ["sample_id", "defect_id"]
+    imported_rows = parquet.read().to_pylist()
+    imported_ids = [str(row["sample_id"]) for row in imported_rows]
+    assert len(set(imported_ids)) == len(imported_rows)
+    assert all(UUID(sample_id).version == 4 for sample_id in imported_ids)
+    assert all(row["sample_id"] != row["defect_id"] for row in imported_rows)
+
+    index = pq.read_table(io.BytesIO(payload_store.index)).to_pylist()
+    assert [row["sample_id"] for row in index] == imported_ids
+    assert [row["upstream_item_id"] for row in index] == [
+        str(row["defect_id"]) for row in imported_rows
+    ]
 
 
 @pytest.mark.asyncio

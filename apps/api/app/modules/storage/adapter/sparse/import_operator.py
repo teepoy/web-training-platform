@@ -273,7 +273,13 @@ class SparseColumnarImportSession:
         self._finalized = False
         self._index_uri: str | None = None
 
-    async def append(self, table: pa.Table, *, row_id_column: str) -> ShardEntry:
+    async def append(
+        self,
+        table: pa.Table,
+        *,
+        row_id_column: str,
+        upstream_item_id_column: str | None = None,
+    ) -> ShardEntry:
         import pyarrow as pa
         import pyarrow.parquet as pq
 
@@ -281,6 +287,13 @@ class SparseColumnarImportSession:
             raise RuntimeError("columnar import session is already finalized")
         if row_id_column not in table.column_names:
             raise ValueError(f"row identity column is missing: {row_id_column}")
+        if (
+            upstream_item_id_column is not None
+            and upstream_item_id_column not in table.column_names
+        ):
+            raise ValueError(
+                f"upstream item identity column is missing: {upstream_item_id_column}"
+            )
         if table.num_rows == 0:
             raise ValueError("cannot append an empty sparse shard")
 
@@ -294,12 +307,17 @@ class SparseColumnarImportSession:
             table=table,
         )
         identities = table[row_id_column].cast(pa.string())
+        upstream_identities = (
+            table[upstream_item_id_column].cast(pa.string())
+            if upstream_item_id_column is not None
+            else identities
+        )
         index_table = pa.Table.from_arrays(
             [
                 identities,
                 pa.array([shard_index] * table.num_rows, type=pa.int32()),
                 pa.array(range(table.num_rows), type=pa.int32()),
-                identities,
+                upstream_identities,
             ],
             schema=SPARSE_INDEX_SCHEMA,
         )

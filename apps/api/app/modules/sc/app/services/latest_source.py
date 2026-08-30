@@ -78,16 +78,22 @@ async def resolve_latest_sc_source(
     if identities["defect_id"].n_unique() != identities.height:
         raise ValueError(f"SC dataset {dataset_id} contains duplicate defect_id")
 
-    sample_count = await upstream_reader.get_sample_count(inspection_time, wafer_key)
     source_projection = None
     if projection is not None:
         source_projection = list(dict.fromkeys(("defect_id", *projection)))
+    try:
+        membership_defect_ids = [
+            int(value) for value in identities["defect_id"].to_list()
+        ]
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"SC dataset {dataset_id} contains malformed defect_id"
+        ) from exc
     frames: list[pl.DataFrame] = []
-    async for batch in upstream_reader.stream_sample_batches(
+    async for batch in upstream_reader.stream_membership_sample_batches(
         inspection_time,
         wafer_key,
-        offset=0,
-        count=sample_count,
+        defect_ids=membership_defect_ids,
         batch_rows=batch_rows,
         projection=source_projection,
     ):

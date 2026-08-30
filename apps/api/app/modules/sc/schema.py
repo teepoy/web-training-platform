@@ -31,7 +31,10 @@ Parquet metadata, so their manifest remains the authoritative version marker.
 
 V4 write behavior
 -----------------
-- Persist only ``sample_id`` and ``defect_id`` as strings.
+- Generate ``sample_id`` as a fresh opaque platform UUID, independent from the
+  upstream ``defect_id``; persist only those two identities as strings.
+- Record ``defect_id`` separately as the sparse index upstream item key so SC
+  annotation/writeback can resolve the persisted platform ``sample_id``.
 - Store inspection time and wafer key once in Dataset metadata.
 - Resolve source fields and images on demand from the latest upstream state.
 

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import uuid
+from io import BytesIO
 
 import pyarrow as pa
+import pyarrow.parquet as pq
 import pytest
 
 from app.modules.storage.adapter.sparse.import_operator import (
@@ -10,6 +12,7 @@ from app.modules.storage.adapter.sparse.import_operator import (
 )
 from tests.support.artifact_storage import InMemoryArtifactStorage
 from app.modules.storage.domain.sparse.models import SampleLocator
+from app.modules.storage.domain.sparse.index import SparseIndexReader
 from app.modules.storage.domain.sparse.store import DatasetPayloadStore
 
 
@@ -140,6 +143,50 @@ async def test_flush_shard_custom_row_id_key(
     assert locators["abc-001"].shard_index == 0
     assert locators["abc-001"].row_index == 0
     assert locators["abc-002"].row_index == 1
+
+
+@pytest.mark.asyncio
+async def test_columnar_import_indexes_platform_and_upstream_identities_separately(
+    operator: SparseImportOperator,
+    storage: InMemoryArtifactStorage,
+) -> None:
+    session = operator.begin_columnar_import(
+        schema_columns=[],
+        schema_version="v4_identity",
+        index_row_group_rows=100,
+    )
+    table = pa.Table.from_pylist(
+        [
+            {
+                "sample_id": "6594dbd1-46bd-5071-9968-61cd0240e1c0",
+                "defect_id": "42",
+            }
+        ]
+    )
+
+    await session.append(
+        table,
+        row_id_column="sample_id",
+        upstream_item_id_column="defect_id",
+    )
+    manifest = await session.finalize()
+
+    assert manifest.index is not None
+    index = pq.read_table(BytesIO(await storage.get_bytes(manifest.index.uri)))
+    assert index.to_pylist() == [
+        {
+            "sample_id": "6594dbd1-46bd-5071-9968-61cd0240e1c0",
+            "shard_index": 0,
+            "row_index": 0,
+            "upstream_item_id": "42",
+        }
+    ]
+    resolved = await SparseIndexReader().lookup_by_upstream_item_ids(
+        manifest.index,
+        {"42", "missing"},
+        storage=storage,
+    )
+    assert resolved == {"42": "6594dbd1-46bd-5071-9968-61cd0240e1c0"}
 
 
 @pytest.mark.asyncio

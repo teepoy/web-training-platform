@@ -178,17 +178,29 @@ Redis Pub/Sub handle when the response expires or the client disconnects.
 Final SQL results are never cached. The cache contains only normalized,
 rebuildable Parquet objects:
 
-- inspection base samples keyed by the inspection freshness timestamp;
-- inspection review-image rows keyed by the same freshness timestamp;
+- inspection base samples keyed by the required Inspection `change_token`;
+- inspection review-image rows keyed by the same `change_token`;
 - a dataset annotation/prediction overlay at its dataset revision.
 
 Dataset and Collection bases are built by semi-joining their persisted identity
 membership with the latest inspection rows. Stored source extras from v2/v3
-shards are ignored. Dataset `samples` is then a query-time join of that current
-source projection and the platform overlay. A cache object ID is the SHA-256 of
-its logical key, source freshness, and platform revision. Redis stores object
-metadata and access order; the file itself stays in the configured cache
-directory.
+shards are ignored. Each source read sends bounded defect-ID chunks and an exact
+projection over Arrow Flight; the SC upstream adapter applies the inspection PK
+and defect-ID predicate before returning rows rather than streaming the full
+inspection for an API-side filter. Inspection freshness and review-image
+metadata reads bypass tokenless metadata caches, and membership sample reads do
+not use the full-inspection cache. Dataset `samples` is then a query-time join of
+that current source projection and the platform overlay. A cache object ID is
+the SHA-256 of its logical key, source freshness, and platform revision. Redis
+stores object metadata and access order; the file itself stays in the configured
+cache directory.
+
+Production deployments provide the SC upstream database adapter through the
+configured adapter factory. That external adapter must implement the bounded
+membership-read operation and apply both the canonical inspection-PK predicate
+and defect-ID predicate in its source database before yielding projected Arrow
+batches; filtering a full inspection inside `sc-upstream` is not compatible with
+this contract.
 
 Every visible Sample-table column has one authority:
 

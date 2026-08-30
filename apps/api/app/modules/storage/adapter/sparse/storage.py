@@ -978,6 +978,40 @@ class SparseDatasetStorage:
         manifest = await self._get_manifest()
         return set(await self._lookup_locators(manifest, sample_ids))
 
+    async def map_upstream_item_ids_to_sample_ids(
+        self, upstream_item_ids: set[str]
+    ) -> dict[str, str]:
+        if not upstream_item_ids:
+            return {}
+        manifest = await self._get_manifest()
+        if manifest.manifest_version == "v3":
+            if manifest.index is None:
+                if manifest.total_rows == 0:
+                    return {}
+                raise ValueError("manifest v3 is missing its sample index object")
+            return await self._index_reader.lookup_by_upstream_item_ids(
+                manifest.index,
+                upstream_item_ids,
+                storage=self._storage,
+            )
+
+        wanted = {str(item_id) for item_id in upstream_item_ids}
+        result: dict[str, str] = {}
+        for sample_id, locator in manifest.sample_index.items():
+            if locator.upstream_item_id is None:
+                continue
+            upstream_key = str(locator.upstream_item_id)
+            if upstream_key not in wanted:
+                continue
+            existing = result.get(upstream_key)
+            if existing is not None and existing != sample_id:
+                raise ValueError(
+                    "sparse index contains duplicate upstream item identity: "
+                    f"{upstream_key}"
+                )
+            result[upstream_key] = str(sample_id)
+        return result
+
     # ── write_samples ───────────────────────────────────────────────
 
     async def write_samples(

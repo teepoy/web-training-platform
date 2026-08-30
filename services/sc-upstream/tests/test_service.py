@@ -94,6 +94,88 @@ def test_missing_inspection_awaits_not_found_abort() -> None:
     )
 
 
+class _FreshSourceDB:
+    def __init__(self) -> None:
+        self.inspection_reads = 0
+        self.review_reads = 0
+
+    async def get_inspection(
+        self, inspection_time: object, wafer_key: int
+    ) -> dict[str, object]:
+        self.inspection_reads += 1
+        return {
+            "inspection_time": str(inspection_time),
+            "wafer_key": wafer_key,
+            "device": "device-current",
+            "change_token": 22,
+        }
+
+    async def list_review_images(
+        self, inspection_time: object, wafer_key: int
+    ) -> list[dict[str, object]]:
+        self.review_reads += 1
+        return [
+            {
+                "defect_id": 11,
+                "image_id": 1,
+                "image_type": "defect",
+                "image_filespec": "current/source.jpg",
+            }
+        ]
+
+
+class _StaleMetadataCache:
+    async def get_inspection(self, *_args: object) -> dict[str, object]:
+        return {"device": "device-stale", "change_token": 21}
+
+    async def get_list_review_images(self, *_args: object) -> list[dict[str, object]]:
+        return [
+            {
+                "defect_id": 11,
+                "image_id": 1,
+                "image_type": "defect",
+                "image_filespec": "stale/source.jpg",
+            }
+        ]
+
+    async def set_inspection(self, *_args: object) -> None:
+        return None
+
+    async def set_list_review_images(self, *_args: object) -> None:
+        return None
+
+
+@pytest.mark.asyncio
+async def test_inspection_and_review_metadata_bypass_tokenless_stale_cache() -> None:
+    database = _FreshSourceDB()
+    service = ScUpstreamService(
+        cast(Any, database),
+        cast(Any, object()),
+        cast(Any, _StaleMetadataCache()),
+    )
+
+    inspection = await service.GetInspection(
+        pb.GetInspectionRequest(
+            inspection_time="2026-08-30T00:00:00+00:00",
+            wafer_key=7,
+        ),
+        AsyncMock(),
+    )
+    reviews = await service.ListReviewImages(
+        pb.ListReviewImagesRequest(
+            inspection_time="2026-08-30T00:00:00+00:00",
+            wafer_key=7,
+        ),
+        AsyncMock(),
+    )
+
+    assert inspection.change_token == 22
+    assert inspection.device == "device-current"
+    assert reviews.images[0].image_filespec == "current/source.jpg"
+    assert database.inspection_reads == 1
+    assert database.review_reads == 1
+
+
 class _DiscoveryDB:
     def __init__(self) -> None:
         self.query: InspectionDiscoveryQuery | None = None

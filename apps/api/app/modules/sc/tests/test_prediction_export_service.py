@@ -111,6 +111,26 @@ class _Upstream:
             assert isinstance(batch, pa.RecordBatch)
             yield batch
 
+    async def stream_membership_sample_batches(
+        self,
+        _time: datetime,
+        wafer_key: int,
+        *,
+        defect_ids: Sequence[int],
+        projection: Sequence[str] | None,
+        **_kwargs: object,
+    ):
+        frame = (
+            self._frames[wafer_key]
+            .collect()
+            .filter(pl.col("defect_id").cast(pl.Int64).is_in(defect_ids))
+        )
+        if projection is not None:
+            frame = frame.select(projection)
+        for batch in frame.to_arrow().to_batches():
+            assert isinstance(batch, pa.RecordBatch)
+            yield batch
+
 
 class _ImageResolver:
     def __init__(
@@ -181,7 +201,7 @@ def _frame(
             ],
             "inspection_time": [inspection_time] * 3,
             "wafer_key": [wafer_key, wafer_key, wafer_key],
-            "defect_id": ["D-1", "D-2", "3"],
+            "defect_id": ["1", "2", "3"],
             "wafer_x": [10.0, 20.0, 30.0],
             "wafer_y": [11.0, 21.0, 31.0],
             "index_x": [1, 1, 2],

@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
+from types import SimpleNamespace
+from typing import Any
 
 import grpc
+import pyarrow as pa
 import pytest
 
 from app.modules.sc.adapter.grpc_upstream import GrpcScUpstream
@@ -17,6 +21,16 @@ class _MissingInspectionStub:
             grpc.aio.Metadata(),
             grpc.aio.Metadata(),
             details="inspection not found",
+        )
+
+
+class _CurrentInspectionStub:
+    async def GetInspection(self, _request: object) -> pb.GetInspectionResponse:
+        return pb.GetInspectionResponse(
+            inspection_time="2026-08-01T00:00:00+00:00",
+            wafer_key=1,
+            device="device-1",
+            change_token=91,
         )
 
 
@@ -39,6 +53,33 @@ class _DiscoveryStub:
         )
 
 
+class _FlightReader:
+    def __init__(self, defect_ids: list[int]) -> None:
+        self._chunks = iter(
+            [
+                pa.RecordBatch.from_pylist(
+                    [{"defect_id": defect_id} for defect_id in defect_ids]
+                )
+            ]
+        )
+
+    def read_chunk(self) -> object:
+        return SimpleNamespace(data=next(self._chunks))
+
+    def cancel(self) -> None:
+        return None
+
+
+class _FlightClient:
+    def __init__(self) -> None:
+        self.tickets: list[dict[str, object]] = []
+
+    def do_get(self, ticket: Any) -> _FlightReader:
+        payload = json.loads(ticket.ticket.decode())
+        self.tickets.append(payload)
+        return _FlightReader(payload["defect_ids"])
+
+
 @pytest.mark.asyncio
 async def test_get_inspection_maps_upstream_not_found_to_none(monkeypatch) -> None:
     upstream = GrpcScUpstream()
@@ -50,6 +91,20 @@ async def test_get_inspection_maps_upstream_not_found_to_none(monkeypatch) -> No
     )
 
     assert result is None
+
+
+@pytest.mark.asyncio
+async def test_get_inspection_preserves_authoritative_change_token(monkeypatch) -> None:
+    upstream = GrpcScUpstream()
+    monkeypatch.setattr(upstream, "_ensure_channel", lambda: _CurrentInspectionStub())
+
+    result = await upstream.get_inspection(
+        datetime(2026, 8, 1, tzinfo=timezone.utc),
+        1,
+    )
+
+    assert result is not None
+    assert result.change_token == 91
 
 
 @pytest.mark.asyncio
@@ -76,3 +131,35 @@ async def test_publication_page_sends_complete_keyset_cursor(monkeypatch) -> Non
     assert page.row(0, named=True)["published_at"].isoformat() == (
         "2026-08-30T01:00:00+00:00"
     )
+
+
+@pytest.mark.asyncio
+async def test_membership_sample_read_splits_ids_into_bounded_flight_tickets(
+    monkeypatch,
+) -> None:
+    upstream = GrpcScUpstream()
+    client = _FlightClient()
+    monkeypatch.setattr(upstream, "_ensure_flight_client", lambda: client)
+
+    batches = [
+        batch
+        async for batch in upstream.stream_membership_sample_batches(
+            datetime(2026, 8, 1, tzinfo=timezone.utc),
+            9,
+            defect_ids=[1, 2, 3, 4, 5],
+            batch_rows=2,
+            projection=("defect_id",),
+        )
+    ]
+
+    assert [batch.to_pylist() for batch in batches] == [
+        [{"defect_id": 1}, {"defect_id": 2}],
+        [{"defect_id": 3}, {"defect_id": 4}],
+        [{"defect_id": 5}],
+    ]
+    assert [ticket["defect_ids"] for ticket in client.tickets] == [
+        [1, 2],
+        [3, 4],
+        [5],
+    ]
+    assert all(ticket["projection"] == ["defect_id"] for ticket in client.tickets)

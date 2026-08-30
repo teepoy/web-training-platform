@@ -31,7 +31,12 @@ def _create_sparse_sc_dataset(client: TestClient, name: str) -> str:
     return str(resp.json()["id"])
 
 
-def _seed_sc_sparse_manifest(dataset_id: str, defect_ids: list[str]) -> None:
+def _seed_sc_sparse_manifest(
+    dataset_id: str,
+    defect_ids: list[str],
+    *,
+    sample_ids_by_defect: dict[str, str] | None = None,
+) -> None:
     """Write a DatasetManifest with sample_index into the app artifact storage.
 
     The manifest is placed at the canonical key so that
@@ -41,7 +46,8 @@ def _seed_sc_sparse_manifest(dataset_id: str, defect_ids: list[str]) -> None:
 
     sample_index: dict[str, SampleLocator] = {}
     for i, did in enumerate(defect_ids):
-        sample_index[did] = SampleLocator(
+        sample_id = (sample_ids_by_defect or {}).get(did, did)
+        sample_index[sample_id] = SampleLocator(
             dataset_id=dataset_id,
             shard_index=0,
             row_index=i,
@@ -85,6 +91,38 @@ def test_bulk_create_annotations_success():
         prefix = f"datasets/{DEFAULT_ORG_ID}/{dataset_id}/annotations/"
         annotation_sidecars = asyncio.run(storage.list_prefix(prefix))
         assert len(annotation_sidecars) == 1
+
+
+def test_bulk_create_annotation_maps_defect_to_opaque_platform_sample_id():
+    with TestClient(app) as client:
+        dataset_id = _create_sparse_sc_dataset(client, "SC Opaque Identity")
+        platform_sample_id = "6594dbd1-46bd-4071-9968-61cd0240e1c0"
+        _seed_sc_sparse_manifest(
+            dataset_id,
+            ["D001"],
+            sample_ids_by_defect={"D001": platform_sample_id},
+        )
+
+        response = client.post(
+            f"/api/v1/datasets/{dataset_id}/annotations/bulk-sc",
+            json={
+                "annotations": [
+                    {
+                        "defect_id": "D001",
+                        "label": "scratch",
+                        "annotator": "user1",
+                    }
+                ]
+            },
+        )
+
+        assert response.status_code == 200, response.text
+        assert response.json()["created"] == 1
+        annotations = client.get(
+            f"/api/v1/datasets/{dataset_id}/samples/{platform_sample_id}/annotations"
+        )
+        assert annotations.status_code == 200, annotations.text
+        assert [item["label"] for item in annotations.json()] == ["scratch"]
 
 
 def test_bulk_create_annotation_zero_clears_existing_annotation():
@@ -182,7 +220,7 @@ def test_bulk_create_annotations_nonexistent_dataset_404():
 
 
 def test_map_defect_ids_via_sample_index():
-    """Sparse identity resolution uses the canonical storage aggregate."""
+    """Sparse defect identity resolves to independent platform sample IDs."""
     from unittest.mock import AsyncMock, MagicMock
 
     from app.modules.sc.sc_dataset_agg import ScDatasetAgg
@@ -192,7 +230,9 @@ def test_map_defect_ids_via_sample_index():
         dataset_id="ds-sparse-1",
         storage_mode=DatasetStorageMode.FILE_SHARD_SPARSE,
     )
-    storage.existing_sample_ids = AsyncMock(return_value={"D001", "D002"})
+    storage.map_upstream_item_ids_to_sample_ids = AsyncMock(
+        return_value={"D001": "sample-uuid-1", "D002": "sample-uuid-2"}
+    )
     db_lookup = MagicMock()
     db_lookup.map_defect_ids_to_sample_ids = AsyncMock()
     import asyncio as _asyncio
@@ -203,8 +243,8 @@ def test_map_defect_ids_via_sample_index():
         )
     )
 
-    assert result == {"D001": "D001", "D002": "D002"}
-    storage.existing_sample_ids.assert_awaited_once_with(
+    assert result == {"D001": "sample-uuid-1", "D002": "sample-uuid-2"}
+    storage.map_upstream_item_ids_to_sample_ids.assert_awaited_once_with(
         {"D001", "D002", "NONEXISTENT"}
     )
     db_lookup.map_defect_ids_to_sample_ids.assert_not_awaited()
@@ -221,7 +261,7 @@ def test_map_defect_ids_via_db_lookup():
         dataset_id="ds-db-1",
         storage_mode=DatasetStorageMode.DB_FULL,
     )
-    storage.existing_sample_ids = AsyncMock()
+    storage.map_upstream_item_ids_to_sample_ids = AsyncMock()
     db_lookup = MagicMock()
     db_lookup.map_defect_ids_to_sample_ids = AsyncMock(
         return_value={"D001": "sample-1"}
@@ -236,4 +276,4 @@ def test_map_defect_ids_via_db_lookup():
     db_lookup.map_defect_ids_to_sample_ids.assert_awaited_once_with(
         "ds-db-1", {"D001"}
     )
-    storage.existing_sample_ids.assert_not_awaited()
+    storage.map_upstream_item_ids_to_sample_ids.assert_not_awaited()

@@ -288,6 +288,26 @@ def _require_int(mapping: dict, key: str) -> int:
         raise ScPlotPointsRejectedError(f"geometry.{key} must be an integer") from exc
 
 
+async def _current_source_geometry(
+    *,
+    upstream_reader: ScUpstreamReader,
+    inspection_time: datetime,
+    wafer_key: int,
+) -> dict[str, int]:
+    inspection = await upstream_reader.get_inspection(inspection_time, wafer_key)
+    if inspection is None:
+        raise ScPlotPointsRejectedError(
+            f"upstream inspection not found: {inspection_time.isoformat()}/{wafer_key}"
+        )
+    geometry = {
+        key: _require_int({key: getattr(inspection, key)}, key)
+        for key in _REQUIRED_GEOMETRY_KEYS
+    }
+    if geometry["die_size_x"] <= 0 or geometry["die_size_y"] <= 0:
+        raise ScPlotPointsRejectedError("upstream geometry die sizes must be positive")
+    return geometry
+
+
 async def filter_box_defect_ids(
     lf: pl.LazyFrame,
     *,
@@ -392,33 +412,6 @@ class ScPlotPointsService:
                 "plot-points requires a file_shard_sparse dataset"
             )
 
-        geometry_raw = dataset.dataset_meta.get("geometry")
-        if not isinstance(geometry_raw, dict):
-            raise ScPlotPointsRejectedError("dataset_meta.geometry is required")
-        missing_geometry = _REQUIRED_GEOMETRY_KEYS - set(geometry_raw)
-        if missing_geometry:
-            raise ScPlotPointsRejectedError(
-                f"dataset_meta.geometry missing keys: {sorted(missing_geometry)}"
-            )
-        geometry = dict(geometry_raw)
-        center_x = _require_int(geometry, "center_x")
-        center_y = _require_int(geometry, "center_y")
-        origin_x = _require_int(geometry, "origin_x")
-        origin_y = _require_int(geometry, "origin_y")
-        die_size_x = _require_int(geometry, "die_size_x")
-        die_size_y = _require_int(geometry, "die_size_y")
-        origin_index_x = _require_int(geometry, "origin_index_x")
-        origin_index_y = _require_int(geometry, "origin_index_y")
-        wafer_radius_nm = (
-            _require_int(geometry, "wafer_radius_nm")
-            if "wafer_radius_nm" in geometry
-            else 150_000_000
-        )
-        if die_size_x <= 0 or die_size_y <= 0:
-            raise ScPlotPointsRejectedError(
-                "dataset_meta.geometry die sizes must be positive"
-            )
-
         filter_needs_labels, filter_needs_predictions = (
             sample_table_filter_requires_label_columns(filter_params)
         )
@@ -441,6 +434,20 @@ class ScPlotPointsService:
         source_inspection_time, source_wafer_key = await _dataset_source_identity(
             dataset.dataset_meta, lf
         )
+        geometry = await _current_source_geometry(
+            upstream_reader=upstream_reader,
+            inspection_time=source_inspection_time,
+            wafer_key=source_wafer_key,
+        )
+        center_x = geometry["center_x"]
+        center_y = geometry["center_y"]
+        origin_x = geometry["origin_x"]
+        origin_y = geometry["origin_y"]
+        die_size_x = geometry["die_size_x"]
+        die_size_y = geometry["die_size_y"]
+        origin_index_x = geometry["origin_index_x"]
+        origin_index_y = geometry["origin_index_y"]
+        wafer_radius_nm = 150_000_000
         lf = await resolve_latest_sc_source(
             upstream_reader=upstream_reader,
             membership=lf,
@@ -577,20 +584,17 @@ class ScPlotPointsService:
             batch_rows=self._source_batch_rows,
         )
         if mode == "reticle":
-            geometry_raw = dataset.dataset_meta.get("geometry")
-            if not isinstance(geometry_raw, dict):
-                raise ScPlotPointsRejectedError("dataset_meta.geometry is required")
-            missing_geometry = _REQUIRED_GEOMETRY_KEYS - set(geometry_raw)
-            if missing_geometry:
-                raise ScPlotPointsRejectedError(
-                    f"dataset_meta.geometry missing keys: {sorted(missing_geometry)}"
-                )
-            origin_x = _require_int(geometry_raw, "origin_x")
-            origin_y = _require_int(geometry_raw, "origin_y")
-            die_size_x = _require_int(geometry_raw, "die_size_x")
-            die_size_y = _require_int(geometry_raw, "die_size_y")
-            origin_index_x = _require_int(geometry_raw, "origin_index_x")
-            origin_index_y = _require_int(geometry_raw, "origin_index_y")
+            geometry = await _current_source_geometry(
+                upstream_reader=self._upstream_reader,
+                inspection_time=source_inspection_time,
+                wafer_key=source_wafer_key,
+            )
+            origin_x = geometry["origin_x"]
+            origin_y = geometry["origin_y"]
+            die_size_x = geometry["die_size_x"]
+            die_size_y = geometry["die_size_y"]
+            origin_index_x = geometry["origin_index_x"]
+            origin_index_y = geometry["origin_index_y"]
             lf = lf.with_columns(
                 (
                     pl.col("die_x")

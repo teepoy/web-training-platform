@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Protocol, cast
 
 from app.modules.storage.domain.storage_agg import DatasetStorageAgg
 from app.shared.api.schemas import DatasetStorageMode
@@ -13,6 +13,12 @@ class ScDefectIdLookup(Protocol):
         self,
         dataset_id: str,
         defect_ids: set[str],
+    ) -> dict[str, str]: ...
+
+
+class ScSparseUpstreamIdentityLookup(Protocol):
+    async def map_upstream_item_ids_to_sample_ids(
+        self, upstream_item_ids: set[str]
     ) -> dict[str, str]: ...
 
 
@@ -35,8 +41,8 @@ class ScDatasetAgg:
             return {}
 
         if self._storage.storage_mode == DatasetStorageMode.FILE_SHARD_SPARSE:
-            existing = await self._storage.existing_sample_ids(defect_ids)
-            return {defect_id: defect_id for defect_id in existing}
+            sparse_lookup = cast(ScSparseUpstreamIdentityLookup, self._storage)
+            return await sparse_lookup.map_upstream_item_ids_to_sample_ids(defect_ids)
 
         if self._storage.storage_mode == DatasetStorageMode.DB_FULL:
             return await self._defect_id_lookup.map_defect_ids_to_sample_ids(

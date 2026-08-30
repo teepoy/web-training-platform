@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
@@ -83,6 +83,16 @@ class UpstreamDB(Protocol):
         batch_size: int = 65536,
         offset: int = 0,
         count: int | None = None,
+    ) -> SampleBatchStream: ...
+
+    def open_membership_samples_stream(
+        self,
+        inspection_time: datetime,
+        wafer_key: int,
+        *,
+        defect_ids: Sequence[int],
+        projection: Sequence[str] | None,
+        batch_size: int,
     ) -> SampleBatchStream: ...
 
     async def list_review_images(

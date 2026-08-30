@@ -15,6 +15,7 @@ from app.modules.sc.domain.upstream_reader import ScUpstreamReader
 class _Upstream:
     def __init__(self, rows: list[dict[str, object]]) -> None:
         self.rows = rows
+        self.membership_requests: list[tuple[list[int], Sequence[str]]] = []
         self.projections: list[Sequence[str] | None] = []
 
     async def get_sample_count(self, inspection_time: datetime, wafer_key: int) -> int:
@@ -39,6 +40,26 @@ class _Upstream:
             ]
         yield pa.RecordBatch.from_pylist(rows)
 
+    async def stream_membership_sample_batches(
+        self,
+        inspection_time: datetime,
+        wafer_key: int,
+        *,
+        defect_ids: Sequence[int],
+        batch_rows: int,
+        projection: Sequence[str] | None,
+    ) -> AsyncIterator[pa.RecordBatch]:
+        del inspection_time, wafer_key, batch_rows
+        requested_projection = projection or tuple(self.rows[0])
+        self.membership_requests.append((list(defect_ids), requested_projection))
+        requested = set(defect_ids)
+        rows = [
+            {column: row[column] for column in requested_projection if column in row}
+            for row in self.rows
+            if int(cast(int, row["defect_id"])) in requested
+        ]
+        yield pa.RecordBatch.from_pylist(rows)
+
 
 @pytest.mark.asyncio
 async def test_resolver_uses_current_source_and_ignores_legacy_extras() -> None:
@@ -54,7 +75,11 @@ async def test_resolver_uses_current_source_and_ignores_legacy_extras() -> None:
             "sample_id": ["stored-1", "stored-2"],
             "defect_id": ["1", "2"],
             "rough_bin": [1, 1],
+            "future_source_field": ["stale-a", "stale-b"],
             "label": ["scratch", "particle"],
+            "annotation_id": ["annotation-1", "annotation-2"],
+            "predicted_label": ["clean", "scratch"],
+            "confidence": [0.8, 0.7],
         }
     )
 
@@ -72,17 +97,24 @@ async def test_resolver_uses_current_source_and_ignores_legacy_extras() -> None:
         {
             "sample_id": "stored-1",
             "label": "scratch",
+            "annotation_id": "annotation-1",
+            "predicted_label": "clean",
+            "confidence": "0.8",
             "defect_id": "1",
             "rough_bin": 8,
         },
         {
             "sample_id": "stored-2",
             "label": "particle",
+            "annotation_id": "annotation-2",
+            "predicted_label": "scratch",
+            "confidence": "0.7",
             "defect_id": "2",
             "rough_bin": 9,
         },
     ]
-    assert upstream.projections == [["defect_id", "rough_bin"]]
+    assert upstream.membership_requests == [([1, 2], ["defect_id", "rough_bin"])]
+    assert upstream.projections == []
 
 
 @pytest.mark.asyncio

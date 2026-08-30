@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 import json
 from datetime import datetime, timedelta, timezone
+from importlib import import_module
+from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 import pytest
@@ -161,6 +163,36 @@ def test_get_inspection_returns_summary_item(
             assert item["wafer_key"] == first["wafer_key"]
             assert item["defects"] == first["defects"]
             assert item["images"] == first["images"]
+    finally:
+        app.dependency_overrides.pop(get_upstream_reader, None)
+
+
+def test_review_image_sample_filter_cache_tracks_inspection_change_token(
+    mock_wafer_db_reader,
+    tmp_path,
+    monkeypatch,
+):
+    router_module = import_module("app.modules.sc.port.http.router")
+    monkeypatch.setattr(router_module, "_SAMPLE_TABLE_CACHE_DIR", tmp_path)
+    mock_wafer_db_reader.get_inspection.side_effect = [
+        SimpleNamespace(defects=3, change_token=11),
+        SimpleNamespace(defects=3, change_token=12),
+    ]
+    mock_wafer_db_reader.list_samples.reset_mock()
+    app.dependency_overrides[get_upstream_reader] = lambda: mock_wafer_db_reader
+    path = "/api/v1/sc/inspections/2026-08-01T04:00:00+00:00/1/review-images"
+    params = {
+        "sample_filter": json.dumps(
+            {"rough_bin": {"filterType": "number", "type": "inRange", "filter": 0, "filterTo": 10}}
+        )
+    }
+    try:
+        with TestClient(app) as client:
+            first = client.get(path, params=params)
+            second = client.get(path, params=params)
+        assert first.status_code == 200, first.text
+        assert second.status_code == 200, second.text
+        assert mock_wafer_db_reader.list_samples.await_count == 2
     finally:
         app.dependency_overrides.pop(get_upstream_reader, None)
 

@@ -162,7 +162,7 @@ class ScDataMaterializer:
             name=f"sc-review-images-{wafer_key}",
         )
         base_key = f"inspection:{inspection_time}/{wafer_key}"
-        freshness = inspection.latest_update
+        freshness = inspection.change_token
         samples, review_images = await asyncio.gather(
             self._cache.get_or_build_file(
                 logical_key=(
@@ -241,7 +241,7 @@ class ScDataMaterializer:
         inspection = await self._upstream_reader.get_inspection(parsed_time, wafer_key)
         if inspection is None:
             raise ValueError(f"Inspection not found: {inspection_time}/{wafer_key}")
-        freshness = inspection.latest_update
+        freshness = inspection.change_token
         review_task: asyncio.Task[pl.DataFrame] | None = None
         source_task: asyncio.Task[pl.LazyFrame] | None = None
 
@@ -495,7 +495,7 @@ class ScDataMaterializer:
                     f"{inspection_time}/{wafer_key}"
                 )
             source_scopes[dataset_id] = (inspection_time, wafer_key)
-            source_freshness.append(f"{dataset_id}:{inspection.latest_update}")
+            source_freshness.append(f"{dataset_id}:{inspection.change_token}")
         freshness_key = hashlib.sha256(
             "\n".join(source_freshness).encode("utf-8")
         ).hexdigest()[:16]

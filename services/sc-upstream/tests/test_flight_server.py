@@ -166,6 +166,34 @@ class EmptyDB:
         )
 
 
+class MembershipDB:
+    def __init__(self) -> None:
+        self.requests: list[tuple[datetime, int, list[int], list[str], int]] = []
+
+    def open_membership_samples_stream(
+        self,
+        inspection_time: datetime,
+        wafer_key: int,
+        *,
+        defect_ids: list[int],
+        projection: list[str],
+        batch_size: int,
+    ) -> SampleBatchStream:
+        self.requests.append(
+            (inspection_time, wafer_key, defect_ids, projection, batch_size)
+        )
+        frame = pl.DataFrame(
+            {
+                "defect_id": [11, 13],
+                "rough_bin": [4, 8],
+            }
+        ).select(projection)
+        return SampleBatchStream(schema=frame.to_arrow().schema, batches=iter([frame]))
+
+    def open_list_samples_stream(self, *_args: object, **_kwargs: object) -> None:
+        raise AssertionError("membership reads must not open the full inspection")
+
+
 def make_ticket() -> flight.Ticket:
     return flight.Ticket(
         json.dumps(
@@ -195,6 +223,39 @@ def test_parse_ticket_rejects_invalid_flight_ticket() -> None:
                 ).encode()
             )
         )
+
+
+def test_membership_ticket_pushes_ids_and_projection_into_upstream_db() -> None:
+    database = MembershipDB()
+    server = UpstreamFlightServer.__new__(UpstreamFlightServer)
+    server._db = database  # type: ignore[assignment]
+    server._cache = None
+    stream = server.do_get(
+        None,  # type: ignore[arg-type]
+        flight.Ticket(
+            json.dumps(
+                {
+                    "type": "list_membership_samples",
+                    "inspection_time": "2026-01-01T00:00:00",
+                    "wafer_key": 7,
+                    "defect_ids": [11, 13],
+                    "projection": ["defect_id", "rough_bin"],
+                    "batch_rows": 2,
+                }
+            ).encode()
+        ),
+    )
+
+    assert stream is not None
+    assert database.requests == [
+        (
+            datetime(2026, 1, 1),
+            7,
+            [11, 13],
+            ["defect_id", "rough_bin"],
+            2,
+        )
+    ]
 
 
 @pytest.fixture()

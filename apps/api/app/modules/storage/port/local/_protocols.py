@@ -21,7 +21,13 @@ if TYPE_CHECKING:
 
 
 class SparseColumnarImportSessionPort(Protocol):
-    async def append(self, table: pa.Table, *, row_id_column: str) -> ShardEntry: ...
+    async def append(
+        self,
+        table: pa.Table,
+        *,
+        row_id_column: str,
+        upstream_item_id_column: str | None = None,
+    ) -> ShardEntry: ...
 
     async def finalize(self) -> Any: ...
 

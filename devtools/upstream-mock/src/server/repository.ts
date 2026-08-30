@@ -18,6 +18,7 @@ import {
   isUniqueViolation,
 } from "./errors";
 import { defects, inspections, patchArchives, reviewImages, upstreamMockClock } from "./schema";
+import { buildMembershipSampleQuery } from "./membership-sample-query";
 
 type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 type InspectionRow = typeof inspections.$inferSelect;
@@ -450,6 +451,28 @@ export const upstreamMockRepository = {
       wafer_key: Number(row.wafer_key),
       inspection_time: new Date(row.inspection_time).toISOString(),
       defect_id: Number(row.defect_id),
+    }));
+  },
+
+  async listPublishedMembershipSamples(
+    key: InspectionKey,
+    defectIds: number[],
+    projection?: string[],
+  ) {
+    const query = buildMembershipSampleQuery({
+      inspectionTime: key.inspection_time,
+      waferKey: key.wafer_key,
+      defectIds,
+      projection,
+    });
+    const result = await pool.query(query.text, query.values);
+    return result.rows.map((row) => ({
+      ...row,
+      ...(row.wafer_key === undefined ? {} : { wafer_key: Number(row.wafer_key) }),
+      ...(row.inspection_time === undefined
+        ? {}
+        : { inspection_time: new Date(row.inspection_time).toISOString() }),
+      ...(row.defect_id === undefined ? {} : { defect_id: Number(row.defect_id) }),
     }));
   },
 

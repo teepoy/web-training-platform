@@ -129,3 +129,51 @@ def test_publication_discovery_uses_full_keyset_cursor(monkeypatch) -> None:
             },
         )
     ]
+
+
+def test_membership_sample_read_delegates_ids_and_projection_to_source(
+    monkeypatch,
+) -> None:
+    adapter = HttpUpstreamAdapter(
+        base_url="http://source.test",
+        token="test-token",
+        timeout_seconds=1,
+    )
+    requests: list[tuple[str, dict[str, object]]] = []
+
+    def fake_post(path: str, body: dict[str, object]):
+        requests.append((path, body))
+        return {
+            "rows": [
+                {"defect_id": 11, "rough_bin": 4},
+                {"defect_id": 13, "rough_bin": 8},
+            ]
+        }
+
+    monkeypatch.setattr(adapter, "_post", fake_post)
+
+    stream = adapter.open_membership_samples_stream(
+        datetime(2026, 8, 30, tzinfo=UTC),
+        7,
+        defect_ids=[11, 13],
+        projection=["defect_id", "rough_bin"],
+        batch_size=2,
+    )
+
+    assert [frame.to_dicts() for frame in stream.batches] == [
+        [
+            {"defect_id": 11, "rough_bin": 4},
+            {"defect_id": 13, "rough_bin": 8},
+        ]
+    ]
+    assert requests == [
+        (
+            "/upstream/v1/inspection-samples/query",
+            {
+                "inspection_time": "2026-08-30T00:00:00+00:00",
+                "wafer_key": 7,
+                "defect_ids": [11, 13],
+                "projection": ["defect_id", "rough_bin"],
+            },
+        )
+    ]

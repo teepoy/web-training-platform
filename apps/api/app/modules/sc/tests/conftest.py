@@ -152,6 +152,7 @@ def mock_wafer_db_reader() -> ScUpstreamReader:
         inspection_time: str = ""
         defects: int = 3
         images: int = 3
+        change_token: int = 1
 
     async def _list_inspections(
         start_time, end_time, lot_id=None, wafer_id=None, layer_id=None, device=None
