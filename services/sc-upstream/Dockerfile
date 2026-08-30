@@ -10,7 +10,7 @@ COPY libs/protos/pyproject.toml libs/protos/pyproject.toml
 COPY libs/ml/pyproject.toml libs/ml/pyproject.toml
 COPY services/sc-upstream/pyproject.toml services/sc-upstream/pyproject.toml
 COPY libs/protos/ libs/protos/
-COPY services/sc-upstream/ services/sc-upstream/
+COPY services/sc-upstream/src services/sc-upstream/src
 
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --package sc-upstream --no-dev

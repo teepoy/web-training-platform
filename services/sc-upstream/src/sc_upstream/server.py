@@ -7,7 +7,7 @@ import logging
 import os
 import signal
 import threading
-from typing import Callable, cast
+from typing import cast
 
 import grpc
 
@@ -17,12 +17,10 @@ from .cache import QueryCache
 from .direct_cache import DirectMetadataCache
 from .flight_server import UpstreamFlightServer
 from .service import ScUpstreamService
-from .upstream_db import InspectionZipsDB, UpstreamDB
+from .upstream_db import InspectionZipsDB, UpstreamAdapterFactory, UpstreamDB
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-AdapterFactory = Callable[[], tuple[UpstreamDB, InspectionZipsDB]]
 
 
 @dataclass(frozen=True)
@@ -77,7 +75,7 @@ async def start_servers(
     )
 
 
-def _load_adapter_factory(reference: str) -> AdapterFactory:
+def _load_adapter_factory(reference: str) -> UpstreamAdapterFactory:
     module_name, separator, attribute_name = reference.partition(":")
     if not separator or not module_name or not attribute_name:
         raise RuntimeError(
@@ -89,7 +87,7 @@ def _load_adapter_factory(reference: str) -> AdapterFactory:
         raise RuntimeError(
             f"SC_UPSTREAM_ADAPTER_FACTORY does not resolve to a callable: {reference}"
         )
-    return cast(AdapterFactory, factory)
+    return cast(UpstreamAdapterFactory, factory)
 
 
 async def serve() -> None:

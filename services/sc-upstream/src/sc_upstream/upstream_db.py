@@ -99,3 +99,9 @@ class InspectionZipsDB(Protocol):
         device: str,
         layer_id: str,
     ) -> list[dict[str, str]]: ...
+
+
+class UpstreamAdapterFactory(Protocol):
+    """Composition boundary implemented by real and development adapters."""
+
+    def __call__(self) -> tuple[UpstreamDB, InspectionZipsDB]: ...

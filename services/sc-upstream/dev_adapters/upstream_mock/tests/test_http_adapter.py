@@ -1,13 +1,19 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime
 
-from sc_upstream_dev_adapter.http import HttpUpstreamAdapter
+from sc_upstream_mock_adapter.http import HttpUpstreamAdapter
+from sc_upstream.upstream_db import (
+    InspectionDiscoveryOrder,
+    InspectionDiscoveryQuery,
+    InspectionPublicationCursor,
+)
 
 
 def test_sample_stream_pages_without_crossing_requested_count(monkeypatch) -> None:
     adapter = HttpUpstreamAdapter(
-        base_url="http://upstream-mock",
+        base_url="http://source.test",
         token="test-token",
         timeout_seconds=1,
     )
@@ -68,3 +74,58 @@ def test_sample_stream_pages_without_crossing_requested_count(monkeypatch) -> No
     )
     assert [frame.height for frame in stream.batches] == [2, 1]
     assert [(call["offset"], call["count"]) for call in calls] == [(5, 2), (7, 1)]
+
+
+def test_publication_discovery_uses_full_keyset_cursor(monkeypatch) -> None:
+    adapter = HttpUpstreamAdapter(
+        base_url="http://source.test",
+        token="test-token",
+        timeout_seconds=1,
+    )
+    calls: list[tuple[str, dict[str, object]]] = []
+
+    def fake_get(path: str, params: dict[str, object]):
+        calls.append((path, params))
+        return [
+            {
+                "inspection_time": "2026-08-01T08:00:00+08:00",
+                "wafer_key": 3,
+                "published_at": "2026-08-30T01:00:00Z",
+                "layer_id": "M1",
+            }
+        ]
+
+    monkeypatch.setattr(adapter, "_get", fake_get)
+    page = asyncio.run(
+        adapter.list_discovery_inspections(
+            InspectionDiscoveryQuery(
+                order=InspectionDiscoveryOrder.PUBLICATION,
+                page_size=256,
+                published_from=datetime(2026, 8, 30, tzinfo=UTC),
+                published_until=datetime(2026, 8, 30, 2, tzinfo=UTC),
+                after_publication=InspectionPublicationCursor(
+                    published_at=datetime(2026, 8, 30, 0, 30, tzinfo=UTC),
+                    inspection_time=datetime(2026, 8, 1, 7, tzinfo=UTC),
+                    wafer_key=2,
+                ),
+            )
+        )
+    )
+
+    assert page.height == 1
+    assert calls == [
+        (
+            "/upstream/v1/discovery-inspections",
+            {
+                "order": "publication",
+                "page_size": 256,
+                "start_time": None,
+                "end_time": None,
+                "published_from": "2026-08-30T00:00:00+00:00",
+                "published_until": "2026-08-30T02:00:00+00:00",
+                "after_published_at": "2026-08-30T00:30:00+00:00",
+                "after_inspection_time": "2026-08-01T07:00:00+00:00",
+                "after_wafer_key": 2,
+            },
+        )
+    ]

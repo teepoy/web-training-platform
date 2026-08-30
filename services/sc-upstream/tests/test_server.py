@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 import threading
 from typing import Any, cast
 from unittest.mock import AsyncMock
 
-from sc_upstream.server import _shutdown_servers
+from pytest import MonkeyPatch
+
+from sc_upstream.server import _load_adapter_factory, _shutdown_servers
 
 
 class _BlockingFlightServer:
@@ -27,3 +30,22 @@ def test_shutdown_does_not_wait_for_blocking_flight_requests() -> None:
     assert flight_server.started.wait(timeout=1)
     grpc_server.stop.assert_awaited_once_with(0)
     flight_server.release.set()
+
+
+def test_adapter_factory_is_loaded_through_the_production_interface(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    upstream = object()
+    zips = object()
+
+    def factory() -> tuple[object, object]:
+        return upstream, zips
+
+    monkeypatch.setattr(
+        "sc_upstream.server.importlib.import_module",
+        lambda _module_name: SimpleNamespace(build=factory),
+    )
+
+    loaded = _load_adapter_factory("real_sc_adapter:build")
+
+    assert loaded() == (upstream, zips)

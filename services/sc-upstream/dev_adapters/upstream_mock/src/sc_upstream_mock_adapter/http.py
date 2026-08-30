@@ -12,10 +12,14 @@ from urllib.request import Request, urlopen
 
 import polars as pl
 
-from sc_upstream.upstream_db import SampleBatchStream
+from sc_upstream.upstream_db import (
+    InspectionDiscoveryOrder,
+    InspectionDiscoveryQuery,
+    SampleBatchStream,
+)
 
 
-_SAMPLE_SCHEMA: Mapping[str, pl.DataType] = {
+_SAMPLE_SCHEMA: Mapping[str, pl.DataType | type[pl.DataType]] = {
     "wafer_key": pl.Int64,
     "inspection_time": pl.Datetime("us", "UTC"),
     "defect_id": pl.Int64,
@@ -66,8 +70,16 @@ def _sample_frame(rows: list[dict[str, Any]]) -> pl.DataFrame:
     return pl.DataFrame(rows, schema=_SAMPLE_SCHEMA, strict=False)
 
 
+def _inspection_frame(rows: list[dict[str, Any]]) -> pl.DataFrame:
+    for row in rows:
+        for field in ("inspection_time", "published_at"):
+            if row.get(field):
+                row[field] = datetime.fromisoformat(row[field])
+    return pl.DataFrame(rows)
+
+
 class HttpUpstreamAdapter:
-    """Read the independent development upstream over its HTTP source boundary."""
+    """Read the standalone upstream mock over its HTTP source boundary."""
 
     def __init__(self, *, base_url: str, token: str, timeout_seconds: float) -> None:
         self._base_url = base_url.rstrip("/")
@@ -122,6 +134,39 @@ class HttpUpstreamAdapter:
             },
         )
         return pl.DataFrame(rows or []).lazy()
+
+    async def list_discovery_inspections(
+        self, query: InspectionDiscoveryQuery
+    ) -> pl.DataFrame:
+        params: dict[str, object] = {
+            "order": query.order.value,
+            "page_size": query.page_size,
+            "start_time": _isoformat(query.start_time) if query.start_time else None,
+            "end_time": _isoformat(query.end_time) if query.end_time else None,
+            "published_from": (
+                _isoformat(query.published_from) if query.published_from else None
+            ),
+            "published_until": (
+                _isoformat(query.published_until) if query.published_until else None
+            ),
+        }
+        if query.order is InspectionDiscoveryOrder.PRIMARY_KEY:
+            after = query.after_primary_key
+            if after is not None:
+                params["after_inspection_time"] = _isoformat(after.inspection_time)
+                params["after_wafer_key"] = after.wafer_key
+        else:
+            after = query.after_publication
+            if after is not None:
+                params["after_published_at"] = _isoformat(after.published_at)
+                params["after_inspection_time"] = _isoformat(after.inspection_time)
+                params["after_wafer_key"] = after.wafer_key
+        rows = await asyncio.to_thread(
+            self._get,
+            "/upstream/v1/discovery-inspections",
+            params,
+        )
+        return _inspection_frame(rows or [])
 
     async def list_samples(
         self, inspection_time: datetime, wafer_key: int
