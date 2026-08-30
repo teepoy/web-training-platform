@@ -25,6 +25,7 @@ import { formatScClassNumber } from "@/features/sc/domain/classNumberDisplay";
 import type { ScDataColumn } from "@/features/sc/domain/workbenchDataSource";
 import { scGlobalFilterColumns, type ScFilterColumnDefinition } from "./scSampleTableColumns";
 import RangeFilterMenu from "@/shared/components/table-filter/RangeFilterMenu.vue";
+import type { NumericRangeFilterDescriptor } from "@/shared/components/table-filter/rangeFilter";
 import SetFilterMenu from "@/shared/components/table-filter/SetFilterMenu.vue";
 import DefectIdFilterMenu from "./DefectIdFilterMenu.vue";
 
@@ -279,9 +280,44 @@ function getRangeDraft(rule: ScQueryRule): { min: number | null; max: number | n
   return rangeDraftByRule.value[rule.id]!;
 }
 
-function applyRangeFilter(rule: ScQueryRule, update: UpdateRule): void {
+function numericRangeDescriptor(rule: ScQueryRule): NumericRangeFilterDescriptor {
+  const definition = definitionFor(rule.value.field);
+  if (!definition?.numericRange) {
+    throw new Error(`Numeric range metadata is missing for ${rule.value.field ?? "unknown field"}`);
+  }
+  return {
+    kind: "number",
+    bounds: props.numericRanges[rule.id] ?? null,
+    ...definition.numericRange,
+  };
+}
+
+function numericRangeUnavailable(rule: ScQueryRule): boolean {
+  return (
+    props.numericRangeErrors[rule.id] === true ||
+    (Object.prototype.hasOwnProperty.call(props.numericRanges, rule.id) &&
+      props.numericRanges[rule.id] === null)
+  );
+}
+
+function applyRangeFilter(rule: ScQueryRule, update: UpdateRule, remove: () => void): void {
   const draft = getRangeDraft(rule);
-  if (draft.min === null || draft.max === null || draft.min > draft.max) return;
+  if (draft.min === null && draft.max === null) {
+    remove();
+    editingRuleId.value = null;
+    return;
+  }
+  const bounds = props.numericRanges[rule.id];
+  if (
+    draft.min === null ||
+    draft.max === null ||
+    !Number.isFinite(draft.min) ||
+    !Number.isFinite(draft.max) ||
+    draft.min > draft.max ||
+    (bounds !== null && bounds !== undefined && (draft.min < bounds.min || draft.max > bounds.max))
+  ) {
+    return;
+  }
   updateRuleValue(rule, update, {
     ...rule.value,
     condition: {
@@ -434,14 +470,14 @@ watch(
             />
             <RangeFilterMenu
               v-else
+              :descriptor="numericRangeDescriptor(rule)"
               :min="getRangeDraft(rule).min"
               :max="getRangeDraft(rule).max"
               :loading="numericRangeLoading[rule.id] === true"
-              :range-unavailable="numericRangeErrors[rule.id] === true"
+              :range-unavailable="numericRangeUnavailable(rule)"
               @update:min="getRangeDraft(rule).min = $event"
               @update:max="getRangeDraft(rule).max = $event"
-              @apply="applyRangeFilter(rule, update)"
-              @clear="remove"
+              @apply="applyRangeFilter(rule, update, remove)"
               @close="editingRuleId = null"
             />
           </div>

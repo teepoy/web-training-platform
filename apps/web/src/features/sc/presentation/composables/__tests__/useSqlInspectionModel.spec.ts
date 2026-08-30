@@ -302,6 +302,33 @@ describe("useSqlInspectionModel", () => {
     );
   });
 
+  it("loads table bounds without narrowing them by the edited table field", async () => {
+    const { source } = createDataSource();
+    const model = mount(source);
+    if (!model?.sampleTableDataSource.value?.loadNumericRange) {
+      throw new Error("sample-table numeric range loader was not created");
+    }
+    vi.mocked(source.loadNumericRange).mockClear();
+
+    await model.sampleTableDataSource.value.loadNumericRange({
+      field: "area",
+      filter: {
+        area: { filterType: "number", type: "inRange", filter: 2, filterTo: 8 },
+        images: { filterType: "number", type: "inRange", filter: 1, filterTo: 4 },
+      },
+    });
+
+    expect(source.loadNumericRange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        field: "area",
+        filters: [
+          ["images", ">=", 1],
+          ["images", "<=", 4],
+        ],
+      }),
+    );
+  });
+
   it("reloads map queries when an SSE revision invalidates the scope", async () => {
     const { source, invalidate } = createDataSource();
     mount(source);

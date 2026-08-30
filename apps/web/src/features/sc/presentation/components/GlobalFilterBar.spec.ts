@@ -241,6 +241,29 @@ describe("GlobalFilterBar", () => {
     const rangeMenu = wrapper.findComponent({ name: "RangeFilterMenu" });
     expect(rangeMenu.props("min")).toBe(10);
     expect(rangeMenu.props("max")).toBe(20);
+    expect(rangeMenu.props("descriptor")).toEqual({
+      kind: "number",
+      bounds: { min: 1.25, max: 98.5 },
+      step: 0.001,
+      displayPrecision: 3,
+    });
+
+    rangeMenu.vm.$emit("update:min", 12.34567);
+    rangeMenu.vm.$emit("update:max", 67.89123);
+    rangeMenu.vm.$emit("apply");
+    expect(wrapper.emitted("update:filter")?.at(-1)).toEqual([
+      globalFilter([
+        {
+          ...filter.items[0]!,
+          condition: {
+            filterType: "number",
+            type: "inRange",
+            filter: 12.34567,
+            filterTo: 67.89123,
+          },
+        },
+      ]),
+    ]);
   });
 
   it("reorders complete items without changing their IDs or predicates", async () => {

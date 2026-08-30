@@ -61,6 +61,17 @@ describe("SC sample-table descriptor projection", () => {
       key: "future_metric",
       title: "future_metric",
       filter: "range",
+      numericRange: { step: 0.001, displayPrecision: 3 },
     });
+  });
+
+  it("derives slider granularity without constraining exact numeric inputs", () => {
+    const integer = { name: "count", arrowType: "Int64", nullable: false };
+    const decimal = { name: "ratio", arrowType: "Decimal128(12, scale = 4)", nullable: false };
+
+    expect(scSampleTableColumns([integer, decimal], false)).toEqual([
+      expect.objectContaining({ numericRange: { step: 1, displayPrecision: 0 } }),
+      expect.objectContaining({ numericRange: { step: 0.0001, displayPrecision: 4 } }),
+    ]);
   });
 });

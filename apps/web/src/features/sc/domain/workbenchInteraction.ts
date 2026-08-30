@@ -76,9 +76,18 @@ export interface ScSampleTableDistinctValuesQuery {
   sort?: ScSampleTableSort | null;
 }
 
+export interface ScSampleTableNumericRangeQuery {
+  field: string;
+  filter?: ScSampleTableFilter;
+  sort?: ScSampleTableSort | null;
+}
+
 export interface ScSampleTableDataSource {
   scopeKey: string;
   loadColumns?: () => Promise<ScDataColumn[]>;
   loadRows: (query: ScSampleTableRowsQuery) => Promise<ScSampleTableRowsPage>;
   loadDistinctValues?: (query: ScSampleTableDistinctValuesQuery) => Promise<Array<string | number>>;
+  loadNumericRange?: (
+    query: ScSampleTableNumericRangeQuery,
+  ) => Promise<{ min: number; max: number } | null>;
 }

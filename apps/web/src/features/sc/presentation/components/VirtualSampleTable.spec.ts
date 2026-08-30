@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { NPopover } from "naive-ui";
 import type { ScSampleTableDisplayRow } from "@/features/sc/domain/workbenchInteraction";
 import type { ScSampleTableDataSource } from "@/features/sc/domain/workbenchInteraction";
 import type { ScDataColumn } from "@/features/sc/domain/workbenchDataSource";
@@ -101,6 +102,32 @@ afterEach(() => {
 });
 
 describe("VirtualSampleTable", () => {
+  it("loads observed numeric bounds when a range filter opens", async () => {
+    const loadRows = vi.fn<ScSampleTableDataSource["loadRows"]>(async () => ({
+      items: [sampleRow("11", 2)],
+      total: 1,
+      nextAnchor: null,
+    }));
+    const loadNumericRange = vi.fn(async () => ({ min: 0, max: 10 }));
+    const dataSource: ScSampleTableDataSource = {
+      scopeKey: "inspection:numeric-range",
+      loadColumns: async () => defaultColumns,
+      loadRows,
+      loadNumericRange,
+    };
+    const { wrapper } = await mountWithProviders(VirtualSampleTable, { props: { dataSource } });
+    await vi.waitFor(() => expect(loadRows).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(wrapper.findAllComponents(NPopover).length).toBeGreaterThan(1));
+
+    wrapper.findAllComponents(NPopover).at(-1)!.vm.$emit("update:show", true);
+    await vi.waitFor(() => expect(loadNumericRange).toHaveBeenCalledOnce());
+    expect(loadNumericRange).toHaveBeenCalledWith({
+      field: "images",
+      filter: {},
+      sort: { field: "defect_id", direction: "asc" },
+    });
+  });
+
   it("keeps row hover backgrounds compatible with the Chrome 108 target", () => {
     const source = readFileSync(
       resolve(process.cwd(), "src/features/sc/presentation/components/VirtualSampleTable.vue"),

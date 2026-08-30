@@ -3,7 +3,10 @@ import { computed, onScopeDispose, ref, watch, type ComputedRef, type Ref } from
 import { i18n } from "@/app/i18n";
 import type { DefectList } from "@/features/sc/generated/proto/sc/v1/sample_pb";
 import { DefectListSchema } from "@/features/sc/generated/proto/sc/v1/sample_pb";
-import { buildScGlobalDataFilters } from "@/features/sc/application/workbenchDataFilter";
+import {
+  buildScDataFilters,
+  buildScGlobalDataFilters,
+} from "@/features/sc/application/workbenchDataFilter";
 import {
   buildInspectionFilterPlan,
   buildSamplingCandidateFilters,
@@ -115,6 +118,12 @@ export function useSqlInspectionModel(args: {
       loadColumns: () => source.loadColumns(),
       loadRows: (query) => source.loadRows({ ...query, filters, reticle }),
       loadDistinctValues: (query) => source.loadDistinctValues({ ...query, filters, reticle }),
+      loadNumericRange: (query) =>
+        source.loadNumericRange({
+          field: query.field,
+          filters: [...filters, ...buildScDataFilters(query.filter, { omitField: query.field })],
+          reticle,
+        }),
     };
   });
 

@@ -1,9 +1,15 @@
 import type { ScDataColumn } from "@/features/sc/domain/workbenchDataSource";
 
+export interface ScNumericRangeControl {
+  step: number;
+  displayPrecision: number;
+}
+
 export interface ScFilterColumnDefinition {
   key: string;
   title: string;
   filter: "set" | "range";
+  numericRange: ScNumericRangeControl | null;
 }
 
 export interface ScSampleTableColumnDefinition {
@@ -12,6 +18,24 @@ export interface ScSampleTableColumnDefinition {
   width: number;
   filter: "set" | "range" | null;
   format: "plain" | "integer" | "fixed_3";
+  numericRange: ScNumericRangeControl | null;
+}
+
+function numericRangeControl(column: ScDataColumn): ScNumericRangeControl | null {
+  const presentation = column.presentation;
+  if ((presentation ? presentation.filter : inferredFilter(column)) !== "range") return null;
+  if (presentation?.format === "fixed_3") return { step: 0.001, displayPrecision: 3 };
+  if (presentation?.format === "integer" || /(^|[^a-z])u?int/i.test(column.arrowType)) {
+    return { step: 1, displayPrecision: 0 };
+  }
+  const decimalScale = /decimal[^)]*scale\s*=\s*(\d+)/i.exec(column.arrowType)?.[1];
+  if (decimalScale !== undefined) {
+    const displayPrecision = Number(decimalScale);
+    return { step: 10 ** -displayPrecision, displayPrecision };
+  }
+  // SC float controls use the descriptor's existing three-decimal display convention for the
+  // slider only. The adjacent number inputs do not round manually entered transport values.
+  return { step: 0.001, displayPrecision: 3 };
 }
 
 function inferredFilter(column: ScDataColumn): "set" | "range" | null {
@@ -50,6 +74,7 @@ function definition(column: ScDataColumn): ScSampleTableColumnDefinition {
     width: presentation?.width ?? Math.max(120, Math.min(240, column.name.length * 9 + 44)),
     filter: presentation ? presentation.filter : inferredFilter(column),
     format: presentation?.format ?? "plain",
+    numericRange: numericRangeControl(column),
   };
 }
 
@@ -86,6 +111,7 @@ export function scGlobalFilterColumns(
             key: columnDefinition.key,
             title: columnDefinition.title,
             filter: columnDefinition.filter,
+            numericRange: columnDefinition.numericRange,
           },
         ];
   });

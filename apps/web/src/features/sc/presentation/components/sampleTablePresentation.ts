@@ -1,7 +1,7 @@
 import type { ScDataColumn } from "@/features/sc/domain/workbenchDataSource";
 import type { ScSampleTableDisplayRow } from "@/features/sc/domain/workbenchInteraction";
 import { formatScClassNumber } from "@/features/sc/domain/classNumberDisplay";
-import { scSampleTableColumns } from "./scSampleTableColumns";
+import { scSampleTableColumns, type ScNumericRangeControl } from "./scSampleTableColumns";
 
 export interface ScSampleTablePresentationRow
   extends Partial<ScSampleTableDisplayRow>, Record<string, unknown> {
@@ -15,6 +15,7 @@ export interface ScSampleTablePresentationColumn {
   title: string;
   width: number;
   filter: "set" | "range" | null;
+  numericRange: ScNumericRangeControl | null;
   render?: (row: ScSampleTablePresentationRow) => string;
 }
 

@@ -22,6 +22,7 @@ import type { ScSampleTableDataSource } from "@/features/sc/domain/workbenchInte
 import { SC_SCROLL_QUERY_DEBOUNCE_MS } from "../composables/scrollQueryDebounce";
 import { formatNumber } from "@/shared/i18n/format";
 import RangeFilterMenu from "@/shared/components/table-filter/RangeFilterMenu.vue";
+import type { NumericRangeFilterDescriptor } from "@/shared/components/table-filter/rangeFilter";
 import SetFilterMenu from "@/shared/components/table-filter/SetFilterMenu.vue";
 import DefectIdFilterMenu from "./DefectIdFilterMenu.vue";
 import { formatScClassNumber } from "@/features/sc/domain/classNumberDisplay";
@@ -85,6 +86,9 @@ const selectionDeltaIds = ref<Set<string>>(new Set());
 const allMatchingRowsSelected = ref(false);
 const filterPopoverVersion = ref(0);
 const filterState = ref<Record<string, { min: number | null; max: number | null }>>({});
+const numericRanges = ref<Record<string, { min: number; max: number } | null>>({});
+const numericRangeLoading = ref<Record<string, boolean>>({});
+const numericRangeErrors = ref<Record<string, boolean>>({});
 const setFilterSearch = ref<Record<string, string>>({});
 const setFilterDraft = ref<Record<string, Set<string>>>({});
 const discoveredSetFilterValues = ref<Record<string, Array<string | number>>>({});
@@ -102,6 +106,8 @@ let loadController: AbortController | null = null;
 let loadTimer: ReturnType<typeof setTimeout> | null = null;
 let sourceColumnsRequestVersion = 0;
 let csvExportController: AbortController | null = null;
+const numericRangeVersions = new Map<string, number>();
+let numericRangeScopeVersion = 0;
 
 const resolvedPageSize = computed(() => props.pageSize ?? PAGE_SIZE);
 const activeColumnDefinitions = computed(() =>
@@ -400,6 +406,65 @@ function getFilterState(field: string): { min: number | null; max: number | null
   return filterState.value[field];
 }
 
+function numericRangeDescriptor(
+  definition: ScSampleTablePresentationColumn,
+): NumericRangeFilterDescriptor {
+  if (!definition.numericRange) {
+    throw new Error(`Numeric range metadata is missing for ${definition.key}`);
+  }
+  return {
+    kind: "number",
+    bounds: numericRanges.value[definition.key] ?? null,
+    ...definition.numericRange,
+  };
+}
+
+function numericRangeUnavailable(field: string): boolean {
+  return (
+    numericRangeErrors.value[field] === true ||
+    (Object.prototype.hasOwnProperty.call(numericRanges.value, field) &&
+      numericRanges.value[field] === null)
+  );
+}
+
+async function requestNumericRange(field: string): Promise<void> {
+  const version = (numericRangeVersions.get(field) ?? 0) + 1;
+  const scopeVersion = numericRangeScopeVersion;
+  numericRangeVersions.set(field, version);
+  numericRangeLoading.value = { ...numericRangeLoading.value, [field]: true };
+  numericRangeErrors.value = { ...numericRangeErrors.value, [field]: false };
+  const loadRange = props.dataSource.loadNumericRange;
+  if (!loadRange) {
+    numericRanges.value = { ...numericRanges.value, [field]: null };
+    numericRangeErrors.value = { ...numericRangeErrors.value, [field]: true };
+    numericRangeLoading.value = { ...numericRangeLoading.value, [field]: false };
+    return;
+  }
+  try {
+    const range = await loadRange({
+      field,
+      filter: tableFilter.value,
+      sort: tableSort.value,
+    });
+    if (numericRangeScopeVersion !== scopeVersion || numericRangeVersions.get(field) !== version)
+      return;
+    numericRanges.value = { ...numericRanges.value, [field]: range };
+    const draft = getFilterState(field);
+    if (range && draft.min === null && draft.max === null) {
+      draft.min = range.min;
+      draft.max = range.max;
+    }
+  } catch {
+    if (numericRangeScopeVersion !== scopeVersion || numericRangeVersions.get(field) !== version)
+      return;
+    numericRangeErrors.value = { ...numericRangeErrors.value, [field]: true };
+  } finally {
+    if (numericRangeScopeVersion === scopeVersion && numericRangeVersions.get(field) === version) {
+      numericRangeLoading.value = { ...numericRangeLoading.value, [field]: false };
+    }
+  }
+}
+
 function getSetFilterValues(field: string): Array<string | number> {
   const filter = tableFilter.value[field];
   return filter?.filterType === "set"
@@ -475,7 +540,19 @@ function applyRangeFilter(field: string): void {
     delete next[field];
     tableFilter.value = next;
   } else {
-    if (state.min === null || state.max === null || state.min > state.max) return;
+    const bounds = numericRanges.value[field];
+    if (
+      state.min === null ||
+      state.max === null ||
+      !Number.isFinite(state.min) ||
+      !Number.isFinite(state.max) ||
+      state.min > state.max ||
+      (bounds !== null &&
+        bounds !== undefined &&
+        (state.min < bounds.min || state.max > bounds.max))
+    ) {
+      return;
+    }
     tableFilter.value = {
       ...tableFilter.value,
       [field]: {
@@ -514,6 +591,7 @@ function openFilter(definition: ScSampleTablePresentationColumn, open: boolean):
     applied?.filterType === "number"
       ? { min: applied.filter, max: applied.filterTo }
       : { min: null, max: null };
+  void requestNumericRange(definition.key);
 }
 
 function closeFilterPopover(): void {
@@ -671,7 +749,14 @@ watch(
 
 watch(
   () => props.dataSource.scopeKey,
-  () => void loadSourceColumns(),
+  () => {
+    numericRangeScopeVersion += 1;
+    numericRangeVersions.clear();
+    numericRanges.value = {};
+    numericRangeLoading.value = {};
+    numericRangeErrors.value = {};
+    void loadSourceColumns();
+  },
   { immediate: true },
 );
 
@@ -1007,8 +1092,19 @@ defineExpose({
                   />
                   <RangeFilterMenu
                     v-else
+                    :descriptor="
+                      numericRangeDescriptor(
+                        definitionForColumn(scrollColumns[virtualColumn.index]?.id ?? '')!,
+                      )
+                    "
                     :min="getFilterState(scrollColumns[virtualColumn.index]?.id ?? '').min"
                     :max="getFilterState(scrollColumns[virtualColumn.index]?.id ?? '').max"
+                    :loading="
+                      numericRangeLoading[scrollColumns[virtualColumn.index]?.id ?? ''] === true
+                    "
+                    :range-unavailable="
+                      numericRangeUnavailable(scrollColumns[virtualColumn.index]?.id ?? '')
+                    "
                     @update:min="
                       getFilterState(scrollColumns[virtualColumn.index]?.id ?? '').min = $event
                     "
