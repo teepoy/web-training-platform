@@ -65,7 +65,9 @@
     "**/node_modules/**",
     "**/dist/**",
     "**/tmp/**",
+    "**/dev_adapters/**",
     "**/graphify-out/**",
+    "services/image-parser/cmd/server/external_sources_upstream_mock.go",
     "**/.DS_Store",
     "**/*.bak"
   ],
@@ -235,9 +237,6 @@
         "apps/api/app/modules/sc",
         "apps/web/src/features/sc",
         "services/sc-upstream/src",
-        "devtools/upstream-mock/app",
-        "devtools/upstream-mock/src",
-        "devtools/sc-upstream-dev-adapter/src",
         "services/image-parser",
         "libs/ml/src",
         "libs/sampling-rules/src"
@@ -249,8 +248,6 @@
           "roots": [
             "apps/api/app/modules/sc/tests",
             "services/sc-upstream/tests",
-            "devtools/upstream-mock/tests",
-            "devtools/sc-upstream-dev-adapter/tests",
             "libs/ml/tests",
             "libs/sampling-rules/tests"
           ],

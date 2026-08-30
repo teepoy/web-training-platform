@@ -20,9 +20,9 @@ lint: check-web-i18n ## Run fast lint on git diff files (ruff + prettier)
 		echo "--- ruff check (Python) ---"; \
 		echo "$$PY_FILES" | xargs ruff check; \
 	fi; \
-	WEB_FILES=$$(echo "$$CHANGED" | grep -E '\.(vue|ts|tsx|js|jsx|css|scss|json|yaml|yml|md)$$' | grep -v /node_modules/ | grep -v /dist/ | grep -v /generated/ || true); \
+	WEB_FILES=$$(echo "$$CHANGED" | grep -E '\.(vue|ts|tsx|js|jsx|css|scss|json|yaml|yml|md)$$' | grep -v '^devtools/' | grep -v /node_modules/ | grep -v /dist/ | grep -v /generated/ || true); \
 	if [ -n "$$WEB_FILES" ]; then \
 		echo "--- prettier check (Web) ---"; \
-		echo "$$WEB_FILES" | xargs pnpm exec prettier --check; \
+		echo "$$WEB_FILES" | xargs ./node_modules/.bin/prettier --check; \
 	fi; \
 	echo "--- lint done ---"

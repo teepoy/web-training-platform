@@ -6,7 +6,9 @@ PostgreSQL state, named scenarios, and object-store fixtures.
 
 It does **not** host or import `services/sc-upstream`. The separate `sc-upstream`
 Compose service keeps the real production cache, gRPC, and Arrow Flight logic
-and reaches this mock through `devtools/sc-upstream-dev-adapter`.
+and reaches this mock through its service-local `dev_adapters/upstream_mock`
+bridge. Production composition replaces that bridge through the same
+`UpstreamDB` factory interface.
 
 The current implementation provides:
 
@@ -31,22 +33,34 @@ not create platform users, organizations, Datasets, Collections, jobs, or
 Models. Those appear through explicit administration and real platform
 ingestion/automation behavior.
 
-Recurring source-discovery automation remains tracked in
-`docs/todos/stateful-upstream-simulator-and-source-automation.md`.
+This directory is a standalone project. It is intentionally excluded from the
+parent repository's pnpm workspace, lockfile, formatting, documentation,
+generation, and Graphify inputs.
 
-Install and apply migrations from the repository root:
+Start its isolated application and PostgreSQL database from this directory:
+
+```bash
+docker compose up -d --build
+```
+
+The default object-store endpoint is the development MinIO service exposed on
+the host at port `9000`. Override the `UPSTREAM_MOCK_S3_*` variables when using
+a different object store. The platform connects to port `8094` as an external
+HTTP source and does not build or manage this project.
+
+Install and apply migrations from this directory:
 
 ```bash
 pnpm install
 UPSTREAM_MOCK_DATABASE_URL=postgresql://postgres:postgres@localhost/upstream_mock \
-  pnpm --filter @devtools/upstream-mock migrate
+  pnpm migrate
 ```
 
 Run checks:
 
 ```bash
-pnpm --filter @devtools/upstream-mock test
-pnpm --filter @devtools/upstream-mock typecheck
+pnpm test
+pnpm typecheck
 ```
 
 The local Compose stack exposes the mock UI/control API on `8094`. The separate
@@ -55,16 +69,16 @@ requires the mock endpoint and bearer credential explicitly:
 
 ```bash
 export UPSTREAM_MOCK_URL=http://127.0.0.1:8094
-export UPSTREAM_MOCK_TOKEN=local-development-upstream-mock-token
+export UPSTREAM_MOCK_TOKEN=local-development-source-token
 export UPSTREAM_MOCK_TIMEOUT_SECONDS=30
 
-pnpm --filter @devtools/upstream-mock cli -- list
-pnpm --filter @devtools/upstream-mock cli -- create --file inspection.json
-pnpm --filter @devtools/upstream-mock cli -- publish \
+pnpm cli -- list
+pnpm cli -- create --file inspection.json
+pnpm cli -- publish \
   --wafer-key 7 \
   --inspection-time 2026-08-29T01:02:00Z \
   --published-at 2026-08-29T01:05:00Z
-pnpm --filter @devtools/upstream-mock cli -- dev-showcase --file showcase.json
+pnpm cli -- dev-showcase --file showcase.json
 ```
 
 `create`, `append`, `update`, and `dev-showcase` accept their corresponding JSON

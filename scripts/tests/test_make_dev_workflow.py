@@ -16,7 +16,7 @@ class DevComposeWorkflowTests(unittest.TestCase):
 
         self.assertIn(
             "docker compose -f $(COMPOSE_DEV) up -d --build postgres minio redis "
-            "label-studio prefect-server upstream-mock sc-upstream image-parser",
+            "label-studio prefect-server sc-upstream image-parser",
             docker_makefile,
         )
         dependency_start = (

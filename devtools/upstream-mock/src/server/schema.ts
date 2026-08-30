@@ -61,6 +61,12 @@ export const inspections = pgTable(
     primaryKey({ columns: [table.waferKey, table.inspectionTime] }),
     unique("uq_upstream_mock_inspection_change_token").on(table.changeToken),
     index("ix_upstream_mock_inspections_published_time").on(table.state, table.inspectionTime),
+    index("ix_upstream_mock_inspections_publication_cursor").on(
+      table.state,
+      table.publishedAt,
+      table.inspectionTime,
+      table.waferKey,
+    ),
     check("ck_upstream_mock_inspection_state", sql`${table.state} IN ('draft', 'published')`),
     check(
       "ck_upstream_mock_inspection_publication_fields",

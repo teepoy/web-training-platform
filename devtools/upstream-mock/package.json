@@ -1,11 +1,14 @@
 {
-  "name": "@devtools/upstream-mock",
+  "name": "upstream-mock",
   "version": "0.2.0",
   "private": true,
+  "packageManager": "pnpm@11.22.0",
   "scripts": {
     "build": "next build",
     "cli": "tsx src/cli/index.ts",
     "dev": "next dev --hostname 0.0.0.0 --port 8094",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "lint": "eslint .",
     "migrate": "node --import tsx src/server/migrate.ts",
     "start": "next start --hostname 0.0.0.0 --port 8094",
@@ -30,6 +33,7 @@
     "@types/react-dom": "^19.1.9",
     "eslint": "^9.35.0",
     "eslint-config-next": "16.3.3",
+    "prettier": "^3.8.3",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2",
     "vitest": "^3.2.4"

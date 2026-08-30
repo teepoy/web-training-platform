@@ -1,16 +1,21 @@
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 import { pool } from "./db";
 
-const migration = fileURLToPath(new URL("../../migrations/0001_initial.sql", import.meta.url));
+const migrationsDirectory = fileURLToPath(new URL("../../migrations", import.meta.url));
 
 async function main(): Promise<void> {
-  const sql = await readFile(migration, "utf8");
+  const migrations = (await readdir(migrationsDirectory))
+    .filter((name) => name.endsWith(".sql"))
+    .sort();
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    await client.query(sql);
+    for (const migration of migrations) {
+      const sql = await readFile(`${migrationsDirectory}/${migration}`, "utf8");
+      await client.query(sql);
+    }
     await client.query("COMMIT");
   } catch (error) {
     await client.query("ROLLBACK");

@@ -1,0 +1,45 @@
+services:
+  database:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: upstream_mock
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d upstream_mock"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - database-data:/var/lib/postgresql/data
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      database:
+        condition: service_healthy
+    environment:
+      UPSTREAM_MOCK_DATABASE_URL: postgresql://postgres:postgres@database:5432/upstream_mock
+      UPSTREAM_MOCK_API_TOKEN: ${UPSTREAM_MOCK_API_TOKEN:-local-development-source-token}
+      UPSTREAM_MOCK_S3_ENDPOINT: ${UPSTREAM_MOCK_S3_ENDPOINT:-http://host.docker.internal:9000}
+      UPSTREAM_MOCK_S3_ACCESS_KEY: ${UPSTREAM_MOCK_S3_ACCESS_KEY:-minioadmin}
+      UPSTREAM_MOCK_S3_SECRET_KEY: ${UPSTREAM_MOCK_S3_SECRET_KEY:-minioadmin}
+      UPSTREAM_MOCK_S3_REGION: ${UPSTREAM_MOCK_S3_REGION:-us-east-1}
+      UPSTREAM_MOCK_PATCH_BUCKET: ${UPSTREAM_MOCK_PATCH_BUCKET:-sc-patch-images}
+      UPSTREAM_MOCK_REVIEW_BUCKET: ${UPSTREAM_MOCK_REVIEW_BUCKET:-sc-review-images}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8094:8094"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:8094/ready"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 30s
+    restart: on-failure
+
+volumes:
+  database-data:

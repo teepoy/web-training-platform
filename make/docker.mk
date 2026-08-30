@@ -10,7 +10,7 @@ build-image-parser-vendor: ## Build amd64 vendor/tooling image for image-parser 
 
 .PHONY: up-dev
 up-dev: ensure-fixtures ## Start compose dev stack (volume mounts, hot reload)
-	docker compose -f $(COMPOSE_DEV) up -d --build postgres minio redis label-studio prefect-server upstream-mock sc-upstream image-parser
+	docker compose -f $(COMPOSE_DEV) up -d --build postgres minio redis label-studio prefect-server sc-upstream image-parser
 	# Air does not retry a child process that exited while SC upstream was cycling.
 	# Restart only image-parser after its upstream is healthy so preparation can converge.
 	docker compose -f $(COMPOSE_DEV) restart image-parser
@@ -56,8 +56,7 @@ ensure-fixtures: ## Ensure host-side bind-mount fixture files exist (idempotent;
 		infra/compose/pgadmin-pgpass \
 		infra/compose/prefect.yaml \
 		infra/compose/init-scripts/create-labelstudio-db.sql \
-		infra/compose/init-scripts/create-prefect-db.sql \
-		infra/compose/init-scripts/03-create-upstream-mock.sql; \
+		infra/compose/init-scripts/create-prefect-db.sql; \
 	do \
 		if [ ! -f "$$f" ]; then \
 			echo "⚠️  Missing optional fixture: $$f" >&2; \

@@ -10,6 +10,7 @@ import {
   type UpdateInspectionInput,
 } from "./contracts";
 import { db, pool } from "./db";
+import { buildInspectionDiscoveryQuery, type InspectionDiscoveryFilters } from "./discovery-query";
 import {
   UpstreamMockConflictError,
   UpstreamMockNotFoundError,
@@ -419,6 +420,12 @@ export const upstreamMockRepository = {
     return result.rows.map(upstreamInspection);
   },
 
+  async listDiscoveryInspections(filters: InspectionDiscoveryFilters) {
+    const query = buildInspectionDiscoveryQuery(filters);
+    const result = await pool.query(query.text, query.values);
+    return result.rows.map(upstreamInspection);
+  },
+
   async listPublishedSamples(key: InspectionKey, offset: number, count: number) {
     const result = await pool.query(
       `SELECT d.wafer_key, d.inspection_time, d.defect_id, d.test_id,
@@ -520,5 +527,6 @@ function upstreamInspection(row: Record<string, unknown>) {
     origin_index_y: row.origin_index_y,
     latest_update: updated ? Math.trunc(updated.getTime() / 1000) : 0,
     change_token: Number(row.change_token ?? 0),
+    published_at: row.published_at ? new Date(row.published_at as string).toISOString() : null,
   };
 }

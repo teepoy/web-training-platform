@@ -24,14 +24,6 @@ x-platform-environment: &platform-environment
   MINIO_ENDPOINT: minio:9000
   MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
   MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
-  SC_PATCH_S3_ENDPOINT: minio:9000
-  SC_PATCH_S3_ACCESS_KEY: minioadmin
-  SC_PATCH_S3_SECRET_KEY: minioadmin
-  SC_PATCH_S3_BUCKET: sc-patch-images
-  SC_REVIEW_S3_ENDPOINT: minio:9000
-  SC_REVIEW_S3_ACCESS_KEY: minioadmin
-  SC_REVIEW_S3_SECRET_KEY: minioadmin
-  SC_REVIEW_S3_BUCKET: sc-review-images
   SC_UPSTREAM_ADDR: sc-upstream:9091
   SC_UPSTREAM_FLIGHT_ADDR: grpc://sc-upstream:9093
   IMAGE_PARSER_GRPC_ADDR: image-parser:9092
@@ -77,72 +69,17 @@ x-api-runtime: &api-runtime
   restart: on-failure
 
 services:
-  # Creates the mock-owned database for both fresh and existing local
-  # Postgres volumes. The SQL is idempotent and this container exits afterward.
-  upstream-mock-db-prepare:
-    image: pgvector/pgvector:pg16
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      PGPASSWORD: postgres
-    volumes:
-      - ./init-scripts/03-create-upstream-mock.sql:/init/03-create-upstream-mock.sql:ro
-    command:
-      [
-        "psql",
-        "-h",
-        "postgres",
-        "-U",
-        "postgres",
-        "-d",
-        "postgres",
-        "-f",
-        "/init/03-create-upstream-mock.sql",
-      ]
-    restart: "no"
-
-  upstream-mock:
-    build:
-      context: ../..
-      dockerfile: devtools/upstream-mock/Dockerfile
-    depends_on:
-      upstream-mock-db-prepare:
-        condition: service_completed_successfully
-      minio:
-        condition: service_healthy
-    environment:
-      UPSTREAM_MOCK_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/upstream_mock
-      UPSTREAM_MOCK_API_TOKEN: ${UPSTREAM_MOCK_TOKEN:-local-development-upstream-mock-token}
-      UPSTREAM_MOCK_S3_ENDPOINT: http://minio:9000
-      UPSTREAM_MOCK_S3_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
-      UPSTREAM_MOCK_S3_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
-      UPSTREAM_MOCK_S3_REGION: us-east-1
-      UPSTREAM_MOCK_PATCH_BUCKET: sc-patch-images
-      UPSTREAM_MOCK_REVIEW_BUCKET: sc-review-images
-    ports:
-      - "8094:8094"
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:8094/ready"]
-      interval: 10s
-      timeout: 3s
-      retries: 10
-      start_period: 30s
-    restart: on-failure
-
   sc-upstream:
     build:
       context: ../..
-      dockerfile: devtools/sc-upstream-dev-adapter/Dockerfile
+      dockerfile: services/sc-upstream/Dockerfile.dev
     depends_on:
-      upstream-mock:
-        condition: service_healthy
       redis:
         condition: service_healthy
     environment:
-      SC_UPSTREAM_ADAPTER_FACTORY: sc_upstream_dev_adapter.http:factory
-      UPSTREAM_MOCK_URL: http://upstream-mock:8094
-      UPSTREAM_MOCK_TOKEN: ${UPSTREAM_MOCK_TOKEN:-local-development-upstream-mock-token}
+      SC_UPSTREAM_ADAPTER_FACTORY: sc_upstream_mock_adapter.http:factory
+      UPSTREAM_MOCK_URL: ${UPSTREAM_MOCK_URL:-http://host.docker.internal:8094}
+      UPSTREAM_MOCK_TOKEN: ${UPSTREAM_MOCK_TOKEN:-local-development-source-token}
       UPSTREAM_MOCK_TIMEOUT_SECONDS: "300"
       GRPC_PORT: "9091"
       FLIGHT_PORT: "9093"
@@ -154,6 +91,8 @@ services:
     ports:
       - "9091:9091"
       - "9093:9093"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     healthcheck:
       test:
         [
@@ -285,14 +224,10 @@ services:
       GRPC_PORT: "9092"
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-local-development-jwt-secret-not-for-shared-host}
       SC_UPSTREAM_ADDR: sc-upstream:9091
-      SC_PATCH_S3_ENDPOINT: http://minio:9000
-      SC_PATCH_S3_REGION: us-east-1
-      SC_PATCH_S3_ACCESS_KEY: minioadmin
-      SC_PATCH_S3_SECRET_KEY: minioadmin
-      SC_REVIEW_S3_ENDPOINT: http://minio:9000
-      SC_REVIEW_S3_REGION: us-east-1
-      SC_REVIEW_S3_ACCESS_KEY: minioadmin
-      SC_REVIEW_S3_SECRET_KEY: minioadmin
+      UPSTREAM_MOCK_S3_ENDPOINT: http://minio:9000
+      UPSTREAM_MOCK_S3_REGION: us-east-1
+      UPSTREAM_MOCK_S3_ACCESS_KEY: minioadmin
+      UPSTREAM_MOCK_S3_SECRET_KEY: minioadmin
       CACHE_DIR: /tmp/image-parser-cache
       CACHE_TTL: ${IMAGE_PARSER_CACHE_TTL:-10m}
       CACHE_CLEANUP_INTERVAL: ${IMAGE_PARSER_CACHE_CLEANUP_INTERVAL:-5m}

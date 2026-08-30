@@ -8,8 +8,8 @@
     "build:web": "pnpm --filter web build",
     "test:web": "pnpm --filter web test:all",
     "test:registrations": "pnpm --filter web test:registrations",
-    "format": "prettier --write .",
-    "format:check": "prettier --check .",
+    "format": "prettier --write apps/web packages docs infra package.json pnpm-workspace.yaml",
+    "format:check": "prettier --check apps/web packages docs infra package.json pnpm-workspace.yaml",
     "storybook": "pnpm --filter web storybook",
     "build-storybook": "pnpm --filter web build-storybook"
   },

@@ -8,10 +8,8 @@ node_modules
 apps/web/dist
 apps/web/node_modules
 services/image-parser/tmp
-devtools/benchmarks
-devtools/seedmaker
-devtools/upstream-mock/tests
-devtools/sc-upstream-dev-adapter/tests
+services/image-parser/dev_adapters
+devtools/*
 .mypy_cache
 .pytest_cache
 *.db
