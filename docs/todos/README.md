@@ -26,7 +26,7 @@ criteria are satisfied.
 | [SC selection and data pipeline efficiency](sc-selection-and-data-pipeline-efficiency.md)                             | Complete | Multi-label selection, linear identity pipeline, and gzip query bodies verified | —              |
 | [Partitioned SC automation and multi-inspection classify](sc-partitioned-automation-and-multi-inspection-classify.md) | Complete | Exclusive SC partitions and the 300k classify gate verified                     | —              |
 | [Annotation, Dataset, and Model import/export](annotation-dataset-model-import-export.md)                             | Complete | Registered, bounded transfer flows and round trips verified                     | —              |
-| [Upstream-mock seed ownership](upstream-mock-seed-ownership.md)                                                       | Complete | Upstream events, explicit identity, and test-fixture boundaries verified        | —              |
+| [Upstream-mock seed ownership](upstream-mock-seed-ownership.md)                                                       | Complete | Dev-only superadmin bootstrap and live login verified                           | —              |
 
 The Prefect GPU worker release task is tracked separately in
 `prefect-gpu-worker-release-activation.md`; it is not one of these nine

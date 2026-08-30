@@ -138,3 +138,28 @@ automation behavior after mock upstream events are published.
 - `make check-config`
 - `make graphify-check` and rebuilt `ingestion-automation`, `platform-access`,
   and `architecture-contracts`
+
+## Reopened Follow-up: Development Administrator
+
+`make up-dev` must explicitly invoke the separate `create-superadmin`
+administration operation after platform preparation. The development identity
+is intentionally not owned by upstream-mock scenario tooling. The bootstrap
+must be idempotent, dev-only, configurable through dedicated Make variables,
+and verified by both a dry-run workflow test and a real login request.
+
+### Follow-up Completion Evidence
+
+- `make up-dev` rebuilds its selected dependencies, restarts image-parser after
+  SC upstream is healthy, applies platform migrations, and then converges the
+  development superadmin before starting the complete application stack.
+- `DEV_SUPERADMIN_EMAIL`, `DEV_SUPERADMIN_PASSWORD`, and
+  `DEV_SUPERADMIN_NAME` provide explicit local overrides; the documented
+  defaults are `seed@example.com`, `seed1234`, and `Development Admin`.
+- `make test-dev-workflow` locks down the targeted parser restart and the
+  ordered `prepare-platform` -> `create-superadmin` contract.
+- A live `make up-dev` run created or updated the account, and the login API
+  returned an access token for that superadmin.
+- The complete mock browser suite passes all 51 tests. Verification also closed
+  two stale mock boundaries so SC classify limits and Collection-source
+  navigation cannot leak fake E2E credentials to the live API and trigger a
+  misleading logout.

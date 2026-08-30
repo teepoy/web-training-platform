@@ -41,8 +41,31 @@ resources.
 
 ## Identity
 
-Scenario tooling never provisions an administrator. For a local administrator,
-run the explicit operation with caller-chosen credentials:
+Scenario tooling never provisions an administrator. `make up-dev` separately
+invokes the explicit administrator operation and converges this local-only
+development account:
+
+```text
+Email: seed@example.com
+Password: seed1234
+Name: Development Admin
+```
+
+The startup rebuilds its selected dependencies and restarts image-parser after
+SC upstream is healthy. This prevents a stale parser child process from
+blocking migrations or identity provisioning without restarting the stateful
+development services.
+
+Override any value when starting the stack:
+
+```bash
+make up-dev \
+  DEV_SUPERADMIN_EMAIL=developer@example.test \
+  DEV_SUPERADMIN_PASSWORD='<local password>' \
+  DEV_SUPERADMIN_NAME='Local Developer'
+```
+
+The standalone administration operation remains available when needed:
 
 ```bash
 make create-superadmin \

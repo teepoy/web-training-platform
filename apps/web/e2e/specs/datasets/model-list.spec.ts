@@ -47,6 +47,55 @@ test("model Collection sources link to Collection detail @mock", async ({
       collection_name: "Source Collection",
     }),
   ]);
+  await authedPage.route("**/api/v1/dataset-collections/collection-source-1**", async (route) => {
+    const pathname = new URL(route.request().url()).pathname;
+    if (pathname.endsWith("/snapshot-update-status")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          snapshot_id: null,
+          snapshot_revision_number: null,
+          update_available: false,
+          outdated_member_count: 0,
+          members: [],
+        }),
+      });
+      return;
+    }
+    if (
+      ["/members", "/revisions", "/membership-rules", "/prediction-batches"].some((suffix) =>
+        pathname.endsWith(suffix),
+      )
+    ) {
+      await route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: "collection-source-1",
+        org_id: "org-e2e-1",
+        name: "Source Collection",
+        description: "",
+        target_view_id: "image_input_v1",
+        target_view_contract: "dataset.image-input",
+        target_schema_version: "1",
+        duplicate_policy: "keep_all",
+        missing_data_policy: "fail",
+        definition_version: 1,
+        default_model_id: null,
+        model_binding_version: 1,
+        created_by: "user-e2e-1",
+        created_at: "2026-08-15T00:00:00Z",
+        updated_at: "2026-08-15T00:00:00Z",
+      }),
+    });
+  });
+  await authedPage.route("**/api/v1/source-connectors**", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
+  });
 
   await authedPage.goto("/models");
   await authedPage.getByRole("button", { name: "Collection · Source Collection" }).click();

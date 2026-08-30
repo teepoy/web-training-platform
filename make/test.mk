@@ -5,7 +5,7 @@
 # ──────────────────────────────────────────────
 
 .PHONY: test
-test: test-api check-openapi-sync ## Run all tests
+test: test-api test-dev-workflow check-openapi-sync ## Run all tests
 
 .PHONY: test-api
 test-api: ## Run API tests
@@ -48,6 +48,10 @@ benchmark-sc-prediction-export: ## Benchmark 300k-row SC export generation plus 
 .PHONY: test-release-contract
 test-release-contract: ## Validate immutable release image environment generation
 	python3 -m unittest discover -s scripts/tests -p 'test_write_release_image_env.py'
+
+.PHONY: test-dev-workflow
+test-dev-workflow: ## Validate development Compose startup contracts
+	python3 -m unittest discover -s scripts/tests -p 'test_make_dev_workflow.py'
 
 .PHONY: test-e2e
 test-e2e: ## Run frontend mock e2e tests (Playwright, no live stack required)

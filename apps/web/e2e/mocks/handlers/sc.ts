@@ -24,6 +24,16 @@ export interface ScInspectionOverrides {
   datasets?: Array<{ id: string; name: string }>;
 }
 
+export async function mockScClassifyLimits(page: Page, maxRows = 300_000): Promise<void> {
+  await page.route("**/api/v1/sc/data/classify-limits", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ max_rows: maxRows }),
+    });
+  });
+}
+
 export async function mockScInspections(
   page: Page,
   overrides?: ScInspectionOverrides,

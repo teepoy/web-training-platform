@@ -65,8 +65,10 @@ Prefer `make` targets from the repository root.
 
 Publish development upstream behavior through the `devtools/upstream-mock`
 HTTP API, TypeScript CLI, or dashboard on port `8094`. Platform identities are
-provisioned explicitly and are never created by scenario tooling. Run smoke
-tests with `make smoke-tests` and caller-supplied `SMOKE_USER_EMAIL` /
+never created by scenario tooling. `make up-dev` separately converges the
+local-only development superadmin configured by `DEV_SUPERADMIN_EMAIL`,
+`DEV_SUPERADMIN_PASSWORD`, and `DEV_SUPERADMIN_NAME`. Run smoke tests with
+`make smoke-tests` and caller-supplied `SMOKE_USER_EMAIL` /
 `SMOKE_USER_PASSWORD`.
 
 The root `Makefile` is the stable entry point and loads focused modules from

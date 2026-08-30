@@ -22,6 +22,9 @@ IMAGE_PARSER_GRPC_ADDR_HOST      ?= 127.0.0.1:9092
 ARTIFACTS_DIR                    ?= $(CURDIR)/artifacts
 HOST_BIN_DIR                     := $(ARTIFACTS_DIR)/bin
 MINIO_ENDPOINT_HOST              ?= localhost:9000
+DEV_SUPERADMIN_EMAIL             ?= seed@example.com
+DEV_SUPERADMIN_PASSWORD          ?= seed1234
+DEV_SUPERADMIN_NAME              ?= Development Admin
 UV_RUN_INSTALLED                 := uv run --no-sync --offline
 LITELLM_LOCAL_MODEL_COST_MAP="True"
 
@@ -108,6 +111,9 @@ help: ## Show this help message
 	@printf '    \033[36m%-43s\033[0m %s\n' "IMAGE_PARSER_GRPC_ADDR_HOST" "Host image-parser gRPC address injected into host API and workers"
 	@printf '    \033[36m%-43s\033[0m %s\n' "ARTIFACTS_DIR" "Repository-local directory for generated host build artifacts"
 	@printf '    \033[36m%-43s\033[0m %s\n' "MINIO_ENDPOINT_HOST" "Host MinIO endpoint used by host API and benchmark targets"
+	@printf '    \033[36m%-43s\033[0m %s\n' "DEV_SUPERADMIN_EMAIL" "Local-only administrator created by up-dev (default: seed@example.com)"
+	@printf '    \033[36m%-43s\033[0m %s\n' "DEV_SUPERADMIN_PASSWORD" "Local-only administrator password created by up-dev"
+	@printf '    \033[36m%-43s\033[0m %s\n' "DEV_SUPERADMIN_NAME" "Local-only administrator display name"
 	@printf '\n  Tests and SC runtime benchmarks\n'
 	@printf '    \033[36m%-43s\033[0m %s\n' "TEST_TIMEOUT" "Hard timeout for API test execution in seconds (default: 300)"
 	@printf '    \033[36m%-43s\033[0m %s\n' "PYTEST_FAULTHANDLER_TIMEOUT" "Per-test stack-dump timeout in seconds (default: 120)"

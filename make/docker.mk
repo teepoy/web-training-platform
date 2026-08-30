@@ -10,8 +10,12 @@ build-image-parser-vendor: ## Build amd64 vendor/tooling image for image-parser 
 
 .PHONY: up-dev
 up-dev: ensure-fixtures ## Start compose dev stack (volume mounts, hot reload)
-	docker compose -f $(COMPOSE_DEV) up -d postgres minio redis label-studio prefect-server upstream-mock sc-upstream image-parser
+	docker compose -f $(COMPOSE_DEV) up -d --build postgres minio redis label-studio prefect-server upstream-mock sc-upstream image-parser
+	# Air does not retry a child process that exited while SC upstream was cycling.
+	# Restart only image-parser after its upstream is healthy so preparation can converge.
+	docker compose -f $(COMPOSE_DEV) restart image-parser
 	docker compose -f $(COMPOSE_DEV) --profile ops run --rm prepare-platform
+	$(MAKE) create-superadmin EMAIL='$(DEV_SUPERADMIN_EMAIL)' PASSWORD='$(DEV_SUPERADMIN_PASSWORD)' NAME='$(DEV_SUPERADMIN_NAME)'
 	# Re-evaluate image layers so package/lockfile changes cannot leave bind-mounted
 	# application source running against stale container dependencies.
 	docker compose -f $(COMPOSE_DEV) up -d --build $(ARGS)
