@@ -49,20 +49,6 @@ test("model Collection sources link to Collection detail @mock", async ({
   ]);
   await authedPage.route("**/api/v1/dataset-collections/collection-source-1**", async (route) => {
     const pathname = new URL(route.request().url()).pathname;
-    if (pathname.endsWith("/snapshot-update-status")) {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          snapshot_id: null,
-          snapshot_revision_number: null,
-          update_available: false,
-          outdated_member_count: 0,
-          members: [],
-        }),
-      });
-      return;
-    }
     if (
       ["/members", "/revisions", "/membership-rules", "/prediction-batches"].some((suffix) =>
         pathname.endsWith(suffix),

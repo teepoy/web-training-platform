@@ -19,8 +19,13 @@ Exposing Partition, logical date, or DAG-run concepts would increase the learnin
 - Preflight shows an as-of timestamp, a provider-produced match-count estimate, and representative records rather than exhaustively materializing the requested range. Submission is blocked if the provider cannot resolve an estimate; the completed run records actual scanned, matched, suppressed, skipped, succeeded, and failed counts.
 - Backfill uses an independent cursor and never advances or rewinds the live-discovery watermark.
 - Backfill and live discovery may run concurrently. Collection admission is serialized and uses Discovery receipts plus Collection-level Source identity deduplication.
-- A Backfill may split work into internal execution windows, but it publishes at most one final Snapshot containing all successfully admitted members. Individual Source record failures produce a visible partial result and remain retryable.
-- The final Snapshot resolves the latest merged Collection head, including valid admissions made concurrently by live discovery. Backfill provenance separately identifies which members were admitted by that Backfill.
+- A Backfill may split work into internal execution windows, but it publishes at
+  most one final Collection Revision containing all successfully admitted
+  member identities. Individual Source record failures produce a visible
+  partial result and remain retryable.
+- The final Revision records the latest merged Collection head, including valid
+  admissions made concurrently by live discovery. Backfill provenance
+  separately identifies which members were admitted by that Backfill.
 
 ## Consequences
 
@@ -28,4 +33,6 @@ Exposing Partition, logical date, or DAG-run concepts would increase the learnin
 - Source providers without a declared historical business-time field cannot offer time-range Backfill and must expose that missing capability explicitly.
 - Backfill execution limits and window sizes must be explicit operator or Import-profile configuration; they cannot be hidden runtime defaults.
 - Receipt and membership provenance allow Backfill to resume or coexist with live discovery without duplicate Dataset creation.
-- A long Backfill does not create a Snapshot per internal batch, keeping Snapshot history aligned with business publication rather than resource-control mechanics.
+- A long Backfill does not create a Revision per internal batch, keeping
+  Revision history aligned with business publication rather than
+  resource-control mechanics.

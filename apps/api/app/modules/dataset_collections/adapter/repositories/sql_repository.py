@@ -106,23 +106,14 @@ def _revision(row: DatasetCollectionRevisionORM) -> DatasetCollectionRevision:
         target_view_contract=row.target_view_contract,
         target_schema_version=row.target_schema_version,
         status=row.status,
-        source_snapshot=tuple(cast(list[dict[str, object]], row.source_snapshot)),
-        row_count=row.row_count,
-        label_counts={
-            str(key): int(cast(int | str, value))
-            for key, value in cast(dict[str, object], row.label_counts).items()
-        },
+        members=tuple(cast(list[dict[str, object]], row.members)),
         manifest_uri=row.manifest_uri,
-        provenance_uri=row.provenance_uri,
         trigger_kind=row.trigger_kind,
         trigger_ref=row.trigger_ref,
         created_by=row.created_by,
         created_at=row.created_at,
         error_code=row.error_code,
         error_detail=row.error_detail,
-        manifest_format=row.manifest_format,
-        source_resolution=row.source_resolution,
-        reproducibility_capability=row.reproducibility_capability,
     )
 
 
@@ -375,7 +366,6 @@ class DatasetCollectionSqlRepository:
             revision_artifacts = await session.execute(
                 select(
                     DatasetCollectionRevisionORM.manifest_uri,
-                    DatasetCollectionRevisionORM.provenance_uri,
                 ).where(DatasetCollectionRevisionORM.collection_id == collection_id)
             )
             artifact_uris = tuple(
@@ -579,14 +569,8 @@ class DatasetCollectionSqlRepository:
                 target_view_contract=revision.target_view_contract,
                 target_schema_version=revision.target_schema_version,
                 status=revision.status,
-                source_snapshot=list(revision.source_snapshot),
-                row_count=revision.row_count,
-                label_counts=revision.label_counts,
+                members=list(revision.members),
                 manifest_uri=revision.manifest_uri,
-                provenance_uri=revision.provenance_uri,
-                manifest_format=revision.manifest_format,
-                source_resolution=revision.source_resolution,
-                reproducibility_capability=revision.reproducibility_capability,
                 trigger_kind=revision.trigger_kind,
                 trigger_ref=revision.trigger_ref,
                 created_by=revision.created_by,
@@ -900,9 +884,9 @@ class DatasetCollectionSqlRepository:
             )
             if int(active or 0) > 0:
                 return True
-            snapshots = (
+            revisions = (
                 await session.execute(
-                    select(DatasetCollectionRevisionORM.source_snapshot)
+                    select(DatasetCollectionRevisionORM.members)
                     .join(
                         DatasetCollectionORM,
                         DatasetCollectionORM.id
@@ -914,9 +898,9 @@ class DatasetCollectionSqlRepository:
             return any(
                 any(
                     str(item.get("source_dataset_id", "")) == dataset_id
-                    for item in cast(list[dict[str, object]], snapshot)
+                    for item in cast(list[dict[str, object]], members)
                 )
-                for snapshot in snapshots
+                for members in revisions
             )
 
     async def _locked_definition(

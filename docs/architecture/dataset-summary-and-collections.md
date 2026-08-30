@@ -1,18 +1,21 @@
-# Dataset Summary, Collection Stack, and Dynamic Collection
+# Dataset Summary, Collection Stack, and Rule-Managed Collection
 
-Status: partially superseded by ADR 0003, ADR 0014, and the implemented source-discovery poller
+Status: accepted Revision-only semantics, with planned Dataset Summary extensions
 Date: 2026-08-15
 
-The retained Collection Snapshot contract is now a composite logical manifest
-with `observed` source semantics and `reproducibility_capability=false`.
-Any section below that describes an archived full `data.parquet` or
-`provenance.parquet` per Collection revision is historical implementation
-context, not the target architecture. See ADR 0003, ADR 0014, and
-`contextual-collection-automation-plan.md` for the accepted design.
-Sections 6.1-6.3 describing generic Sensor subscriptions are also historical.
-The implemented product surface is an active Collection membership rule; one
-internal Prefect deployment evaluates all active rules every five minutes.
-There is no generic Sensor API, YAML registry, persistence model, or UI.
+The Collection feature uses **Revision** terminology only. A Revision is an
+immutable publication of member identity, ordering, and rules; it is not a
+frozen copy of member Dataset contents. Classify, training, and prediction
+always resolve current Dataset rows, annotations, predictions, and mutable
+upstream fields. A Revision does not create a retained member union, copy
+member rows or images, or provide data time travel.
+
+This replaces the Collection publication semantics previously described by
+ADR 0014. ADR 0014 remains relevant to lightweight Dataset audit revisions,
+but its Collection `Update available` and explicit republishing flow are
+superseded by `CORE_DESIGNS.md`. The implemented automation surface is an active Collection
+membership rule evaluated every five minutes. There is no generic Sensor API,
+YAML registry, persistence model, or UI.
 
 ## 1. Scope
 
@@ -25,12 +28,12 @@ This document covers five related product capabilities:
    standalone datasets and composes them into a collection;
 4. a collection stack that can be opened in the classify workbench without
    losing the ability to open each member dataset on its own;
-5. a Dynamic Dataset Collection whose immutable revisions are refreshed by a
-   sensor or cron schedule.
+5. a rule-managed Dataset Collection whose source-discovery runs can admit
+   members and publish a new Revision.
 
 The proposal does not make a collection another physical `DatasetORM`. A
 dataset owns samples and storage; a collection owns a composition rule and
-immutable revisions. Keeping these concepts separate avoids inventing a third
+immutable definition revisions. Keeping these concepts separate avoids inventing a third
 `storage_mode` and preserves the existing `DatasetStorageAgg` boundary.
 
 This document does not amend `CORE_DESIGNS.md`.
@@ -40,24 +43,23 @@ This document does not amend `CORE_DESIGNS.md`.
 The current implementation includes:
 
 - collection resources with audited, optimistic-lock link/unlink membership;
-- immutable Collection audit revisions backed by a versioned composite manifest
-  that records one observed Dataset Revision per member without copying member
-  rows;
+- immutable Collection Revisions that record member identity, ordering, and
+  rules without copying member rows or pinning Dataset contents;
 - dataset-or-collection-revision inputs for training, prediction, and
   train-and-predict;
 - prediction fanout to each physical source dataset;
 - SC inspection multi-select import into standalone datasets followed by
   collection creation;
-- collection list/detail pages, existing-dataset link/unlink, revision
-  creation, and a stack classify route that switches among physical members;
+- collection list/detail pages, existing-dataset link/unlink, Revision
+  publication, and a classify route with a selected-member union plus one
+  active inspection for the map;
 - stable `row_key`/`sample_id` identity for SC table/gallery selection,
   annotation overlays, and prediction overlays.
 
 The following sections also describe planned extensions that are not part of
-this MVP: Dataset Summary, durable `dataset_import_sources`, combined
-`All sources` classify queries, member filter/mapping/sampling transforms,
-background refresh runs, sensors, and cron-driven dynamic revisions. The API
-currently rejects non-empty member transform specifications explicitly.
+this MVP: Dataset Summary, durable `dataset_import_sources`, and advanced
+member filter/mapping/sampling transforms. The API currently rejects non-empty
+member transform specifications explicitly.
 
 The term **stack opening** in this proposal means opening several compatible
 physical datasets through one collection workbench scope. It does not mean
@@ -68,20 +70,20 @@ wafer geometries from different inspections can be overlaid on one map.
 
 ### 2.1 Terms
 
-| Term                 | Meaning                                                                                                                                           |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Dataset              | A physical platform dataset with one explicit `storage_mode`.                                                                                     |
-| Collection           | A reusable logical definition containing one or more dataset sources and explicit composition rules.                                              |
-| Collection revision  | An immutable, resolved snapshot of a collection definition and its source manifests. Training consumes this resource.                             |
-| Collection workspace | The mutable collection head used for browse/classify. It resolves current member data and overlays but is never submitted to runtime as “latest”. |
-| Static collection    | Membership changes only through an explicit user edit and revision creation.                                                                      |
-| Dynamic collection   | The same collection model with one or more refresh bindings that request new revisions.                                                           |
-| Refresh run          | One observable attempt to resolve a collection definition into a revision.                                                                        |
-| Sample ref           | A typed physical identity: `(source_dataset_id, source_sample_id)`.                                                                               |
-| Row key              | An opaque, deterministic UI/runtime row identity derived from a sample ref; unique within a collection scope.                                     |
+| Term                    | Meaning                                                                                                               |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Dataset                 | A physical platform dataset with one explicit `storage_mode`.                                                         |
+| Collection              | A reusable logical definition containing one or more dataset sources and explicit composition rules.                  |
+| Collection Revision     | An immutable publication of member identities, ordering, rules, and mappings. It does not freeze member Dataset data. |
+| Collection workspace    | The classify surface for one explicit Revision. It resolves current data for the selected Revision members.           |
+| Static collection       | Membership changes only through explicit user edits; a successful member batch publishes the resulting Revision.      |
+| Rule-managed collection | The same Collection model whose typed membership rule admits sources through discovery runs.                          |
+| Publication run         | One manual batch, Discovery run, or Backfill that may publish at most one new Revision.                               |
+| Sample ref              | A typed physical identity: `(source_dataset_id, source_sample_id)`.                                                   |
+| Row key                 | An opaque, deterministic UI/runtime row identity derived from a sample ref; unique within a collection scope.         |
 
-“Dynamic” is behavior, not a second storage type. A collection can become
-static or dynamic by adding or removing refresh bindings.
+Rule-managed admission is behavior, not a second storage type. A Collection
+can combine manually linked members and members admitted by its typed rule.
 
 An SC inspection is an upstream source, not a collection member. It becomes
 eligible for collection membership only after import creates a normal physical
@@ -90,34 +92,28 @@ dataset opening and storage ownership.
 
 ### 2.2 Core invariant
 
-Training never consumes a mutable collection head.
+Training never consumes an ambiguous mutable Collection head.
 
 ```text
 collection definition
-        |\
-        | \ current definition + source overlays
-        |  v
-        | collection classify workspace
         |
-        | explicit refresh
+        | successful manual batch, Discovery, or Backfill
         v
-immutable collection revision
+immutable Collection Revision
         |
-        | materialize exact view contract
+        | resolve selected members' current data
         v
-job-scoped data-plane manifest
+classify workspace or job-scoped runtime view
         |
         v
 training or prediction job
 ```
 
-The UI may offer “Refresh and train”, but it must perform and expose two
-operations: create a successful revision, then submit training with that
-revision ID. A job records the exact revision it used.
-
-Prediction follows the same rule. A collection head is valid for interactive
-browse/classify, but training, prediction, and train-and-predict accept only a
-concrete ready revision. A source dataset remains valid as a direct job input.
+Prediction follows the same rule. Classify, training, prediction, and
+train-and-predict accept a concrete ready Revision and record its ID as
+definition provenance. Member Dataset or upstream value changes are read
+dynamically and do not require a new Revision. A source Dataset remains valid
+as a direct job input.
 
 ## 3. Dataset Summary View
 
@@ -160,7 +156,7 @@ The first viewport answers “what is this data, is it usable, and what changed?
    - no storage-specific endpoint is called unless the capability descriptor
      says it applies.
 5. **Recent activity**
-   - imports, annotation changes, predictions, training jobs, and refreshes
+   - imports, annotation changes, predictions, training jobs, and summary tasks
      from Task Tracker;
    - link to the complete Activity view.
 
@@ -283,25 +279,20 @@ explicit dataset choice; it must not silently select the newest dataset.
 
 #### `dataset_collection_revisions`
 
-| Field                                                     | Notes                                                                                                                 |
-| --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `id`, `collection_id`, `revision_number`                  | Immutable collection snapshot identity.                                                                               |
-| `definition_version`, `definition_hash`                   | Exact definition that was resolved.                                                                                   |
-| `target_view_contract`, `target_schema_version`           | Frozen compatibility boundary.                                                                                        |
-| `status`                                                  | `pending`, `ready`, or `failed`.                                                                                      |
-| `source_snapshot`                                         | Member IDs plus observed Dataset Revision IDs/numbers/canonical refs and definition/filter/mapping/sampling versions. |
-| `row_count`, `label_counts`                               | Optional aggregate summary derived without copying all member rows.                                                   |
-| `manifest_uri`, `manifest_format`                         | Versioned composite logical manifest. New Snapshots use `collection-composite-observed.v1`.                           |
-| `source_resolution`, `reproducibility_capability`         | New Snapshots are `observed` and explicitly not reproducible.                                                         |
-| `provenance_uri`                                          | Legacy full-materialization sidecar only; null for new composite Snapshots.                                           |
-| `trigger_kind`, `trigger_ref`, `created_by`, `created_at` | Audit and automation provenance.                                                                                      |
-| `error_code`, `error_detail`                              | Explicit failure result.                                                                                              |
+| Field                                                             | Notes                                                                                              |
+| ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `id`, `collection_id`, `revision_number`                          | Immutable Collection Revision identity.                                                            |
+| `definition_version`, `definition_hash`                           | Exact member and rule definition that was published.                                               |
+| `target_view_id`, `target_view_contract`, `target_schema_version` | Frozen compatibility boundary.                                                                     |
+| `status`                                                          | `pending`, `ready`, or `failed`.                                                                   |
+| `members`                                                         | Ordered member IDs, Dataset IDs, positions, and versioned filter/mapping/sampling rule identities. |
+| `manifest_uri`                                                    | Optional implementation reference for the lightweight definition manifest; never a copied union.   |
+| `trigger_kind`, `trigger_ref`, `created_by`, `created_at`         | Manual batch, Discovery, or Backfill publication provenance.                                       |
+| `error_code`, `error_detail`                                      | Explicit publication failure.                                                                      |
 
-#### `dataset_collection_refresh_runs`
-
-Tracks idempotency key, requested definition version, triggering event or
-schedule run, state, timestamps, resulting revision, and error. Task Tracker
-links to this record.
+The Revision deliberately has no Dataset Revision pins, member row counts,
+label-count cache, source-resolution mode, reproducibility flag, or retained
+provenance sidecar. Current counts come from the selected members at read time.
 
 ### 4.2 Link and unlink lifecycle
 
@@ -324,18 +315,17 @@ revisions. Linking and unlinking existing datasets edits only the head:
 Link and unlink never delete, move, rewrite, or change ownership of the source
 dataset, its samples, annotations, predictions, import-source record, or
 standalone route. Unlinking is therefore reversible by linking that physical
-dataset again. Source deletion is a separate operation: it is rejected while
-an active collection member or any retained collection revision references the
-dataset, unless an accepted revision-retention policy has first made every
-historical reference self-contained.
+dataset again. Source deletion is a separate operation and must respect active
+and historical member-reference retention rules.
 
-An existing ready revision is not modified when the head changes. Training or
-prediction jobs pinned to that revision continue against its immutable
-manifest. A revision or refresh run that observes a membership change while
-resolving fails with `definition_changed`; it never publishes a mixed snapshot.
-Linking or unlinking does not silently create a revision. The UI exposes the
-head as changed and requires an explicit `Refresh revision` before a new job
-can use the new composition.
+An existing ready Revision is not modified when the head changes. Training or
+prediction jobs that record that Revision continue to use its published member
+and rule definition while resolving those members' current data. A publication
+run that observes a definition change while resolving fails with
+`definition_changed`; it never publishes a mixed definition. A successful
+manual member batch, Discovery run, or Backfill may publish at most one
+Revision. Users do not republish a Revision because a member Dataset publishes
+a new Dataset Revision or an upstream field changes.
 
 Each successful membership mutation publishes a collection-scope
 `definition_changed` event containing the new `definition_version` and the
@@ -354,7 +344,7 @@ stale annotation request carrying the previous definition version fails with
 
 The recommended MVP permits unlinking the last member, leaving an empty draft
 head so the collection resource and audit history remain available. Classify,
-revision creation, training, and prediction then fail with/return a visible
+Revision publication, training, and prediction then fail with/return a visible
 `no_active_members` readiness reason until another dataset is linked. This
 empty-head behavior remains an explicit product decision in Section 11.
 
@@ -396,11 +386,10 @@ synthesize an inspection-scoped preview key, but preview keys are not accepted
 by collection, annotation, training, or prediction APIs.
 
 The workbench transport and the runtime view are different contracts. The
-retained composite manifest does not contain a second copy of runtime rows.
-When a runtime needs a unified table, it resolves each member's current data at
-execution start, records the observed Dataset Revision references in launch
-provenance, and derives a job-scoped disposable view. That cache namespaces row
-identity by member Dataset, can be rebuilt, and is not Snapshot truth.
+Revision does not contain a second copy of runtime rows. When a runtime needs a
+unified table, it resolves each selected member's current data at execution
+start and derives a job-scoped disposable view. That cache namespaces row
+identity by member Dataset, can be rebuilt, and is not an archived fact source.
 
 ### 4.4 Compatibility rules
 
@@ -408,43 +397,37 @@ A member does not need the same `dataset_type` or `storage_mode` as another
 member. It must have a registered materializer that can produce the
 collection's exact target `ViewContractRef`.
 
-Revision creation fails before training when:
+Revision publication or job preflight fails when:
 
 - a source is missing or belongs to another organization;
 - no registered materializer can produce the target view and schema version;
 - required columns or images are unavailable;
 - label spaces conflict without an explicit mapping;
 - the selected deduplication, sampling, or missing-data policy is absent;
-- a source changed while its revision was being resolved and the source cannot
-  provide a stable snapshot.
+- current source data cannot satisfy the target view contract.
 
 These failures are visible on the revision and in Task Tracker. There is no
 fallback to another view contract, schema version, or storage path.
 
 ### 4.5 Composition and provenance
 
-Collection publication is metadata-first:
+Collection publication is definition-only:
 
-1. resolve or lazily create one audit Dataset Revision for every member;
-2. record each observed Dataset Revision ID, revision number, and canonical
-   reference;
-3. pin the Collection definition version and deterministic filter, mapping,
-   and sampling plan versions;
-4. persist one versioned composite JSON manifest and its compact summary;
-5. publish the database revision only after that manifest is durable.
+1. resolve the active ordered member identities;
+2. pin the Collection definition version and deterministic filter, mapping,
+   and sampling rule identities;
+3. validate the exact target view contract;
+4. persist the immutable Revision record and optional lightweight definition
+   manifest;
+5. publish only after the definition record is durable.
 
-The Snapshot does not scan and re-archive every sample. Row provenance is
-derived from the Dataset state resolved at execution start plus namespaced
-sample identity. Publication failure deletes the
-uncommitted manifest and leaves the previous ready Snapshot usable.
-
-A new observed revision retains audit source refs but does not preserve member
-data. Dataset deletion still checks Collection references; historical
-reproducibility is not promised by this first implementation.
+Publication does not scan, merge, or archive member samples. Runtime row
+provenance is derived from current Dataset state plus namespaced sample
+identity. Publication failure leaves the previous ready Revision usable.
 
 ### 4.6 Classify/read contract
 
-The combined collection classify page reads one explicit immutable revision
+The combined Collection classify page reads one explicit immutable Revision
 through an SC data-provider collection scope:
 
 ```text
@@ -452,11 +435,13 @@ POST /api/v1/sc/data/collections/{collection_id}/revisions/{revision_id}/query
 GET  /api/v1/sc/data/collections/{collection_id}/revisions/{revision_id}/events
 ```
 
-`ScDataScope(kind="collection")` resolves the composite manifest and opens each
-member's current storage at workbench/runtime start. It may compose a
-LazyFrame/Arrow union inside a disposable cache and records that the resolution
-is current-data/observed; it never retains that union as another archived
-Snapshot.
+`ScDataScope(kind="collection")` resolves the Revision members and opens their
+current storage at workbench/runtime start. The user chooses one or more
+members; table, gallery, global filters, sampling, annotations, training, and
+prediction use that selected-member union. The map and wafer geometry use one
+explicitly selected active member because different inspections cannot share a
+single physical map. A disposable LazyFrame/Arrow union may be rebuilt as a
+cache, but is never retained as Revision data.
 
 The DuckDB `samples` view, pagination CTEs, annotation overlay, prediction
 overlay, gallery, and annotation drafts use `row_key`. `defect_id` remains a
@@ -516,8 +501,8 @@ Prediction uses the same union:
 ```
 
 The request/domain boundary normalizes those fields into
-`RuntimeDataSourceRef`. Dataset inputs open one `DatasetStorageAgg`; collection
-revision inputs resolve a ready, immutable artifact. Generic runtime hosts
+`RuntimeDataSourceRef`. Dataset inputs open one `DatasetStorageAgg`; Collection
+Revision inputs resolve a ready, immutable definition and current member data. Generic runtime hosts
 remain source-agnostic; the registered SC runtime module owns source loading
 and collection prediction fanout.
 
@@ -526,17 +511,17 @@ For train-and-predict, the same revision drives both phases. The visible SC
 workflow filters, ordered by stable `row_key`. Prediction retains the full
 original revision scope, including rows held out of training.
 
-Prediction output is keyed by manifest `sample_id` (`row_key`). A collection
-writeback adapter joins the provenance sidecar in bulk, partitions results by
-physical source dataset, and calls each source `DatasetStorageAgg.write_predictions`.
+Prediction output is keyed by `row_key`. A Collection writeback adapter resolves
+the row's physical member identity in bulk, partitions results by physical
+source Dataset, and calls each source `DatasetStorageAgg.write_predictions`.
 Predictions consequently remain visible from standalone member datasets. The
-job retains its collection revision provenance even though result rows are
+job retains its Collection Revision and selected-member provenance even though result rows are
 owned by physical source storage.
 
-The revision stores member-level observed provenance in its composite manifest.
-Runtime row provenance is derived from the current Dataset state at execution
-start and namespaced sample identity; no retained full provenance sidecar is
-created for new Snapshots.
+The Revision stores member and rule identity. Runtime row provenance is derived
+from the current Dataset state at execution start and namespaced sample
+identity; no retained full provenance sidecar or copied member union is
+created.
 
 ## 5. Collection UI
 
@@ -551,11 +536,14 @@ List datasets and collections together on the top-level Data surface only if
 each row has a clear `Dataset` or `Collection` badge. Do not make a collection
 look like a physical dataset.
 
-Recommended detail tabs:
+Collection Detail uses these contextual sections:
 
 ```text
-Summary | Sources | Classify | Revisions | Train | Predict | Automations | Activity
+Data | Models | Revisions | Activity
 ```
+
+`Classify ↗` is a direct workspace action rather than an intermediate detail
+tab.
 
 ### SC inspection-table entry flow
 
@@ -577,9 +565,9 @@ these explicit steps:
 4. Show compatibility, label-space, missing-data, and duplicate-policy
    validation for the full selection.
 5. Create the collection and atomically replace its ordered members.
-6. Create the first revision. Enable `Open collection` only when that revision
-   is ready; keep every imported dataset independently openable even if another
-   import or revision fails.
+6. Publish the first Revision after the successful member batch. Enable
+   `Open collection` only when that Revision is ready; keep every imported
+   Dataset independently openable even if another import or publication fails.
 
 Import progress is durable and reported per inspection through Task Tracker.
 Batch concurrency must be an explicit configured product/runtime limit with a
@@ -597,16 +585,19 @@ import-aware entry point, not a separate collection type.
 The route is:
 
 ```text
-/dataset-collections/:collectionId/classify/:datasetId?revisionId=:revisionId
+/dataset-collections/:collectionId/revisions/:revisionId/classify
 ```
 
-The page reuses the SC dataset workbench and opens the revision as one combined
-table/gallery/filter/sampling scope. Each member remains independently
-openable through the existing dataset route. Training and prediction use the
-same `revisionId` carried by the collection route.
+The page reuses the SC dataset workbench and opens the Revision without a fake
+representative Dataset route parameter. The user selects the participating
+Revision members and one active member for the map. Each member remains
+independently openable through the existing Dataset route. Training and
+prediction use the same `revisionId` and selected member IDs.
 
-- The combined mode covers table, gallery, filters, distribution, sampling,
-  drafts, and bulk annotation across compatible members.
+- Table, gallery, filters, distribution, sampling, drafts, bulk annotation,
+  training, and prediction use the selected-member union.
+- The map and geometry use exactly one active selected member. Changing the
+  active map member never changes the union selection implicitly.
 - Patch/review image requests use each row's source inspection, wafer, dataset,
   and sample identity instead of the route's representative dataset.
 - Selection and annotation drafts use `row_key`. The UI may display
@@ -614,25 +605,25 @@ same `revisionId` carried by the collection route.
   display fields is used as a collection row key.
 - `Open dataset` on every source opens the existing standalone route. A
   collection never replaces or redirects that route.
-- Train and Predict require an explicit ready revision. If the collection
-  definition or source fingerprints changed, the page requires a revision
-  refresh; it does not submit a mutable “latest” head.
+- Train and Predict require an explicit ready Revision. Member Dataset content
+  and upstream-field changes are picked up dynamically without publishing
+  another Revision.
 
 For MVP, “any composition” means any ordered set of already imported physical
 datasets compatible with one exact target view contract. Arbitrary row slices,
 weights, joins, and overlapping filters remain Phase 6 until their DSL and
 failure semantics are accepted.
 
-### Summary
+### Data
 
 - target view contract and schema version;
 - current definition version;
-- latest ready revision with sample and label counts;
+- latest ready Revision with current member sample and label counts;
 - compatibility/readiness state;
-- source count, dynamic/static state, and next cron run if present;
-- last refresh, last successful revision, and latest error.
+- source count and manual/rule-managed state;
+- last successful publication and latest error.
 
-### Sources
+#### Member sources
 
 The editor validates all members as a set. It displays source compatibility,
 storage mode, label mapping, filters, sampling rule, and estimated counts.
@@ -647,130 +638,74 @@ owns local selections or annotation drafts, unlink also requires an explicit
 choice to preserve them as detached drafts or cancel the operation. A remote
 unlink received while the page is open always preserves such local state.
 
-The page shows when the mutable head differs from the latest ready revision.
+The page shows when the mutable head differs from the latest ready Revision.
 Linking, unlinking, reordering, or editing composition settings increments
 `definition_version`; none of those operations mutates an existing revision.
-An empty head remains on the Sources tab with a visible `no_active_members`
+An empty head remains in the Data section with a visible `no_active_members`
 readiness reason and a `Link datasets` action.
 
 ### Revisions
 
-Show immutable revision number, trigger, definition version, source
-fingerprints, counts, status, creator, time, and jobs using the revision. A
-revision can be inspected or used for training, but never edited.
+Show immutable Revision number, trigger, definition version, ordered members,
+rules, status, creator, time, and jobs using the Revision. Current counts are
+resolved from the selected members rather than stored on the Revision. A
+Revision can be inspected or used for training, but never edited.
 
-### Train
+### Models
 
-The user selects a ready revision. “Latest” may be a UI label, but the submitted
-request always contains a concrete revision ID. If the definition has changed
-since that revision, the UI exposes `Refresh revision` before training.
+The section shows the default Model, coverage, training and prediction jobs,
+and candidate Models. The user selects a ready Revision. “Latest” may be a UI
+label, but the submitted request always contains a concrete Revision ID and,
+when scoped, explicit member IDs. Dataset content changes do not require
+another Revision.
 
-### Automations
+### Activity
 
-Show sensor and cron bindings, enabled state, last/next run, recent refresh
-result, and a test/refresh-now action. Editing automation never rewrites an
-existing revision.
+Show the active membership rule, five-minute discovery state, recent automation
+runs, admission failures, prediction coverage, and retry actions alongside
+manual Collection activity. Editing a rule never rewrites an existing
+Revision.
 
-## 6. Automated Collection Refresh
+## 6. Automated Collection Publication
 
-Interactive link/unlink edits are the head-definition lifecycle in Section
-4.2. This section defines automated revision refresh. A refresh binding does
-not implicitly add or remove members; event-derived membership changes require
-a separately registered source adapter and typed action contract.
+Interactive membership batches and typed membership rules share one Revision
+publication contract. A successful manual batch, Discovery run, or Backfill
+publishes at most one Revision after all accepted membership changes are
+applied. The Revision records the resulting member and rule definition only.
 
-### 6.1 One refresh action, two trigger sources
+### 6.1 Rule evaluation
 
-Both sensors and cron invoke the same registered control-plane action:
-
-```text
-refresh_dataset_collection.v1
-```
-
-Its typed parameters are:
-
-```json
-{
-  "collection_id": "col_123",
-  "expected_definition_version": 4
-}
-```
-
-An event may supply values accepted by a registered collection source adapter,
-but arbitrary event payload is not merged into action parameters.
+One internal Prefect deployment evaluates all active rules every five minutes.
+Rules are versioned, organization-scoped, and target exactly one Collection,
+Source connector, and Import profile. Provider descriptors own the allowed
+fields, types, and operators. The product does not expose a generic Sensor,
+subscription, trigger/action builder, or collection-specific YAML registry.
 
 ```text
-sensor event ─┐
-              ├─> trigger binding ─> refresh action ─> refresh run ─> revision
-cron schedule ┘
+five-minute poll
+      |
+      v
+active typed rule -> source discovery -> import/admit members -> publish Revision
 ```
 
-### 6.2 Binding model
+Every upstream record that matches the rule is processed through bounded
+pagination and batching without a hidden result cap. A failed record keeps its
+own error and retry state; successful records can still contribute to the one
+Revision published by that run.
 
-Add `dataset_collection_refresh_bindings`:
+### 6.2 Publication and idempotency
 
-| Field                               | Notes                              |
-| ----------------------------------- | ---------------------------------- |
-| `id`, `org_id`, `collection_id`     | Organization-scoped ownership.     |
-| `trigger_kind`                      | `sensor` or `cron`.                |
-| `sensor_subscription_id`            | Required only for sensor bindings. |
-| `schedule_id`                       | Required only for cron bindings.   |
-| `enabled`, `created_by`, timestamps | Lifecycle and audit.               |
+Publication is idempotent for the resulting definition. If member identities,
+order, rules, and mappings are unchanged, the run returns `unchanged` and does
+not create an indistinguishable Revision. Dataset row, annotation, prediction,
+or upstream-field changes are not definition changes and therefore never
+create an `Update available` state.
 
-Exactly one trigger reference is set. The binding points at the existing
-sensor/schedule subsystem rather than creating a second scheduler.
-
-Cron uses the existing Schedule service with
-`flow_name=refresh_dataset_collection.v1` and typed collection parameters.
-The collection page creates and manages the schedule through a
-collection-owned application service, not by duplicating Prefect calls in the
-route.
-
-### 6.3 Sensor prerequisites
-
-The existing sensor implementation cannot safely own dynamic collection
-refreshes yet:
-
-- `sensor_subscriptions` has no `org_id`;
-- sensor routes do not currently require user and organization context;
-- `workflow_type` is a raw string resolved directly to a Prefect deployment;
-- the stored subscription has filters but no typed action parameters;
-- matching is flat equality and does not validate `filter_config` against the
-  sensor's JSON Schema.
-
-Before collection binding:
-
-1. add `org_id`, `created_by`, and their Alembic migration;
-2. enforce auth and organization filtering in routes and repositories;
-3. replace or version `workflow_type` with a registered action descriptor ref;
-4. persist and validate typed `action_config`;
-5. validate filter configuration using the registered sensor definition;
-6. include organization and an immutable event ID in dispatch;
-7. route actions through an application port rather than resolving arbitrary
-   deployment strings in `SensorDispatchService`.
-
-The existing YAML sensor definitions are legacy registry inputs. This feature
-does not add collection-specific YAML or another preset mechanism. New
-collection refresh actions and source adapters use module-owned descriptors
-registered through the application registration barrel.
-
-### 6.4 Idempotency and concurrency
-
-Each trigger creates a refresh request with an idempotency key:
-
-```text
-sensor: hash(sensor_id, event_id, binding_id, definition_version)
-cron:   hash(schedule_id, scheduled_time, binding_id, definition_version)
-manual: caller-supplied idempotency key
-```
-
-Only one active refresh run is allowed for the same collection definition
-version. A duplicate trigger returns the existing run. If a run resolves to the
-same source fingerprint and definition hash as the latest ready revision, it
-completes as `unchanged` and points to that revision rather than creating an
-indistinguishable revision.
-
-If the definition changes during resolution, the run fails with
-`definition_changed`; it does not publish a revision based on mixed versions.
+If the Collection head changes concurrently while a run is resolving, the run
+fails with `definition_changed`; it does not publish a mixed definition.
+Backfill fixes the rule version at launch and uses an independent cursor. It
+may execute in internal windows, but those windows are not business
+Partitions and do not publish separate Revisions.
 
 ## 7. API Surface
 
@@ -791,25 +726,23 @@ DELETE /api/v1/dataset-collections/{id}/members/{member_id}
 POST   /api/v1/dataset-collections/{id}/revisions
 GET    /api/v1/dataset-collections/{id}/revisions
 GET    /api/v1/dataset-collections/{id}/revisions/{revision_id}
-GET    /api/v1/dataset-collections/{id}/snapshot-update-status
-POST   /api/v1/dataset-collections/{id}/refresh-snapshot
 
 POST   /api/v1/training-jobs
 POST   /api/v1/training-jobs/train-and-predict
 POST   /api/v1/predictions/run
 ```
 
-`snapshot-update-status` compares the current ready Snapshot's observed member
-Revision IDs with all current Dataset Revisions in one batch read. It never
-creates missing legacy baselines as a read side effect. `refresh-snapshot` is
-creator-only, advances directly to every member's latest observed Revision,
-and returns `unchanged` when the resolved definition and Revision set already
-match. A Dataset-Revision-only refresh does not dispatch incremental prediction
-or training.
+There is no Collection `update-status` or `refresh` endpoint. Dataset Revision
+publication and upstream value changes do not alter a Collection Revision and
+do not require a compatibility endpoint. Collection Revision publication is
+driven by a successful manual membership batch, Discovery run, or Backfill;
+unchanged member/rule definitions return `unchanged`.
+`POST /revisions` is the publication boundary used by those workflows, not a
+user-facing action for manually versioning member data.
 
-Dataset summary, import batches/source resolution, combined collection
-annotations/query/events, and refresh-binding endpoints described elsewhere in
-this document are planned extensions.
+Dataset summary, import batches/source resolution, and additional combined
+Collection annotations/query/events described elsewhere in this document are
+planned extensions.
 
 `POST /members` links one or more existing datasets atomically. Its body carries
 `expected_definition_version` and an explicit ordered list of
@@ -870,25 +803,20 @@ the exact source shape; historical direct-dataset jobs may have a null
 `dataset_id` after source deletion. A future migration can add a database check
 that also accounts for that historical tombstone shape.
 
-The retained Collection manifest uses the following source shape; a runtime
-may resolve its members into its operation-specific data-plane input:
+The lightweight Collection Revision definition uses the following shape; a
+runtime resolves current member data into its operation-specific data-plane
+input:
 
 ```json
 {
-  "manifest_format": "collection-composite-observed.v1",
   "collection_id": "col_123",
   "collection_revision_id": "colrev_7",
   "definition_version": 4,
-  "source_resolution": "observed",
-  "reproducibility": { "capability": false },
   "members": [
     {
       "member_id": "member_1",
       "source_dataset_id": "dataset_1",
-      "dataset_revision_id": "dsrev_3",
-      "dataset_revision_number": 3,
-      "dataset_revision_manifest_uri": "s3://.../manifest.json",
-      "dataset_revision_binding": "observed",
+      "position": 0,
       "filter_version": "sha256:...",
       "mapping_version": "sha256:...",
       "sampling_version": "sha256:..."
@@ -914,8 +842,8 @@ apps/api/app/modules/dataset_collections/
   port/local/
 ```
 
-The module depends on typed dataset, materializer/catalog, scheduling, sensor
-action, and Task Tracker ports. It does not import sibling repositories or ORM
+The module depends on typed Dataset, materializer/catalog, source-discovery,
+and Task Tracker ports. It does not import sibling repositories or ORM
 models directly.
 
 The dataset module continues to own physical sample/storage behavior. The
@@ -929,10 +857,10 @@ under the accepted retention policy; the dataset module does not query
 collection tables or repositories directly.
 
 The training and prediction modules accept a typed data-source resolver port
-and remain unaware of collection persistence details. The collection module
-implements collection-revision resolution and provenance-aware prediction
-writeback behind ports. Runtime services receive only the versioned data-plane
-manifest.
+and remain unaware of Collection persistence details. The Collection module
+implements Revision definition resolution and provenance-aware prediction
+writeback behind ports. Runtime services receive a job-scoped data-plane
+manifest built from current member data.
 
 The separate SC data-provider composition root installs only the storage,
 collection-read, revision, Redis, and query dependencies needed for collection
@@ -949,7 +877,7 @@ The collection creation flows compensate for their two-request
 create-then-link transport: when membership linking fails, they delete the
 newly created empty collection. Existing-dataset creation also validates the
 MVP's identical ordered label-space rule before submission. Historical ready
-revisions remain openable in classify even when the mutable collection head is
+Revisions remain openable in classify even when the mutable Collection head is
 currently empty.
 
 Collection source editors, automation editors, and summary panels are
@@ -984,7 +912,7 @@ collection routes:
 - persist/query durable dataset import-source identities;
 - implement collection CRUD, audited link/unlink, atomic member editing,
   optimistic concurrency, and compatibility checks;
-- implement immutable revision resolution and collection manifest v2;
+- implement immutable Revision definition resolution;
 - add collection list/detail/source/revision UI, including the existing-dataset
   picker and empty-head readiness state.
 
@@ -1004,16 +932,18 @@ collection routes:
 - change training, prediction, and train-and-predict submission to accept a
   typed data source;
 - persist typed data sources on jobs and model artifacts;
-- resolve collection revisions through the data-plane manifest boundary;
+- resolve current selected-member data through the data-plane manifest boundary;
 - add provenance-aware prediction writeback to physical member datasets;
 - add collection Train/Predict UI and task views.
 
-### Phase 5: Automated Collection Refresh
+### Phase 5: Automated Collection Publication
 
-- harden sensor tenancy, auth, validation, and typed actions;
-- register `refresh_dataset_collection.v1`;
-- add sensor and cron bindings plus idempotent refresh runs;
-- expose automation state in Collection and Task Tracker UI.
+- add typed membership rules backed by Source connector and Import profile
+  descriptors;
+- evaluate active rules through the five-minute discovery deployment;
+- publish at most one Revision per Discovery or Backfill run;
+- expose discovery, admission, retry, and prediction-coverage state in the
+  Collection and Task Tracker UI.
 
 ### Phase 6: Advanced Composition
 
@@ -1028,10 +958,9 @@ Do not include Phase 6 behavior implicitly in the static collection phases.
 - Dataset Detail opens on the persisted dataset contract. Training and
   prediction are embedded sections of that page, so they must not render a
   second page header or refetch the selected dataset merely to label the form.
-- Collection Detail presents the mutable definition and latest ready revision
-  as separate states. When they differ, creating the current revision is the
-  primary action and reviewing the older revision must identify its revision
-  number explicitly.
+- Collection Detail presents the mutable definition and latest ready Revision
+  as separate states. When they differ, the pending head change is visible and
+  reviewing the older Revision identifies its Revision number explicitly.
 - Management tables keep stable column widths and horizontal scrolling on
   compact screens. Below the application breakpoint, the global navigation
   collapses to its icon rail so page content retains usable width.
@@ -1039,9 +968,9 @@ Do not include Phase 6 behavior implicitly in the static collection phases.
 ## 10. Required Verification
 
 - backend: repository/service/route tests, organization-isolation tests,
-  revision concurrency tests, import-source ambiguity tests, manifest contract
+  Revision concurrency tests, import-source ambiguity tests, Revision contract
   tests, and `make generate` plus `make test`;
-- frontend: component tests, mock E2E for static and dynamic collection flows,
+- frontend: component tests, mock E2E for manual and rule-managed Collection flows,
   `make test-web`, and `make build-web`;
 - route/user-flow changes: `make test-e2e`;
 - all code changes: `make lint` first, followed by the narrowest relevant
@@ -1061,48 +990,38 @@ Do not include Phase 6 behavior implicitly in the static collection phases.
   open, keep surviving `row_key` values stable, clear an unlinked active map,
   preserve detached drafts, and reject stale annotation submission;
 - empty head: unlink the final source, expose `no_active_members`, and reject
-  revision, training, and prediction creation until a source is linked;
+  Revision publication, training, and prediction until a source is linked;
 - collection training/prediction: a smoke test proving two datasets with
   different storage modes can materialize the same exact view contract, train
   from the recorded revision, predict the full revision scope, and write back
   through provenance;
 - failure semantics: tests for one failed source import, one failed source
-  annotation write, changed definition during revision creation, and deletion
+  annotation write, changed definition during Revision publication, and deletion
   of a referenced source.
 
 ## 11. MVP Decisions and Open Extensions
 
 The implemented MVP makes these explicit choices:
 
-1. source deletion is rejected while an active membership or retained revision
-   references the dataset;
+1. a Collection Revision fixes member identity, order, rules, and mappings, but
+   always resolves current member Dataset and upstream data;
 2. composition is whole-dataset concatenation with `keep_all` and `fail` as
    required request values; non-empty filter, mapping, and sampling specs are
    rejected;
 3. member datasets must expose the exact same ordered label space;
-4. collection prediction results are written through to the physical member
-   datasets using revision provenance;
-5. revision creation is explicit and synchronous; linking or unlinking does not
-   publish a revision automatically.
+4. Collection prediction results are written through to the physical member
+   Datasets while the job records Revision and selected-member provenance;
+5. a successful manual batch, Discovery run, or Backfill publishes at most one
+   Revision, and an unchanged definition publishes none;
+6. member Dataset or upstream-field changes never create an update-available
+   state and never require republishing the Revision;
+7. Collection classify supports a selected-member union for table/gallery/
+   filter/annotation/job operations and exactly one active member for the map;
+8. source deletion is rejected while the accepted membership and Revision
+   retention rules still reference the Dataset;
+9. an empty Collection may remain a Draft, but it cannot publish an empty
+   Revision or run classify, training, or prediction.
 
-Refresh publication/idempotency, summary freshness, transform DSL semantics,
-and combined collection annotation ownership remain decisions for the planned
-extensions described above. 8. **Collection prediction ownership:** partition and write back to physical
-member storage, as proposed, or retain collection-only prediction shards. 9. **SC map behavior:** one active member map, as proposed, or define a valid
-multi-inspection map visualization. 10. **Import publication:** publish the collection only after all selected
-inspections import successfully, as proposed, or permit a visibly partial
-collection definition. 11. **Empty collection head:** permit unlinking the last member and retain an
-empty draft resource with disabled classify/job readiness, as proposed, or
-reject the final unlink. 12. **Detached workbench drafts:** preserve drafts from a remotely unlinked
-source for standalone/re-link recovery, as proposed, or define another
-explicit conflict workflow.
-
-Recommended MVP baseline for acceptance is: block deletion while a retained
-revision references a source; whole-dataset ordered concatenation; require an
-explicit `keep_all` duplicate policy; require identical label spaces; publish a
-new revision only when source or definition fingerprints change; write
-annotations and predictions through to source datasets; show one active wafer
-map; publish the collection only after all selected imports succeed; treat
-link/unlink as audited mutable-head edits; allow an empty draft head; and
-preserve detached drafts after remote unlink. These are recommendations, not
-accepted core decisions, until the product owner confirms them.
+Summary freshness, advanced transform DSL semantics, and richer multi-source
+annotation conflict handling remain planned extensions. They must not weaken
+the Revision identity/current-data boundary above.

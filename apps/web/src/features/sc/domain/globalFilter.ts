@@ -129,6 +129,25 @@ export function scGlobalFilterHasConditions(filter: ScGlobalFilter): boolean {
   return scGlobalFilterConditionCount(filter) > 0;
 }
 
+export function combineScGlobalFilters(
+  ...filters: Array<ScGlobalFilter | null | undefined>
+): ScGlobalFilter {
+  const effective = filters.filter(
+    (filter): filter is ScGlobalFilter => !!filter && scGlobalFilterHasConditions(filter),
+  );
+  if (effective.length === 0) return emptyScGlobalFilter();
+  if (effective.length === 1) return cloneScGlobalFilter(effective[0]!);
+  return {
+    combinator: "and",
+    items: effective.flatMap((filter) => {
+      const clonedFilter = cloneScGlobalFilter(filter);
+      return clonedFilter.combinator === "and"
+        ? clonedFilter.items
+        : [createScGlobalFilterGroup({ combinator: "or", items: clonedFilter.items })];
+    }),
+  };
+}
+
 export function toScWorkflowSampleFilter(filter: ScGlobalFilter): ScWorkflowSampleFilter | null {
   const items = filter.items
     .map(toScWorkflowSampleFilterNode)

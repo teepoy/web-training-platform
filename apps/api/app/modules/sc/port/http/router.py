@@ -16,7 +16,6 @@ from fastapi.responses import Response, StreamingResponse
 
 from app.modules.auth.port.http.deps import get_current_org, get_current_user
 from app.modules.datasets.port.http.deps import (
-    DatasetServiceDep,
     RedisEventPublisherDep,
     get_dataset_storage_factory,
     get_repository,
@@ -1277,7 +1276,6 @@ async def sc_bulk_create_annotations(
     dataset_id: str,
     payload: ScBulkAnnotationRequest,
     batch_reader: ScBatchReaderDep,
-    dataset_service: DatasetServiceDep,
     repository: Annotated[DatasetRepository, Depends(get_repository)],
     storage_factory: Annotated[
         DatasetStorageFactoryPort, Depends(get_dataset_storage_factory)
@@ -1298,7 +1296,6 @@ async def sc_bulk_create_annotations(
         defect_ids
     )
 
-    created_labels: set[str] = set()
     items: list[tuple[str, str | None]] = []
     for item in payload.annotations:
         sample_id = item.sample_id or mapping.get(str(item.defect_id))
@@ -1307,16 +1304,11 @@ async def sc_bulk_create_annotations(
         label = str(item.label)
         label = None if label == "0" else label
         items.append((sample_id, label))
-        if label is not None:
-            created_labels.add(label)
 
     created = await storage.replace_annotations_for_samples(
         items, created_by=current_user.id
     )
     if items:
         await event_publisher.publish_annotation_refresh(dataset_id=dataset_id)
-
-    if created_labels:
-        await dataset_service.merge_label_space(dataset_id, org.id, created_labels)
 
     return ScBulkAnnotationResponse(created=created)

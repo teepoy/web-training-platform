@@ -104,7 +104,7 @@ const availableTabs = computed(() => {
     ...(hasDetailSampleBrowser.value ? ["samples"] : []),
     "train",
     "predict",
-    ...(supportsPredictionExport.value ? ["export"] : []),
+    "export",
     ...(value.storage_mode !== "file_shard_sparse" ? ["annotate"] : []),
   ];
 });
@@ -216,24 +216,6 @@ function handleTabBeforeLeave(name: string | number): boolean {
             </div>
           </div>
         </div>
-        <n-space class="dataset-header-actions" :wrap="true">
-          <n-button
-            v-if="!isSparse"
-            :type="dataset.task_spec?.task_type === 'sc' ? 'default' : 'primary'"
-            @click="showImportFlow = true"
-          >
-            {{ t("datasetDetail.addSamples") }}
-          </n-button>
-          <n-button @click="showExportFlow = true">
-            {{ t("datasetDetail.exportDataset") }}
-          </n-button>
-          <n-button @click="showAnnotationImportFlow = true">
-            {{ t("datasetDetail.importAnnotations") }}
-          </n-button>
-          <n-button @click="showAnnotationExportFlow = true">
-            {{ t("datasetDetail.exportAnnotations") }}
-          </n-button>
-        </n-space>
       </header>
 
       <GlobalFilterControl v-if="isScDataset" :dataset-id="id" />
@@ -296,8 +278,16 @@ function handleTabBeforeLeave(name: string | number): boolean {
         <n-tab-pane name="predict" :tab="t('datasetDetail.predict')">
           <DatasetPredictTab :dataset-id="id" :compatible-view-types="dataset.view_types ?? []" />
         </n-tab-pane>
-        <n-tab-pane v-if="supportsPredictionExport" name="export" :tab="t('datasetDetail.export')">
-          <DatasetPredictionExportTab :dataset-id="id" />
+        <n-tab-pane name="export" :tab="t('datasetDetail.export')">
+          <DatasetPredictionExportTab
+            :dataset-id="id"
+            :allow-sample-import="!isSparse"
+            :show-prediction-export="supportsPredictionExport"
+            @import-samples="showImportFlow = true"
+            @export-dataset="showExportFlow = true"
+            @import-annotations="showAnnotationImportFlow = true"
+            @export-annotations="showAnnotationExportFlow = true"
+          />
         </n-tab-pane>
         <n-tab-pane v-if="!isSparse" name="annotate" :tab="t('datasetDetail.annotate')">
           <template v-if="dataset?.ls_project_url"
@@ -411,10 +401,6 @@ function handleTabBeforeLeave(name: string | number): boolean {
   line-height: 1.25;
 }
 
-.dataset-header-actions {
-  flex: 0 0 auto;
-}
-
 .dataset-tabs {
   margin-top: 16px;
 }
@@ -458,10 +444,6 @@ function handleTabBeforeLeave(name: string | number): boolean {
     align-items: stretch;
     flex-direction: column;
     gap: 14px;
-  }
-
-  .dataset-header-actions :deep(.n-button) {
-    flex: 1 1 auto;
   }
 
   .dataset-overview-grid {

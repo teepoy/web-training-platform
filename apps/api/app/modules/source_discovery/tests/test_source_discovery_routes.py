@@ -40,8 +40,6 @@ def test_import_profile_configuration_requires_org_admin() -> None:
                 json={
                     "name": "bounded import",
                     "settings": {},
-                    "max_records_per_run": 10,
-                    "max_rows_per_dataset": 100,
                 },
             )
     finally:

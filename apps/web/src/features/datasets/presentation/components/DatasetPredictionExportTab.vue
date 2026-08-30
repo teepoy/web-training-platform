@@ -2,7 +2,23 @@
 import { widgetRegistry } from "@/app/registrations";
 import { useI18n } from "vue-i18n";
 
-const props = defineProps<{ datasetId: string }>();
+const props = withDefaults(
+  defineProps<{
+    datasetId: string;
+    allowSampleImport?: boolean;
+    showPredictionExport?: boolean;
+  }>(),
+  {
+    allowSampleImport: false,
+    showPredictionExport: true,
+  },
+);
+const emit = defineEmits<{
+  importSamples: [];
+  exportDataset: [];
+  importAnnotations: [];
+  exportAnnotations: [];
+}>();
 const { t } = useI18n();
 const exporter =
   widgetRegistry
@@ -14,7 +30,22 @@ function ignoreExportCompletion(): void {}
 
 <template>
   <section class="prediction-export-tab" data-testid="dataset-prediction-export-tab">
-    <header class="export-heading">
+    <n-space :wrap="true">
+      <n-button v-if="props.allowSampleImport" @click="emit('importSamples')">
+        {{ t("datasetDetail.addSamples") }}
+      </n-button>
+      <n-button @click="emit('exportDataset')">
+        {{ t("datasetDetail.exportDataset") }}
+      </n-button>
+      <n-button @click="emit('importAnnotations')">
+        {{ t("datasetDetail.importAnnotations") }}
+      </n-button>
+      <n-button @click="emit('exportAnnotations')">
+        {{ t("datasetDetail.exportAnnotations") }}
+      </n-button>
+    </n-space>
+
+    <header v-if="props.showPredictionExport && exporter" class="export-heading">
       <div>
         <n-text depth="3" class="eyebrow">{{ t("common.export") }}</n-text>
         <n-h3>{{ t("datasetFlows.exportResults") }}</n-h3>
@@ -24,10 +55,9 @@ function ignoreExportCompletion(): void {}
       </div>
     </header>
 
-    <n-empty v-if="!exporter" :description="t('datasetFlows.noExporter')" />
     <component
       :is="exporter.component"
-      v-else
+      v-if="props.showPredictionExport && exporter"
       :dataset-id="props.datasetId"
       :on-complete="ignoreExportCompletion"
       :on-cancel="ignoreExportCompletion"

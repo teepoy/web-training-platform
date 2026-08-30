@@ -28,6 +28,7 @@ async def execute_training_runtime(
     org_id: str = "",
     collection_id: str | None = None,
     collection_revision_id: str | None = None,
+    collection_member_ids: list[str] | None = None,
     app_context: AppContext | None = None,
 ) -> object:
     owns_context = app_context is None
@@ -40,6 +41,7 @@ async def execute_training_runtime(
             dataset_id=dataset_id,
             collection_id=collection_id,
             collection_revision_id=collection_revision_id,
+            collection_member_ids=collection_member_ids,
             org_id=org_id,
             sample_ids=sample_ids,
             sample_filter=sample_filter,
@@ -58,6 +60,7 @@ async def execute_training_runtime(
                     org_id=org_id,
                     collection_id=collection_id,
                     collection_revision_id=collection_revision_id,
+                    collection_member_ids=collection_member_ids,
                 ),
             ),
             artifact_sink=PlatformArtifactOutputSink(

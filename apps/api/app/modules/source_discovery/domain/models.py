@@ -88,8 +88,6 @@ class ImportProfileVersion:
     connector_id: str
     name: str
     settings: dict[str, object]
-    max_records_per_run: int
-    max_rows_per_dataset: int
     created_by: str
     created_at: datetime
 
@@ -129,8 +127,7 @@ class ScAutomationPartition:
     rule_id: str
     connector_id: str
     layer_id: str
-    dimension: str
-    dimension_value: str
+    device: str
     partition_key: str
     created_by: str
     created_at: datetime
@@ -148,7 +145,6 @@ class SourceRecord:
 @dataclass(frozen=True, slots=True)
 class SourceDiscoveryBatch:
     records: tuple[SourceRecord, ...]
-    has_more: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -179,7 +175,7 @@ class DiscoveryRun:
     range_end_utc: datetime | None
     timezone_name: str | None
     parent_run_id: str | None
-    snapshot_revision_id: str | None
+    collection_revision_id: str | None
     stats: dict[str, int]
     error_detail: str | None
     created_by: str

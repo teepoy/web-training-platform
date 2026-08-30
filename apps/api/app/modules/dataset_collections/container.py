@@ -9,7 +9,7 @@ from app.modules.dataset_collections.adapter.repositories import (
 )
 from app.modules.dataset_collections.app.services import (
     CollectionModelAutomationService,
-    CollectionSnapshotPublishingService,
+    CollectionRevisionPublishingService,
     DatasetCollectionService,
 )
 from app.modules.dataset_collections.domain.repository import (
@@ -21,7 +21,7 @@ from app.modules.dataset_collections.port.local import (
     CollectionExportReaderPort,
     CollectionModelManagementPort,
     CollectionPredictionAutomationPort,
-    CollectionSnapshotPublishingPort,
+    CollectionRevisionPublishingPort,
     DatasetCollectionManagementPort,
     DatasetCollectionRevisionReaderPort,
 )
@@ -109,7 +109,7 @@ class DatasetCollectionsModule(Module):
 
     @provider
     @singleton
-    def provide_snapshot_publishing(
-        self, service: CollectionSnapshotPublishingService
-    ) -> CollectionSnapshotPublishingPort:
+    def provide_revision_publishing(
+        self, service: CollectionRevisionPublishingService
+    ) -> CollectionRevisionPublishingPort:
         return service

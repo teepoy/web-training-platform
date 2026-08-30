@@ -33,7 +33,7 @@ def _execution(status: str) -> DiscoveryExecution:
             range_end_utc=now,
             timezone_name=None,
             parent_run_id=None,
-            snapshot_revision_id=None,
+            collection_revision_id=None,
             stats={},
             error_detail=None,
             created_by="system:collection-discovery",

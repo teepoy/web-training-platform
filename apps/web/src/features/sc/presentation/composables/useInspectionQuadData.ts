@@ -15,6 +15,8 @@ interface InspectionQuadDataOptions {
   waferKey: ComputedRef<number>;
   legendGroupBy: ComputedRef<ScLegendSource | null | undefined>;
   globalFilter: ComputedRef<ScGlobalFilter>;
+  mapFilter?: ComputedRef<ScGlobalFilter>;
+  lookupFilter?: ComputedRef<ScGlobalFilter>;
   tableFilter: ComputedRef<ScSampleTableFilter | undefined>;
   tableSort: ComputedRef<ScSampleTableSort | null | undefined>;
   reticle: ComputedRef<ScReticleProjection>;
@@ -36,6 +38,8 @@ export function useInspectionQuadData(options: InspectionQuadDataOptions) {
     dataSource: workbench.dataSource,
     legendGroupBy: options.legendGroupBy,
     globalFilter: options.globalFilter,
+    mapFilter: options.mapFilter,
+    lookupFilter: options.lookupFilter,
     tableFilter: options.tableFilter,
     tableSort: options.tableSort,
     reticle: options.reticle,

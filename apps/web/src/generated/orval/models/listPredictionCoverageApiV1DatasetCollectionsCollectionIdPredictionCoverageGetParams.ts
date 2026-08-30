@@ -6,5 +6,5 @@
  */
 
 export type ListPredictionCoverageApiV1DatasetCollectionsCollectionIdPredictionCoverageGetParams = {
-snapshot_id?: string | null;
+revision_id?: string | null;
 };

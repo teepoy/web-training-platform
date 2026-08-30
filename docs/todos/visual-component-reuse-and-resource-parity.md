@@ -274,7 +274,7 @@ Proposed direction:
 Completed: training and prediction now consume one typed resource-target
 selector. Dataset requests contain only `dataset_id`; Collection requests
 contain `collection_id` plus the latest ready `collection_revision_id`, and the
-UI states explicitly which snapshot will be pinned. Both histories render a
+UI states explicitly which Collection Revision will be pinned. Both histories render a
 shared linked target label and semantic status badge. Focused tests cover latest
 ready revision selection and mutually exclusive request fields.
 

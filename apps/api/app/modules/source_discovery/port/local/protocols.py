@@ -54,8 +54,6 @@ class SourceDiscoveryManagementPort(Protocol):
         connector_id: str,
         name: str,
         settings: dict[str, object],
-        max_records_per_run: int,
-        max_rows_per_dataset: int,
     ) -> ImportProfileVersion: ...
 
     async def create_rule(
@@ -80,8 +78,7 @@ class SourceDiscoveryManagementPort(Protocol):
         connector_id: str,
         import_profile_version_id: str,
         layer_id: str,
-        dimension: str,
-        dimension_value: str,
+        device: str,
     ) -> tuple[MembershipRule, MembershipRuleVersion, ScAutomationPartition]: ...
 
     async def list_sc_partitions(

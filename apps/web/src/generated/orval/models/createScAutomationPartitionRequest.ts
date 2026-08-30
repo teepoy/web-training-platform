@@ -4,7 +4,6 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { CreateScAutomationPartitionRequestDimension } from './createScAutomationPartitionRequestDimension';
 
 export interface CreateScAutomationPartitionRequest {
   /**
@@ -27,10 +26,9 @@ export interface CreateScAutomationPartitionRequest {
    * @maxLength 255
    */
   layer_id: string;
-  dimension: CreateScAutomationPartitionRequestDimension;
   /**
    * @minLength 1
    * @maxLength 255
    */
-  dimension_value: string;
+  device: string;
 }

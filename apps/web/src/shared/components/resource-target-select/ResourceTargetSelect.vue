@@ -195,7 +195,7 @@ watch(
       @search="search = $event"
     />
     <NText v-if="modelValue?.kind === 'collection'" depth="3">
-      {{ t("resources.pinnedSnapshot", { revision: modelValue.revisionNumber }) }}
+      {{ t("resources.pinnedRevision", { revision: modelValue.revisionNumber }) }}
     </NText>
     <NAlert
       v-else-if="
@@ -206,7 +206,7 @@ watch(
       "
       type="warning"
     >
-      {{ t("resources.noReadySnapshot") }}
+      {{ t("resources.noReadyRevision") }}
     </NAlert>
   </div>
 </template>

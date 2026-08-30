@@ -9,6 +9,7 @@ import type { TrainAndPredictRequestCollectionId } from './trainAndPredictReques
 import type { TrainAndPredictRequestCollectionRevisionId } from './trainAndPredictRequestCollectionRevisionId';
 import type { TrainAndPredictRequestModelVersion } from './trainAndPredictRequestModelVersion';
 import type { TrainAndPredictRequestSampleIds } from './trainAndPredictRequestSampleIds';
+import type { TrainAndPredictRequestCollectionMemberIds } from './trainAndPredictRequestCollectionMemberIds';
 import type { TrainAndPredictRequestSampleFilter } from './trainAndPredictRequestSampleFilter';
 import type { TrainAndPredictRequestPrompt } from './trainAndPredictRequestPrompt';
 import type { TrainAndPredictRequestPredictorId } from './trainAndPredictRequestPredictorId';
@@ -23,6 +24,7 @@ export interface TrainAndPredictRequest {
   target?: string;
   model_version?: TrainAndPredictRequestModelVersion;
   sample_ids?: TrainAndPredictRequestSampleIds;
+  collection_member_ids?: TrainAndPredictRequestCollectionMemberIds;
   sample_filter?: TrainAndPredictRequestSampleFilter;
   prompt?: TrainAndPredictRequestPrompt;
   predictor_id?: TrainAndPredictRequestPredictorId;

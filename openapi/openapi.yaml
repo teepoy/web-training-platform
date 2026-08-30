@@ -1499,64 +1499,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HTTPValidationError"
-  /api/v1/dataset-collections/{collection_id}/snapshot-update-status:
-    get:
-      tags:
-        - dataset-collections
-      summary: Get Snapshot Update Status
-      operationId: get_snapshot_update_status_api_v1_dataset_collections__collection_id__snapshot_update_status_get
-      parameters:
-        - name: collection_id
-          in: path
-          required: true
-          schema:
-            type: string
-            title: Collection Id
-      responses:
-        "200":
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/CollectionSnapshotUpdateStatusResponse"
-        "422":
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HTTPValidationError"
-  /api/v1/dataset-collections/{collection_id}/refresh-snapshot:
-    post:
-      tags:
-        - dataset-collections
-      summary: Refresh Snapshot
-      operationId: refresh_snapshot_api_v1_dataset_collections__collection_id__refresh_snapshot_post
-      parameters:
-        - name: collection_id
-          in: path
-          required: true
-          schema:
-            type: string
-            title: Collection Id
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreateDatasetCollectionRevisionRequest"
-      responses:
-        "200":
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/CollectionSnapshotRefreshResponse"
-        "422":
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HTTPValidationError"
   /api/v1/dataset-collections/{collection_id}/members:
     get:
       tags:
@@ -1733,7 +1675,7 @@ paths:
           schema:
             type: string
             title: Collection Id
-        - name: snapshot_id
+        - name: revision_id
           in: query
           required: false
           schema:
@@ -1742,7 +1684,7 @@ paths:
                 minLength: 1
                 maxLength: 64
               - type: "null"
-            title: Snapshot Id
+            title: Revision Id
       responses:
         "200":
           description: Successful Response
@@ -2869,6 +2811,13 @@ paths:
           schema:
             type: string
             title: Model Id
+        - name: portable
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+            title: Portable
       responses:
         "200":
           description: Successful Response
@@ -6985,93 +6934,6 @@ components:
         - active_prediction_job_id
         - active_prediction_status
       title: CollectionPredictionCoverageResponse
-    CollectionSnapshotMemberUpdateResponse:
-      properties:
-        member_id:
-          type: string
-          title: Member Id
-        dataset_id:
-          type: string
-          title: Dataset Id
-        observed_dataset_revision_id:
-          anyOf:
-            - type: string
-            - type: "null"
-          title: Observed Dataset Revision Id
-        observed_dataset_revision_number:
-          anyOf:
-            - type: integer
-            - type: "null"
-          title: Observed Dataset Revision Number
-        current_dataset_revision_id:
-          anyOf:
-            - type: string
-            - type: "null"
-          title: Current Dataset Revision Id
-        current_dataset_revision_number:
-          anyOf:
-            - type: integer
-            - type: "null"
-          title: Current Dataset Revision Number
-        update_available:
-          type: boolean
-          title: Update Available
-      type: object
-      required:
-        - member_id
-        - dataset_id
-        - observed_dataset_revision_id
-        - observed_dataset_revision_number
-        - current_dataset_revision_id
-        - current_dataset_revision_number
-        - update_available
-      title: CollectionSnapshotMemberUpdateResponse
-    CollectionSnapshotRefreshResponse:
-      properties:
-        outcome:
-          type: string
-          enum:
-            - refreshed
-            - unchanged
-          title: Outcome
-        snapshot:
-          $ref: "#/components/schemas/DatasetCollectionRevisionResponse"
-      type: object
-      required:
-        - outcome
-        - snapshot
-      title: CollectionSnapshotRefreshResponse
-    CollectionSnapshotUpdateStatusResponse:
-      properties:
-        snapshot_id:
-          anyOf:
-            - type: string
-            - type: "null"
-          title: Snapshot Id
-        snapshot_revision_number:
-          anyOf:
-            - type: integer
-            - type: "null"
-          title: Snapshot Revision Number
-        update_available:
-          type: boolean
-          title: Update Available
-        outdated_member_count:
-          type: integer
-          title: Outdated Member Count
-        members:
-          items:
-            $ref: "#/components/schemas/CollectionSnapshotMemberUpdateResponse"
-          type: array
-          title: Members
-      type: object
-      required:
-        - snapshot_id
-        - snapshot_revision_number
-        - update_available
-        - outdated_member_count
-        - members
-      title: CollectionSnapshotUpdateStatusResponse
     CreateAnnotationRequest:
       properties:
         dataset_id:
@@ -7099,11 +6961,11 @@ components:
       title: CreateAnnotationRequest
     CreateCollectionPredictionBatchRequest:
       properties:
-        snapshot_id:
+        revision_id:
           type: string
           maxLength: 64
           minLength: 1
-          title: Snapshot Id
+          title: Revision Id
         expected_default_model_id:
           type: string
           maxLength: 64
@@ -7123,7 +6985,7 @@ components:
       additionalProperties: false
       type: object
       required:
-        - snapshot_id
+        - revision_id
         - expected_default_model_id
         - request_id
         - dataset_ids
@@ -7203,20 +7065,10 @@ components:
             $ref: "#/components/schemas/JsonValue"
           type: object
           title: Settings
-        max_records_per_run:
-          type: integer
-          exclusiveMinimum: 0.0
-          title: Max Records Per Run
-        max_rows_per_dataset:
-          type: integer
-          exclusiveMinimum: 0.0
-          title: Max Rows Per Dataset
       type: object
       required:
         - name
         - settings
-        - max_records_per_run
-        - max_rows_per_dataset
       title: CreateImportProfileRequest
     CreateMembershipRuleRequest:
       properties:
@@ -7346,25 +7198,18 @@ components:
           maxLength: 255
           minLength: 1
           title: Layer Id
-        dimension:
-          type: string
-          enum:
-            - device
-            - recipe_id
-          title: Dimension
-        dimension_value:
+        device:
           type: string
           maxLength: 255
           minLength: 1
-          title: Dimension Value
+          title: Device
       type: object
       required:
         - name
         - connector_id
         - import_profile_version_id
         - layer_id
-        - dimension
-        - dimension_value
+        - device
       title: CreateScAutomationPartitionRequest
     CreateScheduleRequest:
       properties:
@@ -7852,41 +7697,17 @@ components:
         status:
           type: string
           title: Status
-        source_snapshot:
+        members:
           items:
             additionalProperties: true
             type: object
           type: array
-          title: Source Snapshot
-        row_count:
-          anyOf:
-            - type: integer
-            - type: "null"
-          title: Row Count
-        label_counts:
-          additionalProperties:
-            type: integer
-          type: object
-          title: Label Counts
+          title: Members
         manifest_uri:
           anyOf:
             - type: string
             - type: "null"
           title: Manifest Uri
-        provenance_uri:
-          anyOf:
-            - type: string
-            - type: "null"
-          title: Provenance Uri
-        manifest_format:
-          type: string
-          title: Manifest Format
-        source_resolution:
-          type: string
-          title: Source Resolution
-        reproducibility_capability:
-          type: boolean
-          title: Reproducibility Capability
         trigger_kind:
           type: string
           title: Trigger Kind
@@ -7923,14 +7744,8 @@ components:
         - target_view_contract
         - target_schema_version
         - status
-        - source_snapshot
-        - row_count
-        - label_counts
+        - members
         - manifest_uri
-        - provenance_uri
-        - manifest_format
-        - source_resolution
-        - reproducibility_capability
         - trigger_kind
         - trigger_ref
         - created_by
@@ -8133,11 +7948,11 @@ components:
             - type: string
             - type: "null"
           title: Parent Run Id
-        snapshot_revision_id:
+        collection_revision_id:
           anyOf:
             - type: string
             - type: "null"
-          title: Snapshot Revision Id
+          title: Collection Revision Id
         stats:
           additionalProperties:
             type: integer
@@ -8180,7 +7995,7 @@ components:
         - range_end_utc
         - timezone
         - parent_run_id
-        - snapshot_revision_id
+        - collection_revision_id
         - stats
         - error_detail
         - created_by
@@ -8348,12 +8163,6 @@ components:
             $ref: "#/components/schemas/JsonValue"
           type: object
           title: Settings
-        max_records_per_run:
-          type: integer
-          title: Max Records Per Run
-        max_rows_per_dataset:
-          type: integer
-          title: Max Rows Per Dataset
         created_by:
           type: string
           title: Created By
@@ -8370,8 +8179,6 @@ components:
         - connector_id
         - name
         - settings
-        - max_records_per_run
-        - max_rows_per_dataset
         - created_by
         - created_at
       title: ImportProfileVersionResponse
@@ -9972,15 +9779,9 @@ components:
         layer_id:
           type: string
           title: Layer Id
-        dimension:
+        device:
           type: string
-          enum:
-            - device
-            - recipe_id
-          title: Dimension
-        dimension_value:
-          type: string
-          title: Dimension Value
+          title: Device
         created_by:
           type: string
           title: Created By
@@ -9996,8 +9797,7 @@ components:
         - rule_id
         - connector_id
         - layer_id
-        - dimension
-        - dimension_value
+        - device
         - created_by
         - created_at
       title: ScAutomationPartitionResponse
@@ -11829,6 +11629,14 @@ components:
               minItems: 1
             - type: "null"
           title: Sample Ids
+        collection_member_ids:
+          anyOf:
+            - items:
+                type: string
+              type: array
+              minItems: 1
+            - type: "null"
+          title: Collection Member Ids
         sample_filter:
           anyOf:
             - $ref: "#/components/schemas/SampleFilterRequest"

@@ -4,7 +4,12 @@
 
 ## Context
 
-Datasets and Collections are closely related in a user's data-management journey, but they have different identities and capabilities. A Dataset is an imported or materialized unit of data; a Collection composes Dataset memberships and owns rules, Snapshots, model coverage, and resource automation. Separate sidebar entries make the journey feel fragmented, while one mixed table would make pagination, statuses, filters, and row actions ambiguous.
+Datasets and Collections are closely related in a user's data-management
+journey, but they have different identities and capabilities. A Dataset is an
+imported or materialized unit of data; a Collection composes Dataset
+memberships and owns rules, Revisions, Model coverage, and resource automation.
+Separate sidebar entries make the journey feel fragmented, while one mixed
+table would make pagination, statuses, filters, and row actions ambiguous.
 
 ## Decision
 

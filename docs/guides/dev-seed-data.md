@@ -31,7 +31,7 @@ After an inspection is published, exercise the real platform behavior:
 2. Configure the SC source connector, import profile, Collection membership
    rule, and automation through platform APIs/UI.
 3. Publish or update an inspection through the upstream mock.
-4. Observe discovery, import, Collection membership, Snapshot publication, and
+4. Observe discovery, import, Collection membership, Revision publication, and
    automated prediction through their normal product surfaces.
 
 The five-minute discovery poll may be used for the normal event path. Explicit

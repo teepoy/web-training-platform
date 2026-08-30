@@ -21,6 +21,7 @@ import {
   type ScGlobalFilterNode,
 } from "@/features/sc/domain/globalFilter";
 import { scMissingFilterOption } from "@/features/sc/domain/missingFilterValue";
+import { formatScClassNumber } from "@/features/sc/domain/classNumberDisplay";
 import type { ScDataColumn } from "@/features/sc/domain/workbenchDataSource";
 import { scGlobalFilterColumns, type ScFilterColumnDefinition } from "./scSampleTableColumns";
 import RangeFilterMenu from "@/shared/components/table-filter/RangeFilterMenu.vue";
@@ -230,7 +231,9 @@ function optionsFor(rule: ScQueryRule): Array<{ label: string; value: string | n
                   ? "sc.noPrediction"
                   : "sc.unclassified",
             )
-          : String(value),
+          : field === "class_number"
+            ? formatScClassNumber(value)
+            : String(value),
       value,
     }));
 }
@@ -300,7 +303,9 @@ function itemValueSummary(rule: ScQueryRule): string {
   const condition = rule.value.condition;
   if (!condition) return "—";
   if (condition.filterType === "set") {
-    const values = condition.values.map(String);
+    const values = condition.values.map((value) =>
+      rule.value.field === "class_number" ? formatScClassNumber(value) : String(value),
+    );
     if (values.length === 0) return "No values";
     const visible = values.slice(0, 3).join(", ");
     return values.length > 3 ? `${visible} +${values.length - 3}` : visible;

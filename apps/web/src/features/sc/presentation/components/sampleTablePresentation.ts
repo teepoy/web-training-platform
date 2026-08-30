@@ -1,5 +1,6 @@
 import type { ScDataColumn } from "@/features/sc/domain/workbenchDataSource";
 import type { ScSampleTableDisplayRow } from "@/features/sc/domain/workbenchInteraction";
+import { formatScClassNumber } from "@/features/sc/domain/classNumberDisplay";
 import { scSampleTableColumns } from "./scSampleTableColumns";
 
 export interface ScSampleTablePresentationRow
@@ -23,6 +24,7 @@ function formattedValue(
   row: ScSampleTablePresentationRow,
 ): string {
   const value = row[key];
+  if (key === "class_number") return formatScClassNumber(value);
   if (format === "integer") return String(Number(value));
   if (format === "fixed_3") {
     const numeric = Number(value);
@@ -39,7 +41,7 @@ export function sampleTablePresentationColumns(
   return scSampleTableColumns(sourceColumns, showReclassifyColumns).map(
     ({ format, ...column }) => ({
       ...column,
-      ...(format === "plain"
+      ...(format === "plain" && column.key !== "class_number"
         ? {}
         : {
             render: (row: ScSampleTablePresentationRow) => formattedValue(column.key, format, row),

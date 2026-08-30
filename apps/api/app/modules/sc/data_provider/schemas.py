@@ -10,12 +10,6 @@ ScSqlArray: TypeAlias = list[bool] | list[int] | list[float] | list[str]
 ScSqlParameter: TypeAlias = ScSqlScalar | ScSqlArray
 
 
-class ScClassifyLimitsResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
-
-    max_rows: Annotated[int, Field(gt=0)]
-
-
 class _ScSamplingRule(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, populate_by_name=True)
 

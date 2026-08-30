@@ -412,6 +412,10 @@ describe("useReclassifyPage - train defaults", () => {
           workflow_run_id: "flow-run-1",
         });
       }),
+      http.get("/api/v1/training-jobs/collection-train-job", () =>
+        HttpResponse.json({ id: "collection-train-job", status: "queued" }),
+      ),
+      http.get("/api/v1/prediction-jobs", () => HttpResponse.json([])),
       http.get("/api/v1/training-jobs/train-job-1", () =>
         HttpResponse.json({ id: "train-job-1", status: "queued" }),
       ),
@@ -448,6 +452,177 @@ describe("useReclassifyPage - train defaults", () => {
       ],
     });
     expect(trainRequests[0]?.sample_ids).toBeUndefined();
+  });
+});
+
+describe("useReclassifyPage - Collection Revision class readiness", () => {
+  it("derives active classes from the currently selected member datasets", async () => {
+    let trainRequest: Record<string, unknown> | null = null;
+    const collectionDatasetIds = ref<readonly string[]>(["ds-member-a", "ds-member-b"]);
+    const collectionMemberIds = ref<readonly string[]>(["member-a", "member-b"]);
+    const CollectionInner = defineComponent({
+      setup() {
+        const state = useReclassifyPage({ collectionDatasetIds, collectionMemberIds });
+        return { state, collectionDatasetIds };
+      },
+      render() {
+        return h("div");
+      },
+    });
+    const CollectionWrapper = defineComponent({
+      render() {
+        return h(NMessageProvider, null, { default: () => h(CollectionInner) });
+      },
+    });
+    server.use(
+      http.get("/api/v1/trainers", () =>
+        HttpResponse.json([
+          {
+            id: "resnet50-sc-v1",
+            name: "ResNet-50 SC",
+            view_type: "patch_image_v1",
+            trainable: true,
+          },
+        ]),
+      ),
+      http.get("/api/v1/datasets/ds-member-a/annotation-stats", () =>
+        HttpResponse.json({ label_counts: { Scratch: 3 } }),
+      ),
+      http.get("/api/v1/datasets/ds-member-b/annotation-stats", () =>
+        HttpResponse.json({ label_counts: { Clean: 2 } }),
+      ),
+      http.post("/api/v1/training-jobs/train-and-predict", async ({ request }) => {
+        trainRequest = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({
+          train_job: { id: "collection-train-job", status: "queued" },
+          workflow_run_id: "flow-run-1",
+        });
+      }),
+      http.get("/api/v1/training-jobs/collection-train-job", () =>
+        HttpResponse.json({ id: "collection-train-job", status: "queued" }),
+      ),
+      http.get("/api/v1/prediction-jobs", () =>
+        HttpResponse.json({ items: [], total: 0, offset: 0, limit: 200 }),
+      ),
+    );
+    const queryClient = createTestQueryClient();
+    queryClient.setQueryData(["api", "v1", "datasets", "ds-member-a"], {
+      ...DEFAULT_DATASET,
+      id: "ds-member-a",
+    });
+    const { wrapper } = await mountWithProviders(CollectionWrapper, {
+      queryClient,
+      routes: [
+        {
+          path: "/dataset-collections/:collectionId/revisions/:revisionId/classify",
+          component: CollectionWrapper,
+        },
+      ],
+      initialRoute:
+        "/dataset-collections/collection-1/revisions/revision-1/classify?mapDataset=ds-member-a",
+    });
+    mountedWrappers.push(wrapper);
+    const inner = wrapper.findComponent(CollectionInner);
+    const vm = inner.vm as unknown as {
+      state: ReturnType<typeof useReclassifyPage>;
+      collectionDatasetIds: readonly string[];
+    };
+
+    await waitForCondition(() => vm.state.activeClassCount.value === 2);
+    await waitForCondition(() => vm.state.canTrainAndPredict.value);
+    await vm.state.trainAndPredict(null);
+    expect(trainRequest).toMatchObject({
+      collection_id: "collection-1",
+      collection_revision_id: "revision-1",
+      collection_member_ids: ["member-a", "member-b"],
+      sample_filter: null,
+    });
+
+    vm.collectionDatasetIds = ["ds-member-a"];
+    await waitForCondition(() => vm.state.activeClassCount.value === 1);
+  });
+
+  it("refreshes collection class readiness after an annotation write", async () => {
+    const collectionDatasetIds = ref<readonly string[]>(["ds-member-a"]);
+    const collectionMemberIds = ref<readonly string[]>(["member-a"]);
+    let labelCounts: Record<string, number> = { Scratch: 2 };
+    let annotationStatsRequests = 0;
+    const CollectionInner = defineComponent({
+      setup() {
+        return {
+          state: useReclassifyPage({ collectionDatasetIds, collectionMemberIds }),
+        };
+      },
+      render() {
+        return h("div");
+      },
+    });
+    const CollectionWrapper = defineComponent({
+      render() {
+        return h(NMessageProvider, null, { default: () => h(CollectionInner) });
+      },
+    });
+    server.use(
+      http.get("/api/v1/trainers", () =>
+        HttpResponse.json([
+          {
+            id: "resnet50-sc-v1",
+            name: "ResNet-50 SC",
+            view_type: "patch_image_v1",
+            trainable: true,
+          },
+        ]),
+      ),
+      http.get("/api/v1/datasets/ds-member-a/annotation-stats", () => {
+        annotationStatsRequests += 1;
+        return HttpResponse.json({
+          total_samples: 3,
+          annotated_samples: Object.values(labelCounts).reduce((sum, count) => sum + count, 0),
+          unlabeled_samples: 0,
+          label_counts: labelCounts,
+        });
+      }),
+      http.post("/api/v1/datasets/ds-member-a/annotations/bulk-sc", async ({ request }) => {
+        expect(await request.json()).toEqual({
+          annotations: [
+            {
+              sample_id: "sample-1",
+              label: "Clean",
+              annotator: "platform-user",
+            },
+          ],
+        });
+        labelCounts = { Scratch: 2, Clean: 1 };
+        return HttpResponse.json({ created: 1 });
+      }),
+    );
+    const queryClient = createTestQueryClient();
+    queryClient.setQueryData(["api", "v1", "datasets", "ds-member-a"], {
+      ...DEFAULT_DATASET,
+      id: "ds-member-a",
+    });
+    const { wrapper } = await mountWithProviders(CollectionWrapper, {
+      queryClient,
+      routes: [
+        {
+          path: "/dataset-collections/:collectionId/revisions/:revisionId/classify",
+          component: CollectionWrapper,
+        },
+      ],
+      initialRoute:
+        "/dataset-collections/collection-1/revisions/revision-1/classify?mapDataset=ds-member-a",
+    });
+    mountedWrappers.push(wrapper);
+    const inner = wrapper.findComponent(CollectionInner);
+    const state = (inner.vm as unknown as { state: ReturnType<typeof useReclassifyPage> }).state;
+
+    await waitForCondition(() => state.activeClassCount.value === 1);
+    state.setAnnotationDraft("ds-member-a::sample-1", "Clean");
+    await state.submitAnnotations();
+
+    await waitForCondition(() => state.activeClassCount.value === 2);
+    expect(annotationStatsRequests).toBeGreaterThanOrEqual(2);
+    expect(state.canTrainAndPredict.value).toBe(true);
   });
 });
 

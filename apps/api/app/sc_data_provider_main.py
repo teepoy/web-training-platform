@@ -31,7 +31,6 @@ from app.modules.sc.data_provider.router import (
 )
 from app.modules.sc.domain.upstream_reader import ScUpstreamReader
 from app.modules.storage.port.local import DatasetStorageFactoryPort
-from app.shared.domain.protocols import ArtifactStorage
 from app.sc_data_provider_composition import (
     build_sc_data_provider_app_context,
     close_sc_data_provider_app_context,
@@ -48,7 +47,6 @@ def _validate_data_provider_config(config: ScDataProviderConfig) -> None:
             "SC_DATA_PROVIDER_IMPLEMENTATION=duckdb; automatic fallback is forbidden"
         )
     positive_fields = (
-        "classify_max_rows",
         "max_compressed_request_bytes",
         "max_decompressed_request_bytes",
         "max_rss_mb",
@@ -173,10 +171,8 @@ async def lifespan(data_app: FastAPI):
         collection_revision_reader=context.injector.get(
             DatasetCollectionRevisionReaderPort
         ),
-        artifact_storage=context.injector.get(ArtifactStorage),
         cache=cache,
         batch_rows=provider_config.arrow_batch_rows,
-        classify_max_rows=provider_config.classify_max_rows,
     )
     executor = DuckDbQueryExecutor(config=provider_config)
     data_app.state.sc_data_provider = ScDataProviderRuntime(

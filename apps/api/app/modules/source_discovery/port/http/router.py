@@ -128,8 +128,6 @@ async def create_import_profile(
             connector_id=connector_id,
             name=payload.name,
             settings=cast(dict[str, object], payload.settings),
-            max_records_per_run=payload.max_records_per_run,
-            max_rows_per_dataset=payload.max_rows_per_dataset,
         )
     except SourceDiscoveryError as exc:
         raise _http_error(exc) from exc
@@ -218,8 +216,7 @@ async def create_sc_automation_partition(
             connector_id=payload.connector_id,
             import_profile_version_id=payload.import_profile_version_id,
             layer_id=payload.layer_id,
-            dimension=payload.dimension,
-            dimension_value=payload.dimension_value,
+            device=payload.device,
         )
     except SourceDiscoveryError as exc:
         raise _http_error(exc) from exc

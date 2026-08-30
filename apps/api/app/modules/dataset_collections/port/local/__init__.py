@@ -4,7 +4,7 @@ from app.modules.dataset_collections.port.local.protocols import (
     CollectionAutomationAdmissionPort,
     CollectionModelManagementPort,
     CollectionPredictionAutomationPort,
-    CollectionSnapshotPublishingPort,
+    CollectionRevisionPublishingPort,
     DatasetCollectionManagementPort,
     DatasetCollectionRevisionReaderPort,
 )
@@ -15,7 +15,7 @@ __all__ = [
     "CollectionAutomationAdmissionPort",
     "CollectionModelManagementPort",
     "CollectionPredictionAutomationPort",
-    "CollectionSnapshotPublishingPort",
+    "CollectionRevisionPublishingPort",
     "DatasetCollectionManagementPort",
     "DatasetCollectionRevisionReaderPort",
 ]

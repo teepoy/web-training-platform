@@ -10,7 +10,7 @@ export interface CreateCollectionPredictionBatchRequest {
    * @minLength 1
    * @maxLength 64
    */
-  snapshot_id: string;
+  revision_id: string;
   /**
    * @minLength 1
    * @maxLength 64

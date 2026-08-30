@@ -145,12 +145,10 @@ def test_similarity_search_sample_not_found() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Samples import — label_space MUST NOT auto-expand
+# Samples import — configured label_space invariance
 #
 # Pre-fix regression test: importing a sample whose label is outside the
-# dataset's current label_space must NOT mutate task_spec.label_space.
-# Currently (pre-fix) the bug auto-expands label_space, so this test MUST
-# FAIL.  After the fix, label_space remains ["cat", "dog"].
+# Observed sample labels must not mutate the configured task_spec.label_space.
 # ---------------------------------------------------------------------------
 
 
@@ -223,12 +221,8 @@ def _cleanup_test_overrides() -> None:
     app.dependency_overrides.pop(agent_get_ls_client, None)
 
 
-def test_import_samples_auto_expand() -> None:
-    """Importing a sample with a new label must NOT expand label_space.
-
-    Pre-fix state — this test MUST fail (label_space currently auto-expands).
-    After the fix, label_space stays ["cat", "dog"].
-    """
+def test_import_samples_does_not_mutate_configured_label_space() -> None:
+    """Importing observed labels preserves the configured taxonomy."""
     try:
         _apply_test_overrides()
         with TestClient(app) as c:
@@ -259,13 +253,7 @@ def test_import_samples_auto_expand() -> None:
             task_spec = body["task_spec"]
             label_space = task_spec["label_space"]
 
-            # "bird" IS now in label_space (post-fix: merge_label_space expands)
-            assert "bird" in label_space, (
-                f"Expected 'bird' in label_space, but got {label_space}"
-            )
-            # Existing labels must still be present
-            assert "cat" in label_space
-            assert "dog" in label_space
+            assert label_space == ["cat", "dog"]
     finally:
         # Clean up dependency_overrides so _assert_clean_overrides passes
         from app.modules.auth.port.http.deps import get_current_user, get_current_org
@@ -283,17 +271,11 @@ def test_import_samples_auto_expand() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Bulk annotation — label_space auto-expand (db_full)
+# Bulk annotation — configured label_space invariance (db_full)
 # ---------------------------------------------------------------------------
 
 
-def test_bulk_auto_expand_idempotent() -> None:
-    """Sequential bulk annotations with new labels both persist in label_space.
-
-    db_full path: create dataset with label_space ["cat", "dog"],
-    annotate 100 samples with "bird", then 100 different samples with "fish".
-    Verify label_space contains all four labels (no stale-dataset overwrite).
-    """
+def test_bulk_annotations_do_not_mutate_configured_label_space() -> None:
     _apply_test_overrides()
     try:
         with TestClient(app) as c:
@@ -328,28 +310,24 @@ def test_bulk_auto_expand_idempotent() -> None:
             assert resp.status_code == 200, resp.text
             assert resp.json()["created"] == 100
 
-            # Verify label_space contains all four labels (sorted)
+            stats = c.get(f"/api/v1/datasets/{dataset_id}/annotation-stats")
+            assert stats.status_code == 200, stats.text
+            assert stats.json()["label_counts"] == {"bird": 100, "fish": 100}
+
             resp = c.get(f"/api/v1/datasets/{dataset_id}")
             assert resp.status_code == 200
             label_space = resp.json()["task_spec"]["label_space"]
-            assert label_space == ["bird", "cat", "dog", "fish"], (
-                f"Expected ['bird', 'cat', 'dog', 'fish'], got {label_space}"
-            )
+            assert label_space == ["cat", "dog"]
     finally:
         _cleanup_test_overrides()
 
 
 # ---------------------------------------------------------------------------
-# Bulk annotation — label_space auto-expand (file_shard_sparse)
+# Bulk annotation — configured label_space invariance (file_shard_sparse)
 # ---------------------------------------------------------------------------
 
 
-def test_bulk_auto_expand_idempotent_sparse() -> None:
-    """Sequential bulk annotations with new labels both persist in label_space.
-
-    file_shard_sparse path: same as db_full but with sparse storage mode.
-    Verifies that DatasetService.merge_label_space works correctly for sparse datasets too.
-    """
+def test_sparse_bulk_annotations_do_not_mutate_configured_label_space() -> None:
     _apply_test_overrides()
     try:
         with TestClient(app) as c:
@@ -395,12 +373,13 @@ def test_bulk_auto_expand_idempotent_sparse() -> None:
             assert resp.status_code == 200, resp.text
             assert resp.json()["created"] == 100
 
-            # Verify label_space contains all four labels (sorted)
+            stats = c.get(f"/api/v1/datasets/{dataset_id}/annotation-stats")
+            assert stats.status_code == 200, stats.text
+            assert stats.json()["label_counts"] == {"bird": 100, "fish": 100}
+
             resp = c.get(f"/api/v1/datasets/{dataset_id}")
             assert resp.status_code == 200
             label_space = resp.json()["task_spec"]["label_space"]
-            assert label_space == ["bird", "cat", "dog", "fish"], (
-                f"Expected ['bird', 'cat', 'dog', 'fish'], got {label_space}"
-            )
+            assert label_space == ["cat", "dog"]
     finally:
         _cleanup_test_overrides()

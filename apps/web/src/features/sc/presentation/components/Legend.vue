@@ -12,10 +12,8 @@ import {
   legendColor,
 } from "./scMapUtils";
 import type { DefectList } from "../../generated/proto/sc/v1/sample_pb";
-import {
-  DEFAULT_RECLASSIFY_CODE_NAMES,
-  DEFAULT_ROUGH_BIN_CODE_NAMES,
-} from "@/features/sc/application/reclassifyCodeNames";
+import { DEFAULT_ROUGH_BIN_CODE_NAMES } from "@/features/sc/application/reclassifyCodeNames";
+import { formatScClassNumber } from "@/features/sc/domain/classNumberDisplay";
 
 type LegendSource = "class" | "bin" | "annotation" | "prediction" | "final_class";
 type LegendKey = number | string;
@@ -54,12 +52,8 @@ function groupDisplayName(group: DefectList): string | null {
 
 function codeNameLabel(prefix: string, rawKey: string, group?: DefectList): string {
   const source = props.legendSource ?? "class";
-  const hardcodedName =
-    source === "class"
-      ? DEFAULT_RECLASSIFY_CODE_NAMES[rawKey]
-      : source === "bin"
-        ? DEFAULT_ROUGH_BIN_CODE_NAMES[rawKey]
-        : undefined;
+  if (source === "class") return `${prefix}${formatScClassNumber(rawKey)}`;
+  const hardcodedName = source === "bin" ? DEFAULT_ROUGH_BIN_CODE_NAMES[rawKey] : undefined;
   const name = hardcodedName ?? (group ? groupDisplayName(group) : null);
   return name ? `${prefix}${rawKey} - ${name}` : `${prefix}${rawKey}`;
 }
@@ -115,7 +109,7 @@ const legendData = computed(() => {
       colorKey: String(key),
       count: pts.length,
       color: props.colorMap?.[String(key)] ?? colorFn(key),
-      label: labelPrefix + key,
+      label: source === "class" ? `${labelPrefix}${formatScClassNumber(key)}` : labelPrefix + key,
     }))
     .sort((a, b) => a.key - b.key);
 });

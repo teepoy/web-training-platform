@@ -82,7 +82,7 @@ const props = withDefaults(
     zoom?: { x: number; y: number; w: number; h: number } | null;
     mapSelectionCount?: number;
 
-    /** IDs resolved against the Arrow snapshot already retained by <sc-map>. */
+    /** IDs resolved against the Arrow data already retained by <sc-map>. */
     highlightDefectIds?: number[];
     selectionDefectIds?: number[];
     highlightMapIds?: number[];

@@ -365,7 +365,6 @@ const selectedTask = ref<TaskTrackerSummary | null>(null);
 
 const formRules: FormRules = {
   target: [{ required: true, message: t("jobs.selectTarget"), trigger: ["change"] }],
-  model_id: [{ required: true, message: t("jobs.selectModel"), trigger: ["blur", "change"] }],
 };
 
 const runMutation = useRunPredictionsApiV1PredictionsRunPost({

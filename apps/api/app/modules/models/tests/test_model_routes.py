@@ -9,7 +9,9 @@ Covers:
 from __future__ import annotations
 
 import io
+import hashlib
 import json
+import zipfile
 from datetime import datetime
 
 import pytest
@@ -82,6 +84,42 @@ def test_model_artifact_upload_download_round_trip() -> None:
         assert response.content == model_artifact_bytes()
         assert response.headers["content-length"] == str(len(model_artifact_bytes()))
         assert 'filename="test-model.pt"' in response.headers["content-disposition"]
+
+
+def test_portable_model_package_supplies_job_and_format_for_import() -> None:
+    with TestClient(app) as c:
+        _, job_id, model_id = _setup(c)
+
+        exported = c.get(f"/api/v1/models/{model_id}/download?portable=true")
+
+        assert exported.status_code == 200, exported.text
+        assert exported.headers["content-type"] == "application/zip"
+        with zipfile.ZipFile(io.BytesIO(exported.content)) as package:
+            assert set(package.namelist()) == {"manifest.json", "artifact"}
+            manifest = json.loads(package.read("manifest.json"))
+            artifact = package.read("artifact")
+        assert manifest["schema"] == "platform.model-package"
+        assert manifest["version"] == 1
+        assert manifest["training_job_id"] == job_id
+        assert manifest["format"] == "pytorch"
+        assert manifest["artifact"]["sha256"] == hashlib.sha256(artifact).hexdigest()
+
+        imported = c.post(
+            "/api/v1/models/upload",
+            data={"metadata": json.dumps({"name": "portable-copy"})},
+            files={
+                "file": (
+                    "model-package.zip",
+                    io.BytesIO(exported.content),
+                    "application/zip",
+                )
+            },
+        )
+
+        assert imported.status_code == 200, imported.text
+        assert imported.json()["name"] == "portable-copy"
+        assert imported.json()["job_id"] == job_id
+        assert imported.json()["format"] == "pytorch"
 
 
 def test_upload_model_accepts_minimal_runtime_owned_metadata() -> None:

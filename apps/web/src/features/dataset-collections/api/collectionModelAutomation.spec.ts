@@ -29,7 +29,7 @@ describe("collection model automation API", () => {
   it("keeps latest successful coverage and an active rerun separately visible", async () => {
     server.use(
       http.get("/api/v1/dataset-collections/collection-1/prediction-coverage", ({ request }) => {
-        expect(new URL(request.url).searchParams.get("snapshot_id")).toBe("snapshot-4");
+        expect(new URL(request.url).searchParams.get("revision_id")).toBe("revision-4");
         return HttpResponse.json([
           {
             member_id: "member-1",
@@ -48,7 +48,7 @@ describe("collection model automation API", () => {
       }),
     );
 
-    const result = await listCollectionPredictionCoverage("collection-1", "snapshot-4");
+    const result = await listCollectionPredictionCoverage("collection-1", "revision-4");
 
     expect(result[0]?.status).toBe("model_mismatch");
     expect(result[0]?.latest_prediction_job_id).toBe("job-old");
@@ -65,7 +65,7 @@ describe("collection model automation API", () => {
           return HttpResponse.json({
             id: "batch-1",
             collection_id: "collection-1",
-            collection_revision_id: "snapshot-4",
+            collection_revision_id: "revision-4",
             model_id: "model-7",
             kind: "reconciliation",
             request_id: "request-1",
@@ -80,14 +80,14 @@ describe("collection model automation API", () => {
     );
 
     await createCollectionPredictionBatch("collection-1", {
-      snapshot_id: "snapshot-4",
+      revision_id: "revision-4",
       expected_default_model_id: "model-7",
       request_id: "request-1",
       dataset_ids: ["dataset-2", "dataset-5"],
     });
 
     expect(body).toEqual({
-      snapshot_id: "snapshot-4",
+      revision_id: "revision-4",
       expected_default_model_id: "model-7",
       request_id: "request-1",
       dataset_ids: ["dataset-2", "dataset-5"],

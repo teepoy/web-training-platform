@@ -37,13 +37,7 @@ def _create_annotation(c: TestClient, sample_id: str, dataset_id: str, label: st
     return r.json()["id"]
 
 
-def test_single_annotation_auto_expand() -> None:
-    """Creating a single annotation with a new label does NOT auto-expand
-    the dataset's task_spec.label_space (pre-fix behavior).
-
-    After the fix (adding DatasetService.merge_label_space to the single annotation
-    endpoint), this test will fail because the label WILL be expanded.
-    """
+def test_single_annotation_does_not_mutate_configured_label_space() -> None:
     import datetime
 
     from app.modules.auth.port.http.deps import get_current_org, get_current_user
@@ -109,17 +103,7 @@ def test_single_annotation_auto_expand() -> None:
             assert ds_resp2.status_code == 200, ds_resp2.text
             label_space = ds_resp2.json()["task_spec"]["label_space"]
 
-            # Post-fix: "bird" IS expanded into label_space
-            assert "bird" in label_space, (
-                f"Expected 'bird' in label_space, got {label_space}"
-            )
-            # Existing labels must still be present
-            assert "cat" in label_space, (
-                f"Expected 'cat' in label_space, got {label_space}"
-            )
-            assert "dog" in label_space, (
-                f"Expected 'dog' in label_space, got {label_space}"
-            )
+            assert label_space == ["cat", "dog"]
     finally:
         app.dependency_overrides.pop(get_current_user, None)
         app.dependency_overrides.pop(get_current_org, None)
@@ -178,15 +162,38 @@ def test_update_annotation_label() -> None:
         assert resp.json()["id"] == ann_id
 
 
+def test_annotation_overwrite_does_not_mutate_configured_label_space() -> None:
+    with TestClient(app) as c:
+        dataset_id, sample_id = _create_dataset_and_sample(c)
+        ann_id = _create_annotation(c, sample_id, dataset_id, label="temporary")
+
+        response = c.patch(
+            f"/api/v1/annotations/{ann_id}",
+            json={"dataset_id": dataset_id, "label": "rose"},
+        )
+        assert response.status_code == 200, response.text
+
+        annotations = c.get(
+            f"/api/v1/datasets/{dataset_id}/samples/{sample_id}/annotations"
+        )
+        assert annotations.status_code == 200, annotations.text
+        assert [item["label"] for item in annotations.json()] == ["rose"]
+
+        stats = c.get(f"/api/v1/datasets/{dataset_id}/annotation-stats")
+        assert stats.status_code == 200, stats.text
+        assert stats.json()["label_counts"] == {"rose": 1}
+
+        dataset = c.get(f"/api/v1/datasets/{dataset_id}")
+        assert dataset.status_code == 200, dataset.text
+        assert dataset.json()["task_spec"]["label_space"] == ["rose", "tulip"]
+
+
 # ---------------------------------------------------------------------------
 # Test 3b: Update annotation — label_space MUST NOT auto-expand
 # ---------------------------------------------------------------------------
 
 
-def test_update_annotation_auto_expand() -> None:
-    """Updating an annotation to a new label via PATCH auto-expands
-    the dataset's task_spec.label_space (post-fix behavior).
-    """
+def test_update_annotation_does_not_mutate_configured_label_space() -> None:
     import datetime
 
     from app.modules.auth.port.http.deps import get_current_org, get_current_user
@@ -258,17 +265,7 @@ def test_update_annotation_auto_expand() -> None:
             assert ds_resp2.status_code == 200, ds_resp2.text
             label_space = ds_resp2.json()["task_spec"]["label_space"]
 
-            # Post-fix: "bird" IS expanded into label_space
-            assert "bird" in label_space, (
-                f"Expected 'bird' in label_space, got {label_space}"
-            )
-            # Existing labels must still be present
-            assert "cat" in label_space, (
-                f"Expected 'cat' in label_space, got {label_space}"
-            )
-            assert "dog" in label_space, (
-                f"Expected 'dog' in label_space, got {label_space}"
-            )
+            assert label_space == ["cat", "dog"]
     finally:
         app.dependency_overrides.pop(get_current_user, None)
         app.dependency_overrides.pop(get_current_org, None)
@@ -287,6 +284,31 @@ def test_delete_annotation() -> None:
 
         resp = c.delete(f"/api/v1/annotations/{ann_id}?dataset_id={dataset_id}")
         assert resp.status_code == 204
+
+
+def test_annotation_delete_does_not_mutate_configured_label_space() -> None:
+    with TestClient(app) as c:
+        dataset_id, sample_id = _create_dataset_and_sample(c)
+        ann_id = _create_annotation(c, sample_id, dataset_id, label="temporary")
+
+        response = c.delete(
+            f"/api/v1/annotations/{ann_id}?dataset_id={dataset_id}"
+        )
+        assert response.status_code == 204, response.text
+
+        annotations = c.get(
+            f"/api/v1/datasets/{dataset_id}/samples/{sample_id}/annotations"
+        )
+        assert annotations.status_code == 200, annotations.text
+        assert annotations.json() == []
+
+        stats = c.get(f"/api/v1/datasets/{dataset_id}/annotation-stats")
+        assert stats.status_code == 200, stats.text
+        assert stats.json()["label_counts"] == {}
+
+        dataset = c.get(f"/api/v1/datasets/{dataset_id}")
+        assert dataset.status_code == 200, dataset.text
+        assert dataset.json()["task_spec"]["label_space"] == ["rose", "tulip"]
 
 
 # ---------------------------------------------------------------------------

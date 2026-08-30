@@ -50,6 +50,7 @@ describe("useSqlInspectionModel", () => {
     source: ScWorkbenchDataSource,
     options: {
       globalFilter?: ScGlobalFilter;
+      lookupFilter?: ScGlobalFilter;
       samplingIds?: Ref<Set<string> | undefined>;
       legendGroupBy?: Ref<ScLegendSource | null | undefined>;
     } = {},
@@ -61,6 +62,7 @@ describe("useSqlInspectionModel", () => {
         dataSource: ref(source),
         legendGroupBy: computed(() => options.legendGroupBy?.value ?? "class"),
         globalFilter: computed(() => options.globalFilter ?? emptyScGlobalFilter()),
+        lookupFilter: computed(() => options.lookupFilter ?? emptyScGlobalFilter()),
         tableFilter: computed(() => ({})),
         tableSort: computed(() => null),
         reticle: computed(() => ({
@@ -93,6 +95,37 @@ describe("useSqlInspectionModel", () => {
       ids: ["sample-8", "sample-3"],
     });
     expect(source.resolveSelection).not.toHaveBeenCalled();
+  });
+
+  it("scopes global-filter options to the selected Collection members", async () => {
+    const { source } = createDataSource();
+    const model = mount(source, {
+      lookupFilter: {
+        combinator: "and",
+        items: [
+          {
+            id: "selected-members",
+            field: "collection_member_id",
+            condition: { filterType: "set", values: ["member-1", "member-2"] },
+            source: { kind: "manual" },
+          },
+        ],
+      },
+    });
+    if (!model) throw new Error("model was not created");
+
+    await model.loadGlobalDistinctValues("class_number", "");
+
+    expect(source.loadDistinctValues).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        filters: [
+          {
+            combinator: "and",
+            items: [["collection_member_id", "in", ["member-1", "member-2"]]],
+          },
+        ],
+      }),
+    );
   });
 
   it("keeps select-all symbolic in the gallery query", () => {
@@ -279,7 +312,7 @@ describe("useSqlInspectionModel", () => {
     await vi.waitFor(() => expect(source.loadMap).toHaveBeenCalledTimes(2));
   });
 
-  it("publishes a legend column only with the Arrow snapshot loaded for it", async () => {
+  it("publishes a legend column only with the matching Arrow data loaded", async () => {
     const { source } = createDataSource();
     const legendGroupBy = ref<ScLegendSource>("class");
     let resolveRoughBin!: (value: Uint8Array) => void;

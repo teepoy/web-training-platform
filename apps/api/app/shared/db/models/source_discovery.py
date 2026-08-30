@@ -56,12 +56,6 @@ class SourceImportProfileVersionORM(Base):
             "profile_key", "version", name="uq_source_import_profile_version"
         ),
         CheckConstraint("version > 0", name="ck_source_import_profile_version"),
-        CheckConstraint(
-            "max_records_per_run > 0", name="ck_source_import_profile_record_cap"
-        ),
-        CheckConstraint(
-            "max_rows_per_dataset > 0", name="ck_source_import_profile_row_cap"
-        ),
     )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
@@ -75,8 +69,6 @@ class SourceImportProfileVersionORM(Base):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     settings: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
-    max_records_per_run: Mapped[int] = mapped_column(Integer, nullable=False)
-    max_rows_per_dataset: Mapped[int] = mapped_column(Integer, nullable=False)
     created_by: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
@@ -151,10 +143,6 @@ class ScAutomationPartitionORM(Base):
             "partition_key",
             name="uq_sc_automation_partition_assignment",
         ),
-        CheckConstraint(
-            "dimension IN ('device', 'recipe_id')",
-            name="ck_sc_automation_partition_dimension",
-        ),
     )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
@@ -175,8 +163,7 @@ class ScAutomationPartitionORM(Base):
         String(64), ForeignKey("source_connectors.id", ondelete="RESTRICT")
     )
     layer_id: Mapped[str] = mapped_column(String(255), nullable=False)
-    dimension: Mapped[str] = mapped_column(String(32), nullable=False)
-    dimension_value: Mapped[str] = mapped_column(String(255), nullable=False)
+    device: Mapped[str] = mapped_column(String(255), nullable=False)
     partition_key: Mapped[str] = mapped_column(String(640), nullable=False)
     created_by: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
@@ -227,7 +214,7 @@ class CollectionDiscoveryRunORM(Base):
     parent_run_id: Mapped[str | None] = mapped_column(
         String(64), ForeignKey("collection_discovery_runs.id", ondelete="SET NULL")
     )
-    snapshot_revision_id: Mapped[str | None] = mapped_column(
+    collection_revision_id: Mapped[str | None] = mapped_column(
         String(64),
         ForeignKey("dataset_collection_revisions.id", ondelete="SET NULL"),
         nullable=True,

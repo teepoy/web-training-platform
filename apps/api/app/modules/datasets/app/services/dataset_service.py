@@ -146,39 +146,3 @@ class DatasetService:
                     )
 
         return dataset, samples_out, annotations_out
-
-    async def merge_label_space(
-        self,
-        dataset_id: str,
-        org_id: str,
-        incoming_labels: set[str],
-    ) -> bool:
-        """Merge new labels into the dataset's task_spec.label_space.
-
-        Returns True if label_space was expanded, False if no-op.
-        """
-        if not incoming_labels:
-            return False
-
-        # Filter out falsy labels (None, empty string)
-        incoming_labels = {label for label in incoming_labels if label}
-        if not incoming_labels:
-            return False
-
-        dataset = await self._repository.get_dataset(dataset_id, org_id=org_id)
-        if dataset is None:
-            return False
-
-        existing = set(dataset.task_spec.label_space)
-        new_labels = incoming_labels - existing
-        if not new_labels:
-            return False
-
-        merged = sorted(existing | incoming_labels)
-        updated = dataset.task_spec.model_copy(update={"label_space": merged})
-        await self._repository.update_dataset_meta(
-            dataset_id,
-            updated.model_dump(mode="json"),
-            org_id=org_id,
-        )
-        return True

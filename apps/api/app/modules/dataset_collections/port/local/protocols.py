@@ -6,8 +6,6 @@ from app.modules.dataset_collections.domain.models import (
     CollectionPredictionBatch,
     CollectionPredictionBatchItem,
     CollectionPredictionCoverage,
-    CollectionSnapshotRefreshResult,
-    CollectionSnapshotUpdateStatus,
     DatasetCollection,
     DatasetCollectionMember,
     DatasetCollectionRevision,
@@ -46,7 +44,7 @@ class CollectionPredictionAutomationPort(Protocol):
     async def predict_new_members(
         self,
         collection_id: str,
-        snapshot_id: str,
+        revision_id: str,
         org_id: str,
         actor_id: str,
     ) -> CollectionPredictionBatch | None: ...
@@ -56,7 +54,7 @@ class CollectionPredictionAutomationPort(Protocol):
         collection_id: str,
         org_id: str,
         *,
-        snapshot_id: str | None = None,
+        revision_id: str | None = None,
     ) -> list[CollectionPredictionCoverage]: ...
 
     async def get_batch(
@@ -83,7 +81,7 @@ class CollectionModelManagementPort(CollectionPredictionAutomationPort, Protocol
         org_id: str,
         *,
         actor_id: str,
-        snapshot_id: str,
+        revision_id: str,
         expected_default_model_id: str,
         request_id: str,
         dataset_ids: tuple[str, ...],
@@ -106,7 +104,7 @@ class CollectionModelManagementPort(CollectionPredictionAutomationPort, Protocol
     ]: ...
 
 
-class CollectionSnapshotPublishingPort(Protocol):
+class CollectionRevisionPublishingPort(Protocol):
     async def create_revision(
         self,
         collection_id: str,
@@ -166,7 +164,7 @@ class CollectionAutomationAdmissionPort(Protocol):
         expected_definition_version: int,
     ) -> tuple[DatasetCollection, list[DatasetCollectionMember]]: ...
 
-    async def publish_snapshot_for_automation(
+    async def publish_revision_for_automation(
         self,
         collection_id: str,
         org_id: str,
@@ -213,19 +211,6 @@ class DatasetCollectionManagementPort(
     async def get_collection(
         self, collection_id: str, org_id: str
     ) -> DatasetCollection: ...
-
-    async def get_snapshot_update_status(
-        self, collection_id: str, org_id: str
-    ) -> CollectionSnapshotUpdateStatus: ...
-
-    async def refresh_snapshot(
-        self,
-        collection_id: str,
-        org_id: str,
-        *,
-        actor_id: str,
-        expected_definition_version: int,
-    ) -> CollectionSnapshotRefreshResult: ...
 
     async def update_collection(
         self,

@@ -32,13 +32,33 @@ describe("Legend", () => {
     expect(items).toHaveLength(3);
 
     expect(items[0].text()).toContain("0");
+    expect(items[0].text()).toContain("Unclassified");
     expect(items[0].text()).toContain("1");
 
     expect(items[1].text()).toContain("1");
+    expect(items[1].text()).toContain("Code 1");
     expect(items[1].text()).toContain("2");
 
     expect(items[2].text()).toContain("2");
     expect(items[2].text()).toContain("1");
+  });
+
+  it("shows an unknown class as its raw number", async () => {
+    const { wrapper } = await mountWithProviders(Legend, {
+      props: {
+        classNumbers: {
+          "99": {
+            $typeName: "sc.v1.DefectList",
+            count: 2,
+            defectIds: [101, 102],
+          },
+        },
+      },
+    });
+
+    const item = wrapper.get('[data-testid="sc-legend-class-99"]');
+    expect(item.text()).toContain("99");
+    expect(item.text()).not.toContain("Code 99");
   });
 
   it("emits hidden legend keys from the visible button", async () => {

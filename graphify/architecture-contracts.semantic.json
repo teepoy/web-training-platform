@@ -104,8 +104,8 @@
       "rationale": "Lightweight immutable revisions preserve audit and provenance without copying every sample, annotation, or image or claiming full reproducibility."
     },
     {
-      "id": "core_designs_collection_snapshot",
-      "label": "Collection Snapshot",
+      "id": "core_designs_collection_revision",
+      "label": "Collection Revision",
       "file_type": "concept",
       "source_file": "CORE_DESIGNS.md",
       "source_location": null,
@@ -113,7 +113,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "rationale": "Snapshots publish observed member revisions and mappings while treating complete merged data as rebuildable cache rather than archival truth."
+      "rationale": "Collection Revisions publish member identity, ordering, rules, and mappings while current Dataset and upstream values are resolved dynamically at use time."
     },
     {
       "id": "core_designs_dataset_storage_aggregate",
@@ -1331,8 +1331,8 @@
       "contributor": null
     },
     {
-      "id": "architecture_contextual_collection_automation_plan_revision_snapshot_phases",
-      "label": "Revision and Snapshot Phases",
+      "id": "architecture_contextual_collection_automation_plan_collection_revision_definition",
+      "label": "Collection Revision Definition",
       "file_type": "concept",
       "source_file": "docs/architecture/contextual-collection-automation-plan.md",
       "source_location": null,
@@ -1362,7 +1362,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "rationale": "The plan excludes content hashing, cross-collection dataset reuse, historical backfill, automatic promotion, arbitrary workflows, partitions, raw cron editing, and automatic snapshot refresh."
+      "rationale": "The plan excludes content hashing, cross-collection dataset reuse, historical backfill, automatic promotion, arbitrary workflows, product partitions, raw cron editing, and republishing Collection Revisions for member-data-only changes."
     },
     {
       "id": "architecture_system_design_diagram_system_design_diagram",
@@ -1481,7 +1481,7 @@
     },
     {
       "source": "core_designs_core_designs",
-      "target": "core_designs_collection_snapshot",
+      "target": "core_designs_collection_revision",
       "relation": "references",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
@@ -2971,7 +2971,7 @@
     },
     {
       "source": "architecture_contextual_collection_automation_plan_contextual_collection_automation_implementation_plan",
-      "target": "architecture_contextual_collection_automation_plan_revision_snapshot_phases",
+      "target": "architecture_contextual_collection_automation_plan_collection_revision_definition",
       "relation": "references",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
@@ -3010,7 +3010,7 @@
       "weight": 1.0
     },
     {
-      "source": "architecture_contextual_collection_automation_plan_revision_snapshot_phases",
+      "source": "architecture_contextual_collection_automation_plan_collection_revision_definition",
       "target": "core_designs_dataset_revision",
       "relation": "implements",
       "confidence": "EXTRACTED",
@@ -3020,8 +3020,8 @@
       "weight": 1.0
     },
     {
-      "source": "architecture_contextual_collection_automation_plan_revision_snapshot_phases",
-      "target": "core_designs_collection_snapshot",
+      "source": "architecture_contextual_collection_automation_plan_collection_revision_definition",
+      "target": "core_designs_collection_revision",
       "relation": "implements",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
@@ -3133,14 +3133,14 @@
       "source_file": "docs/architecture/overview.md"
     },
     {
-      "id": "resource_automation_revision_snapshot_model",
-      "label": "Resource Automation Revision and Snapshot Model",
+      "id": "resource_automation_revision_model",
+      "label": "Resource Automation Revision Model",
       "nodes": [
         "core_designs_resource_automation",
         "core_designs_dataset_revision",
-        "core_designs_collection_snapshot",
+        "core_designs_collection_revision",
         "architecture_contextual_collection_automation_plan_contextual_resource_automation",
-        "architecture_contextual_collection_automation_plan_revision_snapshot_phases"
+        "architecture_contextual_collection_automation_plan_collection_revision_definition"
       ],
       "relation": "implement",
       "confidence": "EXTRACTED",

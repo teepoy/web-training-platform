@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from typing import cast
 from zoneinfo import ZoneInfo
@@ -41,6 +42,7 @@ _FIELD_COLUMNS = {
     "images": "images",
 }
 _SC_TIMEZONE = ZoneInfo("Asia/Shanghai")
+_SOURCE_DISCOVERY_BATCH_ROWS = 256
 
 _TEXT_OPERATORS = (
     FilterOperator.EQ,
@@ -116,22 +118,28 @@ class ScSourceRecordProvider:
         condition: FilterGroup,
         start_utc: datetime,
         end_utc: datetime,
-        max_records: int,
-    ) -> SourceDiscoveryBatch:
+    ) -> AsyncIterator[SourceDiscoveryBatch]:
         del connector
         frame = await self._filtered_frame(
             condition=condition,
             start_utc=start_utc,
             end_utc=end_utc,
         )
-        limited = await frame.limit(max_records + 1).collect_async()
-        has_more = limited.height > max_records
-        if has_more:
-            limited = limited.head(max_records)
-        return SourceDiscoveryBatch(
-            records=tuple(self._record(row) for row in limited.iter_rows(named=True)),
-            has_more=has_more,
-        )
+        offset = 0
+        while True:
+            matched = await frame.slice(
+                offset, _SOURCE_DISCOVERY_BATCH_ROWS
+            ).collect_async()
+            if matched.is_empty():
+                return
+            yield SourceDiscoveryBatch(
+                records=tuple(
+                    self._record(row) for row in matched.iter_rows(named=True)
+                ),
+            )
+            if matched.height < _SOURCE_DISCOVERY_BATCH_ROWS:
+                return
+            offset += matched.height
 
     async def estimate(
         self,
@@ -141,9 +149,8 @@ class ScSourceRecordProvider:
         start_utc: datetime,
         end_utc: datetime,
         representative_limit: int,
-        max_records: int,
     ) -> SourceEstimate:
-        del connector, max_records
+        del connector
         frame = await self._filtered_frame(
             condition=condition,
             start_utc=start_utc,
@@ -189,7 +196,6 @@ class ScSourceRecordProvider:
             org_id=org_id,
             created_by=actor_id,
             label_space=label_space,
-            max_rows=profile.max_rows_per_dataset,
         )
         if result.status != "completed" or not result.dataset_id:
             raise RuntimeError(result.error or "SC import did not create a Dataset")

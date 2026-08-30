@@ -51,27 +51,15 @@ def test_yolo_runtime_defaults() -> None:
     assert ultralytics.YOLO_INPUT_CHANNELS == 3
 
 
-def test_yolo_dataset_builds_defective_template_difference_channels(
-    tmp_path: Path,
-) -> None:
-    parquet_path = tmp_path / "channel-stack.parquet"
-    pq.write_table(
-        pa.table(
-            {
-                "sample_id": ["sample-a"],
-                "patch_defective_bytes": [_image_bytes(0)],
-                "patch_template_bytes": [_image_bytes(255)],
-            }
-        ),
-        parquet_path,
-    )
-
-    dataset = ultralytics._ScYoloPredictionDataset(
-        parquet_path,
+def test_yolo_preprocessing_builds_defective_template_difference_channels() -> None:
+    image = ultralytics._preprocess_grayscale_pair(
+        {
+            "sample_id": "sample-a",
+            "patch_defective_bytes": _image_bytes(0),
+            "patch_template_bytes": _image_bytes(255),
+        },
         image_size=128,
     )
-    sample = next(iter(dataset))
-    image = sample["image"]
 
     assert isinstance(image, Tensor)
     assert tuple(image.shape) == (3, 128, 128)
@@ -238,101 +226,6 @@ def test_yolo_training_requires_validation_sample_for_every_class(
                 workers=0,
             )
         )
-
-
-def test_yolo_prediction_defaults_to_256_and_preprocesses_in_dataset_workers(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    row_count = 257
-    parquet_path = tmp_path / "prediction.parquet"
-    defective = _image_bytes(0)
-    reference = _image_bytes(255)
-    pq.write_table(
-        pa.table(
-            {
-                "sample_id": [f"sample-{index}" for index in range(row_count)],
-                "patch_defective_bytes": [defective] * row_count,
-                "patch_template_bytes": [reference] * row_count,
-            }
-        ),
-        parquet_path,
-        row_group_size=64,
-    )
-    observed_batches: list[tuple[int, ...]] = []
-    checkpoint_path = tmp_path / "checkpoint.pt"
-    checkpoint_path.write_bytes(b"native checkpoint")
-    monkeypatch.setattr(
-        ultralytics,
-        "_load_native_yolo_checkpoint",
-        lambda _path, _device: (
-            _TinyClassifier(observed_batches),
-            {"train_args": {"imgsz": 128}},
-        ),
-    )
-    monkeypatch.setattr(
-        ultralytics,
-        "select_torch_device",
-        lambda _torch: torch.device("cpu"),
-    )
-
-    predictions = list(
-        ultralytics.predict_yolo(
-            checkpoint_path,
-            ["a", "c"],
-            parquet_path,
-            workers=2,
-        )
-    )
-
-    assert len(predictions) == row_count
-    assert observed_batches == [(256, 3, 128, 128), (1, 3, 128, 128)]
-    assert {prediction.label for prediction in predictions} <= {"a", "c"}
-
-
-def test_yolo_prediction_reports_image_preprocess_errors(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    parquet_path = tmp_path / "prediction-errors.parquet"
-    pq.write_table(
-        pa.table(
-            {
-                "sample_id": ["valid", "missing"],
-                "patch_defective_bytes": [_image_bytes(0), None],
-                "patch_template_bytes": [_image_bytes(255), _image_bytes(255)],
-            }
-        ),
-        parquet_path,
-    )
-    checkpoint_path = tmp_path / "checkpoint.pt"
-    checkpoint_path.write_bytes(b"native checkpoint")
-    monkeypatch.setattr(
-        ultralytics,
-        "_load_native_yolo_checkpoint",
-        lambda _path, _device: (
-            _TinyClassifier(),
-            {"train_args": {"imgsz": 128}},
-        ),
-    )
-    monkeypatch.setattr(
-        ultralytics,
-        "select_torch_device",
-        lambda _torch: torch.device("cpu"),
-    )
-
-    predictions = list(
-        ultralytics.predict_yolo(
-            checkpoint_path,
-            ["a", "c"],
-            parquet_path,
-            workers=0,
-        )
-    )
-
-    assert predictions[0].error is None
-    assert predictions[1].sample_id == "missing"
-    assert "missing patch_defective" in (predictions[1].error or "")
 
 
 def test_yolo_stream_prediction_processes_every_sample_and_final_partial_batch(

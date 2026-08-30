@@ -48,12 +48,12 @@
       ]
     },
     {
-      "name": "source admission to collection snapshot",
+      "name": "source admission to collection revision",
       "context": "architecture-contracts",
       "nodes": [
         "context_ingestion_automation",
         "contract_source_admission",
-        "contract_collection_snapshot"
+        "contract_collection_revision"
       ]
     }
   ],
@@ -151,7 +151,7 @@
     {
       "name": "data-resources",
       "description": "Dataset, storage, Collection, and Library behavior across API and Web.",
-      "aliases": ["dataset", "storage", "collection", "library", "revision", "snapshot"],
+      "aliases": ["dataset", "storage", "collection", "library", "revision"],
       "roots": [
         "apps/api/app/modules/datasets",
         "apps/api/app/modules/storage",

@@ -241,7 +241,7 @@ describe("InspectionQuad state ownership", () => {
     expect(filterModal.props("numericRangeLoading")).toEqual({ "area-item": false });
   });
 
-  it("owns filter updates and exposes only a cloned workflow snapshot", async () => {
+  it("owns filter updates and exposes only a cloned workflow filter", async () => {
     const { wrapper } = await mountWithProviders(InspectionQuad, {
       props: requiredProps,
     });
@@ -269,9 +269,9 @@ describe("InspectionQuad state ownership", () => {
     const exposed = wrapper.vm as unknown as {
       getGlobalFilter: () => ScGlobalFilter;
     };
-    const snapshot = exposed.getGlobalFilter();
-    expect(snapshot).toEqual(filter);
-    const condition = snapshot.items[0]?.condition;
+    const clonedFilter = exposed.getGlobalFilter();
+    expect(clonedFilter).toEqual(filter);
+    const condition = clonedFilter.items[0]?.condition;
     if (condition?.filterType === "set") condition.values.push(99);
     expect(exposed.getGlobalFilter()).toEqual(filter);
     expect(wrapper.emitted("update:global-filter")).toBeUndefined();

@@ -31,7 +31,7 @@ from app.shared.infrastructure.label_studio.read_repository import LsReadReposit
 
 
 class IDatasetService(Protocol):
-    """Dataset-level operations (label-space merge, LS export)."""
+    """Dataset-level status, response, and Label Studio export operations."""
 
     def to_response(self, dataset: Dataset) -> Dataset:
         """Enrich a dataset with computed response fields such as its LS URL."""
@@ -46,15 +46,6 @@ class IDatasetService(Protocol):
         ls_read_repository: LsReadRepository,
     ) -> tuple[Dataset, list[Any], list[Annotation]]:
         """Return (dataset, samples, annotations) sourced from Label Studio."""
-        ...
-
-    async def merge_label_space(
-        self,
-        dataset_id: str,
-        org_id: str,
-        incoming_labels: set[str],
-    ) -> bool:
-        """Merge new labels into the dataset's task_spec.label_space."""
         ...
 
 

@@ -17,14 +17,12 @@ from app.modules.dataset_collections.domain.repository import (
 )
 from app.modules.dataset_collections.port.http.deps import (
     CollectionModelManagementDep,
-    CollectionSnapshotPublishingDep,
+    CollectionRevisionPublishingDep,
     DatasetCollectionServiceDep,
 )
 from app.modules.dataset_collections.port.http.schemas import (
     CollectionPredictionBatchResponse,
     CollectionPredictionCoverageResponse,
-    CollectionSnapshotRefreshResponse,
-    CollectionSnapshotUpdateStatusResponse,
     CreateCollectionPredictionBatchRequest,
     CreateDatasetCollectionRequest,
     CreateDatasetCollectionRevisionRequest,
@@ -131,55 +129,6 @@ async def get_collection(
     except DatasetCollectionNotFoundError as exc:
         raise _http_error(exc) from exc
     return DatasetCollectionResponse.from_domain(collection)
-
-
-@router.get(
-    "/{collection_id}/snapshot-update-status",
-    response_model=CollectionSnapshotUpdateStatusResponse,
-)
-async def get_snapshot_update_status(
-    collection_id: str,
-    current_user: Annotated[User, Depends(get_current_user)],
-    org: Annotated[Organization, Depends(get_current_org)],
-    service: DatasetCollectionServiceDep,
-) -> CollectionSnapshotUpdateStatusResponse:
-    del current_user
-    try:
-        status = await service.get_snapshot_update_status(collection_id, org.id)
-    except (
-        DatasetCollectionNotFoundError,
-        DatasetCollectionValidationError,
-    ) as exc:
-        raise _http_error(exc) from exc
-    return CollectionSnapshotUpdateStatusResponse.from_domain(status)
-
-
-@router.post(
-    "/{collection_id}/refresh-snapshot",
-    response_model=CollectionSnapshotRefreshResponse,
-)
-async def refresh_snapshot(
-    collection_id: str,
-    payload: CreateDatasetCollectionRevisionRequest,
-    current_user: Annotated[User, Depends(get_current_user)],
-    org: Annotated[Organization, Depends(get_current_org)],
-    service: DatasetCollectionServiceDep,
-) -> CollectionSnapshotRefreshResponse:
-    try:
-        result = await service.refresh_snapshot(
-            collection_id,
-            org.id,
-            actor_id=current_user.id,
-            expected_definition_version=payload.expected_definition_version,
-        )
-    except (
-        DatasetCollectionConflictError,
-        DatasetCollectionNotFoundError,
-        DatasetCollectionPermissionError,
-        DatasetCollectionValidationError,
-    ) as exc:
-        raise _http_error(exc) from exc
-    return CollectionSnapshotRefreshResponse.from_domain(result)
 
 
 @router.patch("/{collection_id}", response_model=DatasetCollectionResponse)
@@ -364,12 +313,12 @@ async def list_prediction_coverage(
     current_user: Annotated[User, Depends(get_current_user)],
     org: Annotated[Organization, Depends(get_current_org)],
     service: CollectionModelManagementDep,
-    snapshot_id: str | None = Query(default=None, min_length=1, max_length=64),
+    revision_id: str | None = Query(default=None, min_length=1, max_length=64),
 ) -> list[CollectionPredictionCoverageResponse]:
     del current_user
     try:
         coverage = await service.list_coverage(
-            collection_id, org.id, snapshot_id=snapshot_id
+            collection_id, org.id, revision_id=revision_id
         )
     except (DatasetCollectionNotFoundError, DatasetCollectionValidationError) as exc:
         raise _http_error(exc) from exc
@@ -392,7 +341,7 @@ async def create_prediction_batch(
             collection_id,
             org.id,
             actor_id=current_user.id,
-            snapshot_id=payload.snapshot_id,
+            revision_id=payload.revision_id,
             expected_default_model_id=payload.expected_default_model_id,
             request_id=payload.request_id,
             dataset_ids=tuple(payload.dataset_ids),
@@ -467,7 +416,7 @@ async def create_revision(
     payload: CreateDatasetCollectionRevisionRequest,
     current_user: Annotated[User, Depends(get_current_user)],
     org: Annotated[Organization, Depends(get_current_org)],
-    service: CollectionSnapshotPublishingDep,
+    service: CollectionRevisionPublishingDep,
 ) -> DatasetCollectionRevisionResponse:
     try:
         revision = await service.create_revision(

@@ -206,7 +206,6 @@ Files and features:
 - `apps/web/src/features/datasets/presentation/components/DatasetSparseSummary.vue`
 - `apps/web/src/features/dataset-collections/presentation/pages/DatasetCollectionListView.vue`
 - `apps/web/src/features/dataset-collections/presentation/pages/DatasetCollectionDetailView.vue`
-- `apps/web/src/features/dataset-collections/presentation/components/CollectionSnapshotUpdateAlert.vue`
 - `apps/web/src/features/models/presentation/pages/ModelsView.vue`
 - `apps/web/src/features/models/presentation/components/RemoteModelPicker.vue`
 - `apps/web/src/features/training/presentation/pages/TrainingJobsView.vue`

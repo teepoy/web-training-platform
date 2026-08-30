@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onBeforeUnmount, ref } from "vue";
+import { computed, onMounted, onBeforeUnmount, ref, watch } from "vue";
 import { useQuery } from "@tanstack/vue-query";
 import {
   NSpin,
@@ -31,6 +31,7 @@ import ReclassifyTaskProgressModal from "../components/ReclassifyTaskProgressMod
 import {
   cloneScGlobalFilter,
   emptyScGlobalFilter,
+  scGlobalFilterHasConditions,
   scGlobalFilterConditions,
   type ScFilterCondition,
   type ScGlobalFilter,
@@ -48,19 +49,21 @@ import {
   getRevisionApiV1DatasetCollectionsCollectionIdRevisionsRevisionIdGet,
 } from "@/generated/orval/endpoints/api";
 
-const page = useReclassifyPage();
 const themeVars = useThemeVars();
 const message = useMessage();
 const router = useRouter();
 const route = useRoute();
 const { t } = useI18n();
-const datasetId = computed(() => route.params.id as string);
+const datasetId = computed(() => {
+  const value = route.params.id;
+  return typeof value === "string" ? value : "";
+});
 const collectionId = computed(() => {
   const value = route.params.collectionId;
   return typeof value === "string" && value.length > 0 ? value : null;
 });
 const collectionRevisionId = computed(() => {
-  const value = route.query.revisionId;
+  const value = route.params.revisionId;
   return typeof value === "string" && value.length > 0 ? value : null;
 });
 const collectionStackQuery = useQuery({
@@ -80,18 +83,169 @@ const collectionStackQuery = useQuery({
       getRevisionApiV1DatasetCollectionsCollectionIdRevisionsRevisionIdGet(id, revisionId),
     ]);
     const datasets = await Promise.all(
-      revision.source_snapshot.map((source) =>
+      revision.members.map((source) =>
         getDatasetApiV1DatasetsDatasetIdGet(String(source.source_dataset_id)),
       ),
     );
     return { collection, revision, datasets };
   },
 });
-const collectionSnapshotLabel = computed(() => {
+interface CollectionRevisionMember {
+  memberId: string;
+  datasetId: string;
+  datasetName: string;
+  inspectionTime: string | null;
+  waferKey: string | null;
+}
+
+const collectionMembers = computed<CollectionRevisionMember[]>(() => {
+  const stack = collectionStackQuery.data.value;
+  if (!stack) return [];
+  const datasetsById = new Map(
+    stack.datasets.map((dataset) => [String(dataset.id ?? ""), dataset]),
+  );
+  return stack.revision.members.flatMap((source) => {
+    const memberId = String(source.member_id ?? "");
+    const sourceDatasetId = String(source.source_dataset_id ?? "");
+    if (!memberId || !sourceDatasetId) return [];
+    const dataset = datasetsById.get(sourceDatasetId);
+    const inspectionTime = dataset?.dataset_meta?.source_inspection_time;
+    const waferKey = dataset?.dataset_meta?.source_wafer_key;
+    return [
+      {
+        memberId,
+        datasetId: sourceDatasetId,
+        datasetName: dataset?.name ?? sourceDatasetId,
+        inspectionTime: typeof inspectionTime === "string" ? inspectionTime : null,
+        waferKey:
+          typeof waferKey === "string" || typeof waferKey === "number" ? String(waferKey) : null,
+      },
+    ];
+  });
+});
+const selectedMemberIds = ref<string[]>([]);
+const activeMapMemberId = ref<string | null>(null);
+const memberOptions = computed(() =>
+  collectionMembers.value.map((member) => ({
+    label: [member.datasetName, member.inspectionTime, member.waferKey && `W${member.waferKey}`]
+      .filter(Boolean)
+      .join(" · "),
+    value: member.memberId,
+  })),
+);
+const selectedMemberSet = computed(() => new Set(selectedMemberIds.value));
+const activeMapOptions = computed(() =>
+  memberOptions.value.filter((option) => selectedMemberSet.value.has(option.value)),
+);
+const activeMapMember = computed(
+  () =>
+    collectionMembers.value.find((member) => member.memberId === activeMapMemberId.value) ?? null,
+);
+const selectedCollectionDatasetIds = computed(() =>
+  collectionMembers.value
+    .filter((member) => selectedMemberSet.value.has(member.memberId))
+    .map((member) => member.datasetId),
+);
+const memberScopeFilter = computed<ScGlobalFilter>(() => {
+  if (!collectionId.value || selectedMemberIds.value.length === collectionMembers.value.length) {
+    return emptyScGlobalFilter();
+  }
+  return {
+    combinator: "and",
+    items: [
+      {
+        id: "collection-member-scope",
+        field: "collection_member_id",
+        condition: { filterType: "set", values: [...selectedMemberIds.value] },
+        source: { kind: "manual" },
+      },
+    ],
+  };
+});
+const activeMapScopeFilter = computed<ScGlobalFilter>(() =>
+  activeMapMemberId.value
+    ? {
+        combinator: "and",
+        items: [
+          {
+            id: "collection-active-map-member",
+            field: "collection_member_id",
+            condition: { filterType: "set", values: [activeMapMemberId.value] },
+            source: { kind: "manual" },
+          },
+        ],
+      }
+    : emptyScGlobalFilter(),
+);
+
+function queryString(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function queryMembers(value: unknown): string[] {
+  return queryString(value)?.split(",").filter(Boolean) ?? [];
+}
+
+function syncCollectionScopeQuery(): void {
+  if (!collectionId.value || !activeMapMember.value) return;
+  const allSelected = selectedMemberIds.value.length === collectionMembers.value.length;
+  const query = {
+    ...route.query,
+    ...(allSelected ? { members: undefined } : { members: selectedMemberIds.value.join(",") }),
+    mapMember: activeMapMember.value.memberId,
+    mapDataset: activeMapMember.value.datasetId,
+  };
+  void router.replace({ query });
+}
+
+watch(
+  [collectionMembers, () => route.query.members, () => route.query.mapMember],
+  ([members, requestedMembers, requestedMapMember]) => {
+    if (!collectionId.value || members.length === 0) return;
+    const allowed = new Set(members.map((member) => member.memberId));
+    const requested = queryMembers(requestedMembers).filter((memberId) => allowed.has(memberId));
+    selectedMemberIds.value =
+      requested.length > 0 ? requested : members.map((member) => member.memberId);
+    const requestedMap = queryString(requestedMapMember);
+    activeMapMemberId.value =
+      requestedMap && selectedMemberIds.value.includes(requestedMap)
+        ? requestedMap
+        : (selectedMemberIds.value[0] ?? null);
+    syncCollectionScopeQuery();
+  },
+  { immediate: true },
+);
+
+function updateSelectedMembers(memberIds: string[]): void {
+  if (memberIds.length === 0) return;
+  selectedMemberIds.value = memberIds;
+  page.clearSelection();
+  page.clearGalleryRandomSamplingDefectIds();
+  if (!activeMapMemberId.value || !memberIds.includes(activeMapMemberId.value)) {
+    activeMapMemberId.value = memberIds[0] ?? null;
+  }
+  syncCollectionScopeQuery();
+}
+
+function updateActiveMapMember(memberId: string): void {
+  activeMapMemberId.value = memberId;
+  syncCollectionScopeQuery();
+}
+
+const page = useReclassifyPage({
+  collectionDatasetIds: selectedCollectionDatasetIds,
+  collectionMemberIds: computed(() => selectedMemberIds.value),
+});
+const pageErrorMessage = computed(() =>
+  collectionStackQuery.error.value
+    ? toUserMessage(collectionStackQuery.error.value, t("sc.datasetLoadFailed"))
+    : page.errorMessage.value,
+);
+const collectionRevisionLabel = computed(() => {
   const revisionNumber = collectionStackQuery.data.value?.revision.revision_number;
   return revisionNumber === undefined
-    ? t("sc.fixedSnapshot")
-    : t("sc.snapshot", { revision: revisionNumber });
+    ? t("sc.fixedRevision")
+    : t("sc.revision", { revision: revisionNumber });
 });
 const globalFilterTriggerTarget = ref<HTMLElement | null>(null);
 const taskInsightVisible = ref(false);
@@ -219,7 +373,10 @@ const containerStyle = computed(() => ({
 }));
 
 function goBack() {
-  window.location.assign(router.resolve(`/datasets/${datasetId.value}`).href);
+  const target = collectionId.value
+    ? `/dataset-collections/${collectionId.value}`
+    : `/datasets/${datasetId.value}`;
+  window.location.assign(router.resolve(target).href);
 }
 
 const selectedDraftCount = computed(() => {
@@ -250,12 +407,12 @@ async function handleTrainAndPredictClick(): Promise<void> {
     message.error(t("sc.dataLoading"));
     return;
   }
-  const workflowFilter = page.resolveTrainSampleFilter();
+  const userFilter = page.resolveTrainSampleFilter();
   filteredWorkflowFilter.value = null;
-  if (workflowFilter) {
+  if (userFilter && scGlobalFilterHasConditions(userFilter)) {
     isPreparingFilteredWorkflow.value = true;
     try {
-      const resolved = await quad.resolveWorkflowSampleFilter(workflowFilter);
+      const resolved = await quad.resolveWorkflowSampleFilter(userFilter);
       filteredWorkflowFilter.value = resolved.filter;
       filteredWorkflowCount.value = resolved.rowCount;
       filterConfirmationVisible.value = true;
@@ -266,7 +423,8 @@ async function handleTrainAndPredictClick(): Promise<void> {
     }
     return;
   }
-  await submitTrainAndPredict();
+  await page.trainAndPredict(null);
+  if (page.trainPredictTaskId.value) taskInsightVisible.value = true;
 }
 
 async function submitTrainAndPredict(): Promise<void> {
@@ -411,9 +569,9 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
     <div class="sc-classify-page" :style="containerStyle">
       <!-- Error state -->
       <NResult
-        v-if="page.isError.value"
+        v-if="page.isError.value || collectionStackQuery.isError.value"
         status="error"
-        :title="page.errorMessage.value"
+        :title="pageErrorMessage"
         class="sc-state"
       >
         <template #footer>
@@ -422,7 +580,10 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
       </NResult>
 
       <!-- Loading state -->
-      <div v-else-if="page.isLoading.value" class="sc-state">
+      <div
+        v-else-if="page.isLoading.value || collectionStackQuery.isLoading.value"
+        class="sc-state"
+      >
         <NSpin size="large" />
       </div>
 
@@ -446,7 +607,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
                     }}
                   </NText>
                   <NTag v-if="collectionId" size="small" type="info">
-                    {{ collectionSnapshotLabel }}
+                    {{ collectionRevisionLabel }}
                   </NTag>
                   <NTag v-if="collectionId" size="small" :bordered="false">
                     {{
@@ -461,7 +622,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
                     <template #trigger>
                       <NText depth="3" class="sc-dataset-name">
                         {{
-                          t("sc.activeDataset", {
+                          t("sc.activeMapInspection", {
                             name: page.dataset.value?.name ?? t("sc.reclassify"),
                           })
                         }}
@@ -498,6 +659,29 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
           </div>
 
           <div class="sc-action-row">
+            <div v-if="collectionId" class="sc-collection-scope-controls">
+              <NSelect
+                :value="selectedMemberIds"
+                :options="memberOptions"
+                multiple
+                filterable
+                size="small"
+                :placeholder="t('sc.selectInspections')"
+                :consistent-menu-width="false"
+                data-testid="sc-collection-member-select"
+                @update:value="updateSelectedMembers"
+              />
+              <NSelect
+                :value="activeMapMemberId"
+                :options="activeMapOptions"
+                filterable
+                size="small"
+                :placeholder="t('sc.activeMapInspectionPlaceholder')"
+                :consistent-menu-width="false"
+                data-testid="sc-active-map-member-select"
+                @update:value="updateActiveMapMember"
+              />
+            </div>
             <div class="sc-reclassify-filter-actions" data-testid="sc-filter-actions">
               <div
                 ref="globalFilterTriggerTarget"
@@ -596,6 +780,8 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
             :dataset-id="page.datasetId.value"
             :collection-id="collectionId ?? undefined"
             :collection-revision-id="collectionRevisionId ?? undefined"
+            :scope-filter="memberScopeFilter"
+            :map-scope-filter="activeMapScopeFilter"
             :inspection-time="page.inspectionContext.value.inspectionTime"
             :wafer-key="Number(page.inspectionContext.value.waferKey)"
             :wafer-geometry="page.waferGeometry.value"
@@ -809,6 +995,13 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
   flex: 0 0 auto;
 }
 
+.sc-collection-scope-controls {
+  display: grid;
+  min-width: min(42vw, 560px);
+  grid-template-columns: minmax(220px, 1fr) minmax(180px, 0.8fr);
+  gap: 8px;
+}
+
 .sc-reclassify-global-filter-action {
   display: flex;
   align-items: center;
@@ -865,6 +1058,11 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
     justify-content: flex-end;
   }
 
+  .sc-collection-scope-controls {
+    width: 100%;
+    min-width: 0;
+  }
+
   .sc-dataset-title {
     flex: 1 1 auto;
   }
@@ -913,6 +1111,10 @@ onBeforeUnmount(() => document.removeEventListener("keydown", handleKeydown));
   .sc-reclassify-filter-actions {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .sc-collection-scope-controls {
+    grid-template-columns: 1fr;
   }
 
   .sc-trainer-select {

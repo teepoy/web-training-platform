@@ -9,7 +9,7 @@ The tracked contract is `graphify/federation.json`. Generated graphs remain loca
 | Context                  | Primary questions                                                                   |
 | ------------------------ | ----------------------------------------------------------------------------------- |
 | `architecture-contracts` | Composition, ports, registries, OpenAPI/protobuf, data-plane and runtime boundaries |
-| `data-resources`         | Dataset, storage, Collection, Revision/Snapshot, and Library                        |
+| `data-resources`         | Dataset, storage, Collection, Revision, and Library                                 |
 | `ml-lifecycle`           | Model, training, prediction, jobs, Prefect dispatch, and artifacts                  |
 | `sc-domain`              | SC inspection, review sampling, image parsing, upstream data, and SC ML             |
 | `ingestion-automation`   | Resource automation, source discovery, Backfill, schedules, and admission           |
@@ -87,7 +87,7 @@ The bridge overlay explicitly preserves these paths:
 - `RuntimeRouter` → `RuntimeCapabilityCatalog` → `PrefectDeploymentSpec` → registered runtime callable.
 - backend transport DTO → OpenAPI → generated Web client → frontend consumer.
 - SC domain → protobuf → image parser → ML lifecycle.
-- source admission → Data Resources / Collection Snapshot.
+- source admission → Data Resources / Collection Revision.
 
 Graphify's graph merge operation does not discover new edges between independently extracted graphs. These bridges therefore belong in the small contract graph rather than in a blind merge of all context graphs.
 

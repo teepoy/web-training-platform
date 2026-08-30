@@ -47,27 +47,13 @@ test("reruns only selected collection datasets with the pinned model @mock", asy
       });
       return;
     }
-    if (url.pathname.endsWith("/snapshot-update-status")) {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          snapshot_id: "snapshot-1",
-          snapshot_revision_number: 1,
-          update_available: false,
-          outdated_member_count: 0,
-          members: [],
-        }),
-      });
-      return;
-    }
     if (url.pathname.endsWith("/revisions")) {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
         body: JSON.stringify([
           {
-            id: "snapshot-1",
+            id: "revision-1",
             collection_id: "collection-1",
             revision_number: 1,
             definition_version: 1,
@@ -76,7 +62,7 @@ test("reruns only selected collection datasets with the pinned model @mock", asy
             target_view_contract: "sc.patch-image",
             target_schema_version: "1",
             status: "ready",
-            source_snapshot: [
+            members: [
               {
                 member_id: "member-1",
                 source_dataset_id: "dataset-1",
@@ -88,21 +74,52 @@ test("reruns only selected collection datasets with the pinned model @mock", asy
                 dataset_revision_id: "revision-2",
               },
             ],
-            row_count: 20,
-            label_counts: {},
             manifest_uri: null,
-            provenance_uri: null,
             trigger_kind: "manual",
             trigger_ref: null,
             created_by: "user-e2e-1",
             created_at: "2026-08-15T00:00:00Z",
             error_code: null,
             error_detail: null,
-            manifest_format: "collection-composite-observed.v1",
-            source_resolution: "observed",
-            reproducibility_capability: false,
           },
         ]),
+      });
+      return;
+    }
+    if (url.pathname.endsWith("/revisions/revision-1")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: "revision-1",
+          collection_id: "collection-1",
+          revision_number: 1,
+          definition_version: 1,
+          definition_hash: "hash-1",
+          target_view_id: "patch_image_v1",
+          target_view_contract: "sc.patch-image",
+          target_schema_version: "1",
+          status: "ready",
+          members: [
+            {
+              member_id: "member-1",
+              source_dataset_id: "dataset-1",
+              dataset_revision_id: "revision-1",
+            },
+            {
+              member_id: "member-2",
+              source_dataset_id: "dataset-2",
+              dataset_revision_id: "revision-2",
+            },
+          ],
+          manifest_uri: null,
+          trigger_kind: "manual",
+          trigger_ref: null,
+          created_by: "user-e2e-1",
+          created_at: "2026-08-15T00:00:00Z",
+          error_code: null,
+          error_detail: null,
+        }),
       });
       return;
     }
@@ -150,7 +167,7 @@ test("reruns only selected collection datasets with the pinned model @mock", asy
           body: JSON.stringify({
             id: "batch-1",
             collection_id: "collection-1",
-            collection_revision_id: "snapshot-1",
+            collection_revision_id: "revision-1",
             model_id: "model-new",
             kind: "reconciliation",
             request_id: "request-1",
@@ -225,6 +242,50 @@ test("reruns only selected collection datasets with the pinned model @mock", asy
       }),
     });
   });
+  await authedPage.route("**/api/v1/datasets/dataset-*", async (route) => {
+    const datasetId = new URL(route.request().url()).pathname.split("/").pop() ?? "";
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: datasetId,
+        name: datasetId === "dataset-1" ? "August line A" : "August line B",
+        dataset_type: "image_sc",
+        storage_mode: "file_shard_sparse",
+        view_types: ["patch_image_v1"],
+        task_spec: { task_type: "sc", label_space: ["0", "1"] },
+        dataset_meta: {
+          source_inspection_time:
+            datasetId === "dataset-1" ? "2026-08-15T00:00:00Z" : "2026-08-16T00:00:00Z",
+          source_wafer_key: datasetId === "dataset-1" ? 1 : 2,
+          geometry: {
+            wafer_radius_nm: 150000000,
+            center_x: 0,
+            center_y: 0,
+            origin_x: 0,
+            origin_y: 0,
+            die_size_x: 10000,
+            die_size_y: 10000,
+          },
+        },
+        org_id: "org-e2e-1",
+        is_public: false,
+        created_at: "2026-08-15T00:00:00Z",
+      }),
+    });
+  });
+  await authedPage.route("**/api/v1/datasets/dataset-*/annotation-stats", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        total_samples: 10,
+        annotated_samples: 10,
+        unlabeled_samples: 0,
+        label_counts: { 0: 5, 1: 5 },
+      }),
+    });
+  });
   const approvedModel = makeModel({
     id: "model-new",
     name: "Approved defect model",
@@ -290,13 +351,13 @@ test("reruns only selected collection datasets with the pinned model @mock", asy
     .getByRole("button", { name: "Close" })
     .click();
   await authedPage.getByRole("button", { name: "Predict selected (1)" }).click();
-  await expect(authedPage.getByText("using Approved defect model and snapshot r1")).toBeVisible();
+  await expect(authedPage.getByText("using Approved defect model and revision r1")).toBeVisible();
   await authedPage.getByRole("button", { name: "Start prediction" }).click();
 
   await expect
     .poll(() => submittedBody)
     .toMatchObject({
-      snapshot_id: "snapshot-1",
+      revision_id: "revision-1",
       expected_default_model_id: "model-new",
       dataset_ids: ["dataset-1"],
     });
@@ -306,202 +367,12 @@ test("reruns only selected collection datasets with the pinned model @mock", asy
     .filter({ hasText: /^Classify/ })
     .click();
   await expect(authedPage).toHaveURL(
-    /\/dataset-collections\/collection-1\/classify\/dataset-1\?revisionId=snapshot-1$/,
+    /\/dataset-collections\/collection-1\/revisions\/revision-1\/classify/,
   );
-});
-
-test("shows and explicitly refreshes an outdated Collection Snapshot @mock", async ({
-  authedPage,
-}) => {
-  let refreshBody: unknown;
-  let refreshed = false;
-  const snapshot = (revisionNumber: number, datasetRevisionId: string) => ({
-    id: `snapshot-${revisionNumber}`,
-    collection_id: "collection-1",
-    revision_number: revisionNumber,
-    definition_version: 1,
-    definition_hash: `hash-${revisionNumber}`,
-    target_view_id: "patch_image_v1",
-    target_view_contract: "sc.patch-image",
-    target_schema_version: "1",
-    status: "ready",
-    source_snapshot: [
-      {
-        member_id: "member-1",
-        source_dataset_id: "dataset-1",
-        dataset_revision_id: datasetRevisionId,
-        dataset_revision_number: revisionNumber,
-      },
-    ],
-    row_count: null,
-    label_counts: {},
-    manifest_uri: `memory://snapshot-${revisionNumber}.json`,
-    provenance_uri: null,
-    trigger_kind: revisionNumber === 1 ? "manual" : "dataset_revision_refresh",
-    trigger_ref: revisionNumber === 1 ? null : "snapshot-1",
-    created_by: "user-e2e-1",
-    created_at: "2026-08-15T00:00:00Z",
-    error_code: null,
-    error_detail: null,
-    manifest_format: "collection-composite-observed.v1",
-    source_resolution: "observed",
-    reproducibility_capability: false,
-  });
-
-  await authedPage.route("**/api/v1/dataset-collections/collection-1**", async (route) => {
-    const request = route.request();
-    const url = new URL(request.url());
-    if (url.pathname.endsWith("/members")) {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify([
-          {
-            id: "member-1",
-            collection_id: "collection-1",
-            source_dataset_id: "dataset-1",
-            position: 0,
-            linked_definition_version: 1,
-            unlinked_definition_version: null,
-            filter_spec: {},
-            label_mapping: {},
-            sampling_spec: {},
-            linked_by: "user-e2e-1",
-            linked_at: "2026-08-15T00:00:00Z",
-            unlinked_by: null,
-            unlinked_at: null,
-          },
-        ]),
-      });
-      return;
-    }
-    if (url.pathname.endsWith("/snapshot-update-status")) {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          snapshot_id: refreshed ? "snapshot-2" : "snapshot-1",
-          snapshot_revision_number: refreshed ? 2 : 1,
-          update_available: !refreshed,
-          outdated_member_count: refreshed ? 0 : 1,
-          members: [
-            {
-              member_id: "member-1",
-              dataset_id: "dataset-1",
-              observed_dataset_revision_id: refreshed ? "dataset-revision-2" : "dataset-revision-1",
-              observed_dataset_revision_number: refreshed ? 2 : 1,
-              current_dataset_revision_id: "dataset-revision-2",
-              current_dataset_revision_number: 2,
-              update_available: !refreshed,
-            },
-          ],
-        }),
-      });
-      return;
-    }
-    if (url.pathname.endsWith("/refresh-snapshot")) {
-      refreshBody = request.postDataJSON();
-      refreshed = true;
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          outcome: "refreshed",
-          snapshot: snapshot(2, "dataset-revision-2"),
-        }),
-      });
-      return;
-    }
-    if (url.pathname.endsWith("/revisions")) {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify(
-          refreshed
-            ? [snapshot(2, "dataset-revision-2"), snapshot(1, "dataset-revision-1")]
-            : [snapshot(1, "dataset-revision-1")],
-        ),
-      });
-      return;
-    }
-    if (
-      url.pathname.endsWith("/prediction-coverage") ||
-      url.pathname.endsWith("/prediction-batches")
-    ) {
-      await route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
-      return;
-    }
-    if (url.pathname.endsWith("/membership-rules")) {
-      await route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
-      return;
-    }
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        id: "collection-1",
-        org_id: "org-e2e-1",
-        name: "Production defects",
-        description: "Daily inspection datasets",
-        target_view_id: "patch_image_v1",
-        target_view_contract: "sc.patch-image",
-        target_schema_version: "1",
-        duplicate_policy: "keep_all",
-        missing_data_policy: "fail",
-        definition_version: 1,
-        default_model_id: null,
-        model_binding_version: 0,
-        created_by: "user-e2e-1",
-        created_at: "2026-08-15T00:00:00Z",
-        updated_at: "2026-08-15T00:00:00Z",
-      }),
-    });
-  });
-  await authedPage.route("**/api/v1/datasets?**", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        items: [
-          {
-            id: "dataset-1",
-            name: "August line A",
-            dataset_type: "sc_patch",
-            view_types: ["patch_image_v1"],
-            task_spec: { task_type: "classification", label_space: ["ok", "defect"] },
-            org_id: "org-e2e-1",
-            is_public: false,
-            created_at: "2026-08-15T00:00:00Z",
-          },
-        ],
-        total: 1,
-      }),
-    });
-  });
-  await authedPage.route("**/api/v1/models**", async (route) => {
-    const url = new URL(route.request().url());
-    if (url.pathname.endsWith("/models/creators")) {
-      await route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
-      return;
-    }
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ items: [], total: 0 }),
-    });
-  });
-  await authedPage.route("**/api/v1/source-connectors**", async (route) => {
-    await route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
-  });
-
-  await authedPage.goto("/dataset-collections/collection-1");
-
-  await expect(authedPage.getByText("Update available")).toBeVisible();
-  await expect(authedPage.getByText("1 linked Dataset has a newer change number.")).toBeVisible();
-  await authedPage.getByTestId("refresh-collection-snapshot").click();
-  await expect.poll(() => refreshBody).toEqual({ expected_definition_version: 1 });
-  await expect(authedPage.getByText("Update available")).toBeHidden();
-  await expect(
-    authedPage.getByText("Snapshot #2 now records the latest Dataset changes"),
-  ).toBeVisible();
+  const memberSelect = authedPage.getByTestId("sc-collection-member-select");
+  await expect(memberSelect).toBeVisible();
+  await expect(authedPage.getByTestId("sc-active-map-member-select")).toBeVisible();
+  await memberSelect.click();
+  await authedPage.locator(".n-base-select-option").filter({ hasText: "August line B" }).click();
+  await expect.poll(() => new URL(authedPage.url()).searchParams.get("members")).toBe("member-1");
 });

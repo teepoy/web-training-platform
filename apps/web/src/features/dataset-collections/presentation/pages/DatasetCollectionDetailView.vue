@@ -48,7 +48,6 @@ import type {
   DatasetCollectionMemberResponse,
   DatasetCollectionRevisionResponse,
   CreateMembershipRuleRequest,
-  CreateScAutomationPartitionRequestDimension,
   FilterOperator,
   MembershipRuleResponse,
   ScAutomationPartitionResponse,
@@ -65,13 +64,7 @@ import {
   type CollectionPredictionCoverage,
   type CollectionWithDefaultModel,
 } from "@/features/dataset-collections/api/collectionModelAutomation";
-import {
-  getCollectionSnapshotUpdateStatus,
-  refreshCollectionSnapshot,
-} from "@/features/dataset-collections/api/collectionSnapshotUpdates";
-import CollectionSnapshotUpdateAlert from "@/features/dataset-collections/presentation/components/CollectionSnapshotUpdateAlert.vue";
 import PredictionExportPlugin from "@/features/sc/presentation/components/PredictionExportPlugin.vue";
-import { getScClassifyLimits } from "@/features/sc/api/classifyLimits";
 import { supportsScPredictionExport } from "@/features/sc/domain/predictionExportCapability";
 import { useAuthStore } from "@/features/auth/application/store";
 import { useOrgStore } from "@/features/auth/application/org";
@@ -107,8 +100,7 @@ const partitionName = ref("");
 const partitionConnectorId = ref<string | null>(null);
 const partitionProfileId = ref<string | null>(null);
 const partitionLayerId = ref("");
-const partitionDimension = ref<CreateScAutomationPartitionRequestDimension>("device");
-const partitionDimensionValue = ref("");
+const partitionDevice = ref("");
 
 async function loadAllDatasets(): Promise<Dataset[]> {
   const datasets: Dataset[] = [];
@@ -146,17 +138,6 @@ const revisionsQuery = useQuery({
     ]),
   ),
   queryFn: () => listRevisionsApiV1DatasetCollectionsCollectionIdRevisionsGet(collectionId.value),
-  enabled: computed(() => !!orgStore.currentOrgId && !!collectionId.value),
-});
-const snapshotUpdateQuery = useQuery({
-  queryKey: computed(() =>
-    orgScopedQueryKey(orgStore.currentOrgId, [
-      "dataset-collections",
-      collectionId.value,
-      "snapshot-update-status",
-    ]),
-  ),
-  queryFn: () => getCollectionSnapshotUpdateStatus(collectionId.value),
   enabled: computed(() => !!orgStore.currentOrgId && !!collectionId.value),
 });
 const datasetsQuery = useQuery({
@@ -243,11 +224,6 @@ const partitionsQuery = useQuery({
     ),
   enabled: computed(() => !!orgStore.currentOrgId && !!collectionId.value && isScCollection.value),
 });
-const classifyLimitsQuery = useQuery({
-  queryKey: ["sc", "classify-limits"],
-  queryFn: getScClassifyLimits,
-  enabled: isScCollection,
-});
 const canModify = computed(
   () => !!collection.value && collection.value.created_by === authStore.user?.id,
 );
@@ -256,18 +232,13 @@ const canManageAutomation = computed(
 );
 const loadError = computed(
   () =>
-    collectionQuery.error.value ??
-    membersQuery.error.value ??
-    revisionsQuery.error.value ??
-    snapshotUpdateQuery.error.value ??
-    null,
+    collectionQuery.error.value ?? membersQuery.error.value ?? revisionsQuery.error.value ?? null,
 );
 const isLoading = computed(
   () =>
     collectionQuery.isLoading.value ||
     membersQuery.isLoading.value ||
-    revisionsQuery.isLoading.value ||
-    snapshotUpdateQuery.isLoading.value,
+    revisionsQuery.isLoading.value,
 );
 const members = computed(() =>
   [...(membersQuery.data.value ?? [])].sort((a, b) => a.position - b.position),
@@ -282,11 +253,6 @@ const latestReadyRevision = computed(
       .filter((revision) => revision.status === "ready")
       .sort((a, b) => b.revision_number - a.revision_number)[0],
 );
-const classifyExceedsLimit = computed(() => {
-  const rows = latestReadyRevision.value?.row_count;
-  const maximum = classifyLimitsQuery.data.value?.max_rows;
-  return rows !== null && rows !== undefined && maximum !== undefined && rows > maximum;
-});
 const coverageQuery = useQuery({
   queryKey: computed(() =>
     orgScopedQueryKey(orgStore.currentOrgId, [
@@ -328,7 +294,6 @@ async function refreshCollection(): Promise<void> {
     queryClient.invalidateQueries({ queryKey: key() }),
     queryClient.invalidateQueries({ queryKey: key("members") }),
     queryClient.invalidateQueries({ queryKey: key("revisions") }),
-    queryClient.invalidateQueries({ queryKey: key("snapshot-update-status") }),
     queryClient.invalidateQueries({ queryKey: key("prediction-coverage") }),
     queryClient.invalidateQueries({ queryKey: key("prediction-batches") }),
   ]);
@@ -422,31 +387,11 @@ const revisionMutation = useMutation({
     });
   },
   onSuccess: async () => {
-    message.success(t("collectionDetail.snapshotSaved"));
+    message.success(t("collectionDetail.revisionSaved"));
     await refreshCollection();
   },
   onError: (error) =>
-    message.error(toUserMessage(error, t("collectionDetail.snapshotCreateFailed"))),
-});
-
-const snapshotRefreshMutation = useMutation({
-  mutationFn: () => {
-    const version = collection.value?.definition_version;
-    if (version === undefined) throw new Error(t("collectionDetail.definitionMissing"));
-    return refreshCollectionSnapshot(collectionId.value, {
-      expected_definition_version: version,
-    });
-  },
-  onSuccess: async (result) => {
-    message.success(
-      result.outcome === "refreshed"
-        ? t("collectionDetail.snapshotRefreshed", { revision: result.snapshot.revision_number })
-        : t("collectionDetail.snapshotCurrent"),
-    );
-    await refreshCollection();
-  },
-  onError: (error) =>
-    message.error(toUserMessage(error, t("collectionDetail.snapshotRefreshFailed"))),
+    message.error(toUserMessage(error, t("collectionDetail.revisionCreateFailed"))),
 });
 
 const defaultModelQuery = useQuery({
@@ -530,11 +475,11 @@ const defaultModelMutation = useMutation({
 
 const reconcileMutation = useMutation({
   mutationFn: () => {
-    const snapshot = latestReadyRevision.value;
+    const revision = latestReadyRevision.value;
     const modelId = collection.value?.default_model_id;
-    if (!snapshot || !modelId) throw new Error(t("collectionDetail.predictionRequirements"));
+    if (!revision || !modelId) throw new Error(t("collectionDetail.predictionRequirements"));
     return createCollectionPredictionBatch(collectionId.value, {
-      snapshot_id: snapshot.id,
+      revision_id: revision.id,
       expected_default_model_id: modelId,
       request_id: crypto.randomUUID(),
       dataset_ids: selectedCoverage.value.map((item) => item.dataset_id),
@@ -560,7 +505,7 @@ const retryBatchMutation = useMutation({
 
 function coverageLabel(item: CollectionPredictionCoverage | undefined): string {
   if (!item) {
-    if (!latestReadyRevision.value) return t("collectionDetail.noSnapshotReview");
+    if (!latestReadyRevision.value) return t("collectionDetail.noRevisionReview");
     if (coverageQuery.isLoading.value) return t("collectionDetail.loading");
     if (coverageQuery.isError.value) return t("collectionDetail.unavailable");
     return t("collectionDetail.notEvaluated");
@@ -585,20 +530,10 @@ function coverageTagType(
 
 function openStack(): void {
   const revision = latestReadyRevision.value;
-  const firstSource = revision?.source_snapshot[0]?.source_dataset_id;
-  if (!revision || typeof firstSource !== "string" || !firstSource) return;
-  if (classifyExceedsLimit.value) {
-    message.warning(
-      t("collectionDetail.classifyTooLarge", {
-        rows: formatNumber(revision.row_count ?? 0),
-        maximum: formatNumber(classifyLimitsQuery.data.value?.max_rows ?? 0),
-      }),
-    );
-    return;
-  }
+  if (!revision) return;
   void router.push({
-    path: `/dataset-collections/${collectionId.value}/classify/${firstSource}`,
-    query: { revisionId: revision.id },
+    name: "dataset-collection-classify",
+    params: { collectionId: collectionId.value, revisionId: revision.id },
   });
 }
 
@@ -742,10 +677,6 @@ const partitionProfileOptions = computed(() =>
     value: profile.id,
   })),
 );
-const partitionDimensionOptions = computed(() => [
-  { label: t("collectionDetail.partitionDevice"), value: "device" },
-  { label: t("collectionDetail.partitionRecipe"), value: "recipe_id" },
-]);
 const profileOptions = computed(() =>
   (profilesQuery.data.value ?? []).map((profile) => ({
     label: `${profile.name} · v${profile.version}`,
@@ -937,7 +868,7 @@ const canCreatePartition = computed(
     !!partitionConnectorId.value &&
     !!partitionProfileId.value &&
     !!partitionLayerId.value.trim() &&
-    !!partitionDimensionValue.value.trim(),
+    !!partitionDevice.value.trim(),
 );
 
 function resetPartitionForm(): void {
@@ -946,8 +877,7 @@ function resetPartitionForm(): void {
   partitionConnectorId.value = null;
   partitionProfileId.value = null;
   partitionLayerId.value = "";
-  partitionDimension.value = "device";
-  partitionDimensionValue.value = "";
+  partitionDevice.value = "";
 }
 
 const createPartitionMutation = useMutation({
@@ -959,8 +889,7 @@ const createPartitionMutation = useMutation({
         connector_id: String(partitionConnectorId.value),
         import_profile_version_id: String(partitionProfileId.value),
         layer_id: partitionLayerId.value.trim(),
-        dimension: partitionDimension.value,
-        dimension_value: partitionDimensionValue.value.trim(),
+        device: partitionDevice.value.trim(),
       },
     ),
   onSuccess: async () => {
@@ -981,17 +910,8 @@ const partitionColumns: DataTableColumns<ScAutomationPartitionResponse> = [
   },
   { title: t("collectionDetail.partitionLayer"), key: "layer_id", minWidth: 130 },
   {
-    title: t("collectionDetail.partitionDimension"),
-    key: "dimension",
-    minWidth: 130,
-    render: (partition) =>
-      partition.dimension === "device"
-        ? t("collectionDetail.partitionDevice")
-        : t("collectionDetail.partitionRecipe"),
-  },
-  {
-    title: t("collectionDetail.partitionValue"),
-    key: "dimension_value",
+    title: t("collectionDetail.partitionDevice"),
+    key: "device",
     minWidth: 160,
   },
   {
@@ -1004,7 +924,7 @@ const partitionColumns: DataTableColumns<ScAutomationPartitionResponse> = [
 
 const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
   {
-    title: t("collectionDetail.snapshot"),
+    title: t("collectionDetail.revision"),
     key: "revision_number",
     render: (row) => `r${row.revision_number}`,
   },
@@ -1027,26 +947,6 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
               : t("collectionDetail.failed"),
         },
       ),
-  },
-  {
-    title: t("collectionDetail.dataResolution"),
-    key: "source_resolution",
-    render: (row) =>
-      h(
-        NTag,
-        { type: row.reproducibility_capability ? "success" : "warning" },
-        {
-          default: () =>
-            row.reproducibility_capability
-              ? t("collectionDetail.frozenLegacy")
-              : t("collectionDetail.currentDataAtRun"),
-        },
-      ),
-  },
-  {
-    title: t("collectionDetail.rows"),
-    key: "row_count",
-    render: (row) => (row.row_count === null ? "—" : formatNumber(row.row_count)),
   },
   {
     title: t("collectionDetail.created"),
@@ -1076,21 +976,21 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
         >
           {{
             latestReadyRevision
-              ? t("collectionDetail.saveSnapshot")
-              : t("collectionDetail.saveFirstSnapshot")
+              ? t("collectionDetail.saveRevision")
+              : t("collectionDetail.saveFirstRevision")
           }}
         </NButton>
         <NButton
           :type="revisionOutdated ? 'default' : 'primary'"
-          :disabled="!latestReadyRevision || classifyExceedsLimit"
+          :disabled="!latestReadyRevision"
           @click="openStack"
         >
           {{
             latestReadyRevision
-              ? t("collectionDetail.reviewSnapshot", {
+              ? t("collectionDetail.reviewRevision", {
                   revision: latestReadyRevision.revision_number,
                 })
-              : t("collectionDetail.noSnapshotReview")
+              : t("collectionDetail.noRevisionReview")
           }}
         </NButton>
       </NSpace>
@@ -1112,28 +1012,20 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
         :on-before-leave="handleTabBeforeLeave"
       >
         <NTabPane name="overview" :tab="t('collectionDetail.overview')">
-          <NAlert type="info" :show-icon="false" class="snapshot-explainer">
-            <strong>{{ t("collectionDetail.snapshotQuestion") }}</strong>
-            {{ t("collectionDetail.snapshotExplanation") }}
+          <NAlert type="info" :show-icon="false" class="revision-explainer">
+            <strong>{{ t("collectionDetail.revisionQuestion") }}</strong>
+            {{ t("collectionDetail.revisionExplanation") }}
           </NAlert>
           <NAlert v-if="!latestReadyRevision" type="info">
-            {{ t("collectionDetail.noSnapshot") }}
+            {{ t("collectionDetail.noRevision") }}
           </NAlert>
           <NAlert v-else-if="revisionOutdated" type="warning">
             {{
-              t("collectionDetail.outdatedSnapshot", {
+              t("collectionDetail.outdatedRevision", {
                 revision: latestReadyRevision.revision_number,
               })
             }}
           </NAlert>
-          <CollectionSnapshotUpdateAlert
-            v-if="snapshotUpdateQuery.data.value?.update_available"
-            :outdated-member-count="snapshotUpdateQuery.data.value.outdated_member_count"
-            :snapshot-revision-number="snapshotUpdateQuery.data.value.snapshot_revision_number"
-            :can-modify="canModify"
-            :loading="snapshotRefreshMutation.isPending.value"
-            @refresh="snapshotRefreshMutation.mutate()"
-          />
           <NCard size="small">
             <div class="collection-summary-grid">
               <div class="collection-summary-field">
@@ -1159,10 +1051,10 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
                 <NTooltip>
                   <template #trigger>
                     <NText depth="3" class="help-label">{{
-                      t("collectionDetail.latestSnapshot")
+                      t("collectionDetail.latestRevision")
                     }}</NText>
                   </template>
-                  {{ t("collectionDetail.latestSnapshotHelp") }}
+                  {{ t("collectionDetail.latestRevisionHelp") }}
                 </NTooltip>
                 <strong>{{
                   latestReadyRevision
@@ -1173,24 +1065,13 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
             </div>
           </NCard>
         </NTabPane>
-        <NTabPane
-          v-if="isScCollection"
-          name="classify"
-          :disabled="!latestReadyRevision || classifyExceedsLimit"
-        >
+        <NTabPane v-if="isScCollection" name="classify" :disabled="!latestReadyRevision">
           <template #tab>
-            <NTooltip :disabled="!!latestReadyRevision && !classifyExceedsLimit">
+            <NTooltip :disabled="!!latestReadyRevision">
               <template #trigger>
                 <span>{{ t("collectionDetail.classify") }}</span>
               </template>
-              {{
-                classifyExceedsLimit
-                  ? t("collectionDetail.classifyTooLarge", {
-                      rows: formatNumber(latestReadyRevision?.row_count ?? 0),
-                      maximum: formatNumber(classifyLimitsQuery.data.value?.max_rows ?? 0),
-                    })
-                  : t("collectionDetail.classifyNeedsSnapshot")
-              }}
+              {{ t("collectionDetail.classifyNeedsRevision") }}
             </NTooltip>
           </template>
         </NTabPane>
@@ -1341,8 +1222,8 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
             </NText>
           </NCard>
         </NTabPane>
-        <NTabPane name="snapshots" :tab="t('collectionDetail.snapshots')">
-          <NCard :title="t('collectionDetail.savedSnapshots')">
+        <NTabPane name="revisions" :tab="t('collectionDetail.revisions')">
+          <NCard :title="t('collectionDetail.savedRevisions')">
             <NDataTable
               v-if="(revisionsQuery.data.value ?? []).length > 0"
               :columns="revisionColumns"
@@ -1350,7 +1231,7 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
               :row-key="(row: DatasetCollectionRevisionResponse) => row.id"
               :scroll-x="640"
             />
-            <NEmpty v-else :description="t('collectionDetail.snapshotEmpty')" />
+            <NEmpty v-else :description="t('collectionDetail.revisionEmpty')" />
           </NCard>
         </NTabPane>
         <NTabPane name="activity" :tab="t('collectionDetail.activity')">
@@ -1539,17 +1420,12 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
             :placeholder="t('collectionDetail.partitionLayerExample')"
           />
         </NFormItem>
-        <div class="rule-condition-row">
-          <NFormItem :label="t('collectionDetail.partitionDimension')" required>
-            <NSelect v-model:value="partitionDimension" :options="partitionDimensionOptions" />
-          </NFormItem>
-          <NFormItem :label="t('collectionDetail.partitionValue')" required>
-            <NInput
-              v-model:value="partitionDimensionValue"
-              :placeholder="t('collectionDetail.partitionValueExample')"
-            />
-          </NFormItem>
-        </div>
+        <NFormItem :label="t('collectionDetail.partitionDevice')" required>
+          <NInput
+            v-model:value="partitionDevice"
+            :placeholder="t('collectionDetail.partitionDeviceExample')"
+          />
+        </NFormItem>
       </template>
       <template #footer>
         <NSpace justify="end">
@@ -1661,7 +1537,7 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
             {
               count: selectedCoverage.length,
               model: defaultModel?.name || collection?.default_model_id,
-              snapshot: latestReadyRevision ? `r${latestReadyRevision.revision_number}` : "—",
+              revision: latestReadyRevision ? `r${latestReadyRevision.revision_number}` : "—",
             },
             selectedCoverage.length,
           )
@@ -1717,7 +1593,7 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
   padding: 56px;
 }
 
-.snapshot-explainer strong {
+.revision-explainer strong {
   margin-right: 6px;
 }
 

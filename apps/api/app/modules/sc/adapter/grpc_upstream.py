@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 import polars as pl
 import pyarrow as pa
 import pyarrow.flight as flight  # pyright: ignore[reportPrivateImportUsage]
+from grpc import StatusCode
 from grpc import aio as grpc_aio
 
 from app.modules.sc.domain.models import _coerce_naive_to_upstream_tz
@@ -116,7 +117,12 @@ class GrpcScUpstream:
             inspection_time=inspection_time.isoformat(),
             wafer_key=wafer_key,
         )
-        resp = await stub.GetInspection(req)
+        try:
+            resp = await stub.GetInspection(req)
+        except grpc_aio.AioRpcError as exc:
+            if exc.code() == StatusCode.NOT_FOUND:
+                return None
+            raise
         if not resp.lot_id and not resp.wafer_id and not resp.device:
             return None
         return ScInspectionRecord(

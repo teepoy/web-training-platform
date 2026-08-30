@@ -9,7 +9,7 @@ import pytest
 
 from app.modules.dataset_collections.app.services.collection_model_automation_service import (
     CollectionModelAutomationService,
-    CollectionSnapshotPublishingService,
+    CollectionRevisionPublishingService,
 )
 from app.modules.dataset_collections.domain.models import (
     CollectionPredictionBatchItem,
@@ -45,12 +45,12 @@ def _collection(*, model_id: str | None = "model-1") -> DatasetCollection:
     )
 
 
-def _snapshot(
+def _revision(
     number: int,
     *members: tuple[str, str, str],
 ) -> DatasetCollectionRevision:
     return DatasetCollectionRevision(
-        id=f"snapshot-{number}",
+        id=f"revision-{number}",
         collection_id="collection-1",
         revision_number=number,
         definition_version=number,
@@ -59,28 +59,30 @@ def _snapshot(
         target_view_contract="sc.patch-image",
         target_schema_version="1",
         status="ready",
-        source_snapshot=tuple(
+        members=tuple(
             {
                 "member_id": member_id,
                 "source_dataset_id": dataset_id,
-                "dataset_revision_id": revision_id,
             }
-            for member_id, dataset_id, revision_id in members
+            for member_id, dataset_id, _revision_id in members
         ),
-        row_count=None,
-        label_counts={},
-        manifest_uri=f"memory://snapshot-{number}.json",
-        provenance_uri=None,
+        manifest_uri=f"memory://revision-{number}.json",
         trigger_kind="manual",
         trigger_ref=None,
         created_by="user-1",
         created_at=_now(),
         error_code=None,
         error_detail=None,
-        manifest_format="collection-composite-observed.v1",
-        source_resolution="observed",
-        reproducibility_capability=False,
     )
+
+
+def _dataset_revisions(**revision_ids: str) -> AsyncMock:
+    reader = AsyncMock()
+    reader.list_current.side_effect = lambda dataset_ids, _org_id: {
+        dataset_id: SimpleNamespace(id=revision_ids[dataset_id])
+        for dataset_id in dataset_ids
+    }
+    return reader
 
 
 def _model() -> Model:
@@ -109,6 +111,7 @@ async def test_default_model_change_never_dispatches_prediction() -> None:
         repository=repository,
         model_catalog=model_catalog,
         prediction_execution=prediction_execution,
+        dataset_revisions=AsyncMock(),
     )
 
     updated = await service.set_default_model(
@@ -132,8 +135,8 @@ async def test_default_model_change_never_dispatches_prediction() -> None:
 
 @pytest.mark.asyncio
 async def test_incremental_prediction_only_dispatches_new_uncovered_member() -> None:
-    previous = _snapshot(1, ("member-old", "dataset-old", "revision-old"))
-    current = _snapshot(
+    previous = _revision(1, ("member-old", "dataset-old", "revision-old"))
+    current = _revision(
         2,
         ("member-old", "dataset-old", "revision-old"),
         ("member-covered", "dataset-covered", "revision-covered"),
@@ -202,10 +205,17 @@ async def test_incremental_prediction_only_dispatches_new_uncovered_member() -> 
         repository=repository,
         model_catalog=AsyncMock(),
         prediction_execution=prediction_execution,
+        dataset_revisions=_dataset_revisions(
+            **{
+                "dataset-old": "revision-old",
+                "dataset-covered": "revision-covered",
+                "dataset-new": "revision-new",
+            }
+        ),
     )
 
     batch = await service.predict_new_members(
-        "collection-1", "snapshot-2", "org-1", "user-1"
+        "collection-1", "revision-2", "org-1", "user-1"
     )
 
     assert batch is not None
@@ -213,18 +223,18 @@ async def test_incremental_prediction_only_dispatches_new_uncovered_member() -> 
     command = prediction_execution.submit_job.await_args.args[0]
     assert command.dataset_id == "dataset-new"
     assert command.collection_id == "collection-1"
-    assert command.collection_revision_id == "snapshot-2"
+    assert command.collection_revision_id == "revision-2"
     assert command.collection_member_id == "member-new"
     assert command.submission_origin.value == "automation"
 
 
 @pytest.mark.asyncio
 async def test_coverage_uses_latest_success_and_exposes_active_run() -> None:
-    snapshot = _snapshot(2, ("member-1", "dataset-1", "revision-current"))
+    revision = _revision(2, ("member-1", "dataset-1", "revision-current"))
     now = _now()
     repository = AsyncMock()
     repository.get_collection.return_value = _collection()
-    repository.get_revision.return_value = snapshot
+    repository.get_revision.return_value = revision
     repository.list_prediction_observations.return_value = [
         CollectionPredictionObservation(
             member_id="member-1",
@@ -258,10 +268,11 @@ async def test_coverage_uses_latest_success_and_exposes_active_run() -> None:
         repository=repository,
         model_catalog=AsyncMock(),
         prediction_execution=AsyncMock(),
+        dataset_revisions=_dataset_revisions(**{"dataset-1": "revision-current"}),
     )
 
     coverage = await service.list_coverage(
-        "collection-1", "org-1", snapshot_id="snapshot-2"
+        "collection-1", "org-1", revision_id="revision-2"
     )
 
     assert coverage[0].status is PredictionCoverageStatus.MODEL_MISMATCH
@@ -272,13 +283,13 @@ async def test_coverage_uses_latest_success_and_exposes_active_run() -> None:
 
 
 @pytest.mark.asyncio
-async def test_snapshot_stays_successful_when_incremental_preparation_fails() -> None:
-    snapshot = _snapshot(1, ("member-1", "dataset-1", "revision-1"))
+async def test_revision_stays_successful_when_incremental_preparation_fails() -> None:
+    revision = _revision(1, ("member-1", "dataset-1", "revision-1"))
     collections = AsyncMock()
-    collections.create_revision.return_value = snapshot
+    collections.create_revision.return_value = revision
     automation = AsyncMock()
     automation.predict_new_members.side_effect = RuntimeError("prefect unavailable")
-    publisher = CollectionSnapshotPublishingService(
+    publisher = CollectionRevisionPublishingService(
         collections, AsyncMock(), automation
     )
 
@@ -291,5 +302,5 @@ async def test_snapshot_stays_successful_when_incremental_preparation_fails() ->
         trigger_ref=None,
     )
 
-    assert result is snapshot
+    assert result is revision
     automation.predict_new_members.assert_awaited_once()

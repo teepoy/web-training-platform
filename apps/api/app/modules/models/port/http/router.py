@@ -14,6 +14,8 @@ from fastapi import (
     UploadFile,
 )
 from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse
+from starlette.background import BackgroundTask
 
 from app.shared.api.schemas import CreatorSummary, Organization, PaginatedResponse, User
 from app.shared.domain.protocols import ArtifactStorage
@@ -179,7 +181,21 @@ async def download_model(
     current_user: CurrentUserDep,
     org: CurrentOrgDep,
     storage: Annotated[ArtifactStorage, Depends(get_artifact_storage)],
-) -> StreamingResponse:
+    portable: bool = Query(default=False),
+) -> Response:
+    if portable:
+        (
+            package_path,
+            filename,
+            size,
+        ) = await model_service.prepare_model_package_download(model_id, org_id=org.id)
+        return FileResponse(
+            package_path,
+            media_type="application/zip",
+            filename=filename,
+            headers={"Content-Length": str(size)},
+            background=BackgroundTask(package_path.unlink, missing_ok=True),
+        )
     uri, filename, size = await model_service.prepare_model_download(
         model_id, org_id=org.id
     )

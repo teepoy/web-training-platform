@@ -24,6 +24,7 @@ import { formatNumber } from "@/shared/i18n/format";
 import RangeFilterMenu from "@/shared/components/table-filter/RangeFilterMenu.vue";
 import SetFilterMenu from "@/shared/components/table-filter/SetFilterMenu.vue";
 import DefectIdFilterMenu from "./DefectIdFilterMenu.vue";
+import { formatScClassNumber } from "@/features/sc/domain/classNumberDisplay";
 
 const { t } = useI18n();
 import {
@@ -427,7 +428,10 @@ function getSetFilterOptions(definition: ScSampleTablePresentationColumn) {
         ? left - right
         : String(left).localeCompare(String(right), undefined, { numeric: true }),
     )
-    .map((value) => ({ label: String(value), value }));
+    .map((value) => ({
+      label: field === "class_number" ? formatScClassNumber(value) : String(value),
+      value,
+    }));
 }
 
 async function searchSetFilterOptions(field: string): Promise<void> {
@@ -595,7 +599,7 @@ function clearSelection(): void {
   emitSelection();
 }
 
-function snapshotFilter(filter: ScSampleTableFilter): ScSampleTableFilter {
+function cloneTableFilter(filter: ScSampleTableFilter): ScSampleTableFilter {
   return Object.fromEntries(
     Object.entries(filter).map(([field, value]) => [
       field,
@@ -617,7 +621,7 @@ async function exportCsv(): Promise<void> {
       dataSource: props.dataSource,
       columns: activeColumnDefinitions.value,
       defectIds: [...(props.defectIds ?? [])],
-      filter: snapshotFilter(tableFilter.value),
+      filter: cloneTableFilter(tableFilter.value),
       sort: { ...tableSort.value },
       signal: controller.signal,
       onProgress: (progress) => {

@@ -44,8 +44,6 @@ import type {
   ChatRequest,
   CollectionPredictionBatchResponse,
   CollectionPredictionCoverageResponse,
-  CollectionSnapshotRefreshResponse,
-  CollectionSnapshotUpdateStatusResponse,
   CreateAnnotationRequest,
   CreateCollectionPredictionBatchRequest,
   CreateDatasetCollectionRequest,
@@ -75,6 +73,7 @@ import type {
   DeleteAnnotationApiV1AnnotationsAnnotationIdDeleteParams,
   DiscoveryRunResponse,
   DownloadExportApiV1DownloadGetParams,
+  DownloadModelApiV1ModelsModelIdDownloadGetParams,
   ExportDatasetApiV1ExportsDatasetIdGet200,
   ExportFormatResponse,
   ExportParquetApiV1PluginsExportParquetExportPost200,
@@ -3544,147 +3543,6 @@ export const useDeleteCollectionApiV1DatasetCollectionsCollectionIdDelete = <TEr
     }
 
 /**
- * @summary Get Snapshot Update Status
- */
-export const getGetSnapshotUpdateStatusApiV1DatasetCollectionsCollectionIdSnapshotUpdateStatusGetUrl = (collectionId: string,) => {
-
-
-  return `/api/v1/dataset-collections/${collectionId}/snapshot-update-status`
-}
-
-export const getSnapshotUpdateStatusApiV1DatasetCollectionsCollectionIdSnapshotUpdateStatusGet = async (collectionId: string, options?: RequestInit): Promise<CollectionSnapshotUpdateStatusResponse> => {
-
-  return orvalFetcher<CollectionSnapshotUpdateStatusResponse>(getGetSnapshotUpdateStatusApiV1DatasetCollectionsCollectionIdSnapshotUpdateStatusGetUrl(collectionId),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-export const getGetSnapshotUpdateStatusApiV1DatasetCollectionsCollectionIdSnapshotUpdateStatusGetQueryKey = (collectionId: MaybeRef<string>,) => {
-    return ['api','v1','dataset-collections',collectionId,'snapshot-update-status'] as const;
-    }
-
-
-export const getGetSnapshotUpdateStatusApiV1DatasetCollectionsCollectionIdSnapshotUpdateStatusGetQueryOptions = <TData = Awaited<ReturnType<typeof getSnapshotUpdateStatusApiV1DatasetCollectionsCollectionIdSnapshotUpdateStatusGet>>, TError = ErrorType<HTTPValidationError>>(collectionId: MaybeRef<string>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getSnapshotUpdateStatusApiV1DatasetCollectionsCollectionIdSnapshotUpdateStatusGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  getGetSnapshotUpdateStatusApiV1DatasetCollectionsCollectionIdSnapshotUpdateStatusGetQueryKey(collectionId);
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSnapshotUpdateStatusApiV1DatasetCollectionsCollectionIdSnapshotUpdateStatusGet>>> = ({ signal }) => getSnapshotUpdateStatusApiV1DatasetCollectionsCollectionIdSnapshotUpdateStatusGet(unref(collectionId), { signal, ...requestOptions });
-
-
-
-
-
-   return  { queryKey, queryFn, enabled: computed(() => !!(unref(collectionId))), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSnapshotUpdateStatusApiV1DatasetCollectionsCollectionIdSnapshotUpdateStatusGet>>, TError, TData>
-}
-
-export type GetSnapshotUpdateStatusApiV1DatasetCollectionsCollectionIdSnapshotUpdateStatusGetQueryResult = NonNullable<Awaited<ReturnType<typeof getSnapshotUpdateStatusApiV1DatasetCollectionsCollectionIdSnapshotUpdateStatusGet>>>
-export type GetSnapshotUpdateStatusApiV1DatasetCollectionsCollectionIdSnapshotUpdateStatusGetQueryError = ErrorType<HTTPValidationError>
-
-
-/**
- * @summary Get Snapshot Update Status
- */
-
-export function useGetSnapshotUpdateStatusApiV1DatasetCollectionsCollectionIdSnapshotUpdateStatusGet<TData = Awaited<ReturnType<typeof getSnapshotUpdateStatusApiV1DatasetCollectionsCollectionIdSnapshotUpdateStatusGet>>, TError = ErrorType<HTTPValidationError>>(
- collectionId: MaybeRef<string>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getSnapshotUpdateStatusApiV1DatasetCollectionsCollectionIdSnapshotUpdateStatusGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
-
-  ): UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-
-  const queryOptions = getGetSnapshotUpdateStatusApiV1DatasetCollectionsCollectionIdSnapshotUpdateStatusGetQueryOptions(collectionId,options)
-
-  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-
-  query.queryKey = unref(queryOptions).queryKey as DataTag<QueryKey, TData, TError>;
-
-  return query;
-}
-
-
-
-
-/**
- * @summary Refresh Snapshot
- */
-export const getRefreshSnapshotApiV1DatasetCollectionsCollectionIdRefreshSnapshotPostUrl = (collectionId: string,) => {
-
-
-  return `/api/v1/dataset-collections/${collectionId}/refresh-snapshot`
-}
-
-export const refreshSnapshotApiV1DatasetCollectionsCollectionIdRefreshSnapshotPost = async (collectionId: string,
-    createDatasetCollectionRevisionRequest: CreateDatasetCollectionRevisionRequest, options?: RequestInit): Promise<CollectionSnapshotRefreshResponse> => {
-
-  return orvalFetcher<CollectionSnapshotRefreshResponse>(getRefreshSnapshotApiV1DatasetCollectionsCollectionIdRefreshSnapshotPostUrl(collectionId),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(
-      createDatasetCollectionRevisionRequest,)
-  }
-);}
-
-
-
-
-export const getRefreshSnapshotApiV1DatasetCollectionsCollectionIdRefreshSnapshotPostMutationOptions = <TError = ErrorType<HTTPValidationError>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof refreshSnapshotApiV1DatasetCollectionsCollectionIdRefreshSnapshotPost>>, TError,{collectionId: string;data: BodyType<CreateDatasetCollectionRevisionRequest>}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
-): UseMutationOptions<Awaited<ReturnType<typeof refreshSnapshotApiV1DatasetCollectionsCollectionIdRefreshSnapshotPost>>, TError,{collectionId: string;data: BodyType<CreateDatasetCollectionRevisionRequest>}, TContext> => {
-
-const mutationKey = ['refreshSnapshotApiV1DatasetCollectionsCollectionIdRefreshSnapshotPost'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof refreshSnapshotApiV1DatasetCollectionsCollectionIdRefreshSnapshotPost>>, {collectionId: string;data: BodyType<CreateDatasetCollectionRevisionRequest>}> = (props) => {
-          const {collectionId,data} = props ?? {};
-
-          return  refreshSnapshotApiV1DatasetCollectionsCollectionIdRefreshSnapshotPost(collectionId,data,requestOptions)
-        }
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type RefreshSnapshotApiV1DatasetCollectionsCollectionIdRefreshSnapshotPostMutationResult = NonNullable<Awaited<ReturnType<typeof refreshSnapshotApiV1DatasetCollectionsCollectionIdRefreshSnapshotPost>>>
-    export type RefreshSnapshotApiV1DatasetCollectionsCollectionIdRefreshSnapshotPostMutationBody = BodyType<CreateDatasetCollectionRevisionRequest>
-    export type RefreshSnapshotApiV1DatasetCollectionsCollectionIdRefreshSnapshotPostMutationError = ErrorType<HTTPValidationError>
-
-    /**
- * @summary Refresh Snapshot
- */
-export const useRefreshSnapshotApiV1DatasetCollectionsCollectionIdRefreshSnapshotPost = <TError = ErrorType<HTTPValidationError>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof refreshSnapshotApiV1DatasetCollectionsCollectionIdRefreshSnapshotPost>>, TError,{collectionId: string;data: BodyType<CreateDatasetCollectionRevisionRequest>}, TContext>, request?: SecondParameter<typeof orvalFetcher>}
-): UseMutationReturnType<
-        Awaited<ReturnType<typeof refreshSnapshotApiV1DatasetCollectionsCollectionIdRefreshSnapshotPost>>,
-        TError,
-        {collectionId: string;data: BodyType<CreateDatasetCollectionRevisionRequest>},
-        TContext
-      > => {
-
-      const mutationOptions = getRefreshSnapshotApiV1DatasetCollectionsCollectionIdRefreshSnapshotPostMutationOptions(options);
-
-      return useMutation(mutationOptions);
-    }
-
-/**
  * @summary List Members
  */
 export const getListMembersApiV1DatasetCollectionsCollectionIdMembersGetUrl = (collectionId: string,) => {
@@ -6708,15 +6566,24 @@ export const useDeleteModelApiV1ModelsModelIdDelete = <TError = ErrorType<HTTPVa
 /**
  * @summary Download Model
  */
-export const getDownloadModelApiV1ModelsModelIdDownloadGetUrl = (modelId: string,) => {
+export const getDownloadModelApiV1ModelsModelIdDownloadGetUrl = (modelId: string,
+    params?: DownloadModelApiV1ModelsModelIdDownloadGetParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
-  return `/api/v1/models/${modelId}/download`
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  return normalizedParams.size ? `/api/v1/models/${modelId}/download?${normalizedParams.toString()}` : `/api/v1/models/${modelId}/download`
 }
 
-export const downloadModelApiV1ModelsModelIdDownloadGet = async (modelId: string, options?: RequestInit): Promise<unknown> => {
+export const downloadModelApiV1ModelsModelIdDownloadGet = async (modelId: string,
+    params?: DownloadModelApiV1ModelsModelIdDownloadGetParams, options?: RequestInit): Promise<unknown> => {
 
-  return orvalFetcher<unknown>(getDownloadModelApiV1ModelsModelIdDownloadGetUrl(modelId),
+  return orvalFetcher<unknown>(getDownloadModelApiV1ModelsModelIdDownloadGetUrl(modelId,params),
   {
     ...options,
     method: 'GET'
@@ -6727,21 +6594,23 @@ export const downloadModelApiV1ModelsModelIdDownloadGet = async (modelId: string
 
 
 
-export const getDownloadModelApiV1ModelsModelIdDownloadGetQueryKey = (modelId: MaybeRef<string>,) => {
-    return ['api','v1','models',modelId,'download'] as const;
+export const getDownloadModelApiV1ModelsModelIdDownloadGetQueryKey = (modelId: MaybeRef<string>,
+    params?: MaybeRef<DownloadModelApiV1ModelsModelIdDownloadGetParams>,) => {
+    return ['api','v1','models',modelId,'download', ...(params ? [params]: [])] as const;
     }
 
 
-export const getDownloadModelApiV1ModelsModelIdDownloadGetQueryOptions = <TData = Awaited<ReturnType<typeof downloadModelApiV1ModelsModelIdDownloadGet>>, TError = ErrorType<HTTPValidationError>>(modelId: MaybeRef<string>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof downloadModelApiV1ModelsModelIdDownloadGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+export const getDownloadModelApiV1ModelsModelIdDownloadGetQueryOptions = <TData = Awaited<ReturnType<typeof downloadModelApiV1ModelsModelIdDownloadGet>>, TError = ErrorType<HTTPValidationError>>(modelId: MaybeRef<string>,
+    params?: MaybeRef<DownloadModelApiV1ModelsModelIdDownloadGetParams>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof downloadModelApiV1ModelsModelIdDownloadGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  getDownloadModelApiV1ModelsModelIdDownloadGetQueryKey(modelId);
+  const queryKey =  getDownloadModelApiV1ModelsModelIdDownloadGetQueryKey(modelId,params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof downloadModelApiV1ModelsModelIdDownloadGet>>> = ({ signal }) => downloadModelApiV1ModelsModelIdDownloadGet(unref(modelId), { signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof downloadModelApiV1ModelsModelIdDownloadGet>>> = ({ signal }) => downloadModelApiV1ModelsModelIdDownloadGet(unref(modelId),unref(params), { signal, ...requestOptions });
 
 
 
@@ -6759,11 +6628,12 @@ export type DownloadModelApiV1ModelsModelIdDownloadGetQueryError = ErrorType<HTT
  */
 
 export function useDownloadModelApiV1ModelsModelIdDownloadGet<TData = Awaited<ReturnType<typeof downloadModelApiV1ModelsModelIdDownloadGet>>, TError = ErrorType<HTTPValidationError>>(
- modelId: MaybeRef<string>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof downloadModelApiV1ModelsModelIdDownloadGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
+ modelId: MaybeRef<string>,
+    params?: MaybeRef<DownloadModelApiV1ModelsModelIdDownloadGetParams>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof downloadModelApiV1ModelsModelIdDownloadGet>>, TError, TData>>, request?: SecondParameter<typeof orvalFetcher>}
 
   ): UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getDownloadModelApiV1ModelsModelIdDownloadGetQueryOptions(modelId,options)
+  const queryOptions = getDownloadModelApiV1ModelsModelIdDownloadGetQueryOptions(modelId,params,options)
 
   const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

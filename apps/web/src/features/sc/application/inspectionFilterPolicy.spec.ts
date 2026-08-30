@@ -60,6 +60,49 @@ describe("SC inspection filter policy", () => {
     expect(plan.galleryBaseFilters).toEqual(plan.tableFilters);
   });
 
+  it("keeps the selected-member union for lists while scoping map queries to one member", () => {
+    const selectedMembers = globalFilter([
+      {
+        id: "selected-members",
+        field: "collection_member_id",
+        condition: { filterType: "set", values: ["member-1", "member-2"] },
+        source: { kind: "manual" },
+      },
+    ]);
+    const activeMapMember = globalFilter([
+      {
+        id: "active-map-member",
+        field: "collection_member_id",
+        condition: { filterType: "set", values: ["member-2"] },
+        source: { kind: "manual" },
+      },
+    ]);
+
+    const plan = buildInspectionFilterPlan({
+      globalFilter: selectedMembers,
+      mapFilter: activeMapMember,
+      mapSelectionIds: [],
+      reviewMode: false,
+      samplingIds: undefined,
+    });
+
+    expect(plan.globalFilters).toEqual([
+      {
+        combinator: "and",
+        items: [["collection_member_id", "in", ["member-1", "member-2"]]],
+      },
+    ]);
+    expect(plan.tableFilters).toEqual(plan.globalFilters);
+    expect(plan.galleryBaseFilters).toEqual(plan.globalFilters);
+    expect(plan.mapFilters).toEqual([
+      {
+        combinator: "and",
+        items: [["collection_member_id", "in", ["member-2"]]],
+      },
+    ]);
+    expect(plan.aggregateFilters).toEqual(plan.mapFilters);
+  });
+
   it("appends independently removable map exclusions", () => {
     const first = applyMapSelectionToGlobalFilter(globalFilter(), [9, 3, 9], "exclude");
     const second = applyMapSelectionToGlobalFilter(first, [7, 3], "exclude");

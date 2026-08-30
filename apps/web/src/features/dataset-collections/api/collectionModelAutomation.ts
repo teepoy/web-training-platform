@@ -35,11 +35,11 @@ export function updateCollectionDefaultModel(
 
 export function listCollectionPredictionCoverage(
   collectionId: string,
-  snapshotId: string,
+  revisionId: string,
 ): Promise<CollectionPredictionCoverage[]> {
   return listPredictionCoverageApiV1DatasetCollectionsCollectionIdPredictionCoverageGet(
     collectionId,
-    { snapshot_id: snapshotId },
+    { revision_id: revisionId },
   );
 }
 

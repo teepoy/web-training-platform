@@ -88,6 +88,7 @@ class TrainAndPredictRequest(_StrictRequest):
     target: str = Field(default="image_classification", min_length=1)
     model_version: str | None = None
     sample_ids: list[str] | None = Field(default=None, min_length=1)
+    collection_member_ids: list[str] | None = Field(default=None, min_length=1)
     sample_filter: SampleFilterRequest | None = None
     prompt: str | None = None
     predictor_id: str | None = Field(default=None, min_length=1)
@@ -116,6 +117,11 @@ class TrainAndPredictRequest(_StrictRequest):
             target=self.target,
             model_version=self.model_version,
             sample_ids=tuple(self.sample_ids) if self.sample_ids is not None else None,
+            collection_member_ids=(
+                tuple(self.collection_member_ids)
+                if self.collection_member_ids is not None
+                else None
+            ),
             sample_filter=(
                 self.sample_filter.model_dump(by_alias=True)
                 if self.sample_filter is not None

@@ -5,7 +5,7 @@
         <button>← Collection</button>
         <div class="context-copy">
           <strong>Collection name / Active dataset</strong>
-          <span>Snapshot r3 · 3 datasets combined</span>
+          <span>Revision r3 · 3 datasets combined</span>
         </div>
         <button>Handbook</button>
       </div>

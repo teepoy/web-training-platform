@@ -162,8 +162,8 @@
       "source_location": "L233"
     },
     {
-      "id": "contract_collection_snapshot",
-      "label": "Collection Snapshot",
+      "id": "contract_collection_revision",
+      "label": "Collection Revision",
       "file_type": "concept",
       "source_file": "CORE_DESIGNS.md",
       "source_location": "L182"
@@ -413,7 +413,7 @@
     },
     {
       "source": "contract_source_admission",
-      "target": "contract_collection_snapshot",
+      "target": "contract_collection_revision",
       "relation": "publishes",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,

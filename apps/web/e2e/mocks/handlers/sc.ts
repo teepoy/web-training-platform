@@ -24,16 +24,6 @@ export interface ScInspectionOverrides {
   datasets?: Array<{ id: string; name: string }>;
 }
 
-export async function mockScClassifyLimits(page: Page, maxRows = 300_000): Promise<void> {
-  await page.route("**/api/v1/sc/data/classify-limits", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ max_rows: maxRows }),
-    });
-  });
-}
-
 export async function mockScInspections(
   page: Page,
   overrides?: ScInspectionOverrides,
@@ -242,7 +232,7 @@ export async function mockScDataProvider(
       body: JSON.stringify({ version: "sc.sample-table.v1", columns }),
     });
   });
-  await page.route(`**/api/v1/sc/data/datasets/${datasetId}/events**`, async (route) => {
+  await page.route("**/api/v1/sc/data/**/events**", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "text/event-stream",
@@ -251,7 +241,7 @@ export async function mockScDataProvider(
         `data: {"scope":"dataset:${datasetId}","revision":0,"changed_kinds":[]}\n\n`,
     });
   });
-  await page.route(`**/api/v1/sc/data/datasets/${datasetId}/query`, async (route) => {
+  await page.route("**/api/v1/sc/data/**/query", async (route) => {
     const request = route.request().postDataJSON() as {
       description?: string;
       sql: string;

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from uuid import uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -10,7 +11,7 @@ from injector import inject
 from app.modules.dataset_collections.domain.models import NewCollectionMember
 from app.modules.dataset_collections.port.local import (
     CollectionAutomationAdmissionPort,
-    CollectionSnapshotPublishingPort,
+    CollectionRevisionPublishingPort,
 )
 from app.modules.source_discovery.domain.conditions import (
     ConditionValidationError,
@@ -37,6 +38,7 @@ from app.modules.source_discovery.domain.models import (
     MembershipSuppression,
     ScAutomationPartition,
     SourceConnector,
+    SourceDiscoveryBatch,
     SourceEstimate,
     SourceMembership,
     SourceProviderDescriptor,
@@ -57,12 +59,12 @@ class SourceDiscoveryService:
         repository: SourceDiscoveryRepository,
         providers: SourceProviderCatalog,
         collections: CollectionAutomationAdmissionPort,
-        snapshot_publisher: CollectionSnapshotPublishingPort,
+        revision_publisher: CollectionRevisionPublishingPort,
     ) -> None:
         self._repository = repository
         self._providers = providers
         self._collections = collections
-        self._snapshot_publisher = snapshot_publisher
+        self._revision_publisher = revision_publisher
 
     def list_provider_descriptors(self) -> tuple[SourceProviderDescriptor, ...]:
         return self._providers.list_descriptors()
@@ -114,8 +116,6 @@ class SourceDiscoveryService:
         connector_id: str,
         name: str,
         settings: dict[str, object],
-        max_records_per_run: int,
-        max_rows_per_dataset: int,
     ) -> ImportProfileVersion:
         connector = await self._connector(connector_id, org_id)
         if not connector.enabled:
@@ -133,8 +133,6 @@ class SourceDiscoveryService:
                 connector_id=connector.id,
                 name=name.strip(),
                 settings=settings,
-                max_records_per_run=max_records_per_run,
-                max_rows_per_dataset=max_rows_per_dataset,
                 created_by=actor_id,
                 created_at=now,
             )
@@ -194,8 +192,7 @@ class SourceDiscoveryService:
         connector_id: str,
         import_profile_version_id: str,
         layer_id: str,
-        dimension: str,
-        dimension_value: str,
+        device: str,
     ) -> tuple[MembershipRule, MembershipRuleVersion, ScAutomationPartition]:
         await self._collections.get_collection(collection_id, org_id)
         connector, profile = await self._rule_dependencies(
@@ -206,22 +203,16 @@ class SourceDiscoveryService:
                 "partition_provider_invalid",
                 "SC automation partitions require an SC source connector",
             )
-        if dimension not in {"device", "recipe_id"}:
-            raise SourceDiscoveryValidationError(
-                "partition_dimension_invalid",
-                "SC automation partition dimension must be device or recipe_id",
-            )
         normalized_layer = layer_id.strip()
-        normalized_value = dimension_value.strip()
-        if not normalized_layer or not normalized_value:
+        normalized_device = device.strip()
+        if not normalized_layer or not normalized_device:
             raise SourceDiscoveryValidationError(
                 "partition_value_required",
-                "SC automation partition layer and dimension value are required",
+                "SC automation partition layer and device are required",
             )
         partition_key = json.dumps(
-            [normalized_layer, dimension, normalized_value],
-            ensure_ascii=True,
-            separators=(",", ":"),
+            [normalized_layer, normalized_device],
+            ensure_ascii=False,
         )
         existing = await self._repository.find_partition(
             org_id, connector.id, partition_key
@@ -244,9 +235,9 @@ class SourceDiscoveryService:
                     value=normalized_layer,
                 ),
                 FilterPredicate(
-                    field=dimension,
+                    field="device",
                     operator=FilterOperator.EQ,
-                    value=normalized_value,
+                    value=normalized_device,
                 ),
             ),
         )
@@ -280,8 +271,7 @@ class SourceDiscoveryService:
             rule_id=rule_id,
             connector_id=connector.id,
             layer_id=normalized_layer,
-            dimension=dimension,
-            dimension_value=normalized_value,
+            device=normalized_device,
             partition_key=partition_key,
             created_by=actor_id,
             created_at=now,
@@ -348,9 +338,9 @@ class SourceDiscoveryService:
                     value=partition.layer_id,
                 ),
                 FilterPredicate(
-                    field=partition.dimension,
+                    field="device",
                     operator=FilterOperator.EQ,
-                    value=partition.dimension_value,
+                    value=partition.device,
                 ),
             ),
         )
@@ -420,7 +410,7 @@ class SourceDiscoveryService:
                     range_end_utc=as_of_utc,
                     timezone_name=None,
                     parent_run_id=exc.run_id,
-                    snapshot_revision_id=None,
+                    collection_revision_id=None,
                     stats={"skipped": 1},
                     error_detail=(
                         "Scheduled discovery skipped because the same membership "
@@ -433,26 +423,19 @@ class SourceDiscoveryService:
             )
             return DiscoveryExecution(run=skipped)
         try:
-            batch = await self._providers.get(connector.provider_id).discover(
+            batches = self._providers.get(connector.provider_id).discover(
                 connector=connector,
                 condition=version.condition,
                 start_utc=cursor_time,
                 end_utc=as_of_utc,
-                max_records=profile.max_records_per_run,
             )
-            if batch.has_more:
-                raise SourceDiscoveryValidationError(
-                    "run_record_cap_exceeded",
-                    "Matched Source records exceed the Import profile cap; "
-                    "use a narrower time range or a reviewed profile version",
-                )
             execution = await self._process_records(
                 run=run,
                 rule=rule,
                 version=version,
                 connector=connector,
                 profile=profile,
-                records=batch.records,
+                batches=batches,
                 actor_id=actor_id,
                 retry_failed=False,
             )
@@ -492,7 +475,6 @@ class SourceDiscoveryService:
             start_utc=start_utc,
             end_utc=end_utc,
             representative_limit=representative_limit,
-            max_records=profile.max_records_per_run,
         )
 
     async def run_backfill(
@@ -529,26 +511,19 @@ class SourceDiscoveryService:
             parent_run_id=None,
         )
         try:
-            batch = await provider.discover(
+            batches = provider.discover(
                 connector=connector,
                 condition=version.condition,
                 start_utc=start_utc,
                 end_utc=end_utc,
-                max_records=profile.max_records_per_run,
             )
-            if batch.has_more:
-                raise SourceDiscoveryValidationError(
-                    "backfill_record_cap_exceeded",
-                    "Matched Source records exceed the Import profile cap; split the "
-                    "Backfill into narrower time ranges",
-                )
             return await self._process_records(
                 run=run,
                 rule=rule,
                 version=version,
                 connector=connector,
                 profile=profile,
-                records=batch.records,
+                batches=batches,
                 actor_id=actor_id,
                 retry_failed=False,
             )
@@ -575,10 +550,10 @@ class SourceDiscoveryService:
         if not failed:
             if (
                 parent.status == "needs_attention"
-                and parent.snapshot_revision_id is None
+                and parent.collection_revision_id is None
                 and parent.stats.get("linked", 0) > 0
                 and (parent.error_detail or "").startswith(
-                    "Admissions succeeded but Snapshot publication failed"
+                    "Admissions succeeded but Revision publication failed"
                 )
             ):
                 return await self._retry_publication(parent, actor_id=actor_id)
@@ -616,7 +591,7 @@ class SourceDiscoveryService:
             version=version,
             connector=connector,
             profile=profile,
-            records=records,
+            batches=_single_batch(records),
             actor_id=actor_id,
             retry_failed=True,
         )
@@ -705,13 +680,13 @@ class SourceDiscoveryService:
         version: MembershipRuleVersion,
         connector: SourceConnector,
         profile: ImportProfileVersion,
-        records: tuple[SourceRecord, ...],
+        batches: AsyncIterator[SourceDiscoveryBatch],
         actor_id: str,
         retry_failed: bool,
     ) -> DiscoveryExecution:
         stats = {
-            "scanned": len(records),
-            "matched": len(records),
+            "scanned": 0,
+            "matched": 0,
             "suppressed": 0,
             "skipped": 0,
             "reused": 0,
@@ -721,63 +696,64 @@ class SourceDiscoveryService:
             "succeeded": 0,
             "failed": 0,
         }
-        items: list[DiscoveryRunItem] = []
-        for record in records:
-            item = await self._repository.create_run_item(
-                DiscoveryRunItem(
-                    id=str(uuid4()),
-                    run_id=run.id,
-                    connector_id=connector.id,
-                    source_record_key=record.record_key,
-                    source_version=record.source_version,
-                    observed_at=record.observed_at,
-                    source_payload=_record_payload(record),
-                    status="pending",
-                    dataset_id=None,
-                    member_id=None,
-                    error_detail=None,
-                    created_at=_utcnow(),
-                    updated_at=_utcnow(),
+        async for batch in batches:
+            stats["scanned"] += len(batch.records)
+            stats["matched"] += len(batch.records)
+            for record in batch.records:
+                item = await self._repository.create_run_item(
+                    DiscoveryRunItem(
+                        id=str(uuid4()),
+                        run_id=run.id,
+                        connector_id=connector.id,
+                        source_record_key=record.record_key,
+                        source_version=record.source_version,
+                        observed_at=record.observed_at,
+                        source_payload=_record_payload(record),
+                        status="pending",
+                        dataset_id=None,
+                        member_id=None,
+                        error_detail=None,
+                        created_at=_utcnow(),
+                        updated_at=_utcnow(),
+                    )
                 )
-            )
-            try:
-                item = await self._process_record(
-                    item=item,
-                    run=run,
-                    rule=rule,
-                    version=version,
-                    connector=connector,
-                    profile=profile,
-                    record=record,
-                    actor_id=actor_id,
-                    retry_failed=retry_failed,
-                )
-            except Exception as exc:
-                item = await self._update_item(
-                    item,
-                    "failed",
-                    item.dataset_id,
-                    item.member_id,
-                    str(exc),
-                )
-            items.append(item)
-            if item.status == "suppressed":
-                stats["suppressed"] += 1
-            elif item.status == "replayed":
-                stats["skipped"] += 1
-            elif item.status == "reused":
-                stats["reused"] += 1
-                stats["succeeded"] += 1
-            elif item.status == "source_changed":
-                stats["source_changed"] += 1
-            elif item.status == "succeeded":
-                stats["imported"] += 1
-                stats["linked"] += 1
-                stats["succeeded"] += 1
-            elif item.status == "failed":
-                stats["failed"] += 1
+                try:
+                    item = await self._process_record(
+                        item=item,
+                        run=run,
+                        rule=rule,
+                        version=version,
+                        connector=connector,
+                        profile=profile,
+                        record=record,
+                        actor_id=actor_id,
+                        retry_failed=retry_failed,
+                    )
+                except Exception as exc:
+                    item = await self._update_item(
+                        item,
+                        "failed",
+                        item.dataset_id,
+                        item.member_id,
+                        str(exc),
+                    )
+                if item.status == "suppressed":
+                    stats["suppressed"] += 1
+                elif item.status == "replayed":
+                    stats["skipped"] += 1
+                elif item.status == "reused":
+                    stats["reused"] += 1
+                    stats["succeeded"] += 1
+                elif item.status == "source_changed":
+                    stats["source_changed"] += 1
+                elif item.status == "succeeded":
+                    stats["imported"] += 1
+                    stats["linked"] += 1
+                    stats["succeeded"] += 1
+                elif item.status == "failed":
+                    stats["failed"] += 1
 
-        snapshot_id: str | None = None
+        revision_id: str | None = None
         error_detail: str | None = None
         needs_attention = False
         if stats["linked"]:
@@ -785,8 +761,8 @@ class SourceDiscoveryService:
                 collection = await self._collections.get_collection(
                     run.collection_id, run.org_id
                 )
-                snapshot = (
-                    await self._snapshot_publisher.create_revision_for_automation(
+                revision = (
+                    await self._revision_publisher.create_revision_for_automation(
                         run.collection_id,
                         run.org_id,
                         actor_id=actor_id,
@@ -795,11 +771,11 @@ class SourceDiscoveryService:
                         trigger_ref=run.id,
                     )
                 )
-                snapshot_id = snapshot.id
+                revision_id = revision.id
             except Exception as exc:
                 needs_attention = True
                 error_detail = (
-                    f"Admissions succeeded but Snapshot publication failed: {exc}"
+                    f"Admissions succeeded but Revision publication failed: {exc}"
                 )
 
         status = _run_status(stats, needs_attention=needs_attention)
@@ -819,11 +795,14 @@ class SourceDiscoveryService:
             run.id,
             status=status,
             stats=stats,
-            snapshot_revision_id=snapshot_id,
+            collection_revision_id=revision_id,
             error_detail=error_detail,
             completed_at=_utcnow(),
         )
-        return DiscoveryExecution(run=finished, items=tuple(items))
+        return DiscoveryExecution(
+            run=finished,
+            items=tuple(await self._repository.list_run_items(run.id)),
+        )
 
     async def _retry_publication(
         self, parent: DiscoveryRun, *, actor_id: str
@@ -853,7 +832,7 @@ class SourceDiscoveryService:
             collection = await self._collections.get_collection(
                 parent.collection_id, parent.org_id
             )
-            snapshot = await self._snapshot_publisher.create_revision_for_automation(
+            revision = await self._revision_publisher.create_revision_for_automation(
                 parent.collection_id,
                 parent.org_id,
                 actor_id=actor_id,
@@ -866,8 +845,8 @@ class SourceDiscoveryService:
                 retry_run.id,
                 status="needs_attention",
                 stats=dict(parent.stats),
-                snapshot_revision_id=None,
-                error_detail=f"Snapshot publication Retry failed: {exc}",
+                collection_revision_id=None,
+                error_detail=f"Revision publication Retry failed: {exc}",
                 completed_at=_utcnow(),
             )
             return DiscoveryExecution(run=failed)
@@ -876,7 +855,7 @@ class SourceDiscoveryService:
             retry_run.id,
             status="needs_attention" if source_changed else "completed",
             stats=dict(parent.stats),
-            snapshot_revision_id=snapshot.id,
+            collection_revision_id=revision.id,
             error_detail=(
                 f"{source_changed} Source record(s) changed; explicit Re-import is required"
                 if source_changed
@@ -1249,7 +1228,7 @@ class SourceDiscoveryService:
                 range_end_utc=end_utc,
                 timezone_name=timezone_name,
                 parent_run_id=parent_run_id,
-                snapshot_revision_id=None,
+                collection_revision_id=None,
                 stats={},
                 error_detail=None,
                 created_by=actor_id,
@@ -1263,7 +1242,7 @@ class SourceDiscoveryService:
             run.id,
             status="failed",
             stats={"scanned": 0, "matched": 0, "succeeded": 0, "failed": 0},
-            snapshot_revision_id=None,
+            collection_revision_id=None,
             error_detail=str(exc),
             completed_at=_utcnow(),
         )
@@ -1339,6 +1318,12 @@ def _record_from_payload(payload: dict[str, object]) -> SourceRecord:
         display_name=display_name,
         attributes=attributes,
     )
+
+
+async def _single_batch(
+    records: tuple[SourceRecord, ...],
+) -> AsyncIterator[SourceDiscoveryBatch]:
+    yield SourceDiscoveryBatch(records=records)
 
 
 def _run_status(stats: dict[str, int], *, needs_attention: bool) -> str:

@@ -71,13 +71,13 @@ async function refreshStatistics(): Promise<void> {
   statsLoading.value = true;
   statsError.value = null;
   try {
-    const filterSnapshot = cloneScGlobalFilter(globalFilter.value);
-    const hasFilter = scGlobalFilterHasConditions(filterSnapshot);
+    const clonedFilter = cloneScGlobalFilter(globalFilter.value);
+    const hasFilter = scGlobalFilterHasConditions(clonedFilter);
     const totalGroupsPromise = source.loadAggregates({ field: "class_number", filters: [] });
     const filteredGroupsPromise = hasFilter
       ? source.loadAggregates({
           field: "class_number",
-          filters: buildScGlobalDataFilters(filterSnapshot),
+          filters: buildScGlobalDataFilters(clonedFilter),
         })
       : totalGroupsPromise;
     const [totalGroups, filteredGroups] = await Promise.all([

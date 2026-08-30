@@ -19,6 +19,7 @@ import BlinkVirtualTable from "@/features/sc/presentation/components/BlinkVirtua
 import type { ScSampleTableFilter, ScSampleTableSort } from "@/features/sc/domain/sampleTable";
 import {
   cloneScGlobalFilter,
+  combineScGlobalFilters,
   emptyScGlobalFilter,
   scGlobalFilterConditionCount,
   type ScGlobalFilter,
@@ -69,6 +70,8 @@ const props = defineProps<{
   selectedDefectIds?: Array<number | string>;
   galleryRandomSamplingDefectIds?: Set<string>;
   globalFilter?: ScGlobalFilter;
+  scopeFilter?: ScGlobalFilter;
+  mapScopeFilter?: ScGlobalFilter;
   globalFilterTriggerTarget?: string | HTMLElement;
 }>();
 
@@ -146,15 +149,21 @@ const isReclassify = computed(() => props.variant === "reclassify");
 const globalFilterModel = computed<ScGlobalFilter>({
   get: () => props.globalFilter ?? localGlobalFilter.value,
   set: (filter) => {
-    const snapshot = cloneScGlobalFilter(filter);
+    const clonedFilter = cloneScGlobalFilter(filter);
     if (props.globalFilter === undefined) {
-      localGlobalFilter.value = snapshot;
+      localGlobalFilter.value = clonedFilter;
       return;
     }
-    emit("update:globalFilter", snapshot);
+    emit("update:globalFilter", clonedFilter);
   },
 });
 const globalFilterCount = computed(() => scGlobalFilterConditionCount(globalFilterModel.value));
+const effectiveGlobalFilter = computed(() =>
+  combineScGlobalFilters(props.scopeFilter, globalFilterModel.value),
+);
+const effectiveMapFilter = computed(() =>
+  combineScGlobalFilters(effectiveGlobalFilter.value, props.mapScopeFilter),
+);
 const tableFilterCount = computed(() => Object.keys(tableFilter.value).length);
 const samplingCohortCount = computed(() => props.galleryRandomSamplingDefectIds?.size ?? 0);
 const sampleTableExportFileName = computed(() => {
@@ -201,7 +210,9 @@ const { workbench, dataReady, model, reportDataError } = useInspectionQuadData({
   inspectionTime: computed(() => props.inspectionTime),
   waferKey: computed(() => props.waferKey),
   legendGroupBy: computed(() => legendGroupBy.value),
-  globalFilter: globalFilterModel,
+  globalFilter: effectiveGlobalFilter,
+  mapFilter: effectiveMapFilter,
+  lookupFilter: computed(() => props.scopeFilter ?? emptyScGlobalFilter()),
   tableFilter: computed(() => tableFilter.value),
   tableSort: computed(() => tableSort.value),
   reticle: reticleProjectionModel,
@@ -235,7 +246,9 @@ async function querySamplingCandidateCount(options: ScSamplingCandidateOptions):
 async function resolveWorkflowSampleFilter(
   filter: ScGlobalFilter,
 ): Promise<{ filter: ScGlobalFilter; rowCount: number }> {
-  const rowKeys = await model.queryWorkflowRowKeys(filter);
+  const rowKeys = await model.queryWorkflowRowKeys(
+    combineScGlobalFilters(props.scopeFilter, filter),
+  );
   if (rowKeys.length === 0) throw new Error(t("sc.filteredWorkflowEmpty"));
   return {
     rowCount: rowKeys.length,

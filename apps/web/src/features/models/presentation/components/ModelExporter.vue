@@ -18,11 +18,11 @@ async function exportModel(): Promise<void> {
   loading.value = true;
   try {
     await downloadAuthenticatedFile(
-      getDownloadModelApiV1ModelsModelIdDownloadGetUrl(modelId),
-      `${modelId}.model`,
+      getDownloadModelApiV1ModelsModelIdDownloadGetUrl(modelId, { portable: true }),
+      `${modelId}.model-package.zip`,
     );
     message.success(t("models.exported"));
-    props.onComplete({ format: "model" });
+    props.onComplete({ format: "model-package" });
   } catch (error) {
     message.error(toUserMessage(error, t("models.exportFailed")));
   } finally {

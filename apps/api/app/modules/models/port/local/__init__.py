@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Protocol
+from pathlib import Path
 
 from fastapi import UploadFile
 
@@ -88,6 +89,10 @@ class ModelManagementPort(Protocol):
     async def prepare_model_download(
         self, artifact_id: str, org_id: str
     ) -> tuple[str, str, int]: ...
+
+    async def prepare_model_package_download(
+        self, artifact_id: str, org_id: str
+    ) -> tuple[Path, str, int]: ...
 
     async def upload_model(
         self,

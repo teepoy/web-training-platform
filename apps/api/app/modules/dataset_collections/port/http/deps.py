@@ -6,7 +6,7 @@ from fastapi import Depends, Request
 
 from app.modules.dataset_collections.port.local import (
     CollectionModelManagementPort,
-    CollectionSnapshotPublishingPort,
+    CollectionRevisionPublishingPort,
     DatasetCollectionManagementPort,
 )
 from app.shared.injection import resolve
@@ -34,13 +34,13 @@ CollectionModelManagementDep = Annotated[
 ]
 
 
-def get_collection_snapshot_publishing(
+def get_collection_revision_publishing(
     request: Request,
-) -> CollectionSnapshotPublishingPort:
-    return resolve(request, CollectionSnapshotPublishingPort)
+) -> CollectionRevisionPublishingPort:
+    return resolve(request, CollectionRevisionPublishingPort)
 
 
-CollectionSnapshotPublishingDep = Annotated[
-    CollectionSnapshotPublishingPort,
-    Depends(get_collection_snapshot_publishing),
+CollectionRevisionPublishingDep = Annotated[
+    CollectionRevisionPublishingPort,
+    Depends(get_collection_revision_publishing),
 ]

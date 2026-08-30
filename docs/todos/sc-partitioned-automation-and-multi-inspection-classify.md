@@ -4,21 +4,22 @@
 
 - Recorded before implementation at commit
   `83db1c1d50242b4086978e07918d80b62c4f7785`.
-- **Overall status:** Complete. Exclusive SC routing partitions reuse the
-  Collection discovery/prediction pipeline, and multi-inspection classify is
-  guarded by a tracked browser cap.
+- **Overall status:** Complete. Partition assignment, automated prediction,
+  multi-inspection Collection Classify, Revision semantics, and regression
+  verification are complete. The accepted Revision/class-taxonomy corrections
+  are recorded in `sc-collection-revision-and-class-taxonomy.md`.
 
 ## Requested Outcomes
 
-1. Define an SC upstream routing partition keyed by layer plus device or
-   `recipe_id` and connect it to automated prediction.
+1. Define an SC upstream routing partition keyed by `layer_id + device` and
+   connect it to automated prediction.
 2. Automated-prediction assignment is exclusive: users cannot attach a partition
    that is already assigned under the exclusivity rule. One Collection may bind
    multiple partitions.
 3. Provide a product surface and durable query model for collecting and reviewing
    automated prediction results.
-4. Verify whether multi-inspection classify is already technically supported;
-   if incomplete, implement it with an explicit configurable client safety cap.
+4. Implement multi-inspection classify without the incorrect unmeasured client
+   safety gate.
 
 ## Architecture Reconciliation
 
@@ -36,69 +37,78 @@ either:
 No old generic Sensor builder or unrestricted trigger/action surface may be
 restored accidentally.
 
-## Required Investigation
+## Resolved Investigation
 
-- Trace Source connector descriptors, Collection membership rules, discovery
-  receipts, five-minute polling, automatic prediction batches, coverage, and
-  current automation persistence.
-- Determine whether `layer + device` and `layer + recipe_id` are alternate
-  partition schemas, one composite schema with optional fields, or two registered
-  partition descriptors.
-- Identify the exact exclusivity owner and database constraint: partition,
-  automation recipe, Collection, organization, model binding, or active time
-  interval.
-- Determine how disabled/archived automations, reassignment, retries, overlapping
-  partition definitions, and historical results behave.
-- Inventory existing prediction jobs, batch items, Collection coverage, and
-  result storage before adding a table or materialized view. Prefer a query/view
-  over duplicated prediction facts when it satisfies the product query.
-- Trace Collection classify snapshot loading across multiple inspections and
-  measure browser memory, Arrow response size, map/gallery rendering, selection,
-  and annotation behavior.
+- The exact partition key is organization + SC connector + `layer_id + device`.
+  The unapproved recipe/dimension alternative was removed.
+- Assignment is immutable and transactionally exclusive to one Collection;
+  one Collection may own multiple exact partitions.
+- The existing five-minute discovery, incremental prediction batches, Activity,
+  and per-member Coverage surfaces are reused. No duplicate prediction-facts
+  table or materialized view was added.
+- Collection Classify resolves one explicit Revision, lets the user select
+  multiple members for the shared table/gallery/filter/annotation/job scope,
+  and uses one explicitly selected member for the physical map.
 
 ## Compatibility and Failure Rules
 
-- Existing Dataset and Collection behavior remains backward-compatible; no
-  historical backfill is required unless separately approved.
+- Existing released Dataset behavior remains backward-compatible; the
+  unreleased Collection feature uses its accepted Revision-only contract
+  without a compatibility alias or historical backfill.
 - Exclusivity must be enforced by a database constraint or transactional service
   invariant, not only by disabled UI options.
 - Partition assignment conflicts fail explicitly and identify the current owner
   to authorized users.
-- The multi-inspection sample maximum is a tracked YAML setting with no
-  environment alias. Exceeding it fails before loading the oversized workbench
-  and explains the configured limit.
+- No client-side sample maximum is imposed without measurement and correct
+  server-side counting. The incorrect 300,000-row gate was removed.
 - Automated prediction results remain normal platform prediction facts with
-  provenance to automation run, Collection snapshot, member Dataset, model, and
-  stable sample identity.
+  provenance to automation run, Collection Revision, member Dataset, model,
+  and stable sample identity.
 
 ## Acceptance Criteria
 
-- A versioned partition descriptor and persistence model define layer/device or
-  recipe membership and overlap semantics.
-- One Collection can bind multiple partitions while the approved exclusivity
-  invariant is transactionally enforced.
-- Five-minute discovery and automatic prediction consume the same partition
-  definition; manual prediction remains unaffected.
-- Automated results can be queried and reviewed across runs without duplicating
-  or weakening platform prediction provenance.
-- Multi-inspection classify works across Collection members and never collides on
-  `defect_id`; the explicit configured maximum is tested at below/equal/above
-  boundary values.
-- Alembic migrations, API contracts, generated clients, UI tests, backend tests,
-  and relevant E2E/performance checks pass.
+- [x] A versioned partition descriptor and persistence model define exact
+      `layer_id + device` membership and overlap semantics.
+- [x] One Collection can bind multiple partitions while the approved
+      exclusivity invariant is transactionally enforced.
+- [x] Five-minute discovery and automatic prediction consume the same partition
+      definition; manual prediction remains unaffected.
+- [x] Automated results are queried and reviewed across runs without duplicating
+      or weakening platform prediction provenance.
+- [x] Multi-inspection classify works across selected Revision members and uses
+      Collection-safe `row_key`/sample identity rather than `defect_id`.
+- [x] Revision publication records member/rule identity and dynamically resolves
+      current Dataset and upstream data.
 
 ## Implemented Decisions
 
-- An exact partition is Org + SC connector + layer + one alternate dimension
-  (`device` or `recipe_id`) + its value. One Collection may own many; one exact
-  partition may belong to only one Collection.
+- An exact partition is Org + SC connector + `layer_id` + `device`. One
+  Collection may own many; one exact partition may belong to only one
+  Collection.
 - Assignment is immutable and transactional. It creates an exact ordinary
-  membership rule so the existing five-minute discovery, snapshot publication,
+  membership rule so the existing five-minute discovery, Revision publication,
   and incremental default-model prediction remain the only execution pipeline.
 - Existing prediction batch Activity and per-member Coverage are the durable
-  automated-result surfaces. They retain job/model/snapshot/member provenance,
+  automated-result surfaces. They retain job/model/Revision/member provenance,
   so a second prediction facts table would duplicate state.
-- Collection classify was already multi-inspection capable through revision
-  materialization and Collection-safe row keys. The tracked
-  `sc.data_provider.classify_max_rows` limit is 300,000 total snapshot rows;
-  both the route gate and materializer fail rather than truncate above it.
+- Collection classify is multi-inspection capable through current member
+  resolution and Collection-safe row keys. The incorrect 300,000-row browser
+  gate and its API/configuration plumbing were removed; no replacement limit
+  is imposed in this change.
+
+## Verification
+
+- `make lint` completed successfully: web i18n literals, Ruff, and Prettier
+  all passed.
+- `make test-web`: 99 test files and 525 tests passed.
+- Focused `useReclassifyPage.spec.ts`: 19 tests passed.
+- `make build-web` passed.
+- Focused mock Playwright Collection Revision/classify flow: 1 test passed.
+- Full `make test-e2e`: 50 tests passed.
+- `make test`: 1,078 tests passed, 15 skipped, and 1 xpassed; generated OpenAPI
+  synchronization passed.
+- Full API Pyright completed with 0 errors, and Ruff was clean.
+- `make generate` and `make graphify-check` passed.
+- The Alembic migration applied successfully to the development PostgreSQL
+  database.
+- `git diff --check` passed.

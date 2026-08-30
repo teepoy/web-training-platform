@@ -10,8 +10,6 @@ from app.modules.dataset_collections.domain.models import (
     CollectionPredictionBatch,
     CollectionPredictionBatchItem,
     CollectionPredictionCoverage,
-    CollectionSnapshotRefreshResult,
-    CollectionSnapshotUpdateStatus,
     DatasetCollection,
     DatasetCollectionMember,
     DatasetCollectionRevision,
@@ -42,7 +40,7 @@ class UpdateCollectionDefaultModelRequest(StrictRequest):
 
 
 class CreateCollectionPredictionBatchRequest(StrictRequest):
-    snapshot_id: str = Field(min_length=1, max_length=64)
+    revision_id: str = Field(min_length=1, max_length=64)
     expected_default_model_id: str = Field(min_length=1, max_length=64)
     request_id: str = Field(min_length=1, max_length=128)
     dataset_ids: list[str] = Field(min_length=1)
@@ -153,14 +151,8 @@ class DatasetCollectionRevisionResponse(BaseModel):
     target_view_contract: str
     target_schema_version: str
     status: str
-    source_snapshot: list[dict[str, object]]
-    row_count: int | None
-    label_counts: dict[str, int]
+    members: list[dict[str, object]]
     manifest_uri: str | None
-    provenance_uri: str | None
-    manifest_format: str
-    source_resolution: str
-    reproducibility_capability: bool
     trigger_kind: str
     trigger_ref: str | None
     created_by: str
@@ -182,67 +174,14 @@ class DatasetCollectionRevisionResponse(BaseModel):
             target_view_contract=revision.target_view_contract,
             target_schema_version=revision.target_schema_version,
             status=revision.status,
-            source_snapshot=list(revision.source_snapshot),
-            row_count=revision.row_count,
-            label_counts=revision.label_counts,
+            members=list(revision.members),
             manifest_uri=revision.manifest_uri,
-            provenance_uri=revision.provenance_uri,
-            manifest_format=revision.manifest_format,
-            source_resolution=revision.source_resolution,
-            reproducibility_capability=revision.reproducibility_capability,
             trigger_kind=revision.trigger_kind,
             trigger_ref=revision.trigger_ref,
             created_by=revision.created_by,
             created_at=revision.created_at,
             error_code=revision.error_code,
             error_detail=revision.error_detail,
-        )
-
-
-class CollectionSnapshotMemberUpdateResponse(BaseModel):
-    member_id: str
-    dataset_id: str
-    observed_dataset_revision_id: str | None
-    observed_dataset_revision_number: int | None
-    current_dataset_revision_id: str | None
-    current_dataset_revision_number: int | None
-    update_available: bool
-
-
-class CollectionSnapshotUpdateStatusResponse(BaseModel):
-    snapshot_id: str | None
-    snapshot_revision_number: int | None
-    update_available: bool
-    outdated_member_count: int
-    members: list[CollectionSnapshotMemberUpdateResponse]
-
-    @classmethod
-    def from_domain(
-        cls, status: CollectionSnapshotUpdateStatus
-    ) -> CollectionSnapshotUpdateStatusResponse:
-        return cls(
-            snapshot_id=status.snapshot_id,
-            snapshot_revision_number=status.snapshot_revision_number,
-            update_available=status.update_available,
-            outdated_member_count=status.outdated_member_count,
-            members=[
-                CollectionSnapshotMemberUpdateResponse(**asdict(member))
-                for member in status.members
-            ],
-        )
-
-
-class CollectionSnapshotRefreshResponse(BaseModel):
-    outcome: Literal["refreshed", "unchanged"]
-    snapshot: DatasetCollectionRevisionResponse
-
-    @classmethod
-    def from_domain(
-        cls, result: CollectionSnapshotRefreshResult
-    ) -> CollectionSnapshotRefreshResponse:
-        return cls(
-            outcome=result.outcome,
-            snapshot=DatasetCollectionRevisionResponse.from_domain(result.snapshot),
         )
 
 

@@ -187,7 +187,7 @@ Files:
 `ScSourceRecordProvider` calls `ScUpstreamReader.list_inspections()`, applies the
 typed membership-rule condition, and imports matched records through the SC
 import port. Live discovery maintains a rule cursor and has receipt, replay,
-suppression, source-change, partial-failure, retry, and snapshot-publication
+suppression, source-change, partial-failure, retry, and Revision-publication
 semantics.
 
 Today this path is started through the source-discovery HTTP surface. The
@@ -240,7 +240,7 @@ SC upstream simulator ----> dedicated upstream database
           +---- object-store image/zip references
                          |
                          v
-API source discovery -> Collection admission/snapshot -> resource automation
+API source discovery -> Collection admission/Revision -> resource automation
 ```
 
 The simulator should own mutation, transaction, publication, and cache
@@ -448,7 +448,7 @@ Minimum scenarios:
    approved rule and creates no Dataset.
 2. **New published inspection** — one inspection becomes visible after the
    current cursor, matches a rule, imports once, joins the Collection, and
-   publishes at most one Snapshot.
+   publishes at most one Collection Revision.
 3. **Replay** — polling the same window again does not create a duplicate
    Dataset or member.
 4. **Source update** — changing a mutable field advances the freshness token,
@@ -483,7 +483,7 @@ Update the documentation to distinguish:
 
 Document one happy-path developer workflow: start the stack, establish a
 Collection rule, publish a simulated upstream inspection, observe the automation
-run, and inspect the admitted Dataset/Snapshot.
+run, and inspect the admitted Dataset and Collection Revision.
 
 ## Explicit Non-Candidates
 

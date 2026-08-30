@@ -27,6 +27,7 @@ async def train_and_predict_flow(
     prompt: str | None = None,
     collection_id: str | None = None,
     collection_revision_id: str | None = None,
+    collection_member_ids: list[str] | None = None,
 ) -> object:
     registration = runtime_catalog.get_trainer(trainer_id)
     resolved_predictor_id = runtime_catalog.resolve_predictor_id(
@@ -47,6 +48,7 @@ async def train_and_predict_flow(
             dataset_id=dataset_id,
             collection_id=collection_id,
             collection_revision_id=collection_revision_id,
+            collection_member_ids=collection_member_ids,
             org_id=org_id,
             sample_ids=sample_ids,
             sample_filter=sample_filter,
@@ -69,6 +71,7 @@ async def train_and_predict_flow(
                     prompt=prompt,
                     collection_id=collection_id,
                     collection_revision_id=collection_revision_id,
+                    collection_member_ids=collection_member_ids,
                 ),
             )
         )

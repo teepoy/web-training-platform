@@ -41,6 +41,7 @@ class TrainAndPredictCommand(TrainingJobCommand):
     target: str = "image_classification"
     model_version: str | None = None
     sample_ids: tuple[str, ...] | None = None
+    collection_member_ids: tuple[str, ...] | None = None
     sample_filter: dict[str, object] | None = None
     prompt: str | None = None
     predictor_id: str | None = None
@@ -57,6 +58,13 @@ class TrainAndPredictCommand(TrainingJobCommand):
             raise ValueError("sample_ids and sample_filter are mutually exclusive")
         if self.sample_filter is not None and not self.sample_filter:
             raise ValueError("sample_filter must not be empty")
+        if self.collection_member_ids is not None:
+            if not self.collection_member_ids or len(self.collection_member_ids) != len(
+                set(self.collection_member_ids)
+            ):
+                raise ValueError("collection_member_ids must be non-empty and unique")
+            if self.collection_id is None:
+                raise ValueError("collection_member_ids require a Collection source")
         if self.predictor_id is not None:
             _require_identifier(self.predictor_id, "predictor_id")
 

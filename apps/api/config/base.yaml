@@ -154,7 +154,6 @@ sc:
     training_shuffle_seed: 0
   data_provider:
     implementation: duckdb
-    classify_max_rows: 300000
     max_compressed_request_bytes: 16777216
     max_decompressed_request_bytes: 67108864
     max_rss_mb: 1536

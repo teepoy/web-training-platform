@@ -4,11 +4,8 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { DatasetCollectionRevisionResponseSourceSnapshotItem } from './datasetCollectionRevisionResponseSourceSnapshotItem';
-import type { DatasetCollectionRevisionResponseRowCount } from './datasetCollectionRevisionResponseRowCount';
-import type { DatasetCollectionRevisionResponseLabelCounts } from './datasetCollectionRevisionResponseLabelCounts';
+import type { DatasetCollectionRevisionResponseMembersItem } from './datasetCollectionRevisionResponseMembersItem';
 import type { DatasetCollectionRevisionResponseManifestUri } from './datasetCollectionRevisionResponseManifestUri';
-import type { DatasetCollectionRevisionResponseProvenanceUri } from './datasetCollectionRevisionResponseProvenanceUri';
 import type { DatasetCollectionRevisionResponseTriggerRef } from './datasetCollectionRevisionResponseTriggerRef';
 import type { DatasetCollectionRevisionResponseErrorCode } from './datasetCollectionRevisionResponseErrorCode';
 import type { DatasetCollectionRevisionResponseErrorDetail } from './datasetCollectionRevisionResponseErrorDetail';
@@ -23,14 +20,8 @@ export interface DatasetCollectionRevisionResponse {
   target_view_contract: string;
   target_schema_version: string;
   status: string;
-  source_snapshot: DatasetCollectionRevisionResponseSourceSnapshotItem[];
-  row_count: DatasetCollectionRevisionResponseRowCount;
-  label_counts: DatasetCollectionRevisionResponseLabelCounts;
+  members: DatasetCollectionRevisionResponseMembersItem[];
   manifest_uri: DatasetCollectionRevisionResponseManifestUri;
-  provenance_uri: DatasetCollectionRevisionResponseProvenanceUri;
-  manifest_format: string;
-  source_resolution: string;
-  reproducibility_capability: boolean;
   trigger_kind: string;
   trigger_ref: DatasetCollectionRevisionResponseTriggerRef;
   created_by: string;

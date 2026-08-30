@@ -4,7 +4,6 @@
  * Online Finetune API
  * OpenAPI spec version: 0.1.0
  */
-import type { ScAutomationPartitionResponseDimension } from './scAutomationPartitionResponseDimension';
 
 export interface ScAutomationPartitionResponse {
   id: string;
@@ -13,8 +12,7 @@ export interface ScAutomationPartitionResponse {
   rule_id: string;
   connector_id: string;
   layer_id: string;
-  dimension: ScAutomationPartitionResponseDimension;
-  dimension_value: string;
+  device: string;
   created_by: string;
   created_at: string;
 }

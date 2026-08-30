@@ -23,17 +23,13 @@ from app.modules.sc.data_provider.engine import (
     ScQueryResponseTooLargeError,
     ScQueryTimeoutError,
 )
-from app.modules.sc.data_provider.materializer import (
-    ScCollectionTooLargeError,
-    ScDataMaterializer,
-)
+from app.modules.sc.data_provider.materializer import ScDataMaterializer
 from app.modules.sc.data_provider.revision import RevisionRedis, ScDataRevisionStore
 from app.modules.sc.data_provider.sample_table_descriptor import (
     SC_SAMPLE_TABLE_DESCRIPTOR,
 )
 from app.modules.sc.data_provider.schemas import (
     ScDataInvalidationEvent,
-    ScClassifyLimitsResponse,
     ScSampleTableDescriptor,
     ScSqlQueryRequest,
 )
@@ -108,14 +104,6 @@ class ScDataProviderRedis(CacheRedis, RevisionRedis, Protocol):
 
 
 router = APIRouter(prefix="/api/v1/sc/data", tags=["sc-data-provider"])
-
-
-@router.get("/classify-limits", response_model=ScClassifyLimitsResponse)
-async def classify_limits(
-    request: Request,
-    _user: User = Depends(get_current_user),
-) -> ScClassifyLimitsResponse:
-    return ScClassifyLimitsResponse(max_rows=_runtime(request).config.classify_max_rows)
 
 
 @router.get("/sample-table-descriptor", response_model=ScSampleTableDescriptor)
@@ -236,8 +224,6 @@ async def _query_scope(
     revision = await runtime.revisions.current(scope)
     try:
         materialized = await runtime.materializer.materialize(scope, revision=revision)
-    except ScCollectionTooLargeError as exc:
-        raise HTTPException(status_code=413, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     materialize_ms = (time.monotonic() - materialize_started) * 1000

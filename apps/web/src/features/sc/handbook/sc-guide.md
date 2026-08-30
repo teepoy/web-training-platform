@@ -98,7 +98,7 @@ The same wafer/die/reticle map triad as the preview page, integrated with annota
   its IDs from the current transient selection, cross marks, context-menu actions, and copied IDs;
   unhiding it does not restore the old selection. The menu can also copy selected defect IDs and switch
   selection tools. Selection IDs and black cross marks are produced together from the frontend Map
-  Arrow snapshot; pan and zoom only reproject them and do not clear the selection.
+  Arrow data; pan and zoom only reproject them and do not clear the selection.
 - **Legend coloring** — by bin, class number, annotation status, or prediction label.
 - **Custom colors** — label colors accept text labels as well as numeric classes and persist per
   dataset and legend source.

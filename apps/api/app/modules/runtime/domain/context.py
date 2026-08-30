@@ -21,6 +21,7 @@ class TrainingRuntimeContext:
     org_id: str = ""
     collection_id: str | None = None
     collection_revision_id: str | None = None
+    collection_member_ids: list[str] | None = None
 
     @property
     def data_source(self) -> RuntimeDataSourceRef:
@@ -47,6 +48,7 @@ class PredictionRuntimeContext:
     prompt: str | None = None
     collection_id: str | None = None
     collection_revision_id: str | None = None
+    collection_member_ids: list[str] | None = None
 
     @property
     def data_source(self) -> RuntimeDataSourceRef:
@@ -73,6 +75,7 @@ class TrainAndPredictRuntimeContext:
     prompt: str | None = None
     collection_id: str | None = None
     collection_revision_id: str | None = None
+    collection_member_ids: list[str] | None = None
 
     @property
     def data_source(self) -> RuntimeDataSourceRef:

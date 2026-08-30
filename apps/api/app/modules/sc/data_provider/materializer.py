@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
-import tempfile
 from collections.abc import Awaitable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
@@ -24,7 +23,7 @@ from app.modules.sc.data_provider.scope import ScDataScope
 from app.modules.sc.domain.models import _coerce_naive_to_upstream_tz
 from app.modules.sc.domain.upstream_reader import ScUpstreamReader
 from app.modules.storage.port.local import DatasetStorageFactoryPort
-from app.shared.domain.protocols import ArtifactStorage
+from app.shared.api.schemas import DatasetStorageMode
 
 
 _SAMPLE_COLUMN_DTYPES = {
@@ -110,16 +109,6 @@ class _MutableOverlayStorage(Protocol):
     async def prediction_overlay_lazyframe(self) -> tuple[Any | None, str]: ...
 
 
-class ScCollectionTooLargeError(ValueError):
-    def __init__(self, *, row_count: int, max_rows: int) -> None:
-        super().__init__(
-            f"Collection revision has {row_count} rows; browser classify limit is "
-            f"{max_rows} rows"
-        )
-        self.row_count = row_count
-        self.max_rows = max_rows
-
-
 class ScDataMaterializer:
     def __init__(
         self,
@@ -127,22 +116,16 @@ class ScDataMaterializer:
         upstream_reader: ScUpstreamReader,
         storage_factory: DatasetStorageFactoryPort,
         collection_revision_reader: DatasetCollectionRevisionReaderPort,
-        artifact_storage: ArtifactStorage,
         cache: ScDataObjectCache,
         batch_rows: int,
-        classify_max_rows: int,
     ) -> None:
         if batch_rows <= 0:
             raise ValueError("batch_rows must be greater than zero")
-        if classify_max_rows <= 0:
-            raise ValueError("classify_max_rows must be greater than zero")
         self._upstream_reader = upstream_reader
         self._storage_factory = storage_factory
         self._collection_revision_reader = collection_revision_reader
-        self._artifact_storage = artifact_storage
         self._cache = cache
         self._batch_rows = batch_rows
-        self._classify_max_rows = classify_max_rows
 
     async def materialize(
         self, scope: ScDataScope, *, revision: int
@@ -226,6 +209,12 @@ class ScDataMaterializer:
     ) -> MaterializedScScope:
         storage = await self._storage_factory.open(scope.identity, scope.org_id)
         dataset = await storage.get_dataset_metadata()
+        if storage.storage_mode == DatasetStorageMode.DB_FULL:
+            return await self._materialize_persisted_dataset(
+                scope,
+                storage=storage,
+                revision=revision,
+            )
         inspection_time, wafer_key = _dataset_source_scope(dataset, scope.identity)
         sparse_task: asyncio.Task[pl.LazyFrame] | None = None
 
@@ -365,6 +354,104 @@ class ScDataMaterializer:
             prediction_overlay=prediction_overlay,
         )
 
+    async def _materialize_persisted_dataset(
+        self,
+        scope: ScDataScope,
+        *,
+        storage: Any,
+        revision: int,
+    ) -> MaterializedScScope:
+        rows_task: asyncio.Task[pl.LazyFrame] | None = None
+
+        async def load_rows() -> pl.LazyFrame:
+            nonlocal rows_task
+            if rows_task is None:
+
+                async def load() -> pl.LazyFrame:
+                    return cast(
+                        pl.LazyFrame,
+                        await storage.list_samples(
+                            return_lazyframe=True,
+                            with_labels=False,
+                            with_predictions=False,
+                        ),
+                    )
+
+                rows_task = asyncio.create_task(
+                    load(), name=f"sc-persisted-dataset-{scope.identity}"
+                )
+            return await rows_task
+
+        async def build_samples_base(path: Path) -> None:
+            await _sink_lazyframe(
+                _persisted_db_full_sc_lazyframe(
+                    await load_rows(), dataset_id=scope.identity
+                ),
+                path,
+            )
+
+        async def build_review_images() -> pa.Table:
+            return pa.table(
+                {
+                    "defect_id": pa.array([], type=pa.int32()),
+                    "image_id": pa.array([], type=pa.int64()),
+                    "row_key": pa.array([], type=pa.string()),
+                }
+            )
+
+        base, review_images = await asyncio.gather(
+            self._cache.get_or_build_file(
+                logical_key=(
+                    f"dataset:{scope.org_id}/{scope.identity}:samples-base:"
+                    "v1-persisted-db-full"
+                ),
+                scope=scope.cache_name,
+                revision=revision,
+                revision_tracked=True,
+                builder=build_samples_base,
+            ),
+            self._cache.get_or_build(
+                logical_key=(
+                    f"dataset:{scope.org_id}/{scope.identity}:review-images:"
+                    "v1-persisted-db-full"
+                ),
+                scope=scope.cache_name,
+                revision=revision,
+                revision_tracked=True,
+                builder=build_review_images,
+            ),
+        )
+        overlay_storage = cast(_MutableOverlayStorage, storage)
+        (
+            (annotation_lf, annotation_fingerprint),
+            (prediction_lf, prediction_fingerprint),
+        ) = await asyncio.gather(
+            overlay_storage.annotation_overlay_lazyframe(),
+            overlay_storage.prediction_overlay_lazyframe(),
+        )
+        annotation_overlay, prediction_overlay = await asyncio.gather(
+            self._materialize_annotation_overlay(
+                scope,
+                annotation_lf,
+                annotation_fingerprint,
+                scope_revision=revision,
+            ),
+            self._materialize_prediction_overlay(
+                scope,
+                prediction_lf,
+                prediction_fingerprint,
+                scope_revision=revision,
+            ),
+        )
+        return MaterializedScScope(
+            scope=scope,
+            revision=revision,
+            samples_base=base,
+            review_images=review_images,
+            annotation_overlay=annotation_overlay,
+            prediction_overlay=prediction_overlay,
+        )
+
     async def _materialize_collection(
         self, scope: ScDataScope, *, revision: int
     ) -> MaterializedScScope:
@@ -380,14 +467,6 @@ class ScDataMaterializer:
         ):
             raise ValueError(
                 f"Collection revision is not ready: {collection_id}/{revision_id}"
-            )
-        if (
-            collection_revision.row_count is not None
-            and collection_revision.row_count > self._classify_max_rows
-        ):
-            raise ScCollectionTooLargeError(
-                row_count=collection_revision.row_count,
-                max_rows=self._classify_max_rows,
             )
         source_dataset_ids = _collection_source_dataset_ids(collection_revision)
         storages = dict(
@@ -420,195 +499,127 @@ class ScDataMaterializer:
         freshness_key = hashlib.sha256(
             "\n".join(source_freshness).encode("utf-8")
         ).hexdigest()[:16]
-        artifact_task: asyncio.Task[Path] | None = None
         observed_source_task: asyncio.Task[pl.LazyFrame] | None = None
-        materialized_source_task: asyncio.Task[pl.LazyFrame] | None = None
         reviews_task: asyncio.Task[pl.DataFrame] | None = None
-        observed_resolution = collection_revision.source_resolution == "observed"
 
-        with tempfile.TemporaryDirectory(prefix="sc-collection-workbench-") as tmp:
-            artifact_path = Path(tmp) / "revision.parquet"
+        async def load_observed_source() -> pl.LazyFrame:
+            nonlocal observed_source_task
+            if observed_source_task is None:
 
-            async def load_artifact_path() -> Path:
-                nonlocal artifact_task
-                if artifact_task is None:
-
-                    async def download() -> Path:
-                        await self._artifact_storage.get_file(
-                            cast(str, collection_revision.manifest_uri),
-                            str(artifact_path),
-                        )
-                        return artifact_path
-
-                    artifact_task = asyncio.create_task(
-                        download(),
-                        name=f"sc-collection-artifact-{revision_id}",
+                async def load_member(
+                    dataset_id: str,
+                    member: dict[str, object],
+                ) -> pl.LazyFrame:
+                    rows = cast(
+                        pl.LazyFrame,
+                        await storages[dataset_id].list_samples(
+                            return_lazyframe=True,
+                            with_labels=False,
+                            with_predictions=False,
+                        ),
                     )
-                return await artifact_task
+                    inspection_time, wafer_key = source_scopes[dataset_id]
+                    rows = await self._resolve_latest_source(
+                        _parse_inspection_time(inspection_time),
+                        wafer_key,
+                        rows,
+                        dataset_id=dataset_id,
+                    )
+                    return _observed_collection_member_lazyframe(
+                        rows,
+                        dataset_id=dataset_id,
+                        member_id=str(member.get("member_id", "")),
+                    )
 
-            async def load_observed_source() -> pl.LazyFrame:
-                nonlocal observed_source_task
-                if observed_source_task is None:
-
-                    async def load() -> pl.LazyFrame:
-                        async def load_member(
-                            dataset_id: str,
-                            snapshot: dict[str, object],
-                        ) -> pl.LazyFrame:
-                            rows = cast(
-                                pl.LazyFrame,
-                                await storages[dataset_id].list_samples(
-                                    return_lazyframe=True,
-                                    with_labels=False,
-                                    with_predictions=False,
-                                ),
-                            )
-                            inspection_time, wafer_key = source_scopes[dataset_id]
-                            rows = await self._resolve_latest_source(
-                                _parse_inspection_time(inspection_time),
-                                wafer_key,
-                                rows,
-                                dataset_id=dataset_id,
-                            )
-                            return _observed_collection_member_lazyframe(
-                                rows,
-                                dataset_id=dataset_id,
-                                member_id=str(snapshot.get("member_id", "")),
-                            )
-
-                        member_frames = await asyncio.gather(
-                            *(
-                                load_member(dataset_id, snapshot)
-                                for dataset_id, snapshot in zip(
-                                    source_dataset_ids,
-                                    collection_revision.source_snapshot,
-                                    strict=True,
-                                )
+                async def load() -> pl.LazyFrame:
+                    member_frames = await asyncio.gather(
+                        *(
+                            load_member(dataset_id, member)
+                            for dataset_id, member in zip(
+                                source_dataset_ids,
+                                collection_revision.members,
+                                strict=True,
                             )
                         )
-                        return pl.concat(member_frames, how="diagonal_relaxed")
-
-                    observed_source_task = asyncio.create_task(
-                        load(),
-                        name=f"sc-collection-observed-source-{revision_id}",
                     )
-                return await observed_source_task
+                    return pl.concat(member_frames, how="diagonal_relaxed")
 
-            async def load_materialized_source() -> pl.LazyFrame:
-                nonlocal materialized_source_task
-                if materialized_source_task is None:
+                observed_source_task = asyncio.create_task(
+                    load(),
+                    name=f"sc-collection-current-source-{revision_id}",
+                )
+            return await observed_source_task
 
-                    async def load() -> pl.LazyFrame:
-                        membership = pl.scan_parquet(await load_artifact_path())
+        async def load_reviews() -> pl.DataFrame:
+            nonlocal reviews_task
+            if reviews_task is None:
 
-                        async def load_member(dataset_id: str) -> pl.LazyFrame:
-                            inspection_time, wafer_key = source_scopes[dataset_id]
-                            return await self._resolve_latest_source(
-                                _parse_inspection_time(inspection_time),
-                                wafer_key,
-                                membership.filter(
-                                    pl.col("source_dataset_id") == dataset_id
-                                ),
-                                dataset_id=dataset_id,
-                            )
-
-                        return pl.concat(
-                            await asyncio.gather(
-                                *(
-                                    load_member(dataset_id)
-                                    for dataset_id in source_dataset_ids
-                                )
-                            ),
-                            how="diagonal_relaxed",
+                async def load() -> pl.DataFrame:
+                    frames: list[pl.DataFrame] = []
+                    for dataset_id in source_dataset_ids:
+                        inspection_time, wafer_key = source_scopes[dataset_id]
+                        frame = await self._load_review_images(
+                            _parse_inspection_time(inspection_time), wafer_key
                         )
-
-                    materialized_source_task = asyncio.create_task(
-                        load(),
-                        name=f"sc-collection-materialized-source-{revision_id}",
-                    )
-                return await materialized_source_task
-
-            async def load_reviews() -> pl.DataFrame:
-                nonlocal reviews_task
-                if reviews_task is None:
-
-                    async def load() -> pl.DataFrame:
-                        frames: list[pl.DataFrame] = []
-                        for dataset_id in source_dataset_ids:
-                            inspection_time, wafer_key = source_scopes[dataset_id]
-                            frame = await self._load_review_images(
-                                _parse_inspection_time(inspection_time), wafer_key
+                        frames.append(
+                            frame.with_columns(
+                                pl.lit(dataset_id).alias("source_dataset_id")
                             )
-                            frames.append(
-                                frame.with_columns(
-                                    pl.lit(dataset_id).alias("source_dataset_id")
-                                )
-                            )
-                        return pl.concat(frames, how="vertical_relaxed")
+                        )
+                    return pl.concat(frames, how="vertical_relaxed")
 
-                    reviews_task = asyncio.create_task(
-                        load(),
-                        name=f"sc-collection-reviews-{revision_id}",
-                    )
-                return await reviews_task
+                reviews_task = asyncio.create_task(
+                    load(),
+                    name=f"sc-collection-reviews-{revision_id}",
+                )
+            return await reviews_task
 
-            async def build_samples_base(path: Path) -> None:
-                source = (
-                    await load_observed_source()
-                    if observed_resolution
-                    else await load_materialized_source()
-                )
-                reviews = await load_reviews()
-                await _sink_lazyframe(
-                    _normalize_dataset_base_lazyframe(
-                        source,
-                        reviews,
-                        assign_map_ids=True,
-                    ),
-                    path,
-                )
-
-            async def build_review_images() -> pa.Table:
-                source = (
-                    await load_observed_source()
-                    if observed_resolution
-                    else await load_materialized_source()
-                )
-                identities = source.select(
-                    pl.col("source_dataset_id").cast(pl.Utf8),
-                    pl.col("defect_id").cast(pl.Int32, strict=False),
-                    pl.col("row_key").cast(pl.Utf8),
-                )
-                return (
-                    await _review_images_with_row_keys(
-                        await load_reviews(),
-                        identities,
-                        join_columns=["source_dataset_id", "defect_id"],
-                    )
-                ).to_arrow()
-
-            base, review_images = await asyncio.gather(
-                self._cache.get_or_build_file(
-                    logical_key=(
-                        f"collection:{scope.org_id}/{scope.identity}:samples-base:"
-                        f"{_SAMPLES_BASE_FORMAT_VERSION}:source-{freshness_key}"
-                    ),
-                    scope=scope.cache_name,
-                    revision=revision if observed_resolution else 0,
-                    revision_tracked=observed_resolution,
-                    builder=build_samples_base,
+        async def build_samples_base(path: Path) -> None:
+            await _sink_lazyframe(
+                _normalize_dataset_base_lazyframe(
+                    await load_observed_source(),
+                    await load_reviews(),
+                    assign_map_ids=True,
                 ),
-                self._cache.get_or_build(
-                    logical_key=(
-                        f"collection:{scope.org_id}/{scope.identity}:review-images:"
-                        f"{_REVIEW_IMAGES_FORMAT_VERSION}:source-{freshness_key}"
-                    ),
-                    scope=scope.cache_name,
-                    revision=revision if observed_resolution else 0,
-                    revision_tracked=observed_resolution,
-                    builder=build_review_images,
-                ),
+                path,
             )
+
+        async def build_review_images() -> pa.Table:
+            identities = (await load_observed_source()).select(
+                pl.col("source_dataset_id").cast(pl.Utf8),
+                pl.col("defect_id").cast(pl.Int32, strict=False),
+                pl.col("row_key").cast(pl.Utf8),
+            )
+            return (
+                await _review_images_with_row_keys(
+                    await load_reviews(),
+                    identities,
+                    join_columns=["source_dataset_id", "defect_id"],
+                )
+            ).to_arrow()
+
+        base, review_images = await asyncio.gather(
+            self._cache.get_or_build_file(
+                logical_key=(
+                    f"collection:{scope.org_id}/{scope.identity}:samples-base:"
+                    f"{_SAMPLES_BASE_FORMAT_VERSION}:source-{freshness_key}"
+                ),
+                scope=scope.cache_name,
+                revision=revision,
+                revision_tracked=True,
+                builder=build_samples_base,
+            ),
+            self._cache.get_or_build(
+                logical_key=(
+                    f"collection:{scope.org_id}/{scope.identity}:review-images:"
+                    f"{_REVIEW_IMAGES_FORMAT_VERSION}:source-{freshness_key}"
+                ),
+                scope=scope.cache_name,
+                revision=revision,
+                revision_tracked=True,
+                builder=build_review_images,
+            ),
+        )
 
         annotation_frames: list[pl.LazyFrame] = []
         prediction_frames: list[pl.LazyFrame] = []
@@ -903,11 +914,11 @@ def _collection_source_dataset_ids(
     revision: DatasetCollectionRevision,
 ) -> tuple[str, ...]:
     dataset_ids = tuple(
-        str(item.get("source_dataset_id", "")) for item in revision.source_snapshot
+        str(item.get("source_dataset_id", "")) for item in revision.members
     )
     if not dataset_ids or any(not dataset_id for dataset_id in dataset_ids):
         raise ValueError(
-            f"Collection revision {revision.id} has no valid source dataset snapshot"
+            f"Collection revision {revision.id} has no valid source dataset membership"
         )
     if len(dataset_ids) != len(set(dataset_ids)):
         raise ValueError(
@@ -971,6 +982,49 @@ def _empty_samples_frame() -> pl.DataFrame:
             column: pl.Series(name=column, values=[], dtype=dtype)
             for column, dtype in _SAMPLE_COLUMN_DTYPES.items()
         }
+    )
+
+
+def _persisted_db_full_sc_lazyframe(
+    rows: pl.LazyFrame, *, dataset_id: str
+) -> pl.LazyFrame:
+    schema = rows.collect_schema()
+    names = set(schema.names())
+    missing = {"id", "metadata_json"} - names
+    if missing:
+        raise ValueError(
+            f"Persisted SC dataset rows are missing columns: {sorted(missing)}"
+        )
+    metadata_dtype = schema["metadata_json"]
+    if not isinstance(metadata_dtype, pl.Struct):
+        raise ValueError("Persisted SC dataset metadata_json must be a struct")
+
+    excluded_metadata = {"sample_id", "shard_images", "review_images"}
+    metadata_expressions = [
+        pl.col("metadata_json").struct.field(field.name).alias(field.name)
+        for field in metadata_dtype.fields
+        if field.name not in excluded_metadata
+    ]
+    source_sample = (
+        pl.col("metadata_json").struct.field("sample_id")
+        if "sample_id" in {field.name for field in metadata_dtype.fields}
+        else pl.col("id")
+    )
+    persisted = rows.select(
+        pl.col("id").cast(pl.Utf8).alias("sample_id"),
+        source_sample.cast(pl.Utf8).alias("source_sample_id"),
+        *metadata_expressions,
+    )
+    return _normalize_dataset_base_lazyframe(
+        persisted,
+        pl.DataFrame(
+            {
+                "defect_id": pl.Series([], dtype=pl.Int32),
+                "image_id": pl.Series([], dtype=pl.Int64),
+            }
+        ),
+        dataset_id=dataset_id,
+        assign_map_ids=True,
     )
 
 

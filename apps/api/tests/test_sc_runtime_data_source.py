@@ -173,26 +173,20 @@ async def test_observed_collection_runtime_resolves_current_member_data() -> Non
         target_view_contract="sc.patch-image",
         target_schema_version="1",
         status="ready",
-        source_snapshot=(
+        members=(
             {
                 "member_id": "member-1",
                 "source_dataset_id": "dataset-1",
                 "label_space": ["scratch", "particle"],
             },
         ),
-        row_count=None,
-        label_counts={},
         manifest_uri="memory://collection-manifest.json",
-        provenance_uri=None,
         trigger_kind="manual",
         trigger_ref=None,
         created_by="user-1",
         created_at=now,
         error_code=None,
         error_detail=None,
-        manifest_format="collection-composite-observed.v1",
-        source_resolution="observed",
-        reproducibility_capability=False,
     )
 
     class Storage:

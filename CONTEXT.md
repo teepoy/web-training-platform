@@ -60,11 +60,11 @@ Source connector 为一条 provider-owned 记录提供的稳定 opaque key，与
 
 使用一个明确的 membership rule version 和用户指定的历史时间范围，发现并处理既有 Source records 的独立操作。启用 membership rule 本身只处理启用后出现的新记录；历史处理不会作为隐藏的启用副作用发生。Provider 声明业务时间字段；用户选择 IANA timezone，API 将范围规范化为 UTC 半开区间 `[start, end)`。
 
-Backfill 固定使用启动时的 rule version，使用独立 cursor，且不推进或回退实时发现 watermark。它可以和实时发现并行，并在全部内部 execution windows 结束后最多发布一个合并后的 Snapshot。
+Backfill 固定使用启动时的 rule version，使用独立 cursor，且不推进或回退实时发现 watermark。它可以和实时发现并行，并在全部内部 execution windows 结束后最多发布一个合并后的 Collection Revision。
 
 ### Execution window
 
-Backfill 内部用于限制单次查询、导入数量和并发的运行时切片。Execution window 不是长期业务身份，不向一般用户暴露为 Partition，也不单独发布 Snapshot。
+Backfill 内部用于限制单次查询批次和并发的运行时切片。Execution window 不是长期业务身份，不向一般用户暴露为 Partition，也不单独发布 Collection Revision。
 
 ### Discovery receipt
 
@@ -76,7 +76,7 @@ Backfill 内部用于限制单次查询、导入数量和并发的运行时切�
 
 ### Discovery run
 
-一次检查和处理一批 Source records 的可追踪运行。一个 run 最多发布一个 Snapshot；成功导入的成员可以发布，失败记录单独保留错误并等待重试。
+一次检查和处理一批 Source records 的可追踪运行。一个 run 最多发布一个 Collection Revision；成功导入的成员可以发布，失败记录单独保留错误并等待重试。
 
 ### Membership suppression
 
@@ -84,7 +84,7 @@ Backfill 内部用于限制单次查询、导入数量和并发的运行时切�
 
 ### Re-import
 
-Source record 在首次导入后发生变化时，由用户显式创建新 Dataset Revision 的操作。输出契约不兼容时 Re-import 才创建新的 Dataset；任何情况都不原地改写旧 Revision 或历史 Snapshot。
+Source record 在首次导入后发生变化时，由用户显式创建新 Dataset Revision 的操作。输出契约不兼容时 Re-import 才创建新的 Dataset；任何情况都不原地改写旧 Dataset Revision。
 
 ### Automation run history
 
@@ -100,7 +100,13 @@ Dataset Collection 当前可编辑的成员与规则定义。修改 head 不会�
 
 ### Dataset revision
 
-Dataset 在一次成功导入、Re-import、标注同步或批量编辑操作结束时自动发布的轻量变更记录。记录本身不可修改，包含操作审计、provenance 与当前数据逻辑引用，但第一阶段不复制样本/标注数据，也不承诺完全可复现。训练、预测和 Collection Snapshot 记录当时观察到的 Dataset Revision 作为 provenance。
+Dataset 在一次成功导入、Re-import、标注同步或批量编辑操作结束时自动发布的轻量变更记录。记录本身不可修改，包含操作审计、provenance 与当前数据逻辑引用，但第一阶段不复制样本/标注数据，也不承诺完全可复现。训练和预测可以记录启动时观察到的 Dataset Revision 作为 provenance；Collection Revision 不固定成员 Dataset 数据版本。
+
+### SC class mapping
+
+平台统一定义的 SC 原始整数 `class_number` 到用户可读类别名称的展示映射。原始整数仍是查询、过滤、传输和导出的稳定标识；该映射不属于 Dataset metadata、annotation taxonomy 或 model label space。
+
+Avoid: 为不同 Dataset、Collection、组织或 connector 创建各自的 SC class mapping。
 
 ### Collection data contract
 
@@ -112,15 +118,13 @@ Collection 成员共同满足的目标 view、任务 schema 与 canonical label 
 
 ### Draft collection
 
-已经创建但尚未成功发布第一个 Snapshot 的 Collection。Draft collection 可以继续配置成员和规则，但不能作为训练或预测的稳定输入。
+已经创建但尚未成功发布第一个 Revision 的 Collection。Draft collection 可以继续配置成员和规则，但不能作为训练或预测输入。
 
 ### Collection revision
 
-Collection head 在一次成功发布时产生的不可修改记录，保存当时观察到的成员 Dataset Revision、规则、映射与组合 manifest。第一阶段不复制成员数据，`source_resolution=observed`，因此训练与预测记录具体 revision 作为 provenance，但不宣称旧任务输入可完全重建。
+Collection head 在一次成功发布时产生的不可修改记录，固定成员 identity、顺序、规则与映射。它不固定成员 Dataset 行、annotation 或 upstream 字段；Classify、training 与 prediction 始终读取这些成员的当前数据，因此 Revision 不是数据 time-travel 机制。
 
 Avoid: 把 revision 理解为用户需要手工维护的 Collection 副本，或允许原地编辑 revision。
-
-面向用户优先显示 `Snapshot #N` / `数据快照`；Revision 保留为 API 与持久化术语。定义和观察到的 Dataset Revision 没有变化时刷新记录为 `unchanged`，不发布内容相同的新 Snapshot。界面必须说明当前 Snapshot 是发布记录而非冻结的数据副本。
 
 ### Collection default model
 
@@ -132,7 +136,7 @@ Collection 中每个成员 Dataset 相对于 default model 和当前 Dataset Rev
 
 ### Candidate model
 
-自动训练成功产生、但尚未替换 Collection default model 的模型。Candidate 保留训练所用 Snapshot 和训练运行 provenance；在评估与 Promote 方案明确前，自动训练不得自动切换默认模型。
+自动训练成功产生、但尚未替换 Collection default model 的模型。Candidate 保留训练所用 Collection Revision 和训练运行 provenance；在评估与 Promote 方案明确前，自动训练不得自动切换默认模型。
 
 所有 Candidate Models 均保留用于后续比较与回退分析；界面可以突出最新 Candidate，但不能用新 Candidate 覆盖或删除旧记录。
 
@@ -142,7 +146,7 @@ Collection 中每个成员 Dataset 相对于 default model 和当前 Dataset Rev
 
 ### Classify workspace
 
-SC Dataset 或 SC Collection 中浏览、筛选、抽样和标注缺陷样本的全屏 Product work surface。资源详情中的 `Classify ↗` 是该 workspace 的直接导航入口，不渲染中间预览页；Dataset 直接打开自身样本，Collection 使用已保存 Snapshot 打开其成员样本。
+SC Dataset 或 SC Collection 中浏览、筛选、抽样和标注缺陷样本的全屏 Product work surface。资源详情中的 `Classify ↗` 是该 workspace 的直接导航入口，不渲染中间预览页；Dataset 直接打开自身样本，Collection 使用所选 Revision 的成员并始终读取这些成员的当前数据。
 
 Avoid: 将 SC Samples 呈现为通用原始行表格，或把 Classify workspace 当作独立资源。
 

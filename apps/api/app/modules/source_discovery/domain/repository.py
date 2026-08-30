@@ -105,7 +105,7 @@ class SourceDiscoveryRepository(Protocol):
         *,
         status: str,
         stats: dict[str, int],
-        snapshot_revision_id: str | None,
+        collection_revision_id: str | None,
         error_detail: str | None,
         completed_at: datetime,
     ) -> DiscoveryRun: ...

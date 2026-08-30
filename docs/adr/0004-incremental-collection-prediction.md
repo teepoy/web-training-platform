@@ -12,12 +12,24 @@ Automatically promoting every newly trained Model would also allow a regression 
 
 - A Collection may pin one default Model identity/version for its prediction automation.
 - If the pinned default Model is archived, its binding and history remain visible but new automatic or manual Collection prediction is blocked with `Default model unavailable`. The platform never substitutes a Candidate or another Model implicitly.
-- Membership discovery and Snapshot publication remain available when no default Model is configured. Newly admitted members are marked `Not predicted`, and no Prediction Job is synthesized from an implicit or recently trained Model.
+- Membership discovery and Collection Revision publication remain available
+  when no default Model is configured. Newly admitted members are marked
+  `Not predicted`, and no Prediction Job is synthesized from an implicit or
+  recently trained Model.
 - When a Dataset newly enters the Collection, automatic prediction processes that new Dataset only. It does not re-run prediction across all existing members.
-- When an existing shared Dataset publishes a new Dataset Revision, referencing Collections remain on their current Snapshots and show `Update available`. A user may explicitly refresh a Collection to record the latest compatible member Revisions; that refresh does not automatically run prediction in the first phase. After refresh, the UI must show that prior prediction provenance references an older Dataset Revision rather than presenting it as current.
+- When an existing Dataset publishes a new Dataset Revision or an upstream
+  mutable field changes, referencing Collection Revisions remain unchanged.
+  Collection consumers read the new current values dynamically. Prediction
+  coverage may mark a member `Data outdated` when its applicable prediction
+  predates the current Dataset Revision, but this does not republish the
+  Collection Revision.
 - Every prediction run and result retains the exact Model identity/version used.
-- A Dataset-level incremental prediction remains a Dataset runtime input while separately recording the Automation, Collection, membership, and triggering Snapshot provenance that caused it.
-- A newly admitted member is first published in a successful Snapshot. Its incremental Prediction Job is created afterward; prediction failure does not roll back membership or the Snapshot.
+- A Dataset-level incremental prediction remains a Dataset runtime input while
+  separately recording the Automation, Collection, membership, and triggering
+  Collection Revision provenance that caused it.
+- A newly admitted member is first published in a successful Collection
+  Revision. Its incremental Prediction Job is created afterward; prediction
+  failure does not roll back membership or the Revision.
 - Changing the Collection default Model does not automatically re-predict existing members.
 - Setting a default Model after members already exist also does not automatically predict them; the UI presents those members for an explicit reconciliation batch.
 - The Collection UI prominently marks member Datasets whose most recent successful prediction attributable to that Collection membership used a Model different from the default Model.
@@ -33,4 +45,6 @@ Automatically promoting every newly trained Model would also allow a regression 
 - The implementation needs Collection-aware provenance for Dataset-level prediction jobs; the current mutually exclusive Dataset versus Collection Revision job source is not sufficient by itself.
 - Reconciliation needs a parent batch record in addition to child Prediction Jobs so the UI can show aggregate progress without losing per-Dataset retry and provenance.
 - Default-model changes create visible reconciliation work instead of silently rewriting predictions or launching an unbounded full rerun.
-- Restoring or replacing an unavailable default Model requires explicit user action before prediction resumes; membership discovery and Snapshot publication continue independently.
+- Restoring or replacing an unavailable default Model requires explicit user
+  action before prediction resumes; membership discovery and Collection
+  Revision publication continue independently.

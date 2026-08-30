@@ -7,7 +7,6 @@ from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock, Mock
 
-import ml_library
 import polars as pl
 import pytest
 
@@ -63,20 +62,16 @@ def _collection_revision() -> DatasetCollectionRevision:
         target_view_contract=SC_PATCH_IMAGE_V1.contract,
         target_schema_version=SC_PATCH_IMAGE_V1.schema_version,
         status="ready",
-        source_snapshot=(),
-        row_count=2,
-        label_counts={"Scratch": 1, "Particle": 1},
+        members=(
+            {"member_id": "member-a", "source_dataset_id": "dataset-a"},
+        ),
         manifest_uri="memory://collection/revision-1.parquet",
-        provenance_uri=None,
         trigger_kind="manual",
         trigger_ref=None,
         created_by="user-1",
         created_at=datetime.now(UTC),
         error_code=None,
         error_detail=None,
-        manifest_format="collection_membership_v1",
-        source_resolution="observed",
-        reproducibility_capability=False,
     )
 
 
@@ -111,6 +106,7 @@ async def test_filtered_collection_train_and_predict_submits_workflow() -> None:
             trainer_id="yolo-sc-v1",
             org_id="org-1",
             created_by="user-1",
+            collection_member_ids=("member-a",),
             sample_filter=_sample_filter(),
         )
     )
@@ -122,6 +118,7 @@ async def test_filtered_collection_train_and_predict_submits_workflow() -> None:
     assert parameters["dataset_id"] is None
     assert parameters["collection_id"] == "collection-1"
     assert parameters["collection_revision_id"] == "revision-1"
+    assert parameters["collection_member_ids"] == ["member-a"]
     assert parameters["sample_filter"] == _sample_filter()
     status_reconciler.wake.assert_called_once_with()
 
@@ -252,6 +249,8 @@ async def test_collection_prediction_applies_filter_to_namespaced_sample_ids(
     )
     checkpoint = tmp_path / "model.pt"
     checkpoint.write_bytes(b"checkpoint")
+    import ml_library
+
     monkeypatch.setattr(ultralytics, "open_sc_runtime_source", open_source)
     monkeypatch.setattr(ultralytics, "write_sc_predictions", write_predictions)
     monkeypatch.setattr(ml_library, "predict_yolo_stream", predict_stream)

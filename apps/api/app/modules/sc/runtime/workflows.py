@@ -138,6 +138,7 @@ async def run_sc_train_and_predict(
         org_id=ctx.org_id,
         collection_id=ctx.collection_id,
         collection_revision_id=ctx.collection_revision_id,
+        collection_member_ids=ctx.collection_member_ids,
     )
     with tempfile.TemporaryDirectory(
         prefix=f"sc-train-predict-{ctx.job_id}-"
@@ -251,6 +252,7 @@ async def run_sc_train_and_predict(
             prompt=ctx.prompt,
             collection_id=ctx.collection_id,
             collection_revision_id=ctx.collection_revision_id,
+            collection_member_ids=ctx.collection_member_ids,
         )
 
         @task(name="sc-predict", persist_result=False)

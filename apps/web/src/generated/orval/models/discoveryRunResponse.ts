@@ -8,7 +8,7 @@ import type { DiscoveryRunResponseRangeStartUtc } from './discoveryRunResponseRa
 import type { DiscoveryRunResponseRangeEndUtc } from './discoveryRunResponseRangeEndUtc';
 import type { DiscoveryRunResponseTimezone } from './discoveryRunResponseTimezone';
 import type { DiscoveryRunResponseParentRunId } from './discoveryRunResponseParentRunId';
-import type { DiscoveryRunResponseSnapshotRevisionId } from './discoveryRunResponseSnapshotRevisionId';
+import type { DiscoveryRunResponseCollectionRevisionId } from './discoveryRunResponseCollectionRevisionId';
 import type { DiscoveryRunResponseStats } from './discoveryRunResponseStats';
 import type { DiscoveryRunResponseErrorDetail } from './discoveryRunResponseErrorDetail';
 import type { DiscoveryRunResponseCompletedAt } from './discoveryRunResponseCompletedAt';
@@ -27,7 +27,7 @@ export interface DiscoveryRunResponse {
   range_end_utc: DiscoveryRunResponseRangeEndUtc;
   timezone: DiscoveryRunResponseTimezone;
   parent_run_id: DiscoveryRunResponseParentRunId;
-  snapshot_revision_id: DiscoveryRunResponseSnapshotRevisionId;
+  collection_revision_id: DiscoveryRunResponseCollectionRevisionId;
   stats: DiscoveryRunResponseStats;
   error_detail: DiscoveryRunResponseErrorDetail;
   created_by: string;

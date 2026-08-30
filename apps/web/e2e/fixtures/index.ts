@@ -92,7 +92,6 @@ import {
   mockGetPersistStatus,
   mockExpiredPreviewSession,
   // sc
-  mockScClassifyLimits,
   mockScInspections,
   mockScInspectionSamples,
   mockScInspectionImageProfile,
@@ -243,7 +242,6 @@ export interface ApiMocks {
     mockExpiredPreviewSession: (sessionId: string) => Promise<void>;
   };
   sc: {
-    mockScClassifyLimits: (maxRows?: number) => Promise<void>;
     mockScInspections: (overrides?: ScInspectionOverrides) => Promise<void>;
     mockScInspectionSamples: () => Promise<void>;
     mockScDataset: (datasetId: string, overrides?: ScDatasetOverrides) => Promise<void>;
@@ -287,7 +285,6 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
       await mockCoreApi(page);
       await mockListTrainers(page);
       await mockScDataProvider(page, "*");
-      await mockScClassifyLimits(page);
       await mockScInspectionImageProfile(page);
       // Use addInitScript so the token is set before any app code runs on navigation.
       // Direct page.evaluate fails because about:blank has no localStorage access.
@@ -397,7 +394,6 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
         mockExpiredPreviewSession: (sessionId) => mockExpiredPreviewSession(page, sessionId),
       },
       sc: {
-        mockScClassifyLimits: (maxRows) => mockScClassifyLimits(page, maxRows),
         mockScInspections: (overrides) => mockScInspections(page, overrides),
         mockScInspectionSamples: () => mockScInspectionSamples(page),
         mockScDataset: (datasetId, overrides) => mockScDataset(page, datasetId, overrides),

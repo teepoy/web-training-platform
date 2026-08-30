@@ -141,6 +141,7 @@ test("Predict tab shows Start Prediction button and opens modal with model selec
   await expect(dialog.getByRole("columnheader", { name: "Model" })).toBeVisible();
   await expect(dialog.getByPlaceholder("Search models")).toBeVisible();
   await expect(dialog.getByText("Demo Model", { exact: true })).toBeVisible();
+  await expect(dialog.getByText("Please select a model", { exact: true })).toHaveCount(0);
   await dialog.getByText("Demo Model", { exact: true }).click();
   await expect(dialog.getByRole("button", { name: "Start with selected model" })).toBeEnabled();
 });
@@ -166,6 +167,12 @@ test("SC Export tab offers Parquet, KLARF, and ZIP result exports @mock", async 
 
   const exportTab = authedPage.getByTestId("dataset-prediction-export-tab");
 
+  await expect(
+    authedPage.locator(".dataset-detail-header").getByRole("button", { name: "Export Dataset" }),
+  ).toHaveCount(0);
+  await expect(exportTab.getByRole("button", { name: "Export Dataset" })).toBeVisible();
+  await expect(exportTab.getByRole("button", { name: "Import annotations" })).toBeVisible();
+  await expect(exportTab.getByRole("button", { name: "Export annotations" })).toBeVisible();
   await expect(exportTab.getByText("Export current results", { exact: true })).toBeVisible();
   await expect(
     exportTab.getByText("Choose the class result, optional Review Sampling, and file format."),
@@ -184,7 +191,7 @@ test("SC Export tab offers Parquet, KLARF, and ZIP result exports @mock", async 
   await expect(exportTab.getByText(/Large exports can exceed 100 MB/)).toBeVisible();
 });
 
-test("SC-only export stays hidden for a generic sparse Dataset @mock", async ({
+test("Dataset transfer tab remains available without SC prediction export @mock", async ({
   authedPage,
   apiMocks,
 }) => {
@@ -197,9 +204,10 @@ test("SC-only export stays hidden for a generic sparse Dataset @mock", async ({
 
   await authedPage.goto(`/datasets/${datasetId}#export`);
 
-  await expect(authedPage.locator(".n-tabs-tab").filter({ hasText: /^Export$/ })).toHaveCount(0);
-  await expect(authedPage.getByTestId("dataset-prediction-export-tab")).toHaveCount(0);
-  await expect(authedPage).toHaveURL(new RegExp(`/datasets/${datasetId}#overview$`));
+  await expect(authedPage.locator(".n-tabs-tab").filter({ hasText: /^Export$/ })).toBeVisible();
+  await expect(authedPage.getByTestId("dataset-prediction-export-tab")).toBeVisible();
+  await expect(authedPage.getByText("Export current results", { exact: true })).toHaveCount(0);
+  await expect(authedPage).toHaveURL(new RegExp(`/datasets/${datasetId}#export$`));
 });
 
 test("SC Classify tab opens the workspace directly @mock", async ({ authedPage, apiMocks }) => {

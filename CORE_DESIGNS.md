@@ -157,7 +157,7 @@ adapter；Schedule 是内部实现术语，旧 generic Sensor/Subscription subsy
   Retry 仍使用高优先级队列。
 - Automation 继承目标资源权限和归档状态。组织成员可以编辑和触发 Collection 规则、
   Backfill、预测与 candidate training；Source connector 和基础设施配置只允许 Org admin。
-  高成本操作必须展示目标、固定 Model/Snapshot/Rule 和预计 child work 后显式确认。
+  高成本操作必须展示目标、固定 Model/Collection Revision/Rule 和预计 child work 后显式确认。
 - 目标归档后停止新运行但保留历史；恢复目标不自动恢复 automation。所有 mutation/run
   记录 actor 与 org。失败、Partial 和 Needs attention 先通过站内通知、资源 Activity 与
   全局 Automations 暴露，不在第一阶段加入邮件/Webhook。
@@ -210,14 +210,18 @@ writes begin may leave completed batches applied, and replaying the same file is
 the recovery boundary. Unknown samples, labels, or contract mismatches fail rather
 than being ignored; extra fields are ignored.
 
-Model export returns the immutable artifact bytes with bounded streaming and the
-stored checksum remains the integrity fact. Model import attaches an artifact to
-an existing training job in the receiving organization; that job fixes Dataset,
-trainer, view/model contract, creator authorization, and provenance. Imported
-organization/user IDs or alternate contracts are not accepted. Trainer-owned
-artifact validation runs before the Model becomes usable.
+The product Model export emits a bounded `platform.model-package` ZIP whose
+versioned manifest carries the existing training job ID, format, artifact size and
+checksum, trainer ID, and model contract. Product import asks only for that package
+and a receiving display name; package-owned fields are not entered again, extra
+manifest fields are ignored, and the artifact checksum is verified before trainer
+validation. The referenced training job must already exist in the receiving
+organization and still fixes Dataset, trainer, creator authorization, and
+provenance; import does not synthesize or backfill a job. The raw artifact download
+and explicit job/format upload remain compatibility API paths. Imported
+organization/user IDs or alternate contracts are not accepted.
 
-### Dataset Collection 与 Snapshot
+### Dataset Collection 与 Revision
 
 Collection 是 Dataset membership 的组合资源；Dataset 与 Collection 在 `Library` 中
 统一入口但保持独立身份、列表、分页和生命周期。Collection 声明 target view、task
@@ -225,19 +229,18 @@ schema 和 canonical label space 组成的数据 contract；成员兼容性由 D
 能力判断，不要求 `dataset_type` 名称相同。显式 label mapping 必须覆盖每个 source label
 或标记 Ignore，并在发布前展示排除计数；不得模糊自动映射。
 
-- Collection head 是可编辑定义，Collection Snapshot/Revision 是不可修改的发布记录。
-  Snapshot 记录发布时观察到的 Dataset Revision ID、规则/映射版本、组合 manifest、
-  汇总与审计，但第一阶段的 `source_resolution` 为 `observed`，不宣称成员数据已冻结或
-  可复现。Snapshot 不复制全部成员行或图片；runtime 在启动时解析当前成员数据，完整
-  merge 只能作为可清理重建的 cache，不是归档事实来源。
-- 空 Collection 可以作为 Draft，但不发布空 Snapshot。成功的 manual batch、Discovery
-  或 Backfill 每次至多自动发布一个 Snapshot；用户不手工创建 Revision。失败 publication
-  保留 pending head changes 和最后成功 current Snapshot。定义和观察到的 Dataset
-  Revision 集合不变时结果为 unchanged。
-- 共享 Dataset 发布新 Revision 时，引用它的 Collection 只显示 Update available，不自动
-  发布 Snapshot。用户显式 refresh 后记录所有成员最新兼容 Revision，并发布一个
-  Snapshot；中间 Dataset Revisions 仍保留审计历史。该 refresh 第一阶段不自动触发预测、
-  reconciliation 或 candidate training。
+- Collection head 是可编辑定义，Collection Revision 是不可修改的成员与规则发布记录。
+  Revision 固定成员 identity、顺序、规则与映射版本，但不固定成员 Dataset 行、annotation
+  或 upstream 字段。Classify、training 与 prediction 启动时始终解析所选成员的当前平台数据
+  与最新 upstream 值；Revision 不提供数据 time travel，也不以复制成员行或图片换取伪
+  “可复现性”。完整 merge 只能作为可清理重建的 cache，不是归档事实来源。
+- 空 Collection 可以作为 Draft，但不发布空 Revision。成功的 manual batch、Discovery
+  或 Backfill 每次至多自动发布一个 Revision；用户不手工创建 Revision。失败 publication
+  保留 pending head changes 和最后成功 current Revision。成员、顺序、规则与映射没有变化
+  时结果为 unchanged。
+- 成员 Dataset 内容或 upstream 字段变化不产生 Collection Update available，也不要求用户
+  refresh Revision；消费者始终动态读取新值。只有 Collection head 的成员/规则定义变化才
+  发布新的 Revision，并可触发相应的 prediction reconciliation 或 candidate training。
 - Membership 可以手动 Link，也可由版本化 typed rule 从一个 Source connector + Import
   profile 发现 Source record。Rule 只使用 provider descriptor 声明的字段/类型/operator
   和通用 All/Any 条件树，不接受 SQL、JSONPath 或 Python。自动发现第一阶段只增加成员，
@@ -248,16 +251,16 @@ schema 和 canonical label space 组成的数据 contract；成员兼容性由 D
   范围，使用独立 cursor，不推进 live watermark；内部 execution window 不暴露为产品
   Partition。Partial success 可发布成功成员，失败 Source record 单独 Retry。
 - SC source-routing automation 可把一个精确的 `(Source connector, layer_id,
-device)` 或 `(Source connector, layer_id, recipe_id)` 组合分配给 Collection；它是
+device)` 组合分配给 Collection；它是
   Collection-bound membership recipe，不是恢复 generic Sensor 产品。一个 Collection
   可拥有多个组合，但同一 Org + connector 下的精确组合只能分配给一个 Collection，且由
   数据库唯一约束和事务同时保证。分配生成普通 exact membership rule，沿用五分钟 discovery、
-  新成员 Snapshot 与 incremental prediction；不自动 Backfill。分配后可更新 Import profile，
+  新成员 Revision 与 incremental prediction；不自动 Backfill。分配后可更新 Import profile，
   但不可通过 rule version 改写 connector 或 partition 条件。
-- Collection 可固定 exact default Model version。新 admission 发布 Snapshot 后只预测新
+- Collection 可固定 exact default Model version。新 admission 发布 Revision 后只预测新
   Dataset，不全量重跑；Model 变更不自动重跑既有成员。Coverage 必须区分 Current、Model
   mismatch、Data outdated 与 Not predicted，并支持选择性 reconciliation。自动训练只在
-  membership/definition/mapping Snapshot 变化后按用户选择的每日/每周本地时间 gated
+  membership/definition/mapping Revision 变化后按用户选择的每日/每周本地时间 gated
   运行，产出 Candidate Model，不自动替换 default Model。仅 Dataset Revision refresh 不
   标记 candidate training dirty。
 
@@ -268,8 +271,16 @@ table、gallery 与 annotation identity 是物理 `row_key`，Collection row key
 平台 `Sample.id` 组成。上游 `defect_id` 仅为可展示/筛选的 SC domain 字段，不可作为跨
 Inspection/Collection selection identity。大 selection query 可使用 gzip request body，
 compressed/decompressed 上限必须由 tracked YAML 明确配置。Collection multi-inspection
-classify 沿用同一 workbench；其浏览器总行数上限同样来自 tracked YAML，并由 UI gate 与
-data-provider materialization 双重拒绝，不能截断。
+classify 沿用同一 workbench：用户多选 Revision 成员，table、gallery、filter、annotation
+与 job 使用所选成员并集，map 只显示用户单独选择的 active inspection。当前不设置浏览器
+总行数产品上限；所有读取必须分页、流式或分批执行，不能静默截断。
+
+SC data-provider 按实际 `storage_mode` 解释 source ownership。历史 `db_full` Dataset
+以平台持久化 sample rows 为事实来源，使用平台 `Sample.id` 作为 `row_key`，即使没有单一
+`dataset_meta.source_inspection_time` 也不能回查 upstream 或隐藏 filter/classify；metadata
+里的上游 sample ID 仅保留为 `source_sample_id`。`file_shard_sparse` SC Dataset 是
+identity-only membership，继续使用其精确 inspection identity 从 upstream 动态读取最新字段；
+上游 inspection 不存在时必须显式失败，不能转换成 500 或退回陈旧平台副本。
 
 Dataset operator/storage 层拥有 `db_full`、`file_shard_sparse`、Parquet shard、manifest、locator 等持久化细节。SC import 这类 domain ingest 只负责 upstream/domain model 到通用 dataset sample/import stream 的转换，不直接拥有 sparse shard 或 Parquet 写入逻辑。
 

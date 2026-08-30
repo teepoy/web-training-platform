@@ -30,6 +30,7 @@ from app.modules.dataset_collections.port.local.protocols import (
     DatasetCollectionManagementPort,
 )
 from app.modules.models.port.local import ModelCatalogPort
+from app.modules.datasets.port.local import DatasetRevisionReaderPort
 from app.modules.prediction.domain.submission import (
     PredictionJobCommand,
     PredictionSubmissionOrigin,
@@ -53,10 +54,12 @@ class CollectionModelAutomationService:
         repository: DatasetCollectionRepository,
         model_catalog: ModelCatalogPort,
         prediction_execution: PredictionExecutionPort,
+        dataset_revisions: DatasetRevisionReaderPort,
     ) -> None:
         self._repository = repository
         self._model_catalog = model_catalog
         self._prediction_execution = prediction_execution
+        self._dataset_revisions = dataset_revisions
 
     async def set_default_model(
         self,
@@ -94,13 +97,13 @@ class CollectionModelAutomationService:
         collection_id: str,
         org_id: str,
         *,
-        snapshot_id: str | None = None,
+        revision_id: str | None = None,
     ) -> list[CollectionPredictionCoverage]:
         collection = await self._require_collection(collection_id, org_id)
-        snapshot = await self._resolve_snapshot(
-            collection_id, org_id, snapshot_id=snapshot_id
+        revision = await self._resolve_revision(
+            collection_id, org_id, revision_id=revision_id
         )
-        entries = self._snapshot_entries(snapshot)
+        entries = await self._revision_entries(revision, org_id)
         observations = await self._repository.list_prediction_observations(
             collection_id,
             org_id,
@@ -119,7 +122,7 @@ class CollectionModelAutomationService:
     async def predict_new_members(
         self,
         collection_id: str,
-        snapshot_id: str,
+        revision_id: str,
         org_id: str,
         actor_id: str,
     ) -> CollectionPredictionBatch | None:
@@ -129,30 +132,31 @@ class CollectionModelAutomationService:
         existing = self._batch_for_request(
             await self._repository.list_prediction_batches(collection_id, org_id),
             kind="incremental",
-            request_id=snapshot_id,
+            request_id=revision_id,
         )
         if existing is not None:
             return existing[0]
-        snapshot = await self._resolve_snapshot(
-            collection_id, org_id, snapshot_id=snapshot_id
+        revision = await self._resolve_revision(
+            collection_id, org_id, revision_id=revision_id
         )
-        await self._require_current_snapshot(snapshot, org_id)
+        await self._require_current_revision(revision, org_id)
         revisions = await self._repository.list_revisions(collection_id, org_id)
         previous = next(
             (
-                revision
-                for revision in revisions
-                if revision.status == "ready"
-                and revision.revision_number < snapshot.revision_number
+                candidate
+                for candidate in revisions
+                if candidate.status == "ready"
+                and candidate.revision_number < revision.revision_number
             ),
             None,
         )
         previous_member_ids = {
-            entry["member_id"] for entry in self._snapshot_entries(previous)
+            entry["member_id"]
+            for entry in await self._revision_entries(previous, org_id)
         }
         new_entries = [
             entry
-            for entry in self._snapshot_entries(snapshot)
+            for entry in await self._revision_entries(revision, org_id)
             if entry["member_id"] not in previous_member_ids
         ]
         eligible = await self._without_exact_prediction(
@@ -164,11 +168,11 @@ class CollectionModelAutomationService:
             return None
         return await self._create_and_dispatch_batch(
             collection=collection,
-            snapshot=snapshot,
+            revision=revision,
             org_id=org_id,
             actor_id=actor_id,
             kind="incremental",
-            request_id=snapshot.id,
+            request_id=revision.id,
             entries=eligible,
         )
 
@@ -178,7 +182,7 @@ class CollectionModelAutomationService:
         org_id: str,
         *,
         actor_id: str,
-        snapshot_id: str,
+        revision_id: str,
         expected_default_model_id: str,
         request_id: str,
         dataset_ids: tuple[str, ...],
@@ -205,7 +209,7 @@ class CollectionModelAutomationService:
         if existing is not None:
             batch, items = existing
             if (
-                batch.collection_revision_id != snapshot_id
+                batch.collection_revision_id != revision_id
                 or batch.model_id != expected_default_model_id
                 or {item.dataset_id for item in items} != set(dataset_ids)
             ):
@@ -224,19 +228,19 @@ class CollectionModelAutomationService:
                 "default_model_changed",
                 "The Collection default model changed; review the selection again",
             )
-        snapshot = await self._resolve_snapshot(
-            collection_id, org_id, snapshot_id=snapshot_id
+        revision = await self._resolve_revision(
+            collection_id, org_id, revision_id=revision_id
         )
-        await self._require_current_snapshot(snapshot, org_id)
+        await self._require_current_revision(revision, org_id)
         coverage = await self.list_coverage(
-            collection_id, org_id, snapshot_id=snapshot.id
+            collection_id, org_id, revision_id=revision.id
         )
         coverage_by_dataset = {item.dataset_id: item for item in coverage}
         missing = sorted(set(dataset_ids) - coverage_by_dataset.keys())
         if missing:
             raise DatasetCollectionValidationError(
-                "datasets_not_in_snapshot",
-                f"Datasets are not members of the selected Snapshot: {missing}",
+                "datasets_not_in_revision",
+                f"Datasets are not members of the selected Revision: {missing}",
             )
         already_current = sorted(
             dataset_id
@@ -250,7 +254,8 @@ class CollectionModelAutomationService:
                 f"Datasets already use the current default model: {already_current}",
             )
         entries_by_dataset = {
-            entry["dataset_id"]: entry for entry in self._snapshot_entries(snapshot)
+            entry["dataset_id"]: entry
+            for entry in await self._revision_entries(revision, org_id)
         }
         entries = [entries_by_dataset[dataset_id] for dataset_id in dataset_ids]
         eligible = await self._without_exact_prediction(collection, org_id, entries)
@@ -262,7 +267,7 @@ class CollectionModelAutomationService:
             )
         batch = await self._create_and_dispatch_batch(
             collection=collection,
-            snapshot=snapshot,
+            revision=revision,
             org_id=org_id,
             actor_id=actor_id,
             kind="reconciliation",
@@ -326,7 +331,7 @@ class CollectionModelAutomationService:
         self,
         *,
         collection: DatasetCollection,
-        snapshot: DatasetCollectionRevision,
+        revision: DatasetCollectionRevision,
         org_id: str,
         actor_id: str,
         kind: str,
@@ -338,7 +343,7 @@ class CollectionModelAutomationService:
         batch = CollectionPredictionBatch(
             id=str(uuid4()),
             collection_id=collection.id,
-            collection_revision_id=snapshot.id,
+            collection_revision_id=revision.id,
             model_id=collection.default_model_id,
             kind=kind,
             request_id=request_id,
@@ -472,66 +477,78 @@ class CollectionModelAutomationService:
             raise DatasetCollectionNotFoundError("Dataset collection not found")
         return collection
 
-    async def _resolve_snapshot(
+    async def _resolve_revision(
         self,
         collection_id: str,
         org_id: str,
         *,
-        snapshot_id: str | None,
+        revision_id: str | None,
     ) -> DatasetCollectionRevision:
-        snapshot = (
-            await self._repository.get_revision(collection_id, snapshot_id, org_id)
-            if snapshot_id is not None
+        revision = (
+            await self._repository.get_revision(collection_id, revision_id, org_id)
+            if revision_id is not None
             else await self._repository.get_current_revision(collection_id, org_id)
         )
-        if snapshot is None or snapshot.status != "ready":
+        if revision is None or revision.status != "ready":
             raise DatasetCollectionValidationError(
-                "snapshot_required", "Save a ready Snapshot before running prediction"
+                "revision_required", "Save a ready Revision before running prediction"
             )
-        return snapshot
+        return revision
 
-    async def _require_current_snapshot(
+    async def _require_current_revision(
         self,
-        snapshot: DatasetCollectionRevision,
+        revision: DatasetCollectionRevision,
         org_id: str,
     ) -> None:
         current = await self._repository.get_current_revision(
-            snapshot.collection_id, org_id
+            revision.collection_id, org_id
         )
-        if current is None or current.id != snapshot.id:
+        if current is None or current.id != revision.id:
             raise DatasetCollectionValidationError(
-                "snapshot_changed",
-                "The current Collection Snapshot changed; review prediction coverage again",
+                "revision_changed",
+                "The current Collection Revision changed; review prediction coverage again",
             )
 
-    @staticmethod
-    def _snapshot_entries(
-        snapshot: DatasetCollectionRevision | None,
+    async def _revision_entries(
+        self,
+        revision: DatasetCollectionRevision | None,
+        org_id: str,
     ) -> list[dict[str, str]]:
-        if snapshot is None:
+        if revision is None:
             return []
-        entries: list[dict[str, str]] = []
-        for raw in snapshot.source_snapshot:
+        identities: list[tuple[str, str]] = []
+        for raw in revision.members:
             member_id = raw.get("member_id")
             dataset_id = raw.get("source_dataset_id")
-            revision_id = raw.get("dataset_revision_id")
             if (
                 not isinstance(member_id, str)
                 or not member_id
                 or not isinstance(dataset_id, str)
                 or not dataset_id
-                or not isinstance(revision_id, str)
-                or not revision_id
             ):
                 raise DatasetCollectionValidationError(
-                    "invalid_snapshot_provenance",
-                    "Snapshot member provenance is incomplete",
+                    "invalid_revision_membership",
+                    "Revision member identity is incomplete",
                 )
+            identities.append((member_id, dataset_id))
+        current = await self._dataset_revisions.list_current(
+            tuple(dataset_id for _, dataset_id in identities), org_id
+        )
+        missing = [
+            dataset_id for _, dataset_id in identities if dataset_id not in current
+        ]
+        if missing:
+            raise DatasetCollectionValidationError(
+                "dataset_revision_required",
+                f"Current Dataset revisions are unavailable: {missing}",
+            )
+        entries: list[dict[str, str]] = []
+        for member_id, dataset_id in identities:
             entries.append(
                 {
                     "member_id": member_id,
                     "dataset_id": dataset_id,
-                    "dataset_revision_id": revision_id,
+                    "dataset_revision_id": current[dataset_id].id,
                 }
             )
         return entries
@@ -679,8 +696,8 @@ class CollectionModelAutomationService:
             )
 
 
-class CollectionSnapshotPublishingService:
-    """Publish one Snapshot, then start prediction only for newly admitted members."""
+class CollectionRevisionPublishingService:
+    """Publish one Revision, then start prediction only for newly admitted members."""
 
     @inject
     def __init__(
@@ -720,8 +737,8 @@ class CollectionSnapshotPublishingService:
             )
         except Exception:
             _logger.exception(
-                "Snapshot %s was published, but incremental prediction could not "
-                "be prepared; the Snapshot remains current",
+                "Revision %s was published, but incremental prediction could not "
+                "be prepared; the Revision remains current",
                 revision.id,
             )
         return revision
@@ -736,7 +753,7 @@ class CollectionSnapshotPublishingService:
         trigger_kind: str,
         trigger_ref: str | None,
     ) -> DatasetCollectionRevision:
-        revision = await self._automation_admission.publish_snapshot_for_automation(
+        revision = await self._automation_admission.publish_revision_for_automation(
             collection_id,
             org_id,
             actor_id=actor_id,
@@ -753,8 +770,8 @@ class CollectionSnapshotPublishingService:
             )
         except Exception:
             _logger.exception(
-                "Snapshot %s was published, but incremental prediction could not "
-                "be prepared; the Snapshot remains current",
+                "Revision %s was published, but incremental prediction could not "
+                "be prepared; the Revision remains current",
                 revision.id,
             )
         return revision
@@ -767,5 +784,5 @@ class CollectionSnapshotPublishingService:
 
 __all__ = [
     "CollectionModelAutomationService",
-    "CollectionSnapshotPublishingService",
+    "CollectionRevisionPublishingService",
 ]

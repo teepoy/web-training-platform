@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-import asyncio
-import shutil
-from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -13,20 +10,25 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
+from app.core.config import load_config
 from app.modules.dataset_collections.domain.models import DatasetCollectionRevision
 from app.modules.dataset_collections.port.local import (
     DatasetCollectionRevisionReaderPort,
 )
 from app.modules.sc.data_provider.cache import CachedDataObject, ScDataObjectCache
-from app.modules.sc.data_provider.materializer import (
-    ScCollectionTooLargeError,
-    ScDataMaterializer,
+from app.modules.sc.data_provider.engine import DuckDbQueryExecutor
+from app.modules.sc.data_provider.materializer import ScDataMaterializer
+from app.modules.sc.data_provider.sampling import compile_sc_sampling_query
+from app.modules.sc.data_provider.schemas import (
+    ScSamplingSelectionRequest,
+    ScSqlParameter,
 )
 from app.modules.sc.data_provider.scope import ScDataScope
+from app.modules.sc.data_provider.sql_policy import validate_sc_sql
 from app.modules.sc.domain.upstream_reader import ScUpstreamReader
 from app.modules.sc.domain.models import ScInspectionRecord
 from app.modules.storage.port.local import DatasetStorageFactoryPort
-from app.shared.domain.protocols import ArtifactStorage
+from app.shared.api.schemas import DatasetStorageMode
 
 
 def _cached_object(path: Path, object_id: str) -> CachedDataObject:
@@ -51,14 +53,11 @@ def _ready_revision(manifest_uri: str) -> DatasetCollectionRevision:
         target_view_contract="sc.patch_image.v1",
         target_schema_version="1",
         status="ready",
-        source_snapshot=(
-            {"source_dataset_id": "dataset-a"},
-            {"source_dataset_id": "dataset-b"},
+        members=(
+            {"member_id": "member-a", "source_dataset_id": "dataset-a"},
+            {"member_id": "member-b", "source_dataset_id": "dataset-b"},
         ),
-        row_count=2,
-        label_counts={},
         manifest_uri=manifest_uri,
-        provenance_uri=None,
         trigger_kind="manual",
         trigger_ref=None,
         created_by="user-1",
@@ -78,22 +77,20 @@ def _inspection(wafer_key: int, *, latest_update: int = 1) -> ScInspectionRecord
 
 
 @pytest.mark.asyncio
-async def test_collection_materialization_rejects_browser_unsafe_row_count() -> None:
+async def test_collection_materialization_has_no_browser_row_count_guard() -> None:
     revision_reader = AsyncMock(spec=DatasetCollectionRevisionReaderPort)
-    revision_reader.get_revision.return_value = replace(
-        _ready_revision("memory://revision"), row_count=300_001
-    )
+    revision_reader.get_revision.return_value = _ready_revision("memory://revision")
+    storage_factory = AsyncMock(spec=DatasetStorageFactoryPort)
+    storage_factory.open.side_effect = RuntimeError("continued to current datasets")
     materializer = ScDataMaterializer(
         upstream_reader=AsyncMock(spec=ScUpstreamReader),
-        storage_factory=AsyncMock(spec=DatasetStorageFactoryPort),
+        storage_factory=storage_factory,
         collection_revision_reader=revision_reader,
-        artifact_storage=AsyncMock(spec=ArtifactStorage),
         cache=AsyncMock(spec=ScDataObjectCache),
         batch_rows=50_000,
-        classify_max_rows=300_000,
     )
 
-    with pytest.raises(ScCollectionTooLargeError, match="300001 rows"):
+    with pytest.raises(RuntimeError, match="continued to current datasets"):
         await materializer.materialize(
             ScDataScope.collection(
                 collection_id="collection-1",
@@ -102,6 +99,8 @@ async def test_collection_materialization_rejects_browser_unsafe_row_count() -> 
             ),
             revision=1,
         )
+
+    storage_factory.open.assert_awaited()
 
 
 @pytest.mark.asyncio
@@ -130,10 +129,8 @@ async def test_dataset_cache_hits_use_dataset_metadata_without_scanning_samples(
         upstream_reader=upstream_reader,
         storage_factory=storage_factory,
         collection_revision_reader=AsyncMock(spec=DatasetCollectionRevisionReaderPort),
-        artifact_storage=AsyncMock(spec=ArtifactStorage),
         cache=cache,
         batch_rows=50_000,
-        classify_max_rows=300_000,
     )
 
     result = await materializer.materialize(
@@ -150,6 +147,194 @@ async def test_dataset_cache_hits_use_dataset_metadata_without_scanning_samples(
     assert second.samples_base is samples_base
     storage.list_samples.assert_not_awaited()
     upstream_reader.list_review_images.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_db_full_dataset_materializes_persisted_sc_rows_without_source_scope(
+    tmp_path: Path,
+) -> None:
+    storage = AsyncMock()
+    storage.storage_mode = DatasetStorageMode.DB_FULL
+    storage.get_dataset_metadata.return_value = SimpleNamespace(dataset_meta={})
+    storage.list_samples.return_value = pl.DataFrame(
+        {
+            "id": ["platform-sample-42"],
+            "dataset_id": ["dataset-1"],
+            "image_uris": [[]],
+            "metadata_json": [
+                {
+                    "sample_id": "upstream-sample-42",
+                    "inspection_time": "2026-08-09T10:36:46+00:00",
+                    "wafer_key": 0,
+                    "defect_id": 42,
+                    "wafer_x": 100,
+                    "wafer_y": 200,
+                    "rough_bin": 1,
+                    "class_number": 2,
+                    "shard_images": [{"role": "patch_defective"}],
+                }
+            ],
+            "ls_task_id": [None],
+            "created_at": [datetime(2026, 8, 9, tzinfo=timezone.utc)],
+        }
+    ).lazy()
+    storage.annotation_overlay_lazyframe.return_value = (None, "0" * 64)
+    storage.prediction_overlay_lazyframe.return_value = (None, "0" * 64)
+    storage_factory = AsyncMock(spec=DatasetStorageFactoryPort)
+    storage_factory.open.return_value = storage
+    upstream_reader = AsyncMock(spec=ScUpstreamReader)
+    cache = AsyncMock(spec=ScDataObjectCache)
+    object_count = 0
+
+    async def get_or_build_file(**kwargs) -> CachedDataObject:
+        nonlocal object_count
+        object_count += 1
+        path = tmp_path / f"persisted-file-{object_count}.parquet"
+        await kwargs["builder"](path)
+        return _cached_object(path, f"file-{object_count}")
+
+    async def get_or_build(**kwargs) -> CachedDataObject:
+        nonlocal object_count
+        object_count += 1
+        path = tmp_path / f"persisted-table-{object_count}.parquet"
+        pq.write_table(await kwargs["builder"](), path)
+        return _cached_object(path, f"table-{object_count}")
+
+    cache.get_or_build_file.side_effect = get_or_build_file
+    cache.get_or_build.side_effect = get_or_build
+    materializer = ScDataMaterializer(
+        upstream_reader=upstream_reader,
+        storage_factory=storage_factory,
+        collection_revision_reader=AsyncMock(spec=DatasetCollectionRevisionReaderPort),
+        cache=cache,
+        batch_rows=50_000,
+    )
+
+    result = await materializer.materialize(
+        ScDataScope.dataset(dataset_id="dataset-1", org_id="org-1"),
+        revision=3,
+    )
+
+    samples = pl.read_parquet(result.samples_base.path)
+    assert samples["row_key"].to_list() == ["platform-sample-42"]
+    assert samples["source_sample_id"].to_list() == ["upstream-sample-42"]
+    assert samples["defect_id"].to_list() == [42]
+    assert samples["map_id"].to_list() == [0]
+    assert "shard_images" not in samples.columns
+    upstream_reader.get_inspection.assert_not_awaited()
+    upstream_reader.list_review_images.assert_not_awaited()
+
+    config = load_config(skip_runtime_validation=True).sc.data_provider.model_copy(
+        update={"cache_dir": str(tmp_path)}
+    )
+    executor = DuckDbQueryExecutor(config=config)
+
+    async def query(sql: str, parameters: list[ScSqlParameter]) -> pa.Table:
+        prepared = await executor.prepare_stream(
+            sql=validate_sc_sql(sql),
+            parameters=parameters,
+            materialized=result,
+        )
+        payload = b"".join([chunk async for chunk in prepared.body])
+        return pa.ipc.open_stream(payload).read_all()
+
+    try:
+        filter_statistics = await query(
+            "SELECT MIN(wafer_x) AS min_x, MAX(wafer_x) AS max_x, "
+            "COUNT(*) AS row_count FROM samples",
+            [],
+        )
+        assert filter_statistics.to_pydict() == {
+            "min_x": [100],
+            "max_x": [100],
+            "row_count": [1],
+        }
+
+        sampling_preparation = await query(
+            "SELECT wafer_key AS group_key, COUNT(*) AS group_count "
+            "FROM samples WHERE final_class NOT IN (?) "
+            "AND final_class IS NOT NULL GROUP BY wafer_key ORDER BY wafer_key",
+            [""],
+        )
+        assert sampling_preparation.num_rows == 0
+
+        sampling = ScSamplingSelectionRequest.model_validate(
+            {
+                "seed": 42,
+                "program": {"rules": [{"type": "random_count", "count": 1}]},
+            }
+        )
+        sampling_sql, sampling_parameters = compile_sc_sampling_query(
+            validate_sc_sql("SELECT map_id FROM samples"),
+            [],
+            sampling,
+        )
+        prepared_sampling = await executor.prepare_stream(
+            sql=sampling_sql,
+            parameters=sampling_parameters,
+            materialized=result,
+        )
+        sampling_payload = b"".join(
+            [chunk async for chunk in prepared_sampling.body]
+        )
+        assert pa.ipc.open_stream(sampling_payload).read_all().to_pydict() == {
+            "defect_id": [0]
+        }
+
+        map_rows = await query(
+            "SELECT map_id, row_key, wafer_x, wafer_y, die_x, die_y, "
+            "rough_bin, images FROM samples ORDER BY map_id",
+            [],
+        )
+        assert map_rows.to_pydict() == {
+            "map_id": [0],
+            "row_key": ["platform-sample-42"],
+            "wafer_x": [100],
+            "wafer_y": [200],
+            "die_x": [None],
+            "die_y": [None],
+            "rough_bin": [1],
+            "images": [0],
+        }
+    finally:
+        await executor.close()
+
+
+@pytest.mark.asyncio
+async def test_sparse_dataset_reports_missing_upstream_inspection_as_not_found() -> None:
+    storage = AsyncMock()
+    storage.storage_mode = DatasetStorageMode.FILE_SHARD_SPARSE
+    storage.get_dataset_metadata.return_value = SimpleNamespace(
+        dataset_meta={
+            "source_inspection_time": "2026-08-01T04:00:00+08:00",
+            "source_wafer_key": 1,
+        }
+    )
+    storage_factory = AsyncMock(spec=DatasetStorageFactoryPort)
+    storage_factory.open.return_value = storage
+    upstream_reader = AsyncMock(spec=ScUpstreamReader)
+    upstream_reader.get_inspection.return_value = None
+    materializer = ScDataMaterializer(
+        upstream_reader=upstream_reader,
+        storage_factory=storage_factory,
+        collection_revision_reader=AsyncMock(spec=DatasetCollectionRevisionReaderPort),
+        cache=AsyncMock(spec=ScDataObjectCache),
+        batch_rows=50_000,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=r"Inspection not found: 2026-08-01T04:00:00\+08:00/1",
+    ):
+        await materializer.materialize(
+            ScDataScope.dataset(
+                dataset_id="fefd5b68-bb47-4679-bd74-73b80e5a5176",
+                org_id="org-1",
+            ),
+            revision=1,
+        )
+
+    storage.list_samples.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -192,10 +377,8 @@ async def test_dataset_overlays_track_the_monotonic_scope_revision(
         upstream_reader=upstream_reader,
         storage_factory=storage_factory,
         collection_revision_reader=AsyncMock(spec=DatasetCollectionRevisionReaderPort),
-        artifact_storage=AsyncMock(spec=ArtifactStorage),
         cache=cache,
         batch_rows=50_000,
-        classify_max_rows=300_000,
     )
 
     await materializer.materialize(
@@ -278,10 +461,8 @@ async def test_dataset_materialization_projects_membership_and_reads_latest_sour
         upstream_reader=upstream_reader,
         storage_factory=storage_factory,
         collection_revision_reader=AsyncMock(spec=DatasetCollectionRevisionReaderPort),
-        artifact_storage=AsyncMock(spec=ArtifactStorage),
         cache=cache,
         batch_rows=50_000,
-        classify_max_rows=300_000,
     )
 
     result = await materializer.materialize(
@@ -308,20 +489,6 @@ async def test_dataset_materialization_projects_membership_and_reads_latest_sour
 async def test_collection_revision_materializes_combined_rows_and_overlays(
     tmp_path: Path,
 ) -> None:
-    revision_path = tmp_path / "revision.parquet"
-    pl.DataFrame(
-        {
-            "row_key": ["dataset-a::sample-1", "dataset-b::sample-9"],
-            "sample_id": ["dataset-a::sample-1", "dataset-b::sample-9"],
-            "source_dataset_id": ["dataset-a", "dataset-b"],
-            "source_sample_id": ["sample-1", "sample-9"],
-            "collection_member_id": ["member-a", "member-b"],
-            "defect_id": [42, 42],
-            "inspection_time": ["2026-08-01T04:00:00+08:00"] * 2,
-            "wafer_key": [1, 2],
-        }
-    ).write_parquet(revision_path)
-
     storages: dict[str, AsyncMock] = {}
     for dataset_id, wafer_key, sample_id in (
         ("dataset-a", 1, "sample-1"),
@@ -334,6 +501,9 @@ async def test_collection_revision_materializes_combined_rows_and_overlays(
                 "source_wafer_key": wafer_key,
             }
         )
+        storage.list_samples.return_value = pl.DataFrame(
+            {"sample_id": [sample_id], "defect_id": [42]}
+        ).lazy()
         storage.annotation_overlay_lazyframe.return_value = (
             pl.DataFrame({"sample_id": [sample_id], "label": [dataset_id]}).lazy(),
             str(wafer_key) * 64,
@@ -345,12 +515,6 @@ async def test_collection_revision_materializes_combined_rows_and_overlays(
     storage_factory.open.side_effect = lambda dataset_id, _org_id: storages[dataset_id]
     revision_reader = AsyncMock(spec=DatasetCollectionRevisionReaderPort)
     revision_reader.get_revision.return_value = _ready_revision("memory://revision")
-    artifact_storage = AsyncMock(spec=ArtifactStorage)
-
-    async def get_file(_uri: str, destination: str) -> None:
-        await asyncio.to_thread(shutil.copyfile, revision_path, destination)
-
-    artifact_storage.get_file.side_effect = get_file
     upstream_reader = AsyncMock(spec=ScUpstreamReader)
     upstream_reader.get_inspection.side_effect = lambda _time, wafer_key: _inspection(
         wafer_key
@@ -404,10 +568,8 @@ async def test_collection_revision_materializes_combined_rows_and_overlays(
         upstream_reader=upstream_reader,
         storage_factory=storage_factory,
         collection_revision_reader=revision_reader,
-        artifact_storage=artifact_storage,
         cache=cache,
         batch_rows=50_000,
-        classify_max_rows=300_000,
     )
 
     result = await materializer.materialize(

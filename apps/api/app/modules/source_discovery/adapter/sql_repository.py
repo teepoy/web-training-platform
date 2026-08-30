@@ -72,8 +72,6 @@ def _profile(row: SourceImportProfileVersionORM) -> ImportProfileVersion:
         connector_id=row.connector_id,
         name=row.name,
         settings=cast(dict[str, object], row.settings),
-        max_records_per_run=row.max_records_per_run,
-        max_rows_per_dataset=row.max_rows_per_dataset,
         created_by=row.created_by,
         created_at=_db_utc(row.created_at),
     )
@@ -119,8 +117,7 @@ def _partition(row: ScAutomationPartitionORM) -> ScAutomationPartition:
         rule_id=row.rule_id,
         connector_id=row.connector_id,
         layer_id=row.layer_id,
-        dimension=row.dimension,
-        dimension_value=row.dimension_value,
+        device=row.device,
         partition_key=row.partition_key,
         created_by=row.created_by,
         created_at=_db_utc(row.created_at),
@@ -145,7 +142,7 @@ def _run(row: CollectionDiscoveryRunORM) -> DiscoveryRun:
         ),
         timezone_name=row.timezone_name,
         parent_run_id=row.parent_run_id,
-        snapshot_revision_id=row.snapshot_revision_id,
+        collection_revision_id=row.collection_revision_id,
         stats={
             str(key): int(value)
             for key, value in cast(dict[str, int], row.stats).items()
@@ -542,7 +539,7 @@ class SourceDiscoverySqlRepository:
         *,
         status: str,
         stats: dict[str, int],
-        snapshot_revision_id: str | None,
+        collection_revision_id: str | None,
         error_detail: str | None,
         completed_at: datetime,
     ) -> DiscoveryRun:
@@ -552,7 +549,7 @@ class SourceDiscoverySqlRepository:
                 raise LookupError("Discovery run not found")
             row.status = status
             row.stats = stats
-            row.snapshot_revision_id = snapshot_revision_id
+            row.collection_revision_id = collection_revision_id
             row.error_detail = error_detail
             row.completed_at = completed_at
             await session.commit()

@@ -848,7 +848,6 @@ async def import_samples(
     dataset_id: str,
     payload: BulkCreateSampleRequest,
     ls_client: LabelStudioClientDep,
-    dataset_service: DatasetServiceDep,
     factory: DatasetStorageFactoryDep,
     current_user: User = Depends(get_current_user),
     org: Organization = Depends(get_current_org),
@@ -925,11 +924,6 @@ async def import_samples(
         )
     if ann_list:
         await storage.create_annotations(ann_list)
-
-    # ── Auto-expand label_space with newly introduced labels ──────────
-    incoming_labels = {item.label for item in payload.items if item.label}
-    if incoming_labels:
-        await dataset_service.merge_label_space(dataset_id, org.id, incoming_labels)
 
     return BulkCreateSampleResponse(
         dataset_id=dataset_id,
@@ -1289,7 +1283,6 @@ async def serve_sparse_sample_image(
 async def create_annotation(
     payload: CreateAnnotationRequest,
     ls_client: LabelStudioClientDep,
-    dataset_service: DatasetServiceDep,
     factory: DatasetStorageFactoryDep,
     event_publisher: RedisEventPublisherDep,
     current_user: User = Depends(get_current_user),
@@ -1329,12 +1322,6 @@ async def create_annotation(
         sample_id=payload.sample_id,
         dataset_id=payload.dataset_id,
     )
-    # ── Auto-expand label_space with newly introduced labels ──────────
-    await dataset_service.merge_label_space(
-        payload.dataset_id,
-        org.id,
-        {payload.label},
-    )
     return ann
 
 
@@ -1357,7 +1344,6 @@ async def list_annotations_for_sample(
 async def update_annotation(
     annotation_id: str,
     payload: UpdateAnnotationRequest,
-    dataset_service: DatasetServiceDep,
     factory: DatasetStorageFactoryDep,
     event_publisher: RedisEventPublisherDep,
     current_user: User = Depends(get_current_user),
@@ -1371,12 +1357,6 @@ async def update_annotation(
         annotation_id=annotation_id,
         sample_id="",
         dataset_id=payload.dataset_id,
-    )
-    # Auto-expand label space if the label is new
-    await dataset_service.merge_label_space(
-        payload.dataset_id,
-        org.id,
-        {payload.label},
     )
     return Annotation(
         id=annotation_id,
@@ -1414,7 +1394,6 @@ async def delete_annotation(
 async def bulk_create_annotations(
     dataset_id: str,
     payload: BulkAnnotationRequest,
-    dataset_service: DatasetServiceDep,
     factory: DatasetStorageFactoryDep,
     event_publisher: RedisEventPublisherDep,
     current_user: User = Depends(get_current_user),
@@ -1438,10 +1417,6 @@ async def bulk_create_annotations(
             sample_id=ann.sample_id,
             dataset_id=dataset_id,
         )
-
-    # ── Auto-expand label_space with newly introduced labels ──────────
-    incoming_labels = {a.label for a in payload.annotations}
-    await dataset_service.merge_label_space(dataset_id, org.id, incoming_labels)
 
     return BulkAnnotationResponse(created=created)
 

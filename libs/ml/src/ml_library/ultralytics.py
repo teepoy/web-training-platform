@@ -16,7 +16,6 @@ from typing import Any, cast
 from PIL import Image, ImageChops
 import torch
 from torch import Tensor, nn
-from torch.utils.data import DataLoader, IterableDataset
 
 from ml_library.data_loading._parquet import ParquetPaths
 from ml_library.data_loading.streaming import stream_parquet_dataset
@@ -41,46 +40,6 @@ _TRAINING_COLUMNS = (
     "patch_defective_bytes",
     "patch_template_bytes",
 )
-_PREDICTION_COLUMNS = (
-    "sample_id",
-    "patch_defective_bytes",
-    "patch_template_bytes",
-)
-
-
-class _ScYoloPredictionDataset(IterableDataset[dict[str, object]]):
-    def __init__(
-        self,
-        parquet_paths: ParquetPaths,
-        *,
-        image_size: int,
-    ) -> None:
-        super().__init__()
-        self._rows = stream_parquet_dataset(
-            parquet_paths,
-            columns=_PREDICTION_COLUMNS,
-            shuffle=False,
-            seed=0,
-            shuffle_buffer_rows=1,
-        )
-        self._image_size = image_size
-
-    def __len__(self) -> int:
-        return len(self._rows)
-
-    def __iter__(self) -> Iterator[dict[str, object]]:
-        for row in self._rows:
-            sample_id = str(row.get("sample_id") or "")
-            try:
-                image = _preprocess_grayscale_pair(row, self._image_size)
-            except (OSError, TypeError, ValueError) as exc:
-                yield {
-                    "sample_id": sample_id,
-                    "image": None,
-                    "error": f"image preprocessing failed: {exc}",
-                }
-                continue
-            yield {"sample_id": sample_id, "image": image, "error": None}
 
 
 def _preprocess_grayscale_pair(row: dict[str, Any], image_size: int) -> Tensor:
@@ -436,63 +395,6 @@ async def train_yolo(
     )
 
 
-def predict_yolo(
-    checkpoint_path: Path,
-    label_space: Sequence[str],
-    parquet_paths: ParquetPaths,
-    *,
-    batch_size: int = YOLO_PREDICTION_BATCH_SIZE,
-    image_size: int = YOLO_IMAGE_SIZE,
-    workers: int = YOLO_DATALOADER_WORKERS,
-) -> Iterator[Prediction]:
-    labels = [str(label) for label in label_space]
-    if not labels:
-        raise ValueError("YOLO model metadata must include compact label_space")
-    _validate_loader_options(
-        batch_size=batch_size,
-        image_size=image_size,
-        workers=workers,
-    )
-    device = select_torch_device(torch)
-    model = _load_yolo_classifier(
-        checkpoint_path,
-        labels,
-        image_size=image_size,
-        device=device,
-    )
-    dataset = _ScYoloPredictionDataset(parquet_paths, image_size=image_size)
-    loader = DataLoader(
-        dataset,
-        batch_size=None,
-        shuffle=False,
-        num_workers=workers,
-        persistent_workers=False,
-        prefetch_factor=2 if workers else None,
-        pin_memory=device.type == "cuda",
-    )
-
-    model.eval()
-    with torch.inference_mode():
-        pending: list[dict[str, object]] = []
-        for raw_sample in loader:
-            pending.append(cast(dict[str, object], raw_sample))
-            if len(pending) == batch_size:
-                yield from _predict_preprocessed_batch(
-                    model,
-                    labels,
-                    pending,
-                    device=device,
-                )
-                pending = []
-        if pending:
-            yield from _predict_preprocessed_batch(
-                model,
-                labels,
-                pending,
-                device=device,
-            )
-
-
 async def predict_yolo_stream(
     checkpoint_path: Path,
     label_space: Sequence[str],
@@ -822,6 +724,6 @@ __all__ = [
     "YOLO_TRAIN_PATIENCE",
     "YOLO_VALIDATION_FRACTION",
     "inspect_yolo_training_samples",
-    "predict_yolo",
+    "predict_yolo_stream",
     "train_yolo",
 ]

@@ -133,8 +133,6 @@ class SourceConnectorResponse(BaseModel):
 class CreateImportProfileRequest(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     settings: dict[str, JsonValue]
-    max_records_per_run: int = Field(gt=0)
-    max_rows_per_dataset: int = Field(gt=0)
 
 
 class ImportProfileVersionResponse(BaseModel):
@@ -145,8 +143,6 @@ class ImportProfileVersionResponse(BaseModel):
     connector_id: str
     name: str
     settings: dict[str, JsonValue]
-    max_records_per_run: int
-    max_rows_per_dataset: int
     created_by: str
     created_at: datetime
 
@@ -160,8 +156,6 @@ class ImportProfileVersionResponse(BaseModel):
             connector_id=value.connector_id,
             name=value.name,
             settings=cast(dict[str, JsonValue], value.settings),
-            max_records_per_run=value.max_records_per_run,
-            max_rows_per_dataset=value.max_rows_per_dataset,
             created_by=value.created_by,
             created_at=value.created_at,
         )
@@ -185,8 +179,7 @@ class CreateScAutomationPartitionRequest(BaseModel):
     connector_id: str = Field(min_length=1, max_length=64)
     import_profile_version_id: str = Field(min_length=1, max_length=64)
     layer_id: str = Field(min_length=1, max_length=255)
-    dimension: Literal["device", "recipe_id"]
-    dimension_value: str = Field(min_length=1, max_length=255)
+    device: str = Field(min_length=1, max_length=255)
 
 
 class MembershipRuleVersionResponse(BaseModel):
@@ -252,8 +245,7 @@ class ScAutomationPartitionResponse(BaseModel):
     rule_id: str
     connector_id: str
     layer_id: str
-    dimension: Literal["device", "recipe_id"]
-    dimension_value: str
+    device: str
     created_by: str
     created_at: datetime
 
@@ -269,8 +261,7 @@ class ScAutomationPartitionResponse(BaseModel):
             rule_id=partition.rule_id,
             connector_id=partition.connector_id,
             layer_id=partition.layer_id,
-            dimension=cast(Literal["device", "recipe_id"], partition.dimension),
-            dimension_value=partition.dimension_value,
+            device=partition.device,
             created_by=partition.created_by,
             created_at=partition.created_at,
         )
@@ -362,7 +353,7 @@ class DiscoveryRunResponse(BaseModel):
     range_end_utc: datetime | None
     timezone: str | None
     parent_run_id: str | None
-    snapshot_revision_id: str | None
+    collection_revision_id: str | None
     stats: dict[str, int]
     error_detail: str | None
     created_by: str
@@ -386,7 +377,7 @@ class DiscoveryRunResponse(BaseModel):
             range_end_utc=run.range_end_utc,
             timezone=run.timezone_name,
             parent_run_id=run.parent_run_id,
-            snapshot_revision_id=run.snapshot_revision_id,
+            collection_revision_id=run.collection_revision_id,
             stats=run.stats,
             error_detail=run.error_detail,
             created_by=run.created_by,

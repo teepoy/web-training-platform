@@ -11,7 +11,7 @@ import {
 } from "@/features/sc/application/inspectionFilterPolicy";
 import type { ReticleMapOptions } from "@/features/sc/application/reticleMapOptions";
 import type { ScSampleTableFilter, ScSampleTableSort } from "@/features/sc/domain/sampleTable";
-import type { ScGlobalFilter } from "@/features/sc/domain/globalFilter";
+import { emptyScGlobalFilter, type ScGlobalFilter } from "@/features/sc/domain/globalFilter";
 import type {
   ScSamplingGroupPopulation,
   ScSamplingProgram,
@@ -58,6 +58,8 @@ export function useSqlInspectionModel(args: {
   dataSource: Ref<ScWorkbenchDataSource | null> | ComputedRef<ScWorkbenchDataSource | null>;
   legendGroupBy: ComputedRef<ScLegendSource | null | undefined>;
   globalFilter: ComputedRef<ScGlobalFilter>;
+  mapFilter?: ComputedRef<ScGlobalFilter>;
+  lookupFilter?: ComputedRef<ScGlobalFilter>;
   tableFilter: ComputedRef<ScSampleTableFilter | undefined>;
   tableSort: ComputedRef<ScSampleTableSort | null | undefined>;
   reticle: ComputedRef<ScReticleProjection>;
@@ -82,10 +84,13 @@ export function useSqlInspectionModel(args: {
 
   const requestedMapLegendColumn = computed(() => legendColumn(args.legendGroupBy.value));
   const mapLegendColumn = ref(requestedMapLegendColumn.value);
-  const globalFilters = computed(() => buildScGlobalDataFilters(args.globalFilter.value));
+  const globalFilters = computed(() =>
+    buildScGlobalDataFilters(args.mapFilter?.value ?? args.globalFilter.value),
+  );
   const filterPlan = computed(() =>
     buildInspectionFilterPlan({
       globalFilter: args.globalFilter.value,
+      mapFilter: args.mapFilter?.value,
       mapSelectionIds: mapSelection.value.ids,
       reviewMode: reviewMode.value,
       samplingIds: args.galleryRandomSamplingDefectIds.value,
@@ -272,7 +277,7 @@ export function useSqlInspectionModel(args: {
       limit: 500,
       filter: {},
       sort: null,
-      filters: [],
+      filters: buildScGlobalDataFilters(args.lookupFilter?.value ?? emptyScGlobalFilter()),
       reticle: args.reticle.value,
     });
   }

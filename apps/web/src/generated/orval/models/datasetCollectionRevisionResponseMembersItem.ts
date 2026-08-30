@@ -5,4 +5,4 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type CollectionSnapshotUpdateStatusResponseSnapshotId = string | null;
+export type DatasetCollectionRevisionResponseMembersItem = { [key: string]: unknown };

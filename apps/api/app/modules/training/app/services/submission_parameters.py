@@ -16,6 +16,11 @@ def train_and_predict_workflow_parameters(
         "dataset_id": command.dataset_id,
         "collection_id": command.collection_id,
         "collection_revision_id": command.collection_revision_id,
+        "collection_member_ids": (
+            list(command.collection_member_ids)
+            if command.collection_member_ids is not None
+            else None
+        ),
         "trainer_id": command.trainer_id,
         "org_id": command.org_id,
         "created_by": command.created_by,

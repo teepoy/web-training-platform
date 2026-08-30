@@ -19,7 +19,6 @@ import {
   useListTrainersRouteApiV1TrainersGet,
   getJobApiV1TrainingJobsJobIdGet,
   getAnnotationStatsApiV1DatasetsDatasetIdAnnotationStatsGet,
-  getRevisionApiV1DatasetCollectionsCollectionIdRevisionsRevisionIdGet,
   createTrainAndPredictJobApiV1TrainingJobsTrainAndPredictPost,
 } from "@/generated/orval/endpoints/api";
 import { listPredictionJobs } from "@/shared/api/predictions";
@@ -41,7 +40,7 @@ import type { ScSamplingCandidateScope } from "./inspectionFilterPolicy";
 import type { ScSelectionAction } from "../domain/workbenchInteraction";
 import { useScReclassifyStore } from "./reclassifyStore";
 import type { ScDatasetInfo, ScAnnotationItem } from "../domain/models";
-import { DEFAULT_RECLASSIFY_CODE_NAMES } from "./reclassifyCodeNames";
+import { SC_CLASS_NUMBER_DISPLAY_NAMES } from "../domain/classNumberDisplay";
 import { loadScSamplingPreference, saveScSamplingPreference } from "./samplingPreferences";
 
 const DEFAULT_SAMPLING_DRAFT_LABEL = "60";
@@ -128,15 +127,25 @@ export interface ReclassifyPageState {
   trainAndPredict: (preparedSampleFilter?: ScGlobalFilter | null) => Promise<void>;
 }
 
-export function useReclassifyPage(): ReclassifyPageState {
+export function useReclassifyPage(options?: {
+  collectionDatasetIds?: ComputedRef<readonly string[]>;
+  collectionMemberIds?: ComputedRef<readonly string[]>;
+}): ReclassifyPageState {
   const route = useRoute();
-  const datasetId = computed(() => route.params.id as string);
   const collectionId = computed(() => {
     const value = route.params.collectionId;
     return typeof value === "string" && value.length > 0 ? value : null;
   });
+  const datasetId = computed(() => {
+    if (collectionId.value) {
+      const value = route.query.mapDataset;
+      return typeof value === "string" ? value : "";
+    }
+    const value = route.params.id;
+    return typeof value === "string" ? value : "";
+  });
   const collectionRevisionId = computed(() => {
-    const value = route.query.revisionId;
+    const value = route.params.revisionId;
     return typeof value === "string" && value.length > 0 ? value : null;
   });
   const workspaceKey = computed(() =>
@@ -171,18 +180,13 @@ export function useReclassifyPage(): ReclassifyPageState {
     {
       query: {
         select: (res) => res as ScDatasetInfo,
+        enabled: computed(() => datasetId.value.length > 0),
         retry: false,
       },
     },
   );
 
   const selectedDataset = computed<ScDatasetInfo | undefined>(() => datasetQuery.data.value);
-
-  const isLoading = computed(() => datasetQuery.isLoading.value);
-  const isError = computed(() => datasetQuery.isError.value);
-  const errorMessage = computed(
-    () => (datasetQuery.error.value as Error)?.message ?? t("sc.datasetLoadFailed"),
-  );
 
   const labelSpace = computed<string[]>(
     () =>
@@ -232,7 +236,7 @@ export function useReclassifyPage(): ReclassifyPageState {
   const annotationStatsQuery = useQuery({
     queryKey: computed(() => ["api", "v1", "datasets", datasetId.value, "annotation-stats"]),
     queryFn: () => getAnnotationStatsApiV1DatasetsDatasetIdAnnotationStatsGet(datasetId.value),
-    enabled: computed(() => !!selectedDataset.value),
+    enabled: computed(() => !collectionId.value && !!selectedDataset.value),
     retry: false,
   });
 
@@ -242,31 +246,51 @@ export function useReclassifyPage(): ReclassifyPageState {
     return typeof annotated === "number" && Number.isFinite(annotated) ? Math.max(0, annotated) : 0;
   });
 
-  const collectionRevisionQuery = useQuery({
+  const collectionAnnotationStatsQuery = useQuery({
     queryKey: computed(() => [
       "dataset-collections",
       collectionId.value,
-      "revisions",
       collectionRevisionId.value,
+      "annotation-stats",
+      [...(options?.collectionDatasetIds?.value ?? [])].sort(),
     ]),
-    queryFn: () => {
-      if (!collectionId.value || !collectionRevisionId.value) {
-        throw new Error(t("sc.revisionRequired"));
-      }
-      return getRevisionApiV1DatasetCollectionsCollectionIdRevisionsRevisionIdGet(
-        collectionId.value,
-        collectionRevisionId.value,
-      );
-    },
-    enabled: computed(() => !!collectionId.value && !!collectionRevisionId.value),
+    queryFn: () =>
+      Promise.all(
+        (options?.collectionDatasetIds?.value ?? []).map((sourceDatasetId) =>
+          getAnnotationStatsApiV1DatasetsDatasetIdAnnotationStatsGet(sourceDatasetId),
+        ),
+      ),
+    enabled: computed(
+      () =>
+        !!collectionId.value &&
+        !!collectionRevisionId.value &&
+        (options?.collectionDatasetIds?.value.length ?? 0) > 0,
+    ),
     retry: false,
   });
 
+  const isLoading = computed(
+    () => datasetQuery.isLoading.value || collectionAnnotationStatsQuery.isLoading.value,
+  );
+  const isError = computed(
+    () => datasetQuery.isError.value || collectionAnnotationStatsQuery.isError.value,
+  );
+  const errorMessage = computed(() =>
+    toUserMessage(
+      datasetQuery.error.value ?? collectionAnnotationStatsQuery.error.value,
+      t("sc.datasetLoadFailed"),
+    ),
+  );
+
   const activeClassCount = computed<number>(() => {
     if (collectionId.value) {
-      return Object.values(collectionRevisionQuery.data.value?.label_counts ?? {}).filter(
-        (count) => Number(count) > 0,
-      ).length;
+      const activeLabels = new Set<string>();
+      for (const stats of collectionAnnotationStatsQuery.data.value ?? []) {
+        for (const [label, count] of Object.entries(stats.label_counts ?? {})) {
+          if (Number(count) > 0) activeLabels.add(label);
+        }
+      }
+      return activeLabels.size;
     }
     const stats = annotationStatsQuery.data.value as DatasetAnnotationStats | undefined;
     const counts = stats?.label_counts ?? {};
@@ -316,7 +340,7 @@ export function useReclassifyPage(): ReclassifyPageState {
   const customShortcuts = ref<Record<string, string>>({});
 
   function localStorageKey(kind: "names" | "shortcuts"): string {
-    return `sc.reclassify.${kind}.${datasetId.value}`;
+    return `sc.reclassify.${kind}.${workspaceKey.value}`;
   }
 
   function readLocalRecord(key: string): Record<string, string> {
@@ -356,7 +380,7 @@ export function useReclassifyPage(): ReclassifyPageState {
 
   const codeLabels = computed<ReclassifyCodeLabel[]>(() => {
     const labels: Array<Omit<ReclassifyCodeLabel, "shortcut">> = Object.entries(
-      DEFAULT_RECLASSIFY_CODE_NAMES,
+      SC_CLASS_NUMBER_DISPLAY_NAMES,
     ).map(([code, name]) => ({
       code,
       name: customLabelNames.value[code] || name,
@@ -487,11 +511,24 @@ export function useReclassifyPage(): ReclassifyPageState {
     annotationDraft.value = {};
   }
 
+  function selectedCollectionSourceDatasetId(rowKey: string): string | null {
+    const sourceDatasetIds = [...(options?.collectionDatasetIds?.value ?? [])].sort(
+      (left, right) => right.length - left.length,
+    );
+    return sourceDatasetIds.find((id) => rowKey.startsWith(`${id}::`)) ?? null;
+  }
+
   const draftCount = computed(
-    () => Object.keys(annotationDraft.value).filter((k) => annotationDraft.value[k]).length,
+    () =>
+      Object.keys(annotationDraft.value).filter(
+        (rowKey) =>
+          annotationDraft.value[rowKey] &&
+          (!collectionId.value || selectedCollectionSourceDatasetId(rowKey) !== null),
+      ).length,
   );
 
   const trainingSampleLimitNotice = computed<string | null>(() => {
+    if (collectionId.value) return null;
     const stats = annotationStatsQuery.data.value as DatasetAnnotationStats | undefined;
     const excessCount = Object.values(stats?.label_counts ?? {}).reduce(
       (total, rawCount) => total + Math.max(0, Number(rawCount) - 1_000),
@@ -509,11 +546,7 @@ export function useReclassifyPage(): ReclassifyPageState {
     if (!collectionId.value) {
       return { datasetId: datasetId.value, sampleId: rowKey };
     }
-    const sourceDatasetIds = (collectionRevisionQuery.data.value?.source_snapshot ?? [])
-      .map((item) => String(item.source_dataset_id ?? ""))
-      .filter(Boolean)
-      .sort((left, right) => right.length - left.length);
-    const sourceDatasetId = sourceDatasetIds.find((id) => rowKey.startsWith(`${id}::`));
+    const sourceDatasetId = selectedCollectionSourceDatasetId(rowKey);
     if (!sourceDatasetId) {
       throw new Error(t("sc.collectionRowIdentityMissing", { rowKey }));
     }
@@ -524,7 +557,10 @@ export function useReclassifyPage(): ReclassifyPageState {
   }
 
   async function submitAnnotations(): Promise<void> {
-    const entries = Object.entries(annotationDraft.value).filter(([, label]) => label);
+    const entries = Object.entries(annotationDraft.value).filter(
+      ([rowKey, label]) =>
+        label && (!collectionId.value || selectedCollectionSourceDatasetId(rowKey) !== null),
+    );
     if (entries.length === 0) {
       message.warning(t("sc.noAnnotationsToSubmit"));
       return;
@@ -592,6 +628,16 @@ export function useReclassifyPage(): ReclassifyPageState {
           }),
         ]),
       );
+      if (collectionId.value && collectionRevisionId.value) {
+        await queryClient.invalidateQueries({
+          queryKey: [
+            "dataset-collections",
+            collectionId.value,
+            collectionRevisionId.value,
+            "annotation-stats",
+          ],
+        });
+      }
     } catch (error) {
       message.error(toUserMessage(error, t("sc.annotationsCreateFailed")));
     } finally {
@@ -900,6 +946,7 @@ export function useReclassifyPage(): ReclassifyPageState {
           ? {
               collection_id: collectionId.value,
               collection_revision_id: collectionRevisionId.value,
+              collection_member_ids: [...(options?.collectionMemberIds?.value ?? [])],
             }
           : { dataset_id: datasetId.value }),
         trainer_id: trainerId,
@@ -912,7 +959,7 @@ export function useReclassifyPage(): ReclassifyPageState {
       }
       trainPredictTaskId.value = trainJobId;
       await queryClient.invalidateQueries({
-        queryKey: ["jobs", datasetId.value],
+        queryKey: ["jobs", workspaceKey.value],
       });
       trainPredictStatusMessage.value = t("sc.workflowSubmitted", {
         id: trainJobId.slice(0, 8),

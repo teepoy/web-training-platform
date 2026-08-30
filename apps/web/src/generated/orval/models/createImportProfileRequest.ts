@@ -13,8 +13,4 @@ export interface CreateImportProfileRequest {
    */
   name: string;
   settings: CreateImportProfileRequestSettings;
-  /** */
-  max_records_per_run: number;
-  /** */
-  max_rows_per_dataset: number;
 }

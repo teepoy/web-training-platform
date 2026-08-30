@@ -36,6 +36,7 @@ import {
   type ScSamplingSizeRangeRule,
 } from "@/features/sc/domain/samplingRules";
 import { scMissingFilterOption } from "@/features/sc/domain/missingFilterValue";
+import { formatScClassNumber } from "@/features/sc/domain/classNumberDisplay";
 import {
   scSamplingRuleEditor,
   type ScSamplingRuleEditorDescriptor,
@@ -256,7 +257,9 @@ function ruleSummary(rule: ScSamplingRule): string {
   if (isCountRule(rule)) return `N = ${rule.count}`;
   if (isLimitRule(rule)) return t("sc.maximum", { count: rule.limit });
   if (isClassCodesRule(rule)) {
-    return rule.classCodes.length ? rule.classCodes.join(", ") : t("sc.classCodesRequired");
+    return rule.classCodes.length
+      ? rule.classCodes.map(formatScClassNumber).join(", ")
+      : t("sc.classCodesRequired");
   }
   if (rule.type === "require_image") return t("sc.imagesRequired");
   if (isSizeRangeRule(rule)) return `${rule.sizeField}: ${rule.minimum}–${rule.maximum}`;
@@ -312,7 +315,7 @@ async function loadRuleOptions(rule: ScSamplingRule): Promise<void> {
     if (isClassCodesRule(rule)) {
       classCodeOptions.value = groups.flatMap((group) => {
         const value = Number(group.value);
-        return Number.isInteger(value) ? [{ label: group.value, value }] : [];
+        return Number.isInteger(value) ? [{ label: formatScClassNumber(value), value }] : [];
       });
       return;
     }

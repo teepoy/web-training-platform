@@ -239,7 +239,7 @@ describe("SQL workbench data source", () => {
     expect(attempts).toBe(1);
   });
 
-  it("includes ordered map IDs in the Arrow map snapshot", async () => {
+  it("includes ordered map IDs in the Arrow map data", async () => {
     let requestBody: { description: string; sql: string; parameters: unknown[] } | null = null;
     server.use(
       http.post(QUERY_URL, async ({ request }) => {

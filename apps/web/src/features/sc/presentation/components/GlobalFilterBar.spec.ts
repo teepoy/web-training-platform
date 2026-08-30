@@ -116,6 +116,33 @@ describe("GlobalFilterBar", () => {
     expect(emitted.items[0]?.id).toBeTruthy();
   });
 
+  it("labels class-number options without changing their numeric predicates", async () => {
+    const { wrapper } = await mountWithProviders(GlobalFilterBar, {
+      props: {
+        filter: globalFilter(),
+        columns: filterColumns,
+        distinctValues: { class_number: [0, 7, 99] },
+      },
+    });
+
+    await wrapper.get('[data-testid="query-add-condition"]').trigger("click");
+    wrapper.findComponent(NSelect).vm.$emit("update:value", "class_number");
+    await wrapper.vm.$nextTick();
+    const menu = wrapper.findComponent({ name: "SetFilterMenu" });
+    expect(menu.props("options")).toEqual([
+      { label: "0 · Unclassified", value: 0 },
+      { label: "7 · Code 7", value: 7 },
+      { label: "99", value: 99 },
+    ]);
+
+    menu.vm.$emit("apply", [7, 99]);
+    const emitted = wrapper.emitted("update:filter")?.at(-1)?.[0] as ScGlobalFilter;
+    expect(emitted.items[0]).toMatchObject({
+      field: "class_number",
+      condition: { filterType: "set", values: [7, 99] },
+    });
+  });
+
   it("renders repeated properties as separately removable items", async () => {
     const filter = globalFilter([
       {

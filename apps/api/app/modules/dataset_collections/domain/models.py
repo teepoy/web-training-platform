@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Literal
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,46 +62,14 @@ class DatasetCollectionRevision:
     target_view_contract: str
     target_schema_version: str
     status: str
-    source_snapshot: tuple[dict[str, object], ...]
-    row_count: int | None
-    label_counts: dict[str, int]
+    members: tuple[dict[str, object], ...]
     manifest_uri: str | None
-    provenance_uri: str | None
     trigger_kind: str
     trigger_ref: str | None
     created_by: str
     created_at: datetime
     error_code: str | None
     error_detail: str | None
-    manifest_format: str = "legacy_materialized_v1"
-    source_resolution: str = "legacy_materialized"
-    reproducibility_capability: bool = True
-
-
-@dataclass(frozen=True, slots=True)
-class CollectionSnapshotMemberUpdate:
-    member_id: str
-    dataset_id: str
-    observed_dataset_revision_id: str | None
-    observed_dataset_revision_number: int | None
-    current_dataset_revision_id: str | None
-    current_dataset_revision_number: int | None
-    update_available: bool
-
-
-@dataclass(frozen=True, slots=True)
-class CollectionSnapshotUpdateStatus:
-    snapshot_id: str | None
-    snapshot_revision_number: int | None
-    update_available: bool
-    outdated_member_count: int
-    members: tuple[CollectionSnapshotMemberUpdate, ...]
-
-
-@dataclass(frozen=True, slots=True)
-class CollectionSnapshotRefreshResult:
-    outcome: Literal["refreshed", "unchanged"]
-    snapshot: DatasetCollectionRevision
 
 
 class PredictionCoverageStatus(str, Enum):

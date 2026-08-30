@@ -72,11 +72,13 @@ export function applyMapSelectionToGlobalFilter(
 
 export function buildInspectionFilterPlan(args: {
   globalFilter: ScGlobalFilter;
+  mapFilter?: ScGlobalFilter;
   mapSelectionIds: readonly number[];
   reviewMode: boolean;
   samplingIds: ReadonlySet<string> | undefined;
 }): ScInspectionFilterPlan {
   const globalFilters = buildScGlobalDataFilters(args.globalFilter);
+  const mapFilters = buildScGlobalDataFilters(args.mapFilter ?? args.globalFilter);
   const mapSelectionIds = uniqueNumericIds(args.mapSelectionIds);
   const samplingIds = uniqueNumericIds([...(args.samplingIds ?? [])]);
   const transientFilters: ScDataFilterExpression[] = [
@@ -92,8 +94,8 @@ export function buildInspectionFilterPlan(args: {
 
   return {
     globalFilters,
-    mapFilters: globalFilters,
-    aggregateFilters: globalFilters,
+    mapFilters,
+    aggregateFilters: mapFilters,
     tableFilters,
     galleryBaseFilters,
   };

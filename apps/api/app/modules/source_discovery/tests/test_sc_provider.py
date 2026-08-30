@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import polars as pl
 import pytest
@@ -52,6 +52,26 @@ class _Importer:
         raise AssertionError("Import is not used by this test")
 
 
+class _ManyUpstream:
+    async def list_inspections(
+        self,
+        start_time: datetime,
+        end_time: datetime,
+        **_filters: object,
+    ) -> pl.LazyFrame:
+        del end_time
+        start = start_time.replace(tzinfo=None)
+        return pl.DataFrame(
+            {
+                "inspection_time": [
+                    start + timedelta(seconds=index) for index in range(600)
+                ],
+                "wafer_key": list(range(600)),
+                "layer_id": ["M1"] * 600,
+            }
+        ).lazy()
+
+
 class _CapturingImporter:
     def __init__(self) -> None:
         self.kwargs: dict[str, object] = {}
@@ -91,18 +111,21 @@ async def test_sc_discovery_uses_local_wall_clock_and_utc_half_open_range() -> N
             ),
         ),
     )
-    batch = await provider.discover(
-        connector=connector,
-        condition=condition,
-        start_utc=datetime(2026, 8, 15, 0, 0, tzinfo=UTC),
-        end_utc=datetime(2026, 8, 15, 1, 0, tzinfo=UTC),
-        max_records=10,
-    )
+    records = [
+        record
+        async for batch in provider.discover(
+            connector=connector,
+            condition=condition,
+            start_utc=datetime(2026, 8, 15, 0, 0, tzinfo=UTC),
+            end_utc=datetime(2026, 8, 15, 1, 0, tzinfo=UTC),
+        )
+        for record in batch.records
+    ]
 
     assert upstream.range is not None
     assert upstream.range[0].isoformat() == "2026-08-15T08:00:00+08:00"
     assert upstream.range[1].isoformat() == "2026-08-15T09:00:00+08:00"
-    assert [record.record_key for record in batch.records] == [
+    assert [record.record_key for record in records] == [
         "2026-08-15T08:59:00+08:00::3"
     ]
 
@@ -131,8 +154,6 @@ async def test_sc_discovery_import_leaves_parser_selection_to_service() -> None:
         connector_id="connector",
         name="SC import",
         settings={"label_space": ["Scratch"]},
-        max_records_per_run=100,
-        max_rows_per_dataset=1_000,
         created_by="user",
         created_at=now,
     )
@@ -157,3 +178,38 @@ async def test_sc_discovery_import_leaves_parser_selection_to_service() -> None:
 
     assert result.dataset_id == "dataset-1"
     assert "image_source_format" not in importer.kwargs
+
+
+@pytest.mark.asyncio
+async def test_sc_discovery_pages_all_matches_without_one_eager_batch() -> None:
+    provider = ScSourceRecordProvider(_ManyUpstream(), _Importer())  # type: ignore[arg-type]
+    now = datetime.now(UTC)
+    connector = SourceConnector(
+        id="connector",
+        org_id="org",
+        provider_id="sc",
+        name="SC",
+        config={},
+        enabled=True,
+        created_by="user",
+        created_at=now,
+        updated_at=now,
+    )
+    batches = [
+        batch
+        async for batch in provider.discover(
+            connector=connector,
+            condition=FilterGroup(
+                combinator=FilterCombinator.ALL,
+                children=(
+                    FilterPredicate("layer_id", FilterOperator.EQ, "M1"),
+                ),
+            ),
+            start_utc=datetime(2026, 8, 15, 0, 0, tzinfo=UTC),
+            end_utc=datetime(2026, 8, 15, 1, 0, tzinfo=UTC),
+        )
+    ]
+
+    assert len(batches) > 1
+    assert max(len(batch.records) for batch in batches) < 600
+    assert sum(len(batch.records) for batch in batches) == 600

@@ -14,8 +14,6 @@ export interface ImportProfileVersionResponse {
   connector_id: string;
   name: string;
   settings: ImportProfileVersionResponseSettings;
-  max_records_per_run: number;
-  max_rows_per_dataset: number;
   created_by: string;
   created_at: string;
 }

@@ -32,7 +32,7 @@ const meta: Meta<typeof ResourceTargetSelect> = {
               target_view_contract: "sc.patch-image",
               target_schema_version: "1",
               status: "ready",
-              source_snapshot: [],
+              members: [],
               row_count: 1240,
               label_counts: {},
               manifest_uri: "s3://collections/revision-3.json",
@@ -59,7 +59,7 @@ const meta: Meta<typeof ResourceTargetSelect> = {
                 id: collectionId,
                 org_id: "org-1",
                 name: "August production lots",
-                description: "Cross-line inspection snapshot",
+                description: "Cross-line inspection revision",
                 target_view_id: "patch_image_v1",
                 target_view_contract: "sc.patch-image",
                 target_schema_version: "1",
@@ -85,7 +85,7 @@ const meta: Meta<typeof ResourceTargetSelect> = {
 export default meta;
 type Story = StoryObj<typeof ResourceTargetSelect>;
 
-export const CollectionSnapshotPinned: Story = {
+export const CollectionRevisionPinned: Story = {
   render: () => ({
     components: { ResourceTargetSelect },
     setup() {

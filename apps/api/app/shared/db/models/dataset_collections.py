@@ -3,7 +3,6 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from sqlalchemy import (
-    Boolean,
     JSON,
     CheckConstraint,
     DateTime,
@@ -159,29 +158,8 @@ class DatasetCollectionRevisionORM(Base):
     target_view_contract: Mapped[str] = mapped_column(String(255), nullable=False)
     target_schema_version: Mapped[str] = mapped_column(String(64), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False)
-    source_snapshot: Mapped[list[dict]] = mapped_column(JSON, nullable=False)
-    row_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    label_counts: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    members: Mapped[list[dict]] = mapped_column(JSON, nullable=False)
     manifest_uri: Mapped[str | None] = mapped_column(Text, nullable=True)
-    provenance_uri: Mapped[str | None] = mapped_column(Text, nullable=True)
-    manifest_format: Mapped[str] = mapped_column(
-        String(64),
-        nullable=False,
-        default="legacy_materialized_v1",
-        server_default="legacy_materialized_v1",
-    )
-    source_resolution: Mapped[str] = mapped_column(
-        String(32),
-        nullable=False,
-        default="legacy_materialized",
-        server_default="legacy_materialized",
-    )
-    reproducibility_capability: Mapped[bool] = mapped_column(
-        Boolean,
-        nullable=False,
-        default=True,
-        server_default="1",
-    )
     trigger_kind: Mapped[str] = mapped_column(String(64), nullable=False)
     trigger_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_by: Mapped[str] = mapped_column(String(255), nullable=False)

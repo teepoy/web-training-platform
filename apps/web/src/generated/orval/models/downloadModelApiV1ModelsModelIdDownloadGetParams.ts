@@ -5,4 +5,6 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type DatasetCollectionRevisionResponseProvenanceUri = string | null;
+export type DownloadModelApiV1ModelsModelIdDownloadGetParams = {
+portable?: boolean;
+};

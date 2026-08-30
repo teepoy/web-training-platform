@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from collections.abc import AsyncIterator
 from typing import cast
 from uuid import uuid4
 
@@ -16,7 +17,7 @@ from app.modules.dataset_collections.domain.models import (
 )
 from app.modules.dataset_collections.port.local import (
     CollectionAutomationAdmissionPort,
-    CollectionSnapshotPublishingPort,
+    CollectionRevisionPublishingPort,
 )
 from app.modules.source_discovery.adapter.sql_repository import (
     SourceDiscoverySqlRepository,
@@ -88,6 +89,7 @@ class _Provider:
         self.records = records
         self.fail_keys: set[str] = set()
         self.imports: list[tuple[str, str]] = []
+        self.require_streaming_consumption = False
 
     async def discover(
         self,
@@ -96,18 +98,17 @@ class _Provider:
         condition: FilterGroup,
         start_utc: datetime,
         end_utc: datetime,
-        max_records: int,
-    ) -> SourceDiscoveryBatch:
+    ) -> AsyncIterator[SourceDiscoveryBatch]:
         del connector, condition
         matched = tuple(
             record
             for record in self.records
             if start_utc <= record.observed_at < end_utc
         )
-        return SourceDiscoveryBatch(
-            records=matched[:max_records],
-            has_more=len(matched) > max_records,
-        )
+        for index, record in enumerate(matched):
+            if self.require_streaming_consumption:
+                assert len(self.imports) == index
+            yield SourceDiscoveryBatch(records=(record,))
 
     async def estimate(
         self,
@@ -117,19 +118,19 @@ class _Provider:
         start_utc: datetime,
         end_utc: datetime,
         representative_limit: int,
-        max_records: int,
     ) -> SourceEstimate:
-        batch = await self.discover(
+        records: list[SourceRecord] = []
+        async for batch in self.discover(
             connector=connector,
             condition=condition,
             start_utc=start_utc,
             end_utc=end_utc,
-            max_records=max_records,
-        )
+        ):
+            records.extend(batch.records)
         return SourceEstimate(
             as_of_utc=_now(),
-            matched_count=len(batch.records),
-            representative_records=batch.records[:representative_limit],
+            matched_count=len(records),
+            representative_records=tuple(records[:representative_limit]),
         )
 
     async def import_record(
@@ -244,7 +245,7 @@ class _Collections:
         return self.collection, list(self.members)
 
 
-class _Snapshots:
+class _Revisions:
     def __init__(self, collections: _Collections) -> None:
         self.collections = collections
         self.calls = 0
@@ -265,9 +266,9 @@ class _Snapshots:
         assert expected_definition_version == collection.definition_version
         self.calls += 1
         if self.fail:
-            raise RuntimeError("snapshot unavailable")
+            raise RuntimeError("revision unavailable")
         return DatasetCollectionRevision(
-            id=f"snapshot-{self.calls}",
+            id=f"revision-{self.calls}",
             collection_id=collection_id,
             revision_number=self.calls,
             definition_version=collection.definition_version,
@@ -276,20 +277,14 @@ class _Snapshots:
             target_view_contract=collection.target_view_contract,
             target_schema_version=collection.target_schema_version,
             status="ready",
-            source_snapshot=(),
-            row_count=None,
-            label_counts={},
+            members=(),
             manifest_uri=None,
-            provenance_uri=None,
             trigger_kind="discovery",
             trigger_ref=None,
             created_by="actor",
             created_at=_now(),
             error_code=None,
             error_detail=None,
-            manifest_format="collection-composite-observed.v1",
-            source_resolution="observed",
-            reproducibility_capability=False,
         )
 
 
@@ -301,12 +296,12 @@ async def _service(
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
     repository = SourceDiscoverySqlRepository(create_session_factory(engine))
-    snapshots = _Snapshots(collections)
+    revisions = _Revisions(collections)
     service = SourceDiscoveryService(
         repository=repository,
         providers=SourceProviderCatalog((provider,)),
         collections=cast(CollectionAutomationAdmissionPort, collections),
-        snapshot_publisher=cast(CollectionSnapshotPublishingPort, snapshots),
+        revision_publisher=cast(CollectionRevisionPublishingPort, revisions),
     )
     return service, repository, engine
 
@@ -330,8 +325,6 @@ async def _configured_rule(
         connector_id=connector.id,
         name="bounded",
         settings={},
-        max_records_per_run=10,
-        max_rows_per_dataset=100,
     )
     condition = FilterGroup(
         combinator=FilterCombinator.ALL,
@@ -372,13 +365,13 @@ async def test_import_profiles_can_be_listed_for_rule_setup() -> None:
             connector_id=connector.id,
             name="Bounded import",
             settings={},
-            max_records_per_run=10,
-            max_rows_per_dataset=100,
         )
 
         listed = await service.list_import_profiles(connector.id, "org")
 
         assert [item.id for item in listed] == [profile.id]
+        assert not hasattr(profile, "max_records_per_run")
+        assert not hasattr(profile, "max_rows_per_dataset")
     finally:
         await engine.dispose()
 
@@ -419,8 +412,6 @@ async def test_sc_partition_creates_exact_rule_and_rejects_duplicate_assignment(
             connector_id=connector.id,
             name="Bounded import",
             settings={},
-            max_records_per_run=10,
-            max_rows_per_dataset=100,
         )
 
         rule, version, partition = await service.create_sc_partition(
@@ -431,11 +422,12 @@ async def test_sc_partition_creates_exact_rule_and_rejects_duplicate_assignment(
             connector_id=connector.id,
             import_profile_version_id=profile.id,
             layer_id="M1",
-            dimension="device",
-            dimension_value="DEVICE-A",
+            device="DEVICE-A",
         )
 
         assert partition.rule_id == rule.id == version.rule_id
+        assert partition.layer_id == "M1"
+        assert partition.device == "DEVICE-A"
         assert version.condition == FilterGroup(
             combinator=FilterCombinator.ALL,
             children=(
@@ -473,8 +465,7 @@ async def test_sc_partition_creates_exact_rule_and_rejects_duplicate_assignment(
                 connector_id=connector.id,
                 import_profile_version_id=profile.id,
                 layer_id="M1",
-                dimension="device",
-                dimension_value="DEVICE-A",
+                device="DEVICE-A",
             )
     finally:
         await engine.dispose()
@@ -504,7 +495,7 @@ async def test_live_discovery_records_overlap_as_skipped() -> None:
                 range_end_utc=rule.activated_at + timedelta(minutes=1),
                 timezone_name=None,
                 parent_run_id=None,
-                snapshot_revision_id=None,
+                collection_revision_id=None,
                 stats={},
                 error_detail=None,
                 created_by="system:collection-discovery",
@@ -564,7 +555,7 @@ async def test_backfill_partial_retry_and_receipts_are_idempotent() -> None:
     provider.fail_keys.add("record-2")
     collections = _Collections("collection-a", org_id)
     service, _, engine = await _service(provider, collections)
-    snapshots = cast(_Snapshots, service._snapshot_publisher)
+    revisions = cast(_Revisions, service._revision_publisher)
     try:
         _, _, rule_id = await _configured_rule(
             service, collection_id=collections.collection.id, org_id=org_id
@@ -583,7 +574,7 @@ async def test_backfill_partial_retry_and_receipts_are_idempotent() -> None:
         assert first.run.status == "partial"
         assert first.run.stats["linked"] == 1
         assert first.run.stats["failed"] == 1
-        assert snapshots.calls == 1
+        assert revisions.calls == 1
 
         provider.fail_keys.clear()
         retried = await service.retry_failed(
@@ -591,7 +582,7 @@ async def test_backfill_partial_retry_and_receipts_are_idempotent() -> None:
         )
         assert retried.run.status == "completed"
         assert retried.run.stats["linked"] == 1
-        assert snapshots.calls == 2
+        assert revisions.calls == 2
 
         replay = await service.run_backfill(
             collection_id=collections.collection.id,
@@ -604,10 +595,45 @@ async def test_backfill_partial_retry_and_receipts_are_idempotent() -> None:
         )
         assert replay.run.status == "completed"
         assert replay.run.stats["skipped"] == 2
-        assert replay.run.snapshot_revision_id is None
-        assert snapshots.calls == 2
+        assert replay.run.collection_revision_id is None
+        assert revisions.calls == 2
         assert collections.link_calls == 2
         assert len(provider.imports) == 2
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_backfill_consumes_every_discovery_batch_without_eager_collection() -> None:
+    org_id = "org"
+    provider = _Provider(
+        (_record("record-1"), _record("record-2"), _record("record-3"))
+    )
+    provider.require_streaming_consumption = True
+    collections = _Collections("collection-a", org_id)
+    service, _, engine = await _service(provider, collections)
+    try:
+        _, _, rule_id = await _configured_rule(
+            service, collection_id=collections.collection.id, org_id=org_id
+        )
+        execution = await service.run_backfill(
+            collection_id=collections.collection.id,
+            rule_id=rule_id,
+            org_id=org_id,
+            actor_id="actor",
+            start_utc=datetime(2026, 8, 15, 0, tzinfo=UTC),
+            end_utc=datetime(2026, 8, 15, 4, tzinfo=UTC),
+            timezone_name="UTC",
+        )
+
+        assert execution.run.status == "completed"
+        assert execution.run.stats["scanned"] == 3
+        assert execution.run.stats["imported"] == 3
+        assert [record_key for record_key, _ in provider.imports] == [
+            "record-1",
+            "record-2",
+            "record-3",
+        ]
     finally:
         await engine.dispose()
 
@@ -639,8 +665,8 @@ async def test_same_source_is_not_shared_across_collections() -> None:
             repository=repository,
             providers=SourceProviderCatalog((provider,)),
             collections=cast(CollectionAutomationAdmissionPort, second_collections),
-            snapshot_publisher=cast(
-                CollectionSnapshotPublishingPort, _Snapshots(second_collections)
+            revision_publisher=cast(
+                CollectionRevisionPublishingPort, _Revisions(second_collections)
             ),
         )
         condition = FilterGroup(
@@ -674,19 +700,19 @@ async def test_same_source_is_not_shared_across_collections() -> None:
 
 
 @pytest.mark.asyncio
-async def test_source_change_and_snapshot_failure_require_attention_and_recover() -> None:
+async def test_source_change_and_revision_failure_require_attention_and_recover() -> None:
     org_id = "org"
     provider = _Provider((_record("record-1"),))
     collections = _Collections("collection-a", org_id)
     service, _, engine = await _service(provider, collections)
-    snapshots = cast(_Snapshots, service._snapshot_publisher)
+    revisions = cast(_Revisions, service._revision_publisher)
     try:
         _, _, rule_id = await _configured_rule(
             service, collection_id="collection-a", org_id=org_id
         )
         start = datetime(2026, 8, 15, 0, tzinfo=UTC)
         end = start + timedelta(hours=2)
-        snapshots.fail = True
+        revisions.fail = True
         first = await service.run_backfill(
             collection_id="collection-a",
             rule_id=rule_id,
@@ -697,15 +723,15 @@ async def test_source_change_and_snapshot_failure_require_attention_and_recover(
             timezone_name="UTC",
         )
         assert first.run.status == "needs_attention"
-        assert first.run.snapshot_revision_id is None
+        assert first.run.collection_revision_id is None
         assert collections.link_calls == 1
 
-        snapshots.fail = False
+        revisions.fail = False
         publication_retry = await service.retry_failed(
             run_id=first.run.id, org_id=org_id, actor_id="actor"
         )
         assert publication_retry.run.status == "completed"
-        assert publication_retry.run.snapshot_revision_id is not None
+        assert publication_retry.run.collection_revision_id is not None
         assert collections.link_calls == 1
         assert len(provider.imports) == 1
 
@@ -747,8 +773,6 @@ async def test_rule_dependencies_and_backfill_range_are_explicitly_scoped() -> N
             connector_id=first.id,
             name="first profile",
             settings={},
-            max_records_per_run=10,
-            max_rows_per_dataset=100,
         )
         second = await service.create_connector(
             org_id=org_id,

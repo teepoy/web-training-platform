@@ -21,7 +21,7 @@ export const datasetCollectionRoutes: RouteRecordRaw[] = [
     component: () => import("./presentation/pages/DatasetCollectionDetailView.vue"),
   },
   {
-    path: "/dataset-collections/:collectionId/classify/:id",
+    path: "/dataset-collections/:collectionId/revisions/:revisionId/classify",
     name: "dataset-collection-classify",
     component: () => import("./presentation/pages/CollectionClassifyView.vue"),
     meta: compactCollectionWorkspaceMeta,

@@ -3,11 +3,11 @@ from app.modules.dataset_collections.app.services.collection_service import (
 )
 from app.modules.dataset_collections.app.services.collection_model_automation_service import (
     CollectionModelAutomationService,
-    CollectionSnapshotPublishingService,
+    CollectionRevisionPublishingService,
 )
 
 __all__ = [
     "CollectionModelAutomationService",
-    "CollectionSnapshotPublishingService",
+    "CollectionRevisionPublishingService",
     "DatasetCollectionService",
 ]

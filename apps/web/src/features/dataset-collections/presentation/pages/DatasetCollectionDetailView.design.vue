@@ -7,14 +7,14 @@
         <p>Collection purpose and scope</p>
       </div>
       <div class="actions">
-        <button>Save current setup as snapshot</button>
-        <button class="primary">Review snapshot r3</button>
+        <button>Save current setup as revision</button>
+        <button class="primary">Review revision r3</button>
       </div>
     </header>
 
     <nav class="tabs" aria-label="Collection sections">
       <button class="active">Overview</button><button>Classify ↗</button
-      ><button>Data &amp; rules</button><button>Models</button><button>Snapshots</button
+      ><button>Data &amp; rules</button><button>Models</button><button>Revisions</button
       ><button>Activity</button>
     </nav>
 
@@ -32,8 +32,8 @@
       </small>
     </section>
 
-    <section class="snapshot-explainer">
-      <strong>What is a snapshot?</strong>
+    <section class="revision-explainer">
+      <strong>What is a Collection Revision?</strong>
       <span>
         It saves the linked datasets and rules plus the Dataset change numbers observed now. It does
         not copy member data; runs read current Dataset data when they start.
@@ -41,7 +41,7 @@
     </section>
 
     <section class="summary">
-      View contract · Current setup v4 · 3 linked datasets · Snapshot r3
+      View contract · Current setup v4 · 3 linked datasets · Revision r3
     </section>
     <section class="models-panel">
       <div>
@@ -51,7 +51,7 @@
       <button>Choose model</button>
     </section>
     <section class="panel muted">
-      The remaining content is split across Data, Models, Snapshots, and Activity.
+      The remaining content is split across Data, Models, Revisions, and Activity.
     </section>
   </main>
 </template>
@@ -104,7 +104,7 @@ button.primary {
   background: #5267c9;
 }
 
-.snapshot-explainer,
+.revision-explainer,
 .member-export,
 .models-panel,
 .warning,
@@ -137,7 +137,7 @@ button.primary {
   font-weight: 400;
 }
 
-.snapshot-explainer {
+.revision-explainer {
   display: grid;
   gap: 4px;
   border-color: #cad3fa;

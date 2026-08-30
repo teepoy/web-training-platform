@@ -14,7 +14,6 @@ from app.modules.storage.port.local import DatasetStorageFactoryPort
 from app.modules.prediction.port.http.deps import (
     ArtifactServiceDep,
     DatasetReaderDep,
-    DatasetServiceDep,
     PredictionCollectionDep,
     PredictionSubmissionDep,
     PredictionQueryDep,
@@ -548,7 +547,6 @@ async def save_review_annotations(
     repo: PredictionRepositoryDep,
     dataset_reader: DatasetReaderDep,
     prediction_review: PredictionReviewDep,
-    dataset_service: DatasetServiceDep,
     event_publisher: RedisEventPublisherDep,
 ) -> SaveReviewAnnotationsResponse:
     action = await repo.get_review_action(action_id, org.id)
@@ -568,17 +566,6 @@ async def save_review_annotations(
             created_by=current_user.id,
             org_id=org.id,
         )
-        # Auto-expand label_space with final_labels from annotations
-        incoming_labels = {
-            item.final_label for item in payload.items if item.final_label
-        }
-        if incoming_labels:
-            await dataset_service.merge_label_space(
-                dataset.id,
-                org.id,
-                incoming_labels,
-            )
-
         if annotations or versions:
             await event_publisher.publish_prediction_refresh(
                 dataset_id=dataset.id,
