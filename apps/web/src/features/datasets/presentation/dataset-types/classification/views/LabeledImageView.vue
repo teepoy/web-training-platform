@@ -2,7 +2,7 @@
   <div data-testid="view-labeled-image-v1">
     <n-empty
       v-if="!items.length"
-      description="No labeled samples in this view. Add samples to this dataset first."
+      :description="t('datasetFlows.noLabeledSamples')"
       style="margin-top: 24px"
     />
     <n-data-table
@@ -18,7 +18,8 @@
 </template>
 
 <script setup lang="ts">
-import { h } from "vue";
+import { computed, h } from "vue";
+import { useI18n } from "vue-i18n";
 import type { DataTableColumns } from "naive-ui";
 import { NEmpty, NImage, NDataTable, NText, NTag, NEllipsis } from "naive-ui";
 import type { LabeledImageV1Row } from "@/shared/api/types";
@@ -38,6 +39,7 @@ withDefaults(
 const emit = defineEmits<{
   (event: "select-sample", sampleId: string): void;
 }>();
+const { t } = useI18n();
 
 function rowProps(row: LabeledImageV1Row) {
   return {
@@ -47,10 +49,10 @@ function rowProps(row: LabeledImageV1Row) {
   };
 }
 
-const columns: DataTableColumns<LabeledImageV1Row> = [
+const columns = computed<DataTableColumns<LabeledImageV1Row>>(() => [
   {
     key: "sample_id",
-    title: "Sample ID",
+    title: t("datasetFlows.sampleId"),
     width: 200,
     render(row) {
       return h(NEllipsis, null, {
@@ -65,7 +67,7 @@ const columns: DataTableColumns<LabeledImageV1Row> = [
   },
   {
     key: "image_uris",
-    title: "Image",
+    title: t("datasetFlows.image"),
     width: 120,
     render(row) {
       const uri = row.image_uris?.[0];
@@ -85,7 +87,7 @@ const columns: DataTableColumns<LabeledImageV1Row> = [
   },
   {
     key: "label",
-    title: "Label",
+    title: t("datasetFlows.label"),
     width: 180,
     render(row) {
       return h(
@@ -95,5 +97,5 @@ const columns: DataTableColumns<LabeledImageV1Row> = [
       );
     },
   },
-];
+]);
 </script>

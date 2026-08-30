@@ -8,6 +8,7 @@ import {
   type WritableComputedRef,
 } from "vue";
 import { useRoute } from "vue-router";
+import { useI18n } from "vue-i18n";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { useMessage } from "naive-ui";
 import { toUserMessage } from "@/shared/api/client";
@@ -31,11 +32,9 @@ import type {
 import {
   cloneScGlobalFilter,
   emptyScGlobalFilter,
-  isScGlobalFilterGroup,
   scGlobalFilterHasConditions,
   toScWorkflowSampleFilter,
   type ScGlobalFilter,
-  type ScGlobalFilterNode,
 } from "../domain/globalFilter";
 import type { ScSamplingProgram } from "../domain/samplingRules";
 import type { ScSamplingCandidateScope } from "./inspectionFilterPolicy";
@@ -126,7 +125,7 @@ export interface ReclassifyPageState {
   trainPredictPredictionPercent: ComputedRef<number | null>;
   trainPredictPredictionProgressLabel: ComputedRef<string>;
   trainPredictPredictionProcessing: ComputedRef<boolean>;
-  trainAndPredict: () => Promise<void>;
+  trainAndPredict: (preparedSampleFilter?: ScGlobalFilter | null) => Promise<void>;
 }
 
 export function useReclassifyPage(): ReclassifyPageState {
@@ -146,6 +145,7 @@ export function useReclassifyPage(): ReclassifyPageState {
       : datasetId.value,
   );
   const message = useMessage();
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const reclassifyStore = useScReclassifyStore();
 
@@ -181,7 +181,7 @@ export function useReclassifyPage(): ReclassifyPageState {
   const isLoading = computed(() => datasetQuery.isLoading.value);
   const isError = computed(() => datasetQuery.isError.value);
   const errorMessage = computed(
-    () => (datasetQuery.error.value as Error)?.message ?? "Failed to load dataset",
+    () => (datasetQuery.error.value as Error)?.message ?? t("sc.datasetLoadFailed"),
   );
 
   const labelSpace = computed<string[]>(
@@ -251,7 +251,7 @@ export function useReclassifyPage(): ReclassifyPageState {
     ]),
     queryFn: () => {
       if (!collectionId.value || !collectionRevisionId.value) {
-        throw new Error("Collection revision is required");
+        throw new Error(t("sc.revisionRequired"));
       }
       return getRevisionApiV1DatasetCollectionsCollectionIdRevisionsRevisionIdGet(
         collectionId.value,
@@ -498,12 +498,7 @@ export function useReclassifyPage(): ReclassifyPageState {
       0,
     );
     if (excessCount === 0) return null;
-    return (
-      "Training uses at most 1,000 annotations per class. " +
-      `${excessCount.toLocaleString()} additional annotation${
-        excessCount === 1 ? "" : "s"
-      } will be held out; prediction results remain available in the validation pool.`
-    );
+    return t("sc.trainingSampleLimit", { count: excessCount.toLocaleString() });
   });
 
   // ── Submit annotations using the stable dataset sample identity ───
@@ -520,7 +515,7 @@ export function useReclassifyPage(): ReclassifyPageState {
       .sort((left, right) => right.length - left.length);
     const sourceDatasetId = sourceDatasetIds.find((id) => rowKey.startsWith(`${id}::`));
     if (!sourceDatasetId) {
-      throw new Error(`Collection row has no source dataset identity: ${rowKey}`);
+      throw new Error(t("sc.collectionRowIdentityMissing", { rowKey }));
     }
     return {
       datasetId: sourceDatasetId,
@@ -531,7 +526,7 @@ export function useReclassifyPage(): ReclassifyPageState {
   async function submitAnnotations(): Promise<void> {
     const entries = Object.entries(annotationDraft.value).filter(([, label]) => label);
     if (entries.length === 0) {
-      message.warning("No annotations to submit");
+      message.warning(t("sc.noAnnotationsToSubmit"));
       return;
     }
     const byDataset = new Map<string, { annotations: ScAnnotationItem[]; rowKeys: string[] }>();
@@ -564,7 +559,7 @@ export function useReclassifyPage(): ReclassifyPageState {
       );
       if (succeeded.length === 0) {
         const firstFailure = results.find((result) => result.status === "rejected");
-        throw firstFailure?.reason ?? new Error("Every dataset annotation write failed");
+        throw firstFailure?.reason ?? new Error(t("sc.annotationAllWritesFailed"));
       }
       const nextDraft = { ...annotationDraft.value };
       for (const [, submission] of succeeded) {
@@ -574,11 +569,17 @@ export function useReclassifyPage(): ReclassifyPageState {
       if (failed.length === 0) {
         pendingLabelNames.value = [];
         message.success(
-          `Applied ${submittedRowCount} annotation update(s) across ${succeeded.length} dataset(s)`,
+          t("sc.annotationsApplied", {
+            updates: submittedRowCount,
+            datasets: succeeded.length,
+          }),
         );
       } else {
         message.warning(
-          `Applied ${submittedRowCount} update(s); ${failed.length} dataset write(s) failed and remain as drafts`,
+          t("sc.annotationsPartiallyApplied", {
+            updates: submittedRowCount,
+            failures: failed.length,
+          }),
         );
       }
       await Promise.all(
@@ -592,7 +593,7 @@ export function useReclassifyPage(): ReclassifyPageState {
         ]),
       );
     } catch (error) {
-      message.error(toUserMessage(error, "Failed to create annotations"));
+      message.error(toUserMessage(error, t("sc.annotationsCreateFailed")));
     } finally {
       isSubmittingAnnotations.value = false;
     }
@@ -609,7 +610,7 @@ export function useReclassifyPage(): ReclassifyPageState {
     const name = newLabel.trim();
     if (!name) return;
     if (codeLabels.value.some((label) => label.name.toLowerCase() === name.toLowerCase())) {
-      addLabelError.value = "Name already exists";
+      addLabelError.value = t("sc.nameAlreadyExists");
       return;
     }
     const usedCodes = new Set(codeLabels.value.map((label) => label.code));
@@ -673,18 +674,8 @@ export function useReclassifyPage(): ReclassifyPageState {
   }
 
   function resolveTrainSampleFilter(): ScGlobalFilter | null {
-    if (collectionId.value) return null;
     if (!scGlobalFilterHasConditions(globalFilter.value)) return null;
-    const workflowFilter = cloneScGlobalFilter(globalFilter.value);
-    const restoreDatasetField = (node: ScGlobalFilterNode): void => {
-      if (isScGlobalFilterGroup(node)) {
-        node.items.forEach(restoreDatasetField);
-      } else if (node.field === "map_id") {
-        node.field = "defect_id";
-      }
-    };
-    workflowFilter.items.forEach(restoreDatasetField);
-    return workflowFilter;
+    return cloneScGlobalFilter(globalFilter.value);
   }
 
   // ── Train & Predict ─────────────────────────────────────────────────
@@ -791,17 +782,22 @@ export function useReclassifyPage(): ReclassifyPageState {
     const job = trainPredictPredictionJob.value;
     if (!job) {
       return trainPredictTrainingStatus.value === "completed"
-        ? "Waiting for prediction job..."
-        : "Prediction starts after training completes";
+        ? t("sc.waitingForPrediction")
+        : t("sc.predictionAfterTraining");
     }
     const total = predictionSummaryValue(job, "total_samples");
     const processed = predictionSummaryValue(job, "processed");
     const successful = predictionSummaryValue(job, "successful");
     const failed = predictionSummaryValue(job, "failed");
     if (total && processed !== null) {
-      return `Processed ${processed} of ${total} · ok ${successful ?? 0} · failed ${failed ?? 0}`;
+      return t("sc.predictionProgress", {
+        processed,
+        total,
+        successful: successful ?? 0,
+        failed: failed ?? 0,
+      });
     }
-    return `Prediction ${trainPredictPredictionStatus.value}`;
+    return t("sc.predictionStatus", { status: trainPredictPredictionStatus.value });
   });
 
   const trainPredictPredictionProcessing = computed(() => {
@@ -819,21 +815,27 @@ export function useReclassifyPage(): ReclassifyPageState {
     const shortId = trainPredictTaskId.value.slice(0, 8);
     if (status === "completed") {
       if (trainPredictPredictionStatus.value === "completed") {
-        trainPredictStatusMessage.value = `Workflow ${shortId} completed.`;
+        trainPredictStatusMessage.value = t("sc.workflowCompleted", { id: shortId });
         isTrainPredictRunning.value = false;
       } else {
-        trainPredictStatusMessage.value = `Training ${shortId} completed; prediction is ${trainPredictPredictionStatus.value}.`;
+        trainPredictStatusMessage.value = t("sc.trainingCompletedPredictionStatus", {
+          id: shortId,
+          status: trainPredictPredictionStatus.value,
+        });
         isTrainPredictRunning.value = true;
       }
       return;
     }
     if (status === "failed" || status === "cancelled") {
-      trainPredictStatusMessage.value = `Training ${shortId} ${status}`;
+      trainPredictStatusMessage.value = t("sc.trainingStatus", { id: shortId, status });
       isTrainPredictRunning.value = false;
       return;
     }
     isTrainPredictRunning.value = true;
-    trainPredictStatusMessage.value = `Training ${shortId} ${status || "queued"}...`;
+    trainPredictStatusMessage.value = t("sc.trainingStatus", {
+      id: shortId,
+      status: status || t("sc.queued"),
+    });
   });
 
   watch(trainPredictPredictionJob, (job) => {
@@ -841,19 +843,25 @@ export function useReclassifyPage(): ReclassifyPageState {
     const status = String(job.status ?? "").toLowerCase();
     const shortId = trainPredictTaskId.value.slice(0, 8);
     if (status === "completed") {
-      trainPredictStatusMessage.value = `Workflow ${shortId} completed.`;
+      trainPredictStatusMessage.value = t("sc.workflowCompleted", { id: shortId });
       isTrainPredictRunning.value = false;
       // InspectionQuad refreshes prediction data from the provider's SSE
       // invalidation; no page-owned sample cache remains to invalidate here.
       return;
     }
     if (status === "failed" || status === "cancelled") {
-      trainPredictStatusMessage.value = `Prediction ${job.id.slice(0, 8)} ${status}`;
+      trainPredictStatusMessage.value = t("sc.predictionJobStatus", {
+        id: job.id.slice(0, 8),
+        status,
+      });
       isTrainPredictRunning.value = false;
       return;
     }
     if (trainPredictTrainingStatus.value === "completed") {
-      trainPredictStatusMessage.value = `Prediction ${job.id.slice(0, 8)} ${status || "queued"}...`;
+      trainPredictStatusMessage.value = t("sc.predictionJobStatus", {
+        id: job.id.slice(0, 8),
+        status: status || t("sc.queued"),
+      });
       isTrainPredictRunning.value = true;
     }
   });
@@ -863,14 +871,14 @@ export function useReclassifyPage(): ReclassifyPageState {
     mounted.value = false;
   });
 
-  async function trainAndPredict(): Promise<void> {
+  async function trainAndPredict(preparedSampleFilter?: ScGlobalFilter | null): Promise<void> {
     const trainerId = selectedTrainerId.value;
     if (!trainerId) {
-      message.warning("Please select a trainer first");
+      message.warning(t("sc.selectTrainerFirst"));
       return;
     }
     if (activeClassCount.value < 2) {
-      message.warning("At least two active classes are required to train");
+      message.warning(t("sc.twoClassesRequired"));
       return;
     }
     if (isTrainPredictRunning.value) return;
@@ -879,13 +887,14 @@ export function useReclassifyPage(): ReclassifyPageState {
     }
 
     isTrainPredictRunning.value = true;
-    trainPredictStatusMessage.value = "Starting train and predict workflow...";
+    trainPredictStatusMessage.value = t("sc.startingWorkflow");
 
     try {
       if (collectionId.value && !collectionRevisionId.value) {
-        throw new Error("Open a ready collection revision before starting training");
+        throw new Error(t("sc.readyCollectionRequired"));
       }
-      const sampleFilter = resolveTrainSampleFilter();
+      const sampleFilter =
+        preparedSampleFilter === undefined ? resolveTrainSampleFilter() : preparedSampleFilter;
       const workflow = await createTrainAndPredictJobApiV1TrainingJobsTrainAndPredictPost({
         ...(collectionId.value
           ? {
@@ -899,20 +908,22 @@ export function useReclassifyPage(): ReclassifyPageState {
       });
       const trainJobId = typeof workflow.train_job.id === "string" ? workflow.train_job.id : "";
       if (!trainJobId) {
-        throw new Error("Train & Predict workflow did not return a training job id");
+        throw new Error(t("sc.missingTrainingJobId"));
       }
       trainPredictTaskId.value = trainJobId;
       await queryClient.invalidateQueries({
         queryKey: ["jobs", datasetId.value],
       });
-      trainPredictStatusMessage.value = `Workflow submitted: ${trainJobId.slice(0, 8)}`;
+      trainPredictStatusMessage.value = t("sc.workflowSubmitted", {
+        id: trainJobId.slice(0, 8),
+      });
       if (mounted.value) {
-        message.success(`Workflow submitted: ${trainJobId.slice(0, 8)}`);
+        message.success(t("sc.workflowSubmitted", { id: trainJobId.slice(0, 8) }));
       }
     } catch (error: unknown) {
       trainPredictStatusMessage.value = "";
       isTrainPredictRunning.value = false;
-      message.error(toUserMessage(error, "Train & Predict failed"));
+      message.error(toUserMessage(error, t("sc.trainPredictFailed")));
     }
   }
 

@@ -77,7 +77,10 @@ async function handleFileChange(event: Event) {
           : {},
       label: item?.label == null ? null : String(item.label),
     }));
-    importFileName.value = `${file.name} (${importItems.value.length} samples)`;
+    importFileName.value = t("datasetFlows.importFileSummary", {
+      name: file.name,
+      count: importItems.value.length,
+    });
   } catch (err: unknown) {
     importItems.value = [];
     importFileName.value = "";
@@ -131,7 +134,7 @@ function onSubmit() {
     <NSpace justify="end" style="margin-top: 16px">
       <NButton @click="props.onCancel">{{ t("common.cancel") }}</NButton>
       <NButton type="primary" :loading="importDataset.isPending.value" @click="onSubmit">
-        Import
+        {{ t("common.import") }}
       </NButton>
     </NSpace>
   </NForm>

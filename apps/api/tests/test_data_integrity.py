@@ -75,7 +75,7 @@ import pytest  # noqa: E402
 
 from app.composition import build_flow_app_context, close_flow_app_context  # noqa: E402
 from app.core.config import load_config  # noqa: E402
-from tests.conftest import DEFAULT_ORG_ID  # noqa: E402
+from tests.conftest import DEFAULT_ORG_ID, model_artifact_bytes  # noqa: E402
 from app.shared.api.schemas import (  # noqa: E402
     JobStatus,
     PlatformPrediction,
@@ -312,7 +312,13 @@ class ApiClient:
         r = await self._client.post(
             f"{self._base}/api/v1/models/upload",
             data={"metadata": metadata},
-            files={"file": ("model.pt", _io2.BytesIO(b"fake-model"), "application/octet-stream")},
+            files={
+                "file": (
+                    "model.pt",
+                    _io2.BytesIO(model_artifact_bytes()),
+                    "application/octet-stream",
+                )
+            },
             headers=self._headers(org_id),
         )
         r.raise_for_status()

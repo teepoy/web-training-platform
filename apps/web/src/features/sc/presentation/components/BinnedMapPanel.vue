@@ -552,7 +552,7 @@ function onNativeMapProgress(event: Event): void {
 function onNativeMapReady(): void {
   nativeMapLoading.value = false;
   keepMapVisibleWhileRendering.value = false;
-  nativeMapProgressMessage.value = "Map ready";
+  nativeMapProgressMessage.value = t("sc.mapReady");
   for (const waiter of mapReadyWaiters) waiter.resolve();
   mapReadyWaiters.clear();
 }
@@ -602,7 +602,7 @@ async function updateMapSelection(command: ScMapSelectionCommand): Promise<numbe
     });
   }
   const map = nativeMapElement.value;
-  if (!map) throw new Error("Map element is not ready");
+  if (!map) throw new Error(t("sc.mapElementNotReady"));
   return map.updateSelection(command);
 }
 

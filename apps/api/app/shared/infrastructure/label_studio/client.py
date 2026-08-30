@@ -256,6 +256,13 @@ class LabelStudioClient:
         except Exception as exc:
             raise _wrap_sdk_error(exc) from exc
 
+    async def delete_task(self, task_id: int) -> None:
+        """Delete one task and its task-owned annotations from Label Studio."""
+        try:
+            await asyncio.to_thread(self._client.tasks.delete, id=str(task_id))
+        except Exception as exc:
+            raise _wrap_sdk_error(exc) from exc
+
     async def import_tasks(
         self,
         project_id: int,

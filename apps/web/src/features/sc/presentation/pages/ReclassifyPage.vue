@@ -105,6 +105,9 @@ const inspectionQuad = ref<{
     extraFilterEnabled: boolean;
     extraFilter: ScGlobalFilter;
   }) => Promise<number>;
+  resolveWorkflowSampleFilter: (
+    filter: ScGlobalFilter,
+  ) => Promise<{ filter: ScGlobalFilter; rowCount: number }>;
   querySamplingDefectIds: (
     program: ScSamplingProgram,
     seed: number,
@@ -248,15 +251,13 @@ async function handleTrainAndPredictClick(): Promise<void> {
     return;
   }
   const workflowFilter = page.resolveTrainSampleFilter();
+  filteredWorkflowFilter.value = null;
   if (workflowFilter) {
     isPreparingFilteredWorkflow.value = true;
     try {
-      filteredWorkflowFilter.value = workflowFilter;
-      filteredWorkflowCount.value = await quad.querySamplingCandidateCount({
-        scope: "all",
-        extraFilterEnabled: false,
-        extraFilter: emptyScGlobalFilter(),
-      });
+      const resolved = await quad.resolveWorkflowSampleFilter(workflowFilter);
+      filteredWorkflowFilter.value = resolved.filter;
+      filteredWorkflowCount.value = resolved.rowCount;
       filterConfirmationVisible.value = true;
     } catch (error) {
       message.error(error instanceof Error ? error.message : t("sc.filteredResolveFailed"));
@@ -270,7 +271,7 @@ async function handleTrainAndPredictClick(): Promise<void> {
 
 async function submitTrainAndPredict(): Promise<void> {
   filterConfirmationVisible.value = false;
-  await page.trainAndPredict();
+  await page.trainAndPredict(filteredWorkflowFilter.value);
   if (page.trainPredictTaskId.value) {
     taskInsightVisible.value = true;
   }
@@ -281,6 +282,9 @@ const globalFilterEntries = computed(() =>
 );
 
 function formatWorkflowCondition(field: string, condition: ScFilterCondition): string {
+  if (field === "row_key" && condition.filterType === "set") {
+    return t("sc.includesSamples", { count: condition.values.length });
+  }
   if (field === "defect_id" && condition.filterType === "set") {
     return condition.exclude
       ? t("sc.excludesDefects", { count: condition.values.length })

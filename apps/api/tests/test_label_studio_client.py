@@ -36,3 +36,14 @@ async def test_create_project_preserves_title_within_label_studio_limit() -> Non
     await client.create_project("short dataset", "<View />")
 
     assert sdk.projects.create.call_args.kwargs["title"] == "short dataset"
+
+
+@pytest.mark.asyncio
+async def test_delete_task_uses_string_task_identity() -> None:
+    sdk = MagicMock()
+    client = LabelStudioClient.__new__(LabelStudioClient)
+    client._client = sdk
+
+    await client.delete_task(42)
+
+    sdk.tasks.delete.assert_called_once_with(id="42")

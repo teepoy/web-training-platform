@@ -676,12 +676,12 @@ async function prepareGalleryDownload(): Promise<void> {
       samplesFromArrow(ipc, offset, startMode === "review"),
     );
     if (props.dataSource?.scopeKey !== startScope || mode.value !== startMode) {
-      throw new Error("Gallery changed while preparing the download; try again");
+      throw new Error(t("sc.galleryChangedDuringDownload"));
     }
     const selected = selectedRowKeys();
     const samples = allSamples.filter((sample) => selected.has(sample.rowKey));
     if (samples.length === 0) {
-      throw new Error("No gallery images match the selected download scope");
+      throw new Error(t("sc.noGalleryImagesForDownload"));
     }
     const payload: ScGalleryDownloadPayload = {
       items: samples.map((sample) => ({
@@ -735,7 +735,7 @@ async function selectAllGallerySamples(): Promise<void> {
       samplesFromArrow(ipc, offset, startMode === "review").map((row) => row.rowKey),
     );
     if (props.dataSource?.scopeKey !== startScope || mode.value !== startMode) {
-      throw new Error("Gallery changed while selecting all rows; try again");
+      throw new Error(t("sc.galleryChangedDuringSelection"));
     }
     emit("selectSamples", [...new Set(rowKeys)], {
       shift: false,

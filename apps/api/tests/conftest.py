@@ -4,6 +4,7 @@ import io as _io
 import json as _json
 import os
 import sys
+import zipfile
 from pathlib import Path
 from uuid import uuid4
 
@@ -44,6 +45,15 @@ DEFAULT_USER_ID = "00000000-0000-0000-0000-000000000002"
 
 TRAINER_ID = "yolo-sc-v1"
 VIEW_ID = "labeled_image_v1"
+
+
+def model_artifact_bytes() -> bytes:
+    """Return a structurally valid, import-safe PyTorch ZIP fixture."""
+    buffer = _io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as checkpoint:
+        checkpoint.writestr("archive/data.pkl", b"fixture")
+        checkpoint.writestr("archive/version", b"3\n")
+    return buffer.getvalue()
 
 
 # ---------------------------------------------------------------------------
@@ -110,6 +120,6 @@ def upload_model(client, job_id):
     })
     resp = client.post("/api/v1/models/upload", data={
         "metadata": metadata,
-    }, files={"file": ("model.pt", _io.BytesIO(b"fake-model"), "application/octet-stream")})
+    }, files={"file": ("model.pt", _io.BytesIO(model_artifact_bytes()), "application/octet-stream")})
     assert resp.status_code == 200, resp.text
     return resp.json()["id"]

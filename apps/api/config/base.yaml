@@ -120,6 +120,7 @@ dataset_transfer:
   annotation_batch_rows: 1000
   parquet_import_max_bytes: 536870912
   parquet_import_max_rows: 300000
+  model_import_max_bytes: 1073741824
 
 redis:
   host: ""

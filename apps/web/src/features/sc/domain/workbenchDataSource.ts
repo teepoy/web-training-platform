@@ -121,6 +121,7 @@ export interface ScWorkbenchDataSource {
   loadDistinctValues(
     query: ScSampleTableDistinctValuesQuery & ScDataQueryContext,
   ): Promise<Array<string | number>>;
+  resolveRowKeys(query: ScDataQueryContext): Promise<string[]>;
   resolveSelection(query: ScSelectionQuery): Promise<number[]>;
   subscribeInvalidations(listener: (event: ScInvalidation) => void): () => void;
   close(): void;

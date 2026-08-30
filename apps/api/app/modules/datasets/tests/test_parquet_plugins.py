@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 import pytest
 
 from app.main import app
+from app.modules.datasets.port.http.deps import get_label_studio_client
 from app.modules.datasets.port.http.extensions.import_parquet_router import (
     _extract_image_uri,
     _find_image_columns,
@@ -393,6 +394,47 @@ class TestImportParquetEndpoint:
             )
             assert anns.status_code == 200
             assert any(a["label"] == "cat" for a in anns.json())
+
+    def test_import_rolls_back_samples_and_tasks_when_annotation_write_fails(
+        self,
+    ) -> None:
+        with TestClient(app) as c:
+            ds = c.post(
+                "/api/v1/datasets",
+                json={
+                    "name": "parquet-rollback-ds",
+                    "dataset_type": "image_classification",
+                    "task_spec": {
+                        "task_type": "classification",
+                        "label_space": ["cat"],
+                    },
+                },
+            )
+            dataset_id = ds.json()["id"]
+            ls_client = app.dependency_overrides[get_label_studio_client]()
+            ls_client.create_annotation.side_effect = RuntimeError("LS unavailable")
+            table = pa.table(
+                {
+                    "sample_id": pa.array(["rollback-sample"]),
+                    "label": pa.array(["cat"]),
+                }
+            )
+
+            response = c.post(
+                f"/api/v1/plugins/import-parquet/import?dataset_id={dataset_id}",
+                files={
+                    "file": (
+                        "rollback.parquet",
+                        io.BytesIO(_make_parquet_bytes(table)),
+                        "application/octet-stream",
+                    )
+                },
+            )
+
+            assert response.status_code == 502, response.text
+            assert "rolled back" in response.json()["detail"]
+            assert c.get(f"/api/v1/datasets/{dataset_id}/samples").json()["total"] == 0
+            ls_client.delete_task.assert_awaited_once_with(1)
 
     def test_import_preserves_portable_sample_id(self) -> None:
         with TestClient(app) as c:

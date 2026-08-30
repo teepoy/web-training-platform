@@ -12,9 +12,9 @@ const message = useMessage();
 const file = ref<File | null>(null);
 const name = ref("");
 const jobId = ref("");
-const format = ref<string | null>(null);
+const format = ref<string | null>("pytorch");
 const loading = ref(false);
-const formatOptions = ["pytorch", "onnx", "safetensors", "keras"].map((value) => ({
+const formatOptions = ["pytorch"].map((value) => ({
   label: value,
   value,
 }));

@@ -314,7 +314,7 @@ describe("useReclassifyPage - review sampling", () => {
     });
   });
 
-  it("restores map identity to defect identity for standalone training", async () => {
+  it("preserves the active predicate until the data source resolves row identity", async () => {
     const { state } = await mountPage("ds-map-filter", DEFAULT_DATASET);
     state.setGlobalFilter({
       combinator: "and",
@@ -331,7 +331,7 @@ describe("useReclassifyPage - review sampling", () => {
     expect(state.resolveTrainSampleFilter()).toMatchObject({
       items: [
         {
-          field: "defect_id",
+          field: "map_id",
           condition: { filterType: "set", values: [3, 9], exclude: true },
         },
       ],

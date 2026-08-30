@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reject untranslated static copy in the final i18n migration scope."""
+"""Reject untranslated user-visible copy in production web sources."""
 
 from __future__ import annotations
 
@@ -9,17 +9,32 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SCOPES = (
-    ROOT / "apps/web/src/features/sc",
-    ROOT / "apps/web/src/shared/components",
-)
+SCOPES = (ROOT / "apps/web/src",)
 EXCLUDED_NAMES = {"HandbookPage.vue"}
-EXCLUDED_PARTS = {"legacy", "generated", "sandbox"}
+EXCLUDED_PARTS = {"__tests__", "generated", "legacy", "sandbox", "templates", "testing"}
 STATIC_ATTRIBUTE = re.compile(
     r"(?<![:@\w-])(aria-label|alt|placeholder|title|label|tab|description)\s*=\s*([\"'])(.*?)\2",
     re.DOTALL,
 )
 LETTER = re.compile(r"[A-Za-z]")
+ALLOWED_TECHNICAL_VALUES = {
+    '{"key": "value"}',
+    "e.g. imported-dataset",
+    "e.g. s3://bucket/img1.jpg, s3://bucket/img2.jpg",
+    "you@example.com",
+}
+SCRIPT_VISIBLE_PATTERNS = (
+    re.compile(
+        r"\bmessage\.(?:success|error|warning|info|loading)\(\s*([\"'`])(.*?)\1",
+        re.DOTALL,
+    ),
+    re.compile(r"\btoUserMessage\([^,\n]+,\s*([\"'`])(.*?)\1"),
+    re.compile(
+        r"\b(?:errorMessage|statusMessage|trainPredictStatusMessage)\.value\s*=\s*"
+        r"([\"'`])(.*?)\1",
+        re.DOTALL,
+    ),
+)
 
 
 def template_source(source: str) -> str:
@@ -54,12 +69,12 @@ def text_only(template: str) -> str:
 
 def violations(path: Path) -> list[tuple[int, str]]:
     source = path.read_text(encoding="utf-8")
-    template = template_source(source)
+    template = template_source(source) if path.suffix == ".vue" else ""
     findings: list[tuple[int, str]] = []
 
     for match in STATIC_ATTRIBUTE.finditer(template):
         value = " ".join(match.group(3).split())
-        if LETTER.search(value):
+        if LETTER.search(value) and value not in ALLOWED_TECHNICAL_VALUES:
             findings.append(
                 (
                     template.count("\n", 0, match.start()) + 1,
@@ -82,23 +97,39 @@ def violations(path: Path) -> list[tuple[int, str]]:
             (template.count("\n", 0, match.start()) + 1, f"static text: {value}")
         )
 
+    for pattern in SCRIPT_VISIBLE_PATTERNS:
+        for match in pattern.finditer(source):
+            value = " ".join(match.group(2).split())
+            if not value or not LETTER.search(value):
+                continue
+            findings.append(
+                (
+                    source.count("\n", 0, match.start()) + 1,
+                    f"script-visible text: {value}",
+                )
+            )
+
     return findings
 
 
-def vue_files() -> list[Path]:
+def source_files() -> list[Path]:
     return sorted(
         path
         for scope in SCOPES
-        for path in scope.rglob("*.vue")
+        for pattern in ("*.vue", "*.ts")
+        for path in scope.rglob(pattern)
         if path.name not in EXCLUDED_NAMES
+        and not path.name.endswith(".spec.ts")
+        and not path.name.endswith(".stories.ts")
         and not path.name.endswith(".design.vue")
+        and not path.name.endswith(".stories.vue")
         and not any(part in EXCLUDED_PARTS for part in path.parts)
     )
 
 
 def main() -> int:
     failed = False
-    for path in vue_files():
+    for path in source_files():
         for template_line, message in violations(path):
             failed = True
             relative = path.relative_to(ROOT)

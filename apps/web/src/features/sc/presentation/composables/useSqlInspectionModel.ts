@@ -1,5 +1,6 @@
 import { create } from "@bufbuild/protobuf";
 import { computed, onScopeDispose, ref, watch, type ComputedRef, type Ref } from "vue";
+import { i18n } from "@/app/i18n";
 import type { DefectList } from "@/features/sc/generated/proto/sc/v1/sample_pb";
 import { DefectListSchema } from "@/features/sc/generated/proto/sc/v1/sample_pb";
 import { buildScGlobalDataFilters } from "@/features/sc/application/workbenchDataFilter";
@@ -63,10 +64,11 @@ export function useSqlInspectionModel(args: {
   galleryRandomSamplingDefectIds: ComputedRef<Set<string> | undefined>;
   onRecoverableError?: (reason: string, error: unknown) => void;
 }) {
+  const t = i18n.global.t;
   const mapArrowData = ref<ArrayBuffer[] | null>(null);
   const mapLoading = ref(false);
   const mapError = ref<string | null>(null);
-  const mapProgressMessage = ref("Waiting for map data");
+  const mapProgressMessage = ref(t("sc.waitingForMap"));
   const mapProgressPercent = ref(0);
   const legendGroups = ref<Record<string, DefectList> | null>(null);
   const mapSelection = ref<IdSelectionState>({ ids: [] });
@@ -129,7 +131,7 @@ export function useSqlInspectionModel(args: {
     }
     mapLoading.value = true;
     mapError.value = null;
-    mapProgressMessage.value = "Querying filtered map data";
+    mapProgressMessage.value = t("sc.queryingFilteredMap");
     mapProgressPercent.value = 20;
     const targetLegendColumn = requestedMapLegendColumn.value;
     try {
@@ -141,12 +143,12 @@ export function useSqlInspectionModel(args: {
       if (sequence !== mapLoadSequence || source !== args.dataSource.value) return;
       mapLegendColumn.value = targetLegendColumn;
       mapArrowData.value = [transferableBuffer(ipc)];
-      mapProgressMessage.value = "Map data ready";
+      mapProgressMessage.value = t("sc.mapDataReady");
       mapProgressPercent.value = 100;
     } catch (error) {
       if (sequence !== mapLoadSequence || source !== args.dataSource.value) return;
       mapError.value = error instanceof Error ? error.message : String(error);
-      args.onRecoverableError?.("SQL map query failed", error);
+      args.onRecoverableError?.(t("sc.mapQueryFailed"), error);
     } finally {
       if (sequence === mapLoadSequence) mapLoading.value = false;
     }
@@ -174,7 +176,7 @@ export function useSqlInspectionModel(args: {
       );
     } catch (error) {
       if (sequence !== aggregateLoadSequence || source !== args.dataSource.value) return;
-      args.onRecoverableError?.("SQL aggregate query failed", error);
+      args.onRecoverableError?.(t("sc.aggregateQueryFailed"), error);
     }
   }
 
@@ -217,6 +219,15 @@ export function useSqlInspectionModel(args: {
       reticle: args.reticle.value,
     });
     return Object.values(groups).reduce((sum, count) => sum + count, 0);
+  }
+
+  async function queryWorkflowRowKeys(filter: ScGlobalFilter): Promise<string[]> {
+    const source = args.dataSource.value;
+    if (!source) throw new Error("SC data source is not ready");
+    return source.resolveRowKeys({
+      filters: buildScGlobalDataFilters(filter),
+      reticle: args.reticle.value,
+    });
   }
 
   async function querySamplingDefectIds(
@@ -335,6 +346,7 @@ export function useSqlInspectionModel(args: {
     setTableSelection,
     setReviewMode,
     querySamplingCandidateCount,
+    queryWorkflowRowKeys,
     querySamplingDefectIds,
     querySamplingGroups,
     applyMapSelection,

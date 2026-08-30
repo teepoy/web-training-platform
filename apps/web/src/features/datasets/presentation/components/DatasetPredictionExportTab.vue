@@ -19,7 +19,7 @@ function ignoreExportCompletion(): void {}
         <n-text depth="3" class="eyebrow">{{ t("common.export") }}</n-text>
         <n-h3>{{ t("datasetFlows.exportResults") }}</n-h3>
         <n-text depth="3">
-          Choose the class result, optional Review Sampling, and file format.
+          {{ t("datasetFlows.predictionExportHelp") }}
         </n-text>
       </div>
     </header>

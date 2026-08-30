@@ -131,6 +131,7 @@ class DatasetTransferConfig(ConfigSection):
     annotation_batch_rows: int = Field(default=1_000, gt=0)
     parquet_import_max_bytes: int = Field(default=536_870_912, gt=0)
     parquet_import_max_rows: int = Field(default=300_000, gt=0)
+    model_import_max_bytes: int = Field(default=1_073_741_824, gt=0)
 
 
 class LlmConfig(ConfigSection):

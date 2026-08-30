@@ -321,7 +321,9 @@ same suite has been verified against the migrated PostgreSQL schema. Development
 Development Compose wiring, the HTTP control surface, and the gRPC/Flight read
 interfaces are complete. The production transport package no longer contains
 the SQLite mock schema or adapter, and the development platform reads the
-simulator directly.
+simulator directly. The root `up-dev` workflow targets the current
+`sc-upstream-simulator` service name, so the documented development startup no
+longer refers to the removed legacy Compose service.
 
 ### P0: Add an explicit development control surface
 

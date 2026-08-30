@@ -36,7 +36,9 @@ from app.modules.datasets.port.http.deps import (
     get_dataset_storage_factory,
 )
 from app.modules.storage.adapter.factory import DatasetStorageFactory
+from app.modules.storage.domain.storage_agg import DatasetStorageAgg
 from app.modules.datasets.domain.sample_row import BulkSampleRow
+from app.shared.domain.protocols import LabelStudioClient
 from app.shared.infrastructure.label_studio.client import (
     platform_annotation_to_ls,
 )
@@ -188,6 +190,28 @@ async def _collect_bulk_rows_parquet(
         yield row
 
 
+async def _rollback_import(
+    *,
+    storage: DatasetStorageAgg,
+    sample_ids: list[str],
+    ls_client: LabelStudioClient,
+    task_ids: list[int],
+) -> list[str]:
+    failures: list[str] = []
+    try:
+        await storage.delete_samples(sample_ids)
+    except Exception:
+        _logger.exception("Parquet import sample rollback failed")
+        failures.append("Dataset samples")
+    for task_id in task_ids:
+        try:
+            await ls_client.delete_task(task_id)
+        except Exception:
+            _logger.exception("Parquet import Label Studio task rollback failed")
+            failures.append(f"Label Studio task {task_id}")
+    return failures
+
+
 @router.post("/import", response_model=BulkCreateSampleResponse)
 async def import_parquet(
     dataset_id: str,
@@ -307,9 +331,23 @@ async def import_parquet(
         imported_dict: dict = imported if isinstance(imported, dict) else {}
         task_ids = [int(tid) for tid in imported_dict.get("task_ids", [])]
         if len(task_ids) != len(items):
+            rollback_failures = await _rollback_import(
+                storage=storage,
+                sample_ids=[],
+                ls_client=ls_client,
+                task_ids=task_ids,
+            )
+            rollback_failures.append("Label Studio task-ID set could not be verified")
             raise HTTPException(
                 status_code=502,
-                detail="Label Studio bulk import returned mismatched task IDs.",
+                detail=(
+                    "Label Studio bulk import returned mismatched task IDs; "
+                    + (
+                        "rollback was incomplete: " + ", ".join(rollback_failures)
+                        if rollback_failures
+                        else "returned tasks were rolled back"
+                    )
+                ),
             )
     except HTTPException:
         raise
@@ -329,27 +367,44 @@ async def import_parquet(
         for idx, item in enumerate(items)
     ]
 
-    await storage.write_samples(_collect_bulk_rows_parquet(bulk_rows))
+    phase = "Dataset sample write"
+    try:
+        await storage.write_samples(_collect_bulk_rows_parquet(bulk_rows))
 
-    ann_list: list[Annotation] = []
-    for idx, item in enumerate(items):
-        if item.label is None:
-            continue
-        sid = sample_ids[idx]
-        ls_tid = task_ids[idx]
-        await ls_client.create_annotation(
-            ls_tid,
-            platform_annotation_to_ls(item.label),
-        )
-        ann_list.append(
-            Annotation(
-                sample_id=sid,
-                label=item.label,
-                created_by=current_user.email,
+        ann_list: list[Annotation] = []
+        for idx, item in enumerate(items):
+            if item.label is None:
+                continue
+            sid = sample_ids[idx]
+            ls_tid = task_ids[idx]
+            phase = "Label Studio annotation write"
+            await ls_client.create_annotation(
+                ls_tid,
+                platform_annotation_to_ls(item.label),
             )
+            ann_list.append(
+                Annotation(
+                    sample_id=sid,
+                    label=item.label,
+                    created_by=current_user.email,
+                )
+            )
+        if ann_list:
+            phase = "Dataset annotation write"
+            await storage.create_annotations(ann_list)
+    except Exception as exc:
+        rollback_failures = await _rollback_import(
+            storage=storage,
+            sample_ids=sample_ids,
+            ls_client=ls_client,
+            task_ids=task_ids,
         )
-    if ann_list:
-        await storage.create_annotations(ann_list)
+        detail = f"{phase} failed"
+        if rollback_failures:
+            detail += "; rollback was incomplete: " + ", ".join(rollback_failures)
+        else:
+            detail += "; imported samples and tasks were rolled back"
+        raise HTTPException(status_code=502, detail=detail) from exc
 
     return BulkCreateSampleResponse(
         dataset_id=dataset_id,

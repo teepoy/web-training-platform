@@ -37,12 +37,12 @@ async function submit() {
       failed: data.failed,
       errors: data.errors ?? [],
     };
-    message.success(`Imported ${data.imported} samples`);
+    message.success(t("datasetFlows.samplesImported", { count: data.imported }));
     props.onComplete({
       imported: data.imported,
       failed: data.failed,
       message: data.errors?.length
-        ? `Imported with warnings: ${data.errors.join("; ")}`
+        ? t("datasetFlows.parquetImportWarnings", { warnings: data.errors.join("; ") })
         : t("datasetFlows.parquetImportComplete"),
     });
   } catch (error) {
@@ -61,12 +61,16 @@ async function submit() {
       </n-form-item>
 
       <n-alert v-if="file" type="info" :show-icon="false">
-        {{ file.name }} ({{ (file.size / 1024).toFixed(1) }} KB)
+        {{ file.name }} ({{
+          t("datasetFlows.fileSizeKb", { size: (file.size / 1024).toFixed(1) })
+        }})
       </n-alert>
 
       <n-alert v-if="result" type="success" :show-icon="false">
-        Imported {{ result.imported }} samples
-        <span v-if="result.failed > 0">, {{ result.failed }} failed</span>
+        {{ t("datasetFlows.samplesImported", { count: result.imported }) }}
+        <span v-if="result.failed > 0">
+          , {{ t("datasetFlows.samplesFailed", { count: result.failed }) }}
+        </span>
         <ul
           v-if="result.errors.length"
           style="margin: 4px 0 0; padding-left: 20px; font-size: 12px"
@@ -78,7 +82,7 @@ async function submit() {
       <n-space justify="end">
         <n-button @click="props.onCancel()">{{ t("common.cancel") }}</n-button>
         <n-button type="primary" :loading="loading" :disabled="!file" @click="submit">
-          Import
+          {{ t("common.import") }}
         </n-button>
       </n-space>
     </n-space>

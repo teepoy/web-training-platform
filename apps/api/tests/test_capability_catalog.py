@@ -47,6 +47,7 @@ def test_runtime_router_unifies_metadata_callable_and_identity() -> None:
         predictor_ids=("predictor",),
         algo_id="algo",
         algo_version="1",
+        artifact_validator=lambda _path, _format: None,
     )
     async def trainer(_ctx: TrainingRuntimeContext) -> RuntimeEventStream:
         yield OperationCompleted()
@@ -91,6 +92,7 @@ def test_runtime_router_registers_a_paired_algorithm_once() -> None:
         model=MODEL,
         algo_id="paired-algo",
         algo_version="1",
+        artifact_validator=lambda _path, _format: None,
     )
     class PairedAlgorithm:
         train = staticmethod(train_callable)
@@ -119,6 +121,7 @@ def test_runtime_catalog_validates_pair_model_contract() -> None:
         predictor_ids=("predictor",),
         algo_id="algo",
         algo_version="1",
+        artifact_validator=lambda _path, _format: None,
     )
     async def _trainer(_ctx: TrainingRuntimeContext) -> RuntimeEventStream:
         yield OperationCompleted()
@@ -149,6 +152,7 @@ def test_multiple_predictors_require_explicit_selection() -> None:
         predictor_ids=("predictor-a", "predictor-b"),
         algo_id="algo",
         algo_version="1",
+        artifact_validator=lambda _path, _format: None,
     )
     async def _trainer(_ctx: TrainingRuntimeContext) -> RuntimeEventStream:
         yield OperationCompleted()

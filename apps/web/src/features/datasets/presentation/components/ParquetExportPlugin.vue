@@ -37,7 +37,7 @@ async function runExport() {
     uri.value = resultUri;
     rowCount.value = typeof payload.rows === "number" ? payload.rows : null;
     statusMessage.value = t("datasetFlows.parquetComplete");
-    message.success(`Parquet export complete: ${rowCount.value ?? "?"} rows`);
+    message.success(t("datasetFlows.parquetExportSuccess", { count: rowCount.value ?? "?" }));
   } catch (error) {
     message.error(toUserMessage(error, t("datasetFlows.parquetFailed")));
   } finally {
@@ -49,7 +49,7 @@ function done() {
   props.onComplete({
     format: "parquet",
     url: uri.value ?? undefined,
-    message: `Exported ${rowCount.value ?? "?"} rows as Parquet`,
+    message: t("datasetFlows.parquetExportSummary", { count: rowCount.value ?? "?" }),
   });
 }
 </script>
@@ -64,12 +64,14 @@ function done() {
 
       <n-space v-if="uri" vertical :size="4">
         <template v-if="rowCount !== null">
-          <n-text>{{ rowCount }} rows exported</n-text>
+          <n-text>{{ t("datasetFlows.parquetRowsExported", { count: rowCount }) }}</n-text>
         </template>
         <n-button tag="a" :href="buildExportDownloadUrl(uri)" download type="primary">
-          Download Parquet
+          {{ t("datasetFlows.downloadParquet") }}
         </n-button>
-        <n-text depth="3" style="font-size: 11px; word-break: break-all">URI: {{ uri }}</n-text>
+        <n-text depth="3" style="font-size: 11px; word-break: break-all">
+          {{ t("datasetFlows.uriLabel") }}: {{ uri }}
+        </n-text>
       </n-space>
 
       <n-space justify="end">

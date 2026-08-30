@@ -772,6 +772,28 @@ describe("SQL workbench data source", () => {
     expect(description).toBe("sc-workbench.selection.all");
   });
 
+  it("resolves filtered workflow membership using stable row keys", async () => {
+    let requestBody: { description: string; sql: string; parameters: unknown[] } | null = null;
+    server.use(
+      http.post(QUERY_URL, async ({ request }) => {
+        requestBody = (await request.json()) as typeof requestBody;
+        return arrowResponse({ row_key: ["dataset:one", "dataset:two"] }, 1);
+      }),
+    );
+    const source = new SqlWorkbenchDataSource({ kind: "dataset", datasetId: "ds-1" });
+    sources.push(source);
+
+    await expect(source.resolveRowKeys({ filters: [["map_id", "in", [3, 9]]] })).resolves.toEqual([
+      "dataset:one",
+      "dataset:two",
+    ]);
+    expect(requestBody).toEqual({
+      description: "sc-workbench.workflow-row-keys",
+      sql: 'SELECT "row_key" FROM samples WHERE "map_id" = ANY(?) ORDER BY "row_key"',
+      parameters: [[3, 9]],
+    });
+  });
+
   it("uses the seed in deterministic random selection", async () => {
     let requestBody: { description: string; sql: string; parameters: unknown[] } | null = null;
     server.use(

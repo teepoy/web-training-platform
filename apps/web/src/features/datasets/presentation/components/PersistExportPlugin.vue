@@ -60,9 +60,11 @@ function done() {
       <n-text v-if="statusMessage" depth="3">{{ statusMessage }}</n-text>
       <n-space v-if="uri" vertical :size="4">
         <n-button tag="a" :href="buildExportDownloadUrl(uri)" download type="primary">
-          Download Export
+          {{ t("datasetFlows.downloadExport") }}
         </n-button>
-        <n-text depth="3" style="font-size: 11px; word-break: break-all">URI: {{ uri }}</n-text>
+        <n-text depth="3" style="font-size: 11px; word-break: break-all">
+          {{ t("datasetFlows.uriLabel") }}: {{ uri }}
+        </n-text>
       </n-space>
       <n-space justify="end">
         <n-button @click="props.onCancel()">{{ t("datasetFlows.close") }}</n-button>

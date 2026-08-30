@@ -67,6 +67,7 @@ describe("BlinkVirtualTable gallery settings", () => {
       loadAggregates: vi.fn(async () => ({})),
       loadNumericRange: vi.fn(async () => null),
       loadDistinctValues: vi.fn(async () => []),
+      resolveRowKeys: vi.fn(async () => []),
       resolveSelection: vi.fn(async () => []),
       subscribeInvalidations: vi.fn(() => () => undefined),
       close: vi.fn(),

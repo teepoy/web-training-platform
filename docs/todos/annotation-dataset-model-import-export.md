@@ -64,7 +64,9 @@
   preserves a dedicated platform `sample_id`, latest label, structured JSON metadata, and image
   references without embedding raw images. Legacy Parquet without IDs remains
   accepted and receives new IDs. Explicit duplicate/platform-wide conflicting IDs fail before
-  Label Studio or Dataset writes.
+  Label Studio or Dataset writes. If a Dataset sample or annotation write fails
+  after Label Studio task creation, the importer deletes the imported samples
+  and created Label Studio tasks and reports whether rollback was incomplete.
 - Annotation: registered version-1 JSONL import/export keyed only by platform
   `sample_id`. The header carries the Dataset type/task/label-space contract.
   Import replaces only provided samples, null clears a provided annotation, and
@@ -73,7 +75,10 @@
 - Model: registered artifact upload/download. Import must attach to an existing
   training job owned by the actor; the registered trainer validates its model
   contract and the server records artifact SHA-256 before publication. Export
-  streams the immutable stored artifact.
+  streams the immutable stored artifact. Uploads are copied and hashed in
+  bounded chunks under the tracked YAML `model_import_max_bytes` limit. The SC
+  trainer performs import-safe PyTorch checkpoint container validation before
+  object-store publication.
 - Receiving organization and actor always come from authorization. No exported
   ownership facts or environment URLs are trusted.
 - Dataset export is page-to-Parquet-to-object-store streaming. Parquet imports
@@ -89,8 +94,10 @@
 ## Verification Record
 
 - Focused annotation, Parquet round-trip/sample-identity, and Model route/upload
-  tests: 67 passed with one pre-existing skip.
-- Full API suite and OpenAPI sync: 1,058 passed, 15 skipped, one expected pass;
+  tests include malformed-model, byte-limit, and Parquet rollback regressions.
+- Full API suite and OpenAPI sync: 1,062 passed, 15 skipped, one expected pass;
   OpenAPI is in sync.
-- Backend Ruff and Pyright: clean.
-- Frontend: 101 test files / 523 tests passed; production build passed.
+- Changed-file Ruff and full Pyright: clean. The repository-wide Ruff command
+  still reports pre-existing findings in `tests/bench_sample_upload.py` and
+  `tests/test_sse_schema.py`.
+- Frontend: 99 test files / 518 tests passed; production build passed.

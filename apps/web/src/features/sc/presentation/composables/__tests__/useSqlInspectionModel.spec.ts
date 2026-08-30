@@ -13,12 +13,14 @@ function createDataSource() {
   let invalidationListener: ((event: ScInvalidation) => void) | null = null;
   const source: ScWorkbenchDataSource = {
     scopeKey: "dataset:ds-1",
+    loadColumns: vi.fn(async () => []),
     loadMap: vi.fn(async () => new Uint8Array([1, 2, 3])),
     loadRows: vi.fn(async () => ({ items: [], total: 0, nextAnchor: null })),
     loadGallery: vi.fn(async () => ({ ipc: null, total: 0, nextOffset: null })),
     loadAggregates: vi.fn(async () => ({ "1": 3 })),
     loadNumericRange: vi.fn(async () => ({ min: 1, max: 9 })),
     loadDistinctValues: vi.fn(async () => []),
+    resolveRowKeys: vi.fn(async () => ["sample-3", "sample-7"]),
     resolveSelection: vi.fn(async () => [3, 7]),
     subscribeInvalidations: vi.fn((listener) => {
       invalidationListener = listener;
@@ -154,6 +156,35 @@ describe("useSqlInspectionModel", () => {
       { combinator: "and", items: [["rough_bin", "in", [4]]] },
       ["map_id", "in", [9, 3]],
     ]);
+  });
+
+  it("resolves workflow membership through stable row keys", async () => {
+    const { source } = createDataSource();
+    const model = mount(source);
+    if (!model) throw new Error("model was not created");
+    const filter: ScGlobalFilter = {
+      combinator: "and",
+      items: [
+        {
+          id: "map-selection",
+          field: "map_id",
+          condition: { filterType: "set", values: [3, 7] },
+          source: { kind: "map-selection", action: "include-selected" },
+        },
+      ],
+    };
+
+    await expect(model.queryWorkflowRowKeys(filter)).resolves.toEqual(["sample-3", "sample-7"]);
+    expect(source.resolveRowKeys).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filters: [
+          {
+            combinator: "and",
+            items: [["map_id", "in", [3, 7]]],
+          },
+        ],
+      }),
+    );
   });
 
   it("applies a committed map exclusion through every Global Filter consumer", async () => {

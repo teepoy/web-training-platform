@@ -10,7 +10,7 @@ build-image-parser-vendor: ## Build amd64 vendor/tooling image for image-parser 
 
 .PHONY: up-dev
 up-dev: ensure-fixtures ## Start compose dev stack (volume mounts, hot reload)
-	docker compose -f $(COMPOSE_DEV) up -d postgres minio redis label-studio prefect-server sc-upstream image-parser
+	docker compose -f $(COMPOSE_DEV) up -d postgres minio redis label-studio prefect-server sc-upstream-simulator image-parser
 	docker compose -f $(COMPOSE_DEV) --profile ops run --rm prepare-platform
 	docker compose -f $(COMPOSE_DEV) up -d $(ARGS)
 

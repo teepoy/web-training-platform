@@ -10,10 +10,12 @@
   drives the application, Naive UI, VXE UI/Table, shared formatting, and
   document language.
 - **Enforcement:** catalog tests require key and interpolation parity; the lint
-  workflow rejects untranslated static copy, labels, tabs, descriptions, and
-  accessibility attributes in the dense SC/shared-component scope. The SC
-  handbook is the documented English-fallback exception.
-- **Verification:** `make lint`, all 516 web unit tests, the production web
+  workflow scans all production Vue and TypeScript source directories and
+  rejects untranslated template copy, labels, tabs, descriptions,
+  accessibility attributes, and common script-generated notifications/status
+  text. Generated, test, Storybook, design, and SDK-template sources are
+  excluded. The SC handbook is the documented English-fallback exception.
+- **Verification:** `make lint`, all 518 web unit tests, the production web
   build, the explicit English regression suite, and the English/Chinese locale
   persistence smoke pass.
 

@@ -236,7 +236,7 @@
         "services/sc-upstream/src",
         "devtools/sc-upstream-simulator/src",
         "services/image-parser",
-        "libs/sc-ml/src",
+        "libs/ml/src",
         "libs/sampling-rules/src"
       ],
       "max_source_files": 300,
@@ -247,7 +247,7 @@
             "apps/api/app/modules/sc/tests",
             "services/sc-upstream/tests",
             "devtools/sc-upstream-simulator/tests",
-            "libs/sc-ml/tests",
+            "libs/ml/tests",
             "libs/sampling-rules/tests"
           ],
           "include_globs": ["apps/web/src/features/sc/**/*.spec.ts"]

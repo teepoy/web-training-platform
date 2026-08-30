@@ -13,12 +13,14 @@ import json
 from datetime import datetime
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from app.main import app
 from app.modules.auth.port.http.deps import get_current_user
+from app.modules.models.app.services.model_service import ModelService
 from app.shared.api.schemas import User
-from tests.conftest import TRAINER_ID, create_job, upload_model
+from tests.conftest import TRAINER_ID, create_job, model_artifact_bytes, upload_model
 
 
 def _setup(c: TestClient) -> tuple[str, str, str]:
@@ -77,9 +79,78 @@ def test_model_artifact_upload_download_round_trip() -> None:
         _, _, model_id = _setup(c)
         response = c.get(f"/api/v1/models/{model_id}/download")
         assert response.status_code == 200
-        assert response.content == b"fake-model"
-        assert response.headers["content-length"] == str(len(b"fake-model"))
+        assert response.content == model_artifact_bytes()
+        assert response.headers["content-length"] == str(len(model_artifact_bytes()))
         assert 'filename="test-model.pt"' in response.headers["content-disposition"]
+
+
+def test_upload_model_accepts_minimal_runtime_owned_metadata() -> None:
+    with TestClient(app) as c:
+        dataset_id, _, _ = _setup(c)
+        job_id = create_job(c, dataset_id, trainer_id=TRAINER_ID)
+        response = c.post(
+            "/api/v1/models/upload",
+            data={
+                "metadata": json.dumps(
+                    {
+                        "name": "minimal-model",
+                        "format": "pytorch",
+                        "job_id": job_id,
+                    }
+                )
+            },
+            files={
+                "file": (
+                    "minimal.pt",
+                    io.BytesIO(model_artifact_bytes()),
+                    "application/octet-stream",
+                )
+            },
+        )
+
+        assert response.status_code == 200, response.text
+        assert response.json()["metadata"]["trainer_id"] == TRAINER_ID
+
+
+def test_upload_model_rejects_invalid_trainer_artifact_without_publishing() -> None:
+    with TestClient(app) as c:
+        _, job_id, _ = _setup(c)
+        before = c.get("/api/v1/models", params={"job_id": job_id}).json()["total"]
+        response = c.post(
+            "/api/v1/models/upload",
+            data={
+                "metadata": json.dumps(
+                    {
+                        "name": "invalid-model",
+                        "format": "pytorch",
+                        "job_id": job_id,
+                    }
+                )
+            },
+            files={
+                "file": (
+                    "invalid.pt",
+                    io.BytesIO(b"not-a-checkpoint"),
+                    "application/octet-stream",
+                )
+            },
+        )
+        after = c.get("/api/v1/models", params={"job_id": job_id}).json()["total"]
+
+        assert response.status_code == 422, response.text
+        assert "PyTorch ZIP checkpoint" in response.json()["detail"]
+        assert after == before
+
+
+def test_bounded_model_copy_rejects_payload_above_limit(tmp_path) -> None:
+    with pytest.raises(HTTPException) as exc_info:
+        ModelService._copy_bounded_upload(
+            io.BytesIO(b"too-large"),
+            tmp_path / "artifact",
+            max_bytes=4,
+        )
+
+    assert exc_info.value.status_code == 413
 
 
 def test_list_models_applies_search_and_creator_before_pagination() -> None:

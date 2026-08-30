@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, replace
+from pathlib import Path
 from typing import Any, Protocol, TypeVar, cast, runtime_checkable
 
 from app.modules.runtime.domain.context import (
@@ -21,6 +22,7 @@ from app.modules.types.capabilities import (
 TrainCallable = Callable[[TrainingRuntimeContext], RuntimeEventStream]
 PredictCallable = Callable[[PredictionRuntimeContext], RuntimeEventStream]
 TrainAndPredictCallable = Callable[[TrainAndPredictRuntimeContext], RuntimeEventStream]
+ModelArtifactValidator = Callable[[Path, str], None]
 
 TTrainCallable = TypeVar("TTrainCallable", bound=TrainCallable)
 TPredictCallable = TypeVar("TPredictCallable", bound=PredictCallable)
@@ -59,6 +61,7 @@ class RegisteredTrainer:
     callable: TrainCallable
     algo_id: str
     algo_version: str
+    artifact_validator: ModelArtifactValidator
     train_and_predict_callable: TrainAndPredictCallable | None = None
 
     @property
@@ -97,6 +100,7 @@ class RuntimeRouter:
         predictor_ids: tuple[str, ...],
         algo_id: str,
         algo_version: str,
+        artifact_validator: ModelArtifactValidator,
     ) -> Callable[[TTrainCallable], TTrainCallable]:
         def decorator(func: TTrainCallable) -> TTrainCallable:
             if id in self._trainers:
@@ -112,6 +116,7 @@ class RuntimeRouter:
                 callable=func,
                 algo_id=algo_id,
                 algo_version=algo_version,
+                artifact_validator=artifact_validator,
             )
             return func
 
@@ -155,6 +160,7 @@ class RuntimeRouter:
         model: ModelContractRef,
         algo_id: str,
         algo_version: str,
+        artifact_validator: ModelArtifactValidator,
     ) -> Callable[[TAlgorithmClass], TAlgorithmClass]:
         """Register a paired algorithm and derive operations from its Protocols."""
 
@@ -176,6 +182,7 @@ class RuntimeRouter:
                 predictor_ids=(id,),
                 algo_id=algo_id,
                 algo_version=algo_version,
+                artifact_validator=artifact_validator,
             )(cast(TrainCallable, algorithm_cls.train))
             self.predictor(
                 id=id,

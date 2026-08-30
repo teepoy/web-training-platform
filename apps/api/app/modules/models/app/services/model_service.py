@@ -1,17 +1,18 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
+import tempfile
 from datetime import UTC, datetime
-from typing import Any
+from pathlib import Path
+from typing import Any, BinaryIO
 from uuid import uuid4
 
 from fastapi import HTTPException, UploadFile
 from injector import inject
 
-from app.shared.api.schemas import ArtifactRef, CreatorSummary, Model
-from app.shared.application.compatibility import validate_upload_metadata
 from app.modules.models.domain.repository import ModelRepository
 from app.modules.models.domain.repository import (
     CompatibleModelSpec,
@@ -21,6 +22,8 @@ from app.modules.models.domain.repository import (
 )
 from app.modules.runtime.catalog import runtime_catalog
 from app.modules.types.catalog import get_view_meta
+from app.shared.api.schemas import ArtifactRef, CreatorSummary, Model
+from app.shared.application.compatibility import validate_upload_metadata
 from app.shared.domain.protocols import ArtifactStorage
 
 
@@ -33,9 +36,32 @@ class ModelService:
         self,
         repository: ModelRepository,
         artifact_storage: ArtifactStorage,
+        max_import_bytes: int,
     ) -> None:
         self.repository = repository
         self.artifact_storage = artifact_storage
+        self.max_import_bytes = max_import_bytes
+
+    @staticmethod
+    def _copy_bounded_upload(
+        source: BinaryIO,
+        destination: Path,
+        max_bytes: int,
+    ) -> tuple[int, str]:
+        source.seek(0)
+        digest = hashlib.sha256()
+        total = 0
+        with destination.open("wb") as target:
+            while chunk := source.read(1024 * 1024):
+                total += len(chunk)
+                if total > max_bytes:
+                    raise HTTPException(
+                        status_code=413,
+                        detail="Model import exceeds the configured byte limit",
+                    )
+                digest.update(chunk)
+                target.write(chunk)
+        return total, digest.hexdigest()
 
     async def list_models(
         self,
@@ -241,10 +267,12 @@ class ModelService:
                 status_code=400, detail="upload metadata must be a JSON object"
             )
 
-        try:
-            upload_metadata = validate_upload_metadata(raw_metadata)
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc))
+        upload_metadata = dict(raw_metadata)
+        if str(raw_metadata.get("template_id", "")).strip():
+            try:
+                upload_metadata = validate_upload_metadata(raw_metadata)
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc))
         name = str(upload_metadata.get("name", "")).strip()
         format = str(upload_metadata.get("format", "")).strip()
         job_id = str(upload_metadata.get("job_id", "")).strip() or job_id
@@ -271,12 +299,13 @@ class ModelService:
                 detail="Only the training job creator can upload its model artifacts",
             )
         try:
-            trainer = runtime_catalog.get_trainer_meta(trainer_id)
+            registered_trainer = runtime_catalog.get_trainer(trainer_id)
         except KeyError as exc:
             raise HTTPException(
                 status_code=422,
                 detail=f"Training job references unknown trainer '{trainer_id}'",
             ) from exc
+        trainer = registered_trainer.metadata
         model_contract = trainer.output_model.contract
         model_schema_version = trainer.output_model.schema_version
         supplied_contract = upload_metadata.get("model_contract")
@@ -301,17 +330,29 @@ class ModelService:
                 ),
             )
 
-        content = await file.read()
-        file_size = len(content)
-        file_hash = hashlib.sha256(content).hexdigest()
         artifact_id = str(uuid4())
-
         object_name = f"models/{org_id}/{artifact_id}/{name}"
-        uri = await self.artifact_storage.put_bytes(
-            object_name=object_name,
-            data=content,
-            content_type=file.content_type or "application/octet-stream",
-        )
+        with tempfile.TemporaryDirectory(prefix="model-import-") as directory:
+            upload_path = Path(directory) / "artifact"
+            file_size, file_hash = await asyncio.to_thread(
+                self._copy_bounded_upload,
+                file.file,
+                upload_path,
+                self.max_import_bytes,
+            )
+            try:
+                await asyncio.to_thread(
+                    registered_trainer.artifact_validator,
+                    upload_path,
+                    format,
+                )
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
+            uri = await self.artifact_storage.put_file(
+                object_name=object_name,
+                path=str(upload_path),
+                content_type=file.content_type or "application/octet-stream",
+            )
 
         raw_spec = upload_metadata.get("model_spec", {})
         if not isinstance(raw_spec, dict):

@@ -7,6 +7,7 @@
  */
 
 import { computed, isRef, ref, type Ref } from "vue";
+import { useI18n } from "vue-i18n";
 import {
   getGetAnnotationStatsApiV1DatasetsDatasetIdAnnotationStatsGetQueryKey,
   useGetAnnotationStatsApiV1DatasetsDatasetIdAnnotationStatsGet,
@@ -28,6 +29,7 @@ export function useClassifyDashboard(
 ): ClassifyDashboardContext {
   const resolvedId = isRef(datasetId) ? datasetId : ref(datasetId);
   const orgStore = useOrgStore();
+  const { t } = useI18n();
 
   const { data, isLoading, isError, error, refetch } =
     useGetAnnotationStatsApiV1DatasetsDatasetIdAnnotationStatsGet(resolvedId, {
@@ -47,7 +49,7 @@ export function useClassifyDashboard(
   const stats = computed<DatasetAnnotationStats | null>(() => data.value ?? null);
   const errorMessage = computed<string | null>(() => {
     if (!isError.value) return null;
-    return toUserMessage(error.value, "Failed to load annotation statistics");
+    return toUserMessage(error.value, t("widgets.failedStats"));
   });
 
   return {

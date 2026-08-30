@@ -232,6 +232,27 @@ async function querySamplingCandidateCount(options: ScSamplingCandidateOptions):
   return model.querySamplingCandidateCount(options);
 }
 
+async function resolveWorkflowSampleFilter(
+  filter: ScGlobalFilter,
+): Promise<{ filter: ScGlobalFilter; rowCount: number }> {
+  const rowKeys = await model.queryWorkflowRowKeys(filter);
+  if (rowKeys.length === 0) throw new Error(t("sc.filteredWorkflowEmpty"));
+  return {
+    rowCount: rowKeys.length,
+    filter: {
+      combinator: "and",
+      items: [
+        {
+          id: "resolved-workflow-row-keys",
+          field: "row_key",
+          condition: { filterType: "set", values: rowKeys },
+          source: { kind: "manual" },
+        },
+      ],
+    },
+  };
+}
+
 async function querySamplingDefectIds(
   program: ScSamplingProgram,
   seed: number,
@@ -386,6 +407,7 @@ function handleReviewModeChange(mode: "patch" | "review"): void {
 defineExpose({
   getGlobalFilter,
   getSamplingContext,
+  resolveWorkflowSampleFilter,
   querySamplingCandidateCount,
   querySamplingDefectIds,
   querySamplingGroups,

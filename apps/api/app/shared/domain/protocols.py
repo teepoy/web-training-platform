@@ -108,6 +108,8 @@ class LabelStudioClient(Protocol):
         self, project_id: int, data: dict[str, object]
     ) -> dict[str, object]: ...
 
+    async def delete_task(self, task_id: int) -> None: ...
+
     async def import_tasks(
         self,
         project_id: int,

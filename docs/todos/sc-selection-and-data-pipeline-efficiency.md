@@ -11,21 +11,21 @@
 ## Checkpoints
 
 - [x] Add click-to-toggle multi-label legend selection while retaining the
-  former scalar Legend event/property as a compatibility adapter.
+      former scalar Legend event/property as a compatibility adapter.
 - [x] Replace per-action full-selection sorting with linear, insertion-ordered
-  uniqueness. The Arrow worker owns uniqueness through `Set`; downstream
-  filters do not require ordering.
+      uniqueness. The Arrow worker owns uniqueness through `Set`; downstream
+      filters do not require ordering.
 - [x] Make the Arrow map contract carry generated `map_id` explicitly. The
-  previous `map_id AS defect_id` alias was removed; Collection members with
-  repeated SC defect IDs therefore cannot collide in map selection.
+      previous `map_id AS defect_id` alias was removed; Collection members with
+      repeated SC defect IDs therefore cannot collide in map selection.
 - [x] Audit remaining frontend sorts: retained sorts operate on bounded display
-  metadata (legend groups, filter options, labels, columns, or loaded page
-  segments), not the full point selection.
+      metadata (legend groups, filter options, labels, columns, or loaded page
+      segments), not the full point selection.
 - [x] Gzip SC query bodies above 4 KiB in capable browsers. The data provider
-  rejects malformed gzip and enforces tracked 16 MiB compressed / 64 MiB
-  decompressed limits; uncompressed clients remain compatible.
+      rejects malformed gzip and enforces tracked 16 MiB compressed / 64 MiB
+      decompressed limits; uncompressed clients remain compatible.
 - [x] Complete the transport/backend identity audit and representative
-  performance measurement.
+      performance measurement.
 
 ## Requested Outcomes
 
@@ -112,6 +112,11 @@
   use `row_key`; Collection annotation submission decodes `row_key` to the
   member Dataset plus platform `Sample.id`. SC `defect_id` remains in gallery,
   KLARF, upstream and domain filter paths where its domain meaning is required.
+- Train & Predict preserves the active workbench predicate until the owning data
+  source resolves its complete membership as ordered `row_key` values. The
+  workflow filter therefore never rewrites transient `map_id` values into
+  `defect_id`, and the same path works for standalone Dataset and Collection
+  revision views.
 - A local Node 22 benchmark on the recorded baseline machine compared
   `Set + numeric sort` with insertion-ordered `Set`: at 10k / 100k / 300k IDs,
   measured times were 1.34/13.40/56.25 ms versus 0.38/3.34/33.19 ms. This is a

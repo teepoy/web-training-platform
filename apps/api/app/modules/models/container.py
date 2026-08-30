@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from injector import Module, inject, provider, singleton
 
+from app.core.config import AppConfig
 from app.modules.models.adapter.repositories.repository import ModelArtifactRepository
 from app.modules.models.app.services.model_service import ModelService
 from app.modules.models.domain.repository import ModelRepository
@@ -19,9 +20,13 @@ class ModelsContext:
     model_service: ModelService
 
 
-def init_models(shared: SharedInfra) -> ModelsContext:
+def init_models(shared: SharedInfra, config: AppConfig) -> ModelsContext:
     repo = ModelArtifactRepository(session_factory=shared.session_factory.sessionmaker)
-    svc = ModelService(repository=repo, artifact_storage=shared.artifact_storage)
+    svc = ModelService(
+        repository=repo,
+        artifact_storage=shared.artifact_storage,
+        max_import_bytes=config.dataset_transfer.model_import_max_bytes,
+    )
     return ModelsContext(model_repository=repo, model_service=svc)
 
 
@@ -33,9 +38,14 @@ class ModelsModule(Module):
         self,
         session_factory: AppDatabaseSessionFactory,
         artifact_storage: ArtifactStoragePort,
+        config: AppConfig,
     ) -> ModelsContext:
         repo = ModelArtifactRepository(session_factory=session_factory.sessionmaker)
-        svc = ModelService(repository=repo, artifact_storage=artifact_storage)
+        svc = ModelService(
+            repository=repo,
+            artifact_storage=artifact_storage,
+            max_import_bytes=config.dataset_transfer.model_import_max_bytes,
+        )
         return ModelsContext(model_repository=repo, model_service=svc)
 
     @provider

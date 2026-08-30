@@ -717,6 +717,22 @@ export class SqlWorkbenchDataSource implements ScWorkbenchDataSource {
     );
   }
 
+  async resolveRowKeys(query: ScDataQueryContext): Promise<string[]> {
+    const sourceColumns = await this.loadColumns();
+    const allowedColumns = this.allowedColumns(sourceColumns);
+    const identityColumn = rowIdentityColumn(sourceColumns);
+    const compiled = compileScWhere(query.filters ?? [], query.reticle, allowedColumns);
+    const identity = quotedColumn(identityColumn, allowedColumns);
+    const result = await this.query(
+      "sc-workbench.workflow-row-keys",
+      `SELECT ${identity} FROM samples${compiled.sql} ORDER BY ${identity}`,
+      compiled.parameters,
+    );
+    return Array.from({ length: result.table.numRows }, (_, index) =>
+      String(result.table.getChild(identityColumn)?.get(index) ?? ""),
+    ).filter((value) => value.length > 0);
+  }
+
   async resolveSelection(query: ScSelectionQuery): Promise<number[]> {
     const filters = [...(query.filters ?? [])];
     const constraint = query.constraint;

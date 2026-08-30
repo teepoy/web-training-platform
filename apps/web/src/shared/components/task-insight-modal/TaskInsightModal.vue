@@ -286,10 +286,10 @@ const cancelMutation = {
       {
         onSuccess: () => {
           void queryClient.invalidateQueries({ queryKey: taskTrackerKeys.all });
-          message.warning("Cancellation requested");
+          message.warning(t("widgets.cancellationRequested"));
         },
         onError: (error) => {
-          message.error(toUserMessage(error, "Failed to cancel task"));
+          message.error(toUserMessage(error, t("widgets.taskCancelFailed")));
         },
       },
     ),
