@@ -4,8 +4,8 @@ import type { ReactNode } from "react";
 import "./styles.css";
 
 export const metadata: Metadata = {
-  title: "SC Upstream Lab",
-  description: "Development-only upstream behavior mock",
+  title: "Upstream mock tools",
+  description: "Development-only upstream event and state tools",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

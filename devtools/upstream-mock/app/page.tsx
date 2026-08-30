@@ -3,20 +3,15 @@ import { UpstreamMockConsole } from "./upstream-mock-console";
 export default function Page() {
   return (
     <main>
-      <header className="hero">
+      <header className="page-header">
         <div>
-          <p className="eyebrow">Development tool · Next.js full stack</p>
-          <h1>SC Upstream Lab</h1>
-          <p className="lede">
-            Create upstream behavior, publish deterministic inspections, and watch what the platform
-            can observe—without production code or hidden seed scripts.
-          </p>
+          <h1>Upstream mock tools</h1>
+          <p>Send source events, generate fixtures, and inspect state visible to local services.</p>
         </div>
-        <div className="protocol-card" aria-label="Simulator topology">
-          <span>Control</span>
-          <strong>Next.js · :8094</strong>
-          <span>Read protocols</span>
-          <strong>gRPC :9091 · Flight :9093</strong>
+        <div className="endpoints" aria-label="Simulator endpoints">
+          <code>HTTP control :8094</code>
+          <code>gRPC read :9091</code>
+          <code>Flight read :9093</code>
         </div>
       </header>
       <UpstreamMockConsole />

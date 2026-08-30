@@ -15,6 +15,9 @@ The current implementation provides:
 - atomic creation of inspection, defect, review-image, and patch-archive
   metadata;
 - a transactionally allocated latest-change token on publication.
+- a compact operator console for composing upstream events, generating a named
+  scenario, inspecting source state, and reviewing local request/response
+  activity;
 - a bearer-authenticated HTTP control API for create, append, publish, update,
   list, and inspect operations;
 - a TypeScript `upstream-mock` CLI that calls only that HTTP API;
