@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { messages } from "./messages";
+import { mergeMessageCatalogs } from "./catalog";
+import { messageCatalogs, messages } from "./messages";
 
 function flattenMessages(value: Record<string, unknown>, prefix = ""): Record<string, string> {
   const flattened: Record<string, string> = {};
@@ -33,5 +34,36 @@ describe("application message catalogs", () => {
     for (const [key, source] of Object.entries(english)) {
       expect(placeholders(chinese[key]), key).toEqual(placeholders(source));
     }
+  });
+
+  it("keeps every feature catalog independently complete", () => {
+    for (const catalog of messageCatalogs) {
+      const featureEnglish = flattenMessages(catalog.messages["en-US"]);
+      const featureChinese = flattenMessages(catalog.messages["zh-CN"]);
+
+      expect(Object.keys(featureChinese).sort(), catalog.name).toEqual(
+        Object.keys(featureEnglish).sort(),
+      );
+      for (const [key, source] of Object.entries(featureEnglish)) {
+        expect(placeholders(featureChinese[key]), `${catalog.name}:${key}`).toEqual(
+          placeholders(source),
+        );
+      }
+    }
+  });
+
+  it("rejects duplicate top-level namespaces during composition", () => {
+    expect(() =>
+      mergeMessageCatalogs([
+        {
+          name: "first",
+          messages: { "en-US": { common: {} }, "zh-CN": { common: {} } },
+        },
+        {
+          name: "second",
+          messages: { "en-US": { common: {} }, "zh-CN": { common: {} } },
+        },
+      ]),
+    ).toThrow('Duplicate i18n namespace "common"');
   });
 });

@@ -1,0 +1,46 @@
+import { defineMessageCatalog } from "@/app/i18n/catalog";
+
+export const authMessageCatalog = defineMessageCatalog("auth", {
+  "en-US": {
+    auth: {
+      signIn: "Sign In",
+      createAccount: "Create Account",
+      completeRegistration: "Complete Registration",
+      yourName: "Your name",
+      continueWith: "Continue with {provider}",
+      orContinueWith: "or continue with",
+      noAccount: "Don't have an account?",
+      register: "Register",
+      haveAccount: "Already have an account?",
+      login: "Login",
+      loginFailed: "Login failed",
+      registrationFailed: "Registration failed",
+      authenticationFailed: "Authentication Failed",
+      oauthFailed: "OAuth authentication failed",
+      noToken: "No authentication token received. Please try logging in again.",
+      missingRegistrationToken: "Missing registration token. Please start the login flow again.",
+      backToLogin: "Back to Login",
+    },
+  },
+  "zh-CN": {
+    auth: {
+      signIn: "登录",
+      createAccount: "创建账户",
+      completeRegistration: "完成注册",
+      yourName: "您的姓名",
+      continueWith: "使用 {provider} 继续",
+      orContinueWith: "或使用以下方式继续",
+      noAccount: "还没有账户？",
+      register: "注册",
+      haveAccount: "已有账户？",
+      login: "登录",
+      loginFailed: "登录失败",
+      registrationFailed: "注册失败",
+      authenticationFailed: "身份验证失败",
+      oauthFailed: "OAuth 身份验证失败",
+      noToken: "未收到身份验证令牌，请重新登录。",
+      missingRegistrationToken: "缺少注册令牌，请重新开始登录流程。",
+      backToLogin: "返回登录",
+    },
+  },
+});

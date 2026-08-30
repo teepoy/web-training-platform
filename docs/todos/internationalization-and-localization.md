@@ -8,7 +8,8 @@
   transfer flows, SC discovery/classification/map/sampling controls, visible
   copy, and accessibility labels. Locale selection persists per browser and
   drives the application, Naive UI, VXE UI/Table, shared formatting, and
-  document language.
+  document language. Translation namespaces are owned by app, shared, or the
+  corresponding feature catalog and composed once at application bootstrap.
 - **Enforcement:** catalog tests require key and interpolation parity; the lint
   workflow scans all production Vue and TypeScript source directories and
   rejects untranslated template copy, labels, tabs, descriptions,
@@ -27,7 +28,9 @@ contracts.
 ## Current State
 
 - Vue I18n is installed during application bootstrap with English and
-  Simplified Chinese catalogs.
+  Simplified Chinese feature catalogs. The composition root rejects duplicate
+  top-level namespaces, while catalog tests enforce locale and interpolation
+  parity independently for every feature.
 - The selected locale is persisted per browser and synchronizes the document,
   Naive UI, VXE UI, and VXE Table locale.
 - Global navigation and user-menu copy is translated, and language controls are

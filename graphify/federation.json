@@ -114,6 +114,7 @@
         "apps/api/app/modules/*/domain/*registry*.py",
         "apps/api/app/shared/context.py",
         "apps/web/src/app/registrations.ts",
+        "apps/web/src/app/i18n/**/*.ts",
         "apps/web/src/features/datasets/presentation/pages/registry.ts",
         "apps/web/src/features/datasets/presentation/pages/schema-registry.ts"
       ],

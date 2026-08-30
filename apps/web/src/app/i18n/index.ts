@@ -4,9 +4,9 @@ import vxeEnUS from "vxe-pc-ui/lib/language/en-US.js";
 import vxeZhCN from "vxe-pc-ui/lib/language/zh-CN.js";
 
 import { messages } from "./messages";
+import { supportedLocales, type AppLocale } from "./catalog";
 
-export const supportedLocales = ["en-US", "zh-CN"] as const;
-export type AppLocale = (typeof supportedLocales)[number];
+export { supportedLocales, type AppLocale } from "./catalog";
 
 export const LOCALE_STORAGE_KEY = "platform.locale";
 
