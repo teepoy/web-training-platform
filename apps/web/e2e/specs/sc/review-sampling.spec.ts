@@ -71,7 +71,7 @@ test("Global Filter waits for explicit confirmation before refreshing consumers 
   await expect(authedPage.getByTestId("sc-global-filter-trigger")).toHaveText("Global Filter (1)");
 });
 
-test("Train & Predict submits the page-owned Global Filter @mock", async ({
+test("Train & Predict resolves the page-owned Global Filter to stable membership @mock", async ({
   authedPage,
   apiMocks,
 }) => {
@@ -94,6 +94,31 @@ test("Train & Predict submits the page-owned Global Filter @mock", async ({
       view_type: "patch_image_v1",
     },
   ]);
+
+  const workflowResolutionRequests: Array<{
+    description?: string;
+    sql: string;
+    parameters: unknown[];
+  }> = [];
+  await authedPage.route(`**/api/v1/sc/data/datasets/${DATASET_ID}/query`, async (route) => {
+    const request = route.request().postDataJSON() as {
+      description?: string;
+      sql: string;
+      parameters: unknown[];
+    };
+    if (request.description !== "sc-workbench.workflow-row-keys") {
+      await route.fallback();
+      return;
+    }
+    workflowResolutionRequests.push(request);
+    await route.fulfill({
+      status: 200,
+      contentType: "application/vnd.apache.arrow.stream",
+      body: Buffer.from(
+        tableToIPC(tableFromArrays({ row_key: ["row-2", "row-7", "row-12", "row-17"] })),
+      ),
+    });
+  });
 
   const workflowRequests: Array<Record<string, unknown>> = [];
   await authedPage.route("**/api/v1/training-jobs/train-and-predict", async (route) => {
@@ -128,6 +153,12 @@ test("Train & Predict submits the page-owned Global Filter @mock", async ({
   await expect(confirmation).toBeVisible();
   await authedPage.getByRole("button", { name: /Continue with \d+ defects/ }).click();
 
+  await expect.poll(() => workflowResolutionRequests.length).toBe(1);
+  expect(workflowResolutionRequests[0]).toEqual({
+    description: "sc-workbench.workflow-row-keys",
+    sql: 'SELECT "row_key" FROM samples WHERE ("rough_bin" = ANY(?)) ORDER BY "row_key"',
+    parameters: [[2]],
+  });
   await expect.poll(() => workflowRequests.length).toBe(1);
   expect(workflowRequests[0]).toMatchObject({
     dataset_id: DATASET_ID,
@@ -137,8 +168,11 @@ test("Train & Predict submits the page-owned Global Filter @mock", async ({
       items: [
         {
           kind: "condition",
-          field: "rough_bin",
-          condition: { filterType: "set", values: [2] },
+          field: "row_key",
+          condition: {
+            filterType: "set",
+            values: ["row-2", "row-7", "row-12", "row-17"],
+          },
         },
       ],
     },

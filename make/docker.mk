@@ -12,7 +12,9 @@ build-image-parser-vendor: ## Build amd64 vendor/tooling image for image-parser 
 up-dev: ensure-fixtures ## Start compose dev stack (volume mounts, hot reload)
 	docker compose -f $(COMPOSE_DEV) up -d postgres minio redis label-studio prefect-server upstream-mock sc-upstream image-parser
 	docker compose -f $(COMPOSE_DEV) --profile ops run --rm prepare-platform
-	docker compose -f $(COMPOSE_DEV) up -d $(ARGS)
+	# Re-evaluate image layers so package/lockfile changes cannot leave bind-mounted
+	# application source running against stale container dependencies.
+	docker compose -f $(COMPOSE_DEV) up -d --build $(ARGS)
 
 .PHONY: up-dev-host-api
 up-dev-host-api: ensure-fixtures ## Start compose dev dependencies without Docker API/Web
