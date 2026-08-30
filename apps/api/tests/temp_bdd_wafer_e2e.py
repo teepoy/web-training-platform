@@ -7,7 +7,7 @@ QUICKSTART
   make up-dev
 
   # 2. Seed Wafer Demo data
-  publish an inspection through devtools/upstream-mock and import it through
+  publish an inspection through an external development source and import it through
   the platform
 
   # 3. Run this BDD test
@@ -54,7 +54,7 @@ NOTES
 ============================================================
 - Uses httpx (NOT TestClient) → talks to the real running API.
 - Uses minio.Minio client → inspects S3 objects directly.
-- An imported SC Dataset is expected to exist from the real upstream-mock and
+- An imported SC Dataset is expected to exist from the external source and
   platform import path.
 - For minimal data, use --samples 20 --annotate 5.
 - Auth: requires `BDD_USER_EMAIL` and `BDD_USER_PASSWORD` for an explicitly
@@ -208,8 +208,8 @@ def _find_inspection_bdd(
     if not items:
         raise RuntimeError(
             f"No inspections found in {start}..{end}. "
-            "Ensure the wafer-mock store is loaded "
-            "Publish it through upstream mock and import it through the product flow first."
+            "Ensure the external source contains a published inspection. "
+            "Publish it through the external source and import it through the product flow first."
         )
     return str(items[0]["inspection_time"]), int(items[0]["wafer_key"])
 
@@ -338,7 +338,7 @@ def sample_ids(
     if len(items) < needed:
         raise RuntimeError(
             f"Only found {len(items)} samples (via patch_image_v1 view), "
-            f"need {needed}. Publish/import an upstream-mock scenario with more samples "
+            f"need {needed}. Publish/import a source scenario with more samples "
             f"or set BDD_SAMPLES={len(items)}."
         )
     return items

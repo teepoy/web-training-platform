@@ -69,8 +69,8 @@ apps/api/
 ```
 
 Test-only dataset builders and explicitly named legacy fixtures live under
-`devtools/seedmaker/`. Operational upstream scenarios live exclusively in the
-standalone `devtools/upstream-mock` service; there is no platform seed CLI.
+`devtools/seedmaker/`. Operational source scenarios live in a standalone,
+repository-tooling-independent development service; there is no platform seed CLI.
 Fake performance kernels and benchmark entrypoints live under
 `devtools/benchmarks/` so API images do not contain them.
 Dummy, fake, mock, fixture, and seed implementations must not live in or be

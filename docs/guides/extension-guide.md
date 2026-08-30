@@ -579,8 +579,7 @@ config = FixtureConfig(
 )
 ```
 
-Live source scenarios belong in `devtools/upstream-mock` and must reach the
-platform through its normal ingestion flow.
+Live source scenarios must reach the platform through its normal ingestion flow.
 
 ### Annotation value for complex types
 

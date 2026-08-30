@@ -50,13 +50,10 @@ an explicit behavior/control interface.
 - It exposes an HTTP control API and a thin CLI client. Upstream scenario
   behavior is not implemented as Make targets or direct database/object-store
   scripts.
-- Repository development seeding calls the simulator API for every upstream
-  record. The former decision to keep platform-owned showcase seeding in
-  `devtools/seedmaker/` is superseded by
-  `docs/todos/upstream-mock-seed-ownership.md`: operational development
-  scenarios now belong to the upstream-mock surface, while platform identity
-  and resources are created through explicit administration and real product
-  flows.
+- Repository development seeding calls an external simulator API for every
+  upstream record. Operational development scenarios remain outside the
+  platform workspace, while platform identity and resources are created
+  through explicit administration and real product flows.
 - The initial simulator supports creating and publishing inspections and
   updating mutable fields on published rows. Deletion/tombstones, outages,
   artificial latency, delayed assets, and incomplete publication are deferred.
@@ -187,8 +184,7 @@ Files:
 `ScSourceRecordProvider` calls `ScUpstreamReader.list_inspections()`, applies the
 typed membership-rule condition, and imports matched records through the SC
 import port. Live discovery maintains a rule cursor and has receipt, replay,
-suppression, source-change, partial-failure, retry, and Revision-publication
-semantics.
+partial-failure, retry, and Revision-publication semantics.
 
 Today this path is started through the source-discovery HTTP surface. The
 automation overview reports its runs, but there is no recurring upstream poller
@@ -249,6 +245,77 @@ longer write the upstream database, zip database, cache directory, or MinIO
 metadata independently.
 
 ## Candidate Work
+
+### P0: Make SC discovery complete under delayed publication — completed
+
+- Add a target-bound Backfill action to each Collection membership rule. The
+  Collection page must preview a user-selected UTC range and timezone, show the
+  total matching inspections, confirm that every match will be imported, and
+  then submit the existing Backfill API. The global Automations page remains a
+  history/retry surface and does not create Backfills.
+- Treat the canonical SC inspection primary key `(inspection_time, wafer_key)`
+  as Source identity. Do not use Dataset name, source version, offset position,
+  or mutable inspection fields as discovery identity.
+- Replace time-only/offset discovery progress with a deterministic publication
+  cursor whose tie-breakers include the inspection primary key. A published
+  inspection must be discovered even when publication occurs after its
+  `inspection_time`; replayed pages and overlapping delivery must remain safe
+  through database-backed receipts and membership uniqueness.
+- Advance discovery progress only after the corresponding records and receipts
+  are durable. Backfill remains independent of the live cursor and imports all
+  matches without an implicit record limit.
+- Keep incremental prediction causally downstream of Collection Revision
+  publication without adding another polling Sensor. Prediction execution stays
+  in its dedicated Prefect deployment/low-priority queue; preparation/dispatch
+  failures must be persisted and visible for retry instead of existing only in
+  logs, and must not roll back the published Revision.
+- Remove the unused membership-suppression surface if it is not required by the
+  final primary-key/receipt design; do not retain a table and APIs for a product
+  behavior that the frontend does not expose.
+
+Acceptance:
+
+- A delayed SC inspection is admitted exactly once after publication, including
+  when adjacent polls contain the same inspection primary key.
+- Concurrent/replayed discovery does not create another Dataset, Collection
+  member, Revision, or prediction batch for the same logical admission.
+- Collection users can preview and run historical import from the rule surface,
+  and existing Backfill runs remain visible in Automations.
+- Revision publication succeeds independently of prediction dispatch, while a
+  failed dispatch is queryable and retryable as product state.
+
+Implemented discovery slice: live SC discovery now pages by
+`(published_at, inspection_time, wafer_key)` through the production gRPC service
+and development mock adapter. The platform persists the last fully processed
+page checkpoint only after run items, receipts, admissions, and run completion
+are durable. Backfill uses an independent `(inspection_time, wafer_key)` keyset
+scan and does not update the live cursor. Legacy Source-version identity and the
+unused membership-suppression table/API were removed by migration
+`b3c4d5e6f7a8`. Each live poll also replays a bounded five-minute publication
+overlap; database receipts absorb those replays, while the stored checkpoint
+never regresses. This covers equal-timestamp and short clock/publication races
+without changing the all-record semantics of the forward keyset scan.
+
+Any production `UpstreamDB` implementation must now implement
+`list_discovery_inspections(InspectionDiscoveryQuery)` and return a bounded page
+whose rows include timezone-aware `published_at`. Publication ordering must be
+stable and immutable for a published inspection; the development HTTP adapter
+and mock PostgreSQL query are the reference implementation, not a substitute
+for the still-unknown real upstream database schema/driver.
+
+The Collection rule surface now provides Historical import range selection,
+timezone-aware preview, an explicit all-record confirmation, submission, and a
+link to the resulting Automation history. Incremental prediction remains a
+direct downstream action of Revision publication: the existing prediction
+batch persists preparation failure even before child jobs exist, exposes that
+state in Automations, and supports retry without rolling back the Revision.
+
+Verification completed with the full API suite (1087 passed), full frontend
+unit suite (529 passed), production web build, full mock E2E suite (50 passed),
+SC upstream service suite (14 passed, 2 skipped), image-parser Go suite,
+development adapter and source-simulator tests, OpenAPI/protobuf sync, Pyright,
+lint, Compose configuration parity, the PostgreSQL migration upgrade, and the
+affected Graphify federation contexts.
 
 ### P0: Implement internal scheduled Collection discovery — completed
 
@@ -453,11 +520,9 @@ Minimum scenarios:
    Dataset or member.
 4. **Source update** — changing a mutable field advances the freshness token,
    invalidates stale projections, and becomes visible without re-import.
-5. **Suppressed record** — a manually removed/suppressed source identity is not
-   re-admitted by later polls.
-6. **Concurrent polls** — a second tick for the same active rule is skipped and
+5. **Concurrent polls** — a second tick for the same active rule is skipped and
    recorded, not queued.
-7. **Restart durability** — simulator, platform, and worker restarts preserve
+6. **Restart durability** — simulator, platform, and worker restarts preserve
    upstream data, freshness tokens, receipts, and cursors.
 
 Delayed/incomplete assets and simulated outage/latency scenarios are deferred

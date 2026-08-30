@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """End-to-end wafer inspection smoke test.
 
-Consumes inspection data published by the standalone upstream mock and imported
+Consumes inspection data published by an external development source and imported
 through the real SC path. The test-only wafer fixture module supplies only the
 expected class labels; no direct SQLite or object-store write is performed.
 

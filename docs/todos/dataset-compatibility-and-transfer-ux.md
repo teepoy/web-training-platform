@@ -91,7 +91,7 @@ fields or errors.
   `file_shard_sparse` and intentionally stores membership plus one exact source
   inspection identity. Its source inspection had disappeared from the upstream
   simulator; the gRPC `NOT_FOUND` escaped as an Internal Server Error. The
-  historical inspection was republished through the upstream-mock HTTP API
+  historical inspection was republished through the external source API
   (not by writing platform data), and missing inspections now map to an explicit
   absent-source result rather than a 500.
 - Filter statistics, classify/map, and Review Sampling all consume the same SC

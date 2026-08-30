@@ -6,10 +6,15 @@ If this file conflicts with root `AGENTS.md` or `CORE_DESIGNS.md`, treat `CORE_D
 
 ## Service Map
 
-| Service      | Path                    | Role                                                                                            |
-| ------------ | ----------------------- | ----------------------------------------------------------------------------------------------- |
-| SC upstream  | `services/sc-upstream`  | Python gRPC + Arrow Flight service exposing wafer inspection upstream data and zip metadata     |
-| Image parser | `services/image-parser` | Go HTTP + gRPC service resolving SC image references, sprites, cache, and S3-backed image reads |
+| Service      | Path                    | Role                                                                                                 |
+| ------------ | ----------------------- | ---------------------------------------------------------------------------------------------------- |
+| SC upstream  | `services/sc-upstream`  | Python gRPC + Arrow Flight service exposing wafer inspection upstream data and zip metadata          |
+| Image parser | `services/image-parser` | Go HTTP + gRPC service resolving SC image references, sprites, cache, and adapter-backed image reads |
+
+Development composition adapters for a service may live below its
+`dev_adapters/` directory, outside the production `src/` package. Production
+images must not copy that directory; deployable implementations satisfy the
+same production-owned Protocol and are selected through explicit composition.
 
 Development-only service fixtures and simulators belong under the root
 `devtools/` boundary. Production `src/` packages must not contain or import

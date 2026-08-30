@@ -80,7 +80,7 @@ This plan turns ADRs 0001–0014 into incremental, reviewable changes. It is an 
 ## Phase 6: Seed and verification
 
 1. Do not create default display Automation records; exercise real target-bound
-   automation from explicit upstream-mock events.
+   automation from explicit source events.
 2. Add an explicit deterministic executable scenario for Source discovery,
    Dataset import/Revision, Collection Revision publication, and incremental
    prediction. Candidate training remains a documented follow-up until

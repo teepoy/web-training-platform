@@ -63,12 +63,12 @@ Prefer `make` targets from the repository root.
 | Start compose backend only        | `make up-dev ARGS="--scale web=0"`       |
 | Stop compose                      | `make down`                              |
 
-Publish development upstream behavior through the `devtools/upstream-mock`
-HTTP API, TypeScript CLI, or dashboard on port `8094`. Platform identities are
-never created by scenario tooling. `make up-dev` separately converges the
-local-only development superadmin configured by `DEV_SUPERADMIN_EMAIL`,
-`DEV_SUPERADMIN_PASSWORD`, and `DEV_SUPERADMIN_NAME`. Run smoke tests with
-`make smoke-tests` and caller-supplied `SMOKE_USER_EMAIL` /
+Development-only source simulators are standalone tools and are not part of the
+repository workspace, documentation, generation, or release surfaces. Platform
+identities are never created by scenario tooling. `make up-dev` separately
+converges the local-only development superadmin configured by
+`DEV_SUPERADMIN_EMAIL`, `DEV_SUPERADMIN_PASSWORD`, and `DEV_SUPERADMIN_NAME`.
+Run smoke tests with `make smoke-tests` and caller-supplied `SMOKE_USER_EMAIL` /
 `SMOKE_USER_PASSWORD`.
 
 The root `Makefile` is the stable entry point and loads focused modules from

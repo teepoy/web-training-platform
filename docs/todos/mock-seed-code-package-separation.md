@@ -42,7 +42,7 @@ This cleanup follows the existing repository rules:
 
 ## Candidate Inventory
 
-### P0: SC upstream mock database is the deployable implementation
+### P0: SC development source database is the deployable implementation
 
 Files and features:
 

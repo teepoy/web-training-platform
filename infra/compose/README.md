@@ -82,10 +82,8 @@ Adds via `docker-compose.dev.yaml`:
 - **prefect-worker-cpu** with bind mounts for flow code changes
 - **prepare-platform** (ops profile): one-shot database, MinIO, and Prefect preparation
 - **pgadmin** (`:5050`): optional PostgreSQL admin UI
-- **upstream-mock** as an independent Next.js mock service/dashboard with its
-  owned `upstream_mock` PostgreSQL database and authenticated API on `:8094`
 - **sc-upstream** as the separate production cache/gRPC/Flight service, connected
-  to the mock through a development-only HTTP adapter
+  through a development-only HTTP adapter
 - **image-parser** with Air reload for Go source changes
 - Profile `--profile gpu`: GPU Prefect worker (Linux/NVIDIA only)
 
@@ -208,16 +206,15 @@ make up-release
 ```
 
 `make up-dev` starts the complete Compose development stack, including the
-bind-mounted Vite service on `:5173` and the upstream-mock tool surface on
-`:8094`. Publish mock records/events through that service; platform resources
-are created through real product flows.
+bind-mounted Vite service on `:5173`. Platform resources are created through
+real product flows.
 
 ## Services
 
 The stack is split across multiple Compose files:
 
 - **Local infrastructure** (`docker-compose.yaml`): postgres, minio, redis, prefect-server, label-studio, profile-gated observability, profile-gated dcgm-exporter
-- **Local development** (`docker-compose.dev.yaml`): api, sc-data-provider, web, upstream-mock, sc-upstream, image-parser, workers, prepare-platform (ops profile), pgadmin
+- **Local development** (`docker-compose.dev.yaml`): api, sc-data-provider, web, sc-upstream, image-parser, workers, prepare-platform (ops profile), pgadmin
 - **Production stateful** (`production/compose.stateful.yaml`): postgres, minio, redis, label-studio (data plane)
 - **Production platform** (`production/compose.platform.yaml`): prefect-server, api, web, prefect-worker-cpu, prefect-worker-gpu (app plane)
 - **Production ops** (`production/compose.ops.yaml`): prepare-platform (one-shot ops)
@@ -276,10 +273,6 @@ All services at a glance:
 - The object cache uses a 10 GiB high watermark, cleans down to 8 GiB, and is
   stored in the shared `sc-data-provider-cache` volume in development or below
   the platform data mount in production deployments.
-- The authenticated upstream-mock `dev-showcase` scenario publishes repeatable
-  SC inspections. The mock owns deterministic defect rows, review objects,
-  patch archives, and PostgreSQL metadata; Compose does not invoke seeders,
-  clear caches, restart services, or create platform identities/resources.
 - Dev services use the tracked `logging.level: INFO` profile setting, so
   data-provider memory records are visible. Use a reviewed profile YAML change
   when a different threshold is required; there is no environment override.

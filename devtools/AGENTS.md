@@ -8,8 +8,6 @@ simulator, synthetic-data, and fake-kernel benchmark implementations.
 | Area           | Path                               | Role                                                                                            |
 | -------------- | ---------------------------------- | ----------------------------------------------------------------------------------------------- |
 | Test fixtures  | `devtools/seedmaker`               | Test-only synthetic builders and explicitly named legacy compatibility fixtures                 |
-| Upstream mock  | `devtools/upstream-mock`           | Disposable Next.js upstream behavior service, dashboard, PostgreSQL state, control API, and CLI |
-| SC dev adapter | `devtools/sc-upstream-dev-adapter` | Development-only HTTP bridge injected into the separate production SC upstream service          |
 | Benchmarks     | `devtools/benchmarks`              | Development performance harnesses and fake compute kernels                                      |
 
 ## Boundaries
@@ -21,17 +19,16 @@ simulator, synthetic-data, and fake-kernel benchmark implementations.
   dependency direction never runs from production code back into this tree.
 - Test-only mocks remain valid under explicit `tests`, `e2e/mocks`, and
   `src/testing` roots; do not move them into production source packages.
-- The upstream mock has its own Node package and container. Production
-  Dockerfiles must not copy its metadata or source. Its development adapter is
-  packaged only by its devtools-owned Dockerfile.
-- There is no repository-wide operational seed CLI. Supported upstream
-  scenarios are mutations of `devtools/upstream-mock`; platform identities and
+- Standalone disposable tools own their dependency locks, documentation,
+  generation, formatting, tests, and container build contexts. They are not
+  root workspace members. Production Dockerfiles must not copy their metadata
+  or source.
+- There is no repository-wide operational seed CLI. Platform identities and
   resources use explicit administration and real product flows.
 
 ## Verification
 
-- Run `pnpm --filter @devtools/upstream-mock test` and
-  `PYTHONPATH=devtools/sc-upstream-dev-adapter/src uv run --package sc-upstream pytest devtools/sc-upstream-dev-adapter/tests`.
+- Run each standalone tool's checks from its own directory.
 - Run `make check-config` after changing development Compose wiring.
 - Keep production release manifests free of `devtools/` paths and mock
   services.
