@@ -52,7 +52,7 @@ Sparse mode is **opt-in only**. No existing dataset is converted to sparse autom
 | Import (Parquet shards)                      | Supported | Supported           | Primary sparse ingest path. Streams identities into Parquet shards and builds a scalable locator index. Current SC imports use the identity-only v4 contract (see [SC source schema v4 and earlier compatibility](#sc-source-schema-v4-and-earlier-compatibility)). For `db_full`, materializes `SampleORM` rows. |
 | List (paginated, 100k+)                      | Supported | Supported           | Sparse datasets expose shard-level summaries and manifest-driven pagination. Full `SampleORM` pagination is not available.                                                                                                                                                                                        |
 | Sample browsing / individual materialization | Supported | Unsupported         | Samples live in Parquet shard files, not `SampleORM` rows. Per-sample materialization is not available.                                                                                                                                                                                                           |
-| Annotation (bulk)                            | Supported | Supported           | Sparse bulk annotation resolves `defect_id` → `sample_id` via `manifest.sample_index` at O(1) per annotation. `sample_id` equals `defect_id` in sparse mode (no FK constraint).                                                                                                                                   |
+| Annotation (bulk)                            | Supported | Supported           | Sparse bulk annotation resolves the index's upstream `defect_id` key to its independent platform `sample_id`; no `SampleORM` row or FK is required.                                                                                                                                                               |
 | Annotation (individual)                      | Supported | Unsupported         | No individual `SampleORM` rows to anchor annotations against. Sparse correction is done through prediction review.                                                                                                                                                                                                |
 | Label Studio project / task integration      | Supported | Unsupported         | Sparse datasets do not create an LS project. This is intentional, not a missing feature.                                                                                                                                                                                                                          |
 | LS annotation sync                           | Supported | Unsupported         | No LS project means no sync surface.                                                                                                                                                                                                                                                                              |
@@ -133,7 +133,10 @@ Workers must not call the materialization endpoint before compute begins. Failur
 
 **List.** Sparse datasets expose shard-level summaries and manifest-driven pagination. The manifest's `total_rows` and `shards[]` metadata drive list views for datasets of 100k+ rows.
 
-**Annotate.** Bulk annotations resolve `defect_id` → `sample_id` through `ScDatasetAgg`. Sparse mode uses the storage aggregate's manifest index, while `db_full` performs one JSON-metadata query. The `sample_id` equals the `defect_id` in sparse mode (no `SampleORM` rows exist); unknown defect IDs are excluded.
+**Annotate.** Bulk annotations resolve `defect_id` → independent platform
+`sample_id` through `ScDatasetAgg`. Sparse mode uses the locator index's
+`upstream_item_id` mapping, while `db_full` performs one JSON-metadata query.
+No `SampleORM` rows exist for sparse storage; unknown defect IDs are excluded.
 
 **Train.** `train_job` opens identity membership through `DatasetStorageFactory`, resolves current source rows through the SC upstream boundary, and passes the resulting view to the registered runtime. External runtimes consume the data-plane manifest. The API-local Ultralytics module owns materialization and its temporary workspace. `libs/ml` opens the resulting Parquet paths as an algorithm-owned streaming Dataset; each DataLoader worker decodes the defective/template images as grayscale, resizes both to `128x128`, and stacks them in channel order. Training runs for 50 epochs without building a local image-folder copy. The checkpoint remains a local path until `ArtifactOutput` consumption uploads it. No legacy `RuntimeMaterializer`, `BulkViewLoader`, or `DatasetSampleService` is used.
 
@@ -164,18 +167,18 @@ These capabilities are explicitly NOT supported for sparse SC datasets. The desi
 SC sparse datasets have versioned source data models that share the same
 `file_shard_sparse` storage mode.
 
-**Storage model (v4 identity shards).** New imports persist only `sample_id` and
-`defect_id`. Inspection time and wafer key live once in Dataset metadata. SC
+**Storage model (v4 identity shards).** New imports persist only an opaque UUID
+platform `sample_id` and the separate upstream `defect_id`. Inspection time and
+wafer key live once in Dataset metadata. SC
 source fields are fetched from the current upstream inspection and semi-joined
 to the stored membership before the workbench, map, runtime, or prediction
 export consumes them. An upstream outage or missing identity fails the
 source-dependent operation; stored v2/v3 source fields are never a stale
 fallback.
 
-The disposable SQL-provider cache includes the inspection freshness timestamp
-in its logical key. A mutable upstream value therefore appears after the
-inspection freshness token changes without re-importing or versioning the
-Dataset.
+The disposable SQL-provider cache includes the required positive Inspection
+`change_token` in its logical key. A mutable upstream value therefore appears
+after the token changes without re-importing or versioning the Dataset.
 
 The SC data viewer discovers this concrete list from the SQL data provider with
 `SELECT * FROM samples LIMIT 0`. Known fields retain their curated labels and

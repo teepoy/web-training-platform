@@ -2,12 +2,20 @@
 
 ## Progress
 
-- **Overall status:** Complete.
+- **Overall status:** Identity-only runtime behavior complete; legacy Backfill
+  and payload cleanup remain an explicit open decision.
 - **Completed intermediate slice:** new imports write schema
-  `v4_identity` (`sample_id`, `defect_id`); Dataset/Collection workbench,
+  `v4_identity` (`sample_id`, `defect_id`) with an opaque UUID platform
+  `sample_id` independent from the upstream `defect_id`; the sparse index keeps
+  their explicit mapping for annotation-by-defect. Dataset/Collection workbench,
   map/filter, runtime, and prediction-export paths rehydrate current source
   rows; v2/v3 extras are ignored; cache keys include inspection freshness; and
   the unused direct Sample table endpoints/client have been removed.
+- **Authority hardening:** source geometry is no longer persisted; map and
+  reticle operations read the current Inspection. Source-derived caches use the
+  required positive Inspection `change_token`. Dataset membership is sent to
+  SC upstream in bounded defect-ID chunks, and the upstream database applies
+  the Inspection-PK membership predicate before returning projected Arrow rows.
 - **Final slice:** the generic sparse exporter now accepts `v4_identity`, reads
   only the two identity columns, joins annotations for scalable locator-index
   manifests, and emits deterministic patch references from Dataset-level source
@@ -45,18 +53,26 @@ the platform stores membership and reads the latest source attributes.
 - If the upstream is unavailable, source-dependent reads and operations fail
   explicitly. There is no stale full-row fallback from S3.
 - Existing v2/v3 full-row shards receive temporary compatibility reading: the
-  reader projects their identity fields and ignores extra stored source fields.
+  SC latest-source membership boundary projects their identity fields and
+  platform overlays, and ignores extra stored source fields. Generic sparse
+  storage still exposes the physical legacy rows for compatible export/readback.
 - Compatibility does not make those extra fields authoritative and does not
   preserve the old mixed-source behavior.
-- No backfill is required. Existing Datasets remain readable through the
-  compatibility adapter; new writes use the identity-only contract.
+- Existing Datasets remain readable through the compatibility adapter without
+  requiring an immediate backfill; new writes use the identity-only contract.
+  Whether legacy payloads should later be migrated or cleaned up remains an
+  explicit open Backfill decision.
+- New v4 imports generate a fresh UUID platform identity for each stored member.
+  The ID is stable once persisted and is never derived from `defect_id` or another
+  upstream identity. The manifest index separately maps `defect_id` back to that
+  platform identity for SC writeback operations.
 - A Collection job pins the Collection's current ready revision when the job is
   submitted. Membership is stable for that job, while source-owned fields are
   resolved to their latest upstream values when the job builds its input.
-- Use one inspection-level `last_updated_at` or opaque change token as a cache
-  validator. It exists only to prevent a cached full projection from surviving
-  mutable upstream updates; it is not Dataset versioning, historical retention,
-  or a user-selectable source revision.
+- Use the required positive inspection-level opaque `change_token` as the cache
+  validator. It prevents a cached full projection from surviving mutable
+  upstream updates; it is not Dataset versioning, historical retention, or a
+  user-selectable source revision.
 
 ## Current Findings
 
@@ -257,9 +273,9 @@ them for a bounded purpose, but it is never another source of truth.
 Define a new SC source schema version with a deliberately closed persistent
 contract:
 
-- `sample_id` — platform sample identity within the Dataset; it may continue to
-  equal the normalized `defect_id` for one-inspection Datasets, but that is a
-  module rule rather than a global primary-key rule.
+- `sample_id` — opaque UUID platform sample identity generated for the import;
+  it is persisted as the annotation/storage identity and does not depend on an
+  upstream identifier.
 - `defect_id` — upstream defect identity.
 - Dataset metadata stores `inspection_time`, the normalized upstream inspection
   identity, and `wafer_key`, the upstream wafer identity, once per Dataset.
@@ -382,21 +398,20 @@ reproducibility after upstream fields change.
   not from whichever S3 shard version happens to be present.
 - Do not retain the old route as a fallback.
 
-### P1: Migrate existing v2/v3 Datasets explicitly
+### P1: Keep existing v2/v3 Datasets readable without backfill
 
 - Introduce a new schema version for identity-only storage.
 - Read v2/v3 Datasets through a temporary compatibility adapter that projects
   `sample_id` and `defect_id` from their existing shards, derives/validates the
   Dataset-level `inspection_time` and `wafer_key`, and ignores all extra source
   columns.
+- Apply this authority rule at the SC latest-source membership boundary; do not
+  make generic sparse storage import SC policy or reinterpret its physical rows.
 - Enrich those projected identities from the latest upstream source, exactly as
   for new identity-only Datasets.
 - Do not relabel existing full-row shards as identity-only.
-- Provide a migration/audit command that reports storage bytes, source identity,
-  and whether safe identity projection or re-import is possible before deleting
-  any old payload.
-- Delete old full-row objects only through the normal Dataset revision/storage
-  lifecycle and only after the replacement manifest is durable.
+- Do not rewrite historical IDs or stored shards. Their old platform identity
+  remains stable, while bulk SC membership reads hide copied source extras.
 
 ### P1: Update tests around authority, not duplicated values
 
@@ -423,9 +438,10 @@ that prove:
   they do not belong in the identity shard.
 - Annotation and prediction overlays remain platform-owned and must not be
   written back into upstream source rows.
-- Dataset metadata such as label space, geometry, and connector/import receipt
-  belongs in the appropriate Dataset/receipt metadata contract, not repeated on
-  every identity row unless row-level variation requires it.
+- Platform metadata such as label space and connector/import receipt belongs in
+  the appropriate Dataset/receipt contract. Source-owned geometry is resolved
+  from the current upstream Inspection and is not persisted in Dataset metadata
+  or repeated on identity rows.
 - `defect_id` alone must not become a global primary key or Collection row key.
 - The browser must not join upstream and S3 data itself.
 - The API must not query the upstream database directly; it continues through
@@ -485,6 +501,6 @@ that prove:
 
 The identity layout, observed-membership, always-latest,
 fail-when-upstream-unavailable, cache-freshness, pinned Collection job revision,
-and temporary v2/v3 compatibility semantics are approved. Implementation must
-preserve existing behavior through compatibility reads without requiring a
-backfill.
+and temporary v2/v3 compatibility semantics are approved. Compatibility reads
+preserve existing behavior without an immediate backfill; the separate legacy
+Backfill/cleanup decision remains open.
