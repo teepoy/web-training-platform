@@ -65,6 +65,7 @@ import {
   type CollectionWithDefaultModel,
 } from "@/features/dataset-collections/api/collectionModelAutomation";
 import PredictionExportPlugin from "@/features/sc/presentation/components/PredictionExportPlugin.vue";
+import MembershipRuleBackfillModal from "../components/MembershipRuleBackfillModal.vue";
 import { supportsScPredictionExport } from "@/features/sc/domain/predictionExportCapability";
 import { useAuthStore } from "@/features/auth/application/store";
 import { useOrgStore } from "@/features/auth/application/org";
@@ -95,6 +96,13 @@ const ruleProfileId = ref<string | null>(null);
 const ruleField = ref<string | null>(null);
 const ruleOperator = ref<FilterOperator | null>(null);
 const ruleValue = ref("");
+const backfillRule = ref<MembershipRuleResponse | null>(null);
+const backfillVisible = computed({
+  get: () => !!backfillRule.value,
+  set: (show: boolean) => {
+    if (!show) backfillRule.value = null;
+  },
+});
 const partitionVisible = ref(false);
 const partitionName = ref("");
 const partitionConnectorId = ref<string | null>(null);
@@ -815,6 +823,25 @@ function connectorName(connectorId: string): string {
   );
 }
 
+function ruleSupportsBackfill(rule: MembershipRuleResponse): boolean {
+  const connector = connectorsQuery.data.value?.find(
+    (candidate) => candidate.id === rule.active_version.connector_id,
+  );
+  return !!providersQuery.data.value?.find(
+    (provider) => provider.provider_id === connector?.provider_id && !!provider.backfill_time_field,
+  );
+}
+
+async function handleBackfillSubmitted(): Promise<void> {
+  await Promise.all([
+    rulesQuery.refetch(),
+    refreshCollection(),
+    queryClient.invalidateQueries({
+      queryKey: orgScopedQueryKey(orgStore.currentOrgId, ["automations"]),
+    }),
+  ]);
+}
+
 function ruleConditionCount(condition: unknown): number {
   if (typeof condition !== "object" || condition === null || !("children" in condition)) return 0;
   return Array.isArray(condition.children) ? condition.children.length : 0;
@@ -846,18 +873,41 @@ const ruleColumns: DataTableColumns<MembershipRuleResponse> = [
   {
     title: t("collectionDetail.action"),
     key: "action",
-    width: 110,
+    width: 280,
     render: (rule) =>
-      h(
-        NButton,
-        {
-          size: "small",
-          disabled: !canManageAutomation.value,
-          loading: runRuleMutation.isPending.value && runRuleMutation.variables.value === rule.id,
-          onClick: () => runRuleMutation.mutate(rule.id),
-        },
-        { default: () => t("collectionDetail.runNow") },
-      ),
+      h(NSpace, { size: 8, wrap: false }, () => [
+        h(
+          NButton,
+          {
+            size: "small",
+            disabled: !canManageAutomation.value,
+            loading: runRuleMutation.isPending.value && runRuleMutation.variables.value === rule.id,
+            onClick: () => runRuleMutation.mutate(rule.id),
+          },
+          { default: () => t("collectionDetail.runNow") },
+        ),
+        h(
+          NTooltip,
+          { disabled: ruleSupportsBackfill(rule) },
+          {
+            trigger: () =>
+              h("span", [
+                h(
+                  NButton,
+                  {
+                    size: "small",
+                    disabled: !canManageAutomation.value || !ruleSupportsBackfill(rule),
+                    onClick: () => {
+                      backfillRule.value = rule;
+                    },
+                  },
+                  { default: () => t("collectionDetail.historicalImport") },
+                ),
+              ]),
+            default: () => t("collectionDetail.backfillUnsupported"),
+          },
+        ),
+      ]),
   },
 ];
 
@@ -1377,6 +1427,13 @@ const revisionColumns: DataTableColumns<DatasetCollectionRevisionResponse> = [
         </NSpace>
       </template>
     </NModal>
+
+    <MembershipRuleBackfillModal
+      v-model:show="backfillVisible"
+      :collection-id="collectionId"
+      :rule="backfillRule"
+      @submitted="handleBackfillSubmitted"
+    />
 
     <NModal
       v-model:show="partitionVisible"

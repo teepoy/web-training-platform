@@ -1,10 +1,12 @@
 import { expect, test } from "../../fixtures";
 import { makeModel } from "../../mocks/factories";
 
-test("reruns only selected collection datasets with the pinned model @mock", async ({
+test("previews rule backfill and reruns selected collection datasets @mock", async ({
   authedPage,
 }) => {
   let submittedBody: unknown;
+  let backfillPreviewBody: Record<string, unknown> | null = null;
+  let backfillRunBody: Record<string, unknown> | null = null;
   await authedPage.route("**/api/v1/dataset-collections/collection-1**", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -183,8 +185,85 @@ test("reruns only selected collection datasets with the pinned model @mock", asy
       }
       return;
     }
+    if (url.pathname.endsWith("/membership-rules/rule-1/backfill-preview")) {
+      backfillPreviewBody = request.postDataJSON() as Record<string, unknown>;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          as_of_utc: "2026-08-30T08:00:00Z",
+          matched_count: 2,
+          representative_records: [
+            {
+              record_key: "inspection-history-1",
+              source_version: null,
+              observed_at: "2026-08-20T08:00:00Z",
+              display_name: "Historical inspection A",
+              attributes: { layer_id: "M1", device: "DEVICE-A" },
+            },
+          ],
+        }),
+      });
+      return;
+    }
+    if (url.pathname.endsWith("/membership-rules/rule-1/backfills")) {
+      backfillRunBody = request.postDataJSON() as Record<string, unknown>;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: "backfill-1",
+          org_id: "org-e2e-1",
+          collection_id: "collection-1",
+          rule_id: "rule-1",
+          rule_version_id: "rule-version-1",
+          kind: "backfill",
+          status: "completed",
+          as_of_utc: "2026-08-30T08:00:00Z",
+          range_start_utc: backfillRunBody.start_utc,
+          range_end_utc: backfillRunBody.end_utc,
+          timezone: backfillRunBody.timezone,
+          parent_run_id: null,
+          collection_revision_id: "revision-2",
+          stats: {},
+          error_detail: null,
+          created_by: "user-e2e-1",
+          created_at: "2026-08-30T08:00:00Z",
+          completed_at: "2026-08-30T08:00:01Z",
+          items: [],
+        }),
+      });
+      return;
+    }
     if (url.pathname.endsWith("/membership-rules")) {
-      await route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([
+          {
+            id: "rule-1",
+            org_id: "org-e2e-1",
+            collection_id: "collection-1",
+            name: "Metal layers",
+            status: "active",
+            active_version_id: "rule-version-1",
+            activated_at: "2026-08-01T00:00:00Z",
+            created_by: "user-e2e-1",
+            created_at: "2026-08-01T00:00:00Z",
+            updated_at: "2026-08-01T00:00:00Z",
+            active_version: {
+              id: "rule-version-1",
+              rule_id: "rule-1",
+              version: 1,
+              connector_id: "connector-1",
+              import_profile_version_id: "profile-1",
+              condition: { combinator: "all", children: [] },
+              created_by: "user-e2e-1",
+              created_at: "2026-08-01T00:00:00Z",
+            },
+          },
+        ]),
+      });
       return;
     }
     await route.fulfill({
@@ -324,7 +403,40 @@ test("reruns only selected collection datasets with the pinned model @mock", asy
     });
   });
   await authedPage.route("**/api/v1/source-connectors**", async (route) => {
-    await route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith("/source-connectors/providers")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([
+          {
+            provider_id: "sc",
+            display_name: "SC",
+            fields: [],
+            backfill_time_field: "inspection_time",
+            max_condition_depth: 5,
+            max_condition_nodes: 20,
+          },
+        ]),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify([
+        {
+          id: "connector-1",
+          org_id: "org-e2e-1",
+          provider_id: "sc",
+          name: "SC production",
+          enabled: true,
+          created_by: "user-e2e-1",
+          created_at: "2026-08-01T00:00:00Z",
+          updated_at: "2026-08-01T00:00:00Z",
+        },
+      ]),
+    });
   });
 
   await authedPage.goto("/dataset-collections/collection-1");
@@ -339,6 +451,30 @@ test("reruns only selected collection datasets with the pinned model @mock", asy
     .filter({ hasText: /^Data & rules$/ })
     .click();
   await expect(authedPage.getByText("Dynamic membership", { exact: true })).toBeVisible();
+  const ruleRow = authedPage.getByRole("row").filter({ hasText: "Metal layers" });
+  const historicalImport = ruleRow.getByRole("button", { name: "Historical import" });
+  await expect(historicalImport).toBeEnabled();
+  await historicalImport.click();
+  await expect(authedPage.getByTestId("membership-rule-backfill-modal")).toBeVisible();
+  await expect(authedPage.getByTestId("backfill-start")).toBeVisible();
+  await expect(authedPage.getByTestId("backfill-end")).toBeVisible();
+  await expect(authedPage.getByTestId("backfill-timezone")).toBeVisible();
+  await authedPage.getByTestId("backfill-preview").click();
+  await expect.poll(() => backfillPreviewBody).not.toBeNull();
+  await expect(authedPage.getByTestId("backfill-matched-count")).toHaveText("2");
+  await expect(authedPage.getByText("Historical inspection A")).toBeVisible();
+  await expect(authedPage.getByTestId("backfill-submit")).toBeDisabled();
+  await authedPage.getByTestId("backfill-confirm-all").click();
+  await expect(authedPage.getByTestId("backfill-submit")).toBeEnabled();
+  await authedPage.getByTestId("backfill-submit").click();
+  await expect.poll(() => backfillRunBody).not.toBeNull();
+  expect(backfillRunBody).toEqual({
+    start_utc: backfillPreviewBody?.start_utc,
+    end_utc: backfillPreviewBody?.end_utc,
+    timezone: backfillPreviewBody?.timezone,
+  });
+  await expect(authedPage.getByRole("button", { name: "View in Automations" })).toBeVisible();
+  await authedPage.getByRole("button", { name: "Close", exact: true }).click();
   const mismatchRow = authedPage.getByRole("row").filter({ hasText: "August line A" });
   await mismatchRow.getByRole("checkbox").check();
   await authedPage.getByRole("button", { name: "Export selected (1)" }).click();

@@ -35,9 +35,19 @@
     <section class="revision-explainer">
       <strong>What is a Collection Revision?</strong>
       <span>
-        It saves the linked datasets and rules plus the Dataset change numbers observed now. It does
-        not copy member data; runs read current Dataset data when they start.
+        It saves linked Dataset identities and rules. It does not copy member data; runs read
+        current Dataset data when they start.
       </span>
+    </section>
+
+    <section class="historical-import">
+      <div>
+        <strong>Historical import · Metal layers</strong>
+        <span>Aug 1, 00:00 → Aug 7, 00:00 · Asia/Shanghai</span>
+      </div>
+      <p>Preview: 248 matches · 5 representative records</p>
+      <label><input type="checkbox" /> Import all 248 matching records in this range.</label>
+      <div class="actions"><button>Preview matches</button><button>Import all matches</button></div>
     </section>
 
     <section class="summary">
@@ -105,6 +115,7 @@ button.primary {
 }
 
 .revision-explainer,
+.historical-import,
 .member-export,
 .models-panel,
 .warning,
@@ -147,6 +158,16 @@ button.primary {
 .member-export {
   display: grid;
   gap: 12px;
+}
+
+.historical-import {
+  display: grid;
+  gap: 12px;
+}
+
+.historical-import > div:first-child {
+  display: flex;
+  justify-content: space-between;
 }
 
 .member-export > div {
