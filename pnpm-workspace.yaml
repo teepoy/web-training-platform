@@ -1,5 +1,6 @@
 packages:
   - apps/web
+  - devtools/upstream-mock
   - packages/*
 
 allowBuilds:
@@ -7,4 +8,5 @@ allowBuilds:
   core-js: false
   esbuild: false
   msw: false
+  unrs-resolver: true
   vue-demi: false

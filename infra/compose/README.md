@@ -82,9 +82,10 @@ Adds via `docker-compose.dev.yaml`:
 - **prefect-worker-cpu** with bind mounts for flow code changes
 - **prepare-platform** (ops profile): one-shot database, MinIO, and Prefect preparation
 - **pgadmin** (`:5050`): optional PostgreSQL admin UI
-- **sc-upstream** with `watchfiles` reload for Python service and protobuf changes
-- **sc-upstream-simulator** with its owned `sc_simulator` PostgreSQL database
-  and bearer-authenticated development control API on `:8094`
+- **upstream-mock** as an independent Next.js mock service/dashboard with its
+  owned `upstream_mock` PostgreSQL database and authenticated API on `:8094`
+- **sc-upstream** as the separate production cache/gRPC/Flight service, connected
+  to the mock through a development-only HTTP adapter
 - **image-parser** with Air reload for Go source changes
 - Profile `--profile gpu`: GPU Prefect worker (Linux/NVIDIA only)
 
@@ -215,7 +216,7 @@ default demo datasets are needed.
 The stack is split across multiple Compose files:
 
 - **Local infrastructure** (`docker-compose.yaml`): postgres, minio, redis, prefect-server, label-studio, profile-gated observability, profile-gated dcgm-exporter
-- **Local development** (`docker-compose.dev.yaml`): api, sc-data-provider, web, sc-upstream, sc-upstream-simulator, image-parser, workers, prepare-platform (ops profile), pgadmin
+- **Local development** (`docker-compose.dev.yaml`): api, sc-data-provider, web, upstream-mock, sc-upstream, image-parser, workers, prepare-platform (ops profile), pgadmin
 - **Production stateful** (`production/compose.stateful.yaml`): postgres, minio, redis, label-studio (data plane)
 - **Production platform** (`production/compose.platform.yaml`): prefect-server, api, web, prefect-worker-cpu, prefect-worker-gpu (app plane)
 - **Production ops** (`production/compose.ops.yaml`): prepare-platform (one-shot ops)

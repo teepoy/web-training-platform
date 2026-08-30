@@ -234,7 +234,9 @@
         "apps/api/app/modules/sc",
         "apps/web/src/features/sc",
         "services/sc-upstream/src",
-        "devtools/sc-upstream-simulator/src",
+        "devtools/upstream-mock/app",
+        "devtools/upstream-mock/src",
+        "devtools/sc-upstream-dev-adapter/src",
         "services/image-parser",
         "libs/ml/src",
         "libs/sampling-rules/src"
@@ -246,7 +248,8 @@
           "roots": [
             "apps/api/app/modules/sc/tests",
             "services/sc-upstream/tests",
-            "devtools/sc-upstream-simulator/tests",
+            "devtools/upstream-mock/tests",
+            "devtools/sc-upstream-dev-adapter/tests",
             "libs/ml/tests",
             "libs/sampling-rules/tests"
           ],

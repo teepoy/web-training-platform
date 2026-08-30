@@ -4,12 +4,14 @@
 __pycache__
 *.pyc
 node_modules
+**/.next
 apps/web/dist
 apps/web/node_modules
 services/image-parser/tmp
 devtools/benchmarks
 devtools/seedmaker
-devtools/sc-upstream-simulator/tests
+devtools/upstream-mock/tests
+devtools/sc-upstream-dev-adapter/tests
 .mypy_cache
 .pytest_cache
 *.db

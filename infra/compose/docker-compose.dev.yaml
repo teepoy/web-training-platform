@@ -32,8 +32,8 @@ x-platform-environment: &platform-environment
   SC_REVIEW_S3_ACCESS_KEY: minioadmin
   SC_REVIEW_S3_SECRET_KEY: minioadmin
   SC_REVIEW_S3_BUCKET: sc-review-images
-  SC_UPSTREAM_ADDR: sc-upstream-simulator:9091
-  SC_UPSTREAM_FLIGHT_ADDR: grpc://sc-upstream-simulator:9093
+  SC_UPSTREAM_ADDR: sc-upstream:9091
+  SC_UPSTREAM_FLIGHT_ADDR: grpc://sc-upstream:9093
   IMAGE_PARSER_GRPC_ADDR: image-parser:9092
   SC_DATA_PROVIDER_CACHE_DIR: /var/cache/sc-data-provider
   SC_DATA_PROVIDER_CACHE_NAMESPACE: sc-data-provider
@@ -70,16 +70,16 @@ x-api-runtime: &api-runtime
       condition: service_healthy
     redis:
       condition: service_healthy
-    sc-upstream-simulator:
+    sc-upstream:
       condition: service_healthy
     image-parser:
       condition: service_healthy
   restart: on-failure
 
 services:
-  # Creates the simulator-owned database for both fresh and existing local
+  # Creates the mock-owned database for both fresh and existing local
   # Postgres volumes. The SQL is idempotent and this container exits afterward.
-  sc-simulator-db-prepare:
+  upstream-mock-db-prepare:
     image: pgvector/pgvector:pg16
     depends_on:
       postgres:
@@ -87,7 +87,7 @@ services:
     environment:
       PGPASSWORD: postgres
     volumes:
-      - ./init-scripts/03-create-sc-simulator.sql:/init/03-create-sc-simulator.sql:ro
+      - ./init-scripts/03-create-upstream-mock.sql:/init/03-create-upstream-mock.sql:ro
     command:
       [
         "psql",
@@ -98,40 +98,60 @@ services:
         "-d",
         "postgres",
         "-f",
-        "/init/03-create-sc-simulator.sql",
+        "/init/03-create-upstream-mock.sql",
       ]
     restart: "no"
 
-  sc-upstream-simulator:
+  upstream-mock:
     build:
       context: ../..
-      dockerfile: devtools/sc-upstream-simulator/Dockerfile
+      dockerfile: devtools/upstream-mock/Dockerfile
     depends_on:
-      sc-simulator-db-prepare:
+      upstream-mock-db-prepare:
         condition: service_completed_successfully
       minio:
         condition: service_healthy
     environment:
-      SC_SIMULATOR_ALLOW_MUTATIONS: "1"
-      SC_SIMULATOR_DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/sc_simulator
-      SC_SIMULATOR_API_TOKEN: ${SC_SIMULATOR_API_TOKEN:-local-development-sc-simulator-token}
-      SC_SIMULATOR_GRPC_PORT: "9091"
-      SC_SIMULATOR_FLIGHT_PORT: "9093"
-      SC_SIMULATOR_S3_ENDPOINT: http://minio:9000
-      SC_SIMULATOR_S3_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
-      SC_SIMULATOR_S3_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
-      SC_SIMULATOR_S3_REGION: us-east-1
-      SC_SIMULATOR_PATCH_BUCKET: sc-patch-images
-      SC_SIMULATOR_REVIEW_BUCKET: sc-review-images
-      SC_FLIGHT_BATCH_SIZE: "65536"
-    command:
-      [
-        "/bin/sh",
-        "-lc",
-        "/workspace/devtools/sc-upstream-simulator/.venv/bin/alembic -c /workspace/devtools/sc-upstream-simulator/alembic.ini upgrade head && exec /workspace/devtools/sc-upstream-simulator/.venv/bin/uvicorn --factory sc_upstream_simulator.server:create_app --host 0.0.0.0 --port 8094",
-      ]
+      UPSTREAM_MOCK_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/upstream_mock
+      UPSTREAM_MOCK_API_TOKEN: ${UPSTREAM_MOCK_TOKEN:-local-development-upstream-mock-token}
+      UPSTREAM_MOCK_S3_ENDPOINT: http://minio:9000
+      UPSTREAM_MOCK_S3_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      UPSTREAM_MOCK_S3_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      UPSTREAM_MOCK_S3_REGION: us-east-1
+      UPSTREAM_MOCK_PATCH_BUCKET: sc-patch-images
+      UPSTREAM_MOCK_REVIEW_BUCKET: sc-review-images
     ports:
       - "8094:8094"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:8094/ready"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 30s
+    restart: on-failure
+
+  sc-upstream:
+    build:
+      context: ../..
+      dockerfile: devtools/sc-upstream-dev-adapter/Dockerfile
+    depends_on:
+      upstream-mock:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      SC_UPSTREAM_ADAPTER_FACTORY: sc_upstream_dev_adapter.http:factory
+      UPSTREAM_MOCK_URL: http://upstream-mock:8094
+      UPSTREAM_MOCK_TOKEN: ${UPSTREAM_MOCK_TOKEN:-local-development-upstream-mock-token}
+      UPSTREAM_MOCK_TIMEOUT_SECONDS: "300"
+      GRPC_PORT: "9091"
+      FLIGHT_PORT: "9093"
+      CACHE_DIR: /var/cache/sc-upstream
+      REDIS_URL: redis://redis:6379/0
+      SC_FLIGHT_BATCH_SIZE: "65536"
+    volumes:
+      - sc-upstream-cache:/var/cache/sc-upstream
+    ports:
       - "9091:9091"
       - "9093:9093"
     healthcheck:
@@ -140,7 +160,7 @@ services:
           "CMD",
           "python",
           "-c",
-          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8094/ready', timeout=2)",
+          "import socket; socket.create_connection(('127.0.0.1', 9091), 2).close(); socket.create_connection(('127.0.0.1', 9093), 2).close()",
         ]
       interval: 10s
       timeout: 3s
@@ -254,7 +274,7 @@ services:
         limits:
           memory: ${IMAGE_PARSER_MEMORY:-2g}
     depends_on:
-      sc-upstream-simulator:
+      sc-upstream:
         condition: service_healthy
       minio:
         condition: service_healthy
@@ -264,7 +284,7 @@ services:
       PORT: "8090"
       GRPC_PORT: "9092"
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-local-development-jwt-secret-not-for-shared-host}
-      SC_UPSTREAM_ADDR: sc-upstream-simulator:9091
+      SC_UPSTREAM_ADDR: sc-upstream:9091
       SC_PATCH_S3_ENDPOINT: http://minio:9000
       SC_PATCH_S3_REGION: us-east-1
       SC_PATCH_S3_ACCESS_KEY: minioadmin
@@ -400,3 +420,4 @@ services:
 # ─────────────────────────────────────────────────────────────────────
 volumes:
   pgadmin-data:
+  sc-upstream-cache:

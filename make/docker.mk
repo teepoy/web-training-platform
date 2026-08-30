@@ -10,7 +10,7 @@ build-image-parser-vendor: ## Build amd64 vendor/tooling image for image-parser 
 
 .PHONY: up-dev
 up-dev: ensure-fixtures ## Start compose dev stack (volume mounts, hot reload)
-	docker compose -f $(COMPOSE_DEV) up -d postgres minio redis label-studio prefect-server sc-upstream-simulator image-parser
+	docker compose -f $(COMPOSE_DEV) up -d postgres minio redis label-studio prefect-server upstream-mock sc-upstream image-parser
 	docker compose -f $(COMPOSE_DEV) --profile ops run --rm prepare-platform
 	docker compose -f $(COMPOSE_DEV) up -d $(ARGS)
 
@@ -51,7 +51,7 @@ ensure-fixtures: ## Ensure host-side bind-mount fixture files exist (idempotent;
 		infra/compose/prefect.yaml \
 		infra/compose/init-scripts/create-labelstudio-db.sql \
 		infra/compose/init-scripts/create-prefect-db.sql \
-		infra/compose/init-scripts/03-create-sc-simulator.sql; \
+		infra/compose/init-scripts/03-create-upstream-mock.sql; \
 	do \
 		if [ ! -f "$$f" ]; then \
 			echo "⚠️  Missing optional fixture: $$f" >&2; \

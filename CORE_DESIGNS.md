@@ -48,6 +48,12 @@ benchmark 统一归属根目录 `devtools/`。生产 `apps/*/src`、`apps/api/ap
 开发入口，`scripts/` 可以保留只负责转发的薄 wrapper，但不得承载 mock/seed
 实现。
 
+本地 upstream mock 是独立的 `devtools/upstream-mock` Next.js 服务，只拥有 mock
+事件、控制/读取 HTTP API、PostgreSQL 状态、对象夹具与开发面板。它不得 import、
+托管或复制 `services/sc-upstream`。`services/sc-upstream` 始终作为单独进程运行并
+保留生产使用的 cache、gRPC 与 Arrow Flight 逻辑；开发 Compose 只能通过
+`devtools/sc-upstream-dev-adapter` 将它的 `UpstreamDB` port 接到 mock HTTP source。
+
 目标执行拓扑：
 
 ```text

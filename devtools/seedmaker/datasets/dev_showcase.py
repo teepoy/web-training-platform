@@ -7,7 +7,7 @@ from typing import Any
 
 from seedmaker import SeedConfig, SeedRunner, registry
 from seedmaker.images import png_data_uri
-from seedmaker.sc_simulator import publish_dev_showcase
+from seedmaker.upstream_mock import publish_dev_showcase
 from seedmaker.utils import _find_by_name, _items_from_collection_response
 
 CLASS_LABELS = ["normal", "scratch", "particle", "residue", "crack", "void"]
