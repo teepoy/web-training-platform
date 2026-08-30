@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Live smoke for seedmaker SC images and the combined train/predict workflow.
+"""Live smoke for synthetic SC fixtures and the combined train/predict workflow.
 
-Creates a UUID-named db-full dataset, uploads deterministic wafer seed images,
+Creates a UUID-named db-full dataset, uploads deterministic wafer fixture images,
 adds two active labels, and verifies train -> model artifact -> predict ->
 prediction persistence against the running local stack.
 """
@@ -21,7 +21,7 @@ sys.path.insert(0, str(REPO_ROOT / "apps/api"))
 sys.path.insert(0, str(REPO_ROOT / "devtools"))
 
 from seedmaker.wafer_data import build_patch_sample  # noqa: E402
-from smoke_common import login_seed_user, resolve_seed_org  # noqa: E402
+from smoke_common import login_smoke_user, resolve_smoke_org  # noqa: E402
 
 DEFAULT_API_URL = "http://localhost:8000"
 LABELS = ("Scratch", "Particle")
@@ -181,7 +181,7 @@ def _wait_for_workflow(
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Run seedmaker wafer images through live train-and-predict"
+        description="Run synthetic wafer fixtures through live train-and-predict"
     )
     parser.add_argument("--api-url", default=DEFAULT_API_URL)
     parser.add_argument("--samples", type=int, default=4)
@@ -190,8 +190,8 @@ def main() -> int:
     if args.samples < 2:
         raise ValueError("--samples must be at least 2")
 
-    token = login_seed_user(args.api_url)
-    org_id = resolve_seed_org(args.api_url, token)
+    token = login_smoke_user(args.api_url)
+    org_id = resolve_smoke_org(args.api_url, token)
     headers = {
         "Authorization": f"Bearer {token}",
         "X-Organization-ID": org_id,

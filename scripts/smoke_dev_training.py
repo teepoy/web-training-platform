@@ -10,19 +10,23 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import time
 import uuid
 from pathlib import Path
+from urllib.parse import urlparse
 
 import httpx
 from minio import Minio
 
 sys.path.insert(0, str(Path(__file__).parent))
 from smoke_common import (
+    create_smoke_dataset,
     create_synthetic_image,
-    login_seed_user,
-    resolve_seed_org,
+    login_smoke_user,
+    resolve_smoke_org,
+    smoke_failure,
     wait_for_api_ready,
 )
 
@@ -41,7 +45,7 @@ def _create_training_job(
         json={
             "dataset_id": dataset_id,
             "trainer_id": trainer_id,
-            "created_by": "seed-user",
+            "created_by": "smoke-user",
         },
     )
     response.raise_for_status()
@@ -66,25 +70,9 @@ def _create_annotation(
     response = client.post(
         f"{API_URL}/api/v1/annotations",
         headers=headers,
-        json={"sample_id": sample_id, "label": label, "created_by": "seed-user"},
+        json={"sample_id": sample_id, "label": label, "created_by": "smoke-user"},
     )
     response.raise_for_status()
-
-
-def _create_training_job(
-    client: httpx.Client, dataset_id: str, headers: dict[str, str], trainer_id: str
-) -> str:
-    response = client.post(
-        f"{API_URL}/api/v1/training-jobs",
-        headers=headers,
-        json={
-            "dataset_id": dataset_id,
-            "trainer_id": trainer_id,
-            "created_by": "seed-user",
-        },
-    )
-    response.raise_for_status()
-    return str(response.json()["id"])
 
 
 def _poll_training_job(
@@ -123,25 +111,26 @@ def _assert_s3_artifacts(job: dict) -> list[str]:
     uris: list[str] = []
     for artifact in artifact_refs:
         uri = str(artifact.get("uri", ""))
-        if not uri.startswith(f"s3://{MINIO_BUCKET}/"):
-            raise RuntimeError(
-                f"Training artifact was not stored in shared MinIO bucket: {uri}"
-            )
+        parsed = urlparse(uri)
+        if parsed.scheme != "s3" or not parsed.netloc or not parsed.path.strip("/"):
+            raise RuntimeError(f"Training artifact is not a valid S3 URI: {uri}")
         uris.append(uri)
     return uris
 
 
 def _assert_minio_objects_exist(uris: list[str]) -> None:
     client = Minio(
-        MINIO_ENDPOINT,
-        access_key=MINIO_ACCESS_KEY,
-        secret_key=MINIO_SECRET_KEY,
+        os.environ["MINIO_ENDPOINT"],
+        access_key=os.environ["MINIO_ACCESS_KEY"],
+        secret_key=os.environ["MINIO_SECRET_KEY"],
         secure=False,
     )
     for uri in uris:
-        object_name = uri.removeprefix(f"s3://{MINIO_BUCKET}/")
+        parsed = urlparse(uri)
+        bucket = parsed.netloc
+        object_name = parsed.path.lstrip("/")
         try:
-            client.stat_object(MINIO_BUCKET, object_name)
+            client.stat_object(bucket, object_name)
         except Exception as exc:
             raise RuntimeError(
                 f"Artifact missing from shared MinIO bucket: {uri}"
@@ -172,17 +161,17 @@ def main() -> int:
         print("[1/7] Waiting for API health ...")
         wait_for_api_ready(API_URL, timeout=args.timeout)
 
-        print("[2/7] Logging in as seed user ...")
-        token = login_seed_user(API_URL)
+        print("[2/7] Logging in as configured smoke user ...")
+        token = login_smoke_user(API_URL)
         headers = {"Authorization": f"Bearer {token}"}
 
         print("[3/7] Resolving org context ...")
-        headers["X-Organization-ID"] = resolve_seed_org(API_URL, token)
+        headers["X-Organization-ID"] = resolve_smoke_org(API_URL, token)
 
         with httpx.Client(timeout=30.0) as client:
             dataset_name = f"{args.dataset_name_prefix} {uuid.uuid4().hex[:8]}"
             print("[4/7] Creating tiny labeled dataset ...")
-            dataset_id = _create_dataset(client, headers, dataset_name)
+            dataset_id = create_smoke_dataset(client, API_URL, headers, dataset_name)
             sample_red = _create_sample(
                 client, dataset_id, headers, create_synthetic_image("red")
             )
@@ -216,7 +205,7 @@ def main() -> int:
                 print(uri)
             return 0
     except Exception as exc:
-        return _fail(str(exc))
+        return smoke_failure(str(exc))
 
 
 if __name__ == "__main__":

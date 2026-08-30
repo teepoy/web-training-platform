@@ -7,7 +7,7 @@ simulator, synthetic-data, and fake-kernel benchmark implementations.
 
 | Area           | Path                               | Role                                                                                            |
 | -------------- | ---------------------------------- | ----------------------------------------------------------------------------------------------- |
-| Seedmaker      | `devtools/seedmaker`               | Platform seed recipes, synthetic artifacts, and legacy compatibility seeders                    |
+| Test fixtures  | `devtools/seedmaker`               | Test-only synthetic builders and explicitly named legacy compatibility fixtures                 |
 | Upstream mock  | `devtools/upstream-mock`           | Disposable Next.js upstream behavior service, dashboard, PostgreSQL state, control API, and CLI |
 | SC dev adapter | `devtools/sc-upstream-dev-adapter` | Development-only HTTP bridge injected into the separate production SC upstream service          |
 | Benchmarks     | `devtools/benchmarks`              | Development performance harnesses and fake compute kernels                                      |
@@ -24,12 +24,12 @@ simulator, synthetic-data, and fake-kernel benchmark implementations.
 - The upstream mock has its own Node package and container. Production
   Dockerfiles must not copy its metadata or source. Its development adapter is
   packaged only by its devtools-owned Dockerfile.
-- Compatibility wrappers may remain under `scripts/`, but they must contain no
-  mock or seed implementation.
+- There is no repository-wide operational seed CLI. Supported upstream
+  scenarios are mutations of `devtools/upstream-mock`; platform identities and
+  resources use explicit administration and real product flows.
 
 ## Verification
 
-- Run `make test-seed-tools` after seedmaker changes.
 - Run `pnpm --filter @devtools/upstream-mock test` and
   `PYTHONPATH=devtools/sc-upstream-dev-adapter/src uv run --package sc-upstream pytest devtools/sc-upstream-dev-adapter/tests`.
 - Run `make check-config` after changing development Compose wiring.

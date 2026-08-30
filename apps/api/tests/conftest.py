@@ -51,8 +51,13 @@ def model_artifact_bytes() -> bytes:
     """Return a structurally valid, import-safe PyTorch ZIP fixture."""
     buffer = _io.BytesIO()
     with zipfile.ZipFile(buffer, "w") as checkpoint:
-        checkpoint.writestr("archive/data.pkl", b"fixture")
-        checkpoint.writestr("archive/version", b"3\n")
+        for name, content in (
+            ("archive/data.pkl", b"fixture"),
+            ("archive/version", b"3\n"),
+        ):
+            entry = zipfile.ZipInfo(name, date_time=(2026, 1, 1, 0, 0, 0))
+            entry.compress_type = zipfile.ZIP_STORED
+            checkpoint.writestr(entry, content)
     return buffer.getvalue()
 
 

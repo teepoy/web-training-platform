@@ -208,8 +208,9 @@ make up-release
 ```
 
 `make up-dev` starts the complete Compose development stack, including the
-bind-mounted Vite service on `:5173`. Run `make seed-dev` separately when the
-default demo datasets are needed.
+bind-mounted Vite service on `:5173` and the upstream-mock tool surface on
+`:8094`. Publish mock records/events through that service; platform resources
+are created through real product flows.
 
 ## Services
 
@@ -275,10 +276,10 @@ All services at a glance:
 - The object cache uses a 10 GiB high watermark, cleans down to 8 GiB, and is
   stored in the shared `sc-data-provider-cache` volume in development or below
   the platform data mount in production deployments.
-- `make seed-dev` asks the authenticated simulator `dev-showcase` scenario to
-  publish the repeatable SC inspection. The simulator owns deterministic defect
-  rows, review objects, patch archives, and PostgreSQL metadata; Compose no
-  longer invokes direct SQLite/S3 seeders, clears caches, or restarts services.
+- The authenticated upstream-mock `dev-showcase` scenario publishes repeatable
+  SC inspections. The mock owns deterministic defect rows, review objects,
+  patch archives, and PostgreSQL metadata; Compose does not invoke seeders,
+  clear caches, restart services, or create platform identities/resources.
 - Dev services use the tracked `logging.level: INFO` profile setting, so
   data-provider memory records are visible. Use a reviewed profile YAML change
   when a different threshold is required; there is no environment override.

@@ -93,16 +93,6 @@ reset-db-compose: ## Reset the compose database (drops and recreates finetune DB
 wait-api: ## Wait for API health endpoint to respond
 	@python3 scripts/run_with_timeout.py --timeout 120 -- bash -lc 'until curl --fail --silent --show-error "$(API_URL)/health" >/dev/null; do sleep 2; done'
 
-.PHONY: ensure-mock-datasets
-ensure-mock-datasets: wait-api ## Ensure default mock datasets exist for dev mode
-	$(MAKE) seed ARGS="imagenet-mock --no-model $(ARGS)"
-
-.PHONY: ensure-sandbox-datasets
-ensure-sandbox-datasets: wait-api ## Seed demo datasets for the /sandbox dev route
-	$(MAKE) seed ARGS="wafer-demo --samples 2000 $(ARGS)"
-	$(MAKE) seed ARGS="multi-image-scatter --samples 18 $(ARGS)"
-	$(MAKE) seed ARGS="imagenet-100-rchannel --max-samples 200 --no-model $(ARGS)"
-
 .PHONY: db-migrate-compose
 db-migrate-compose: ## Run Alembic migrations inside Compose API container (dev mode)
 	docker compose -f $(COMPOSE_DEV) run --rm api /bin/sh -lc 'cd /app/apps/api && /app/.venv/bin/alembic upgrade head'

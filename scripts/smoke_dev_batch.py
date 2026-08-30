@@ -15,10 +15,10 @@ from pathlib import Path
 import httpx
 
 sys.path.insert(0, str(Path(__file__).parent))
-from smoke_common import login_seed_user, wait_for_api_ready
+from smoke_common import login_smoke_user, wait_for_api_ready
 
 API_URL = "http://localhost:8000"
-SEEDED_DATASET_NAMES = {"ImageNet-1K Mock", "ImageNet-1K Real"}
+SMOKE_DATASET_NAMES = {"ImageNet-1K Mock", "ImageNet-1K Real"}
 DEFAULT_SAMPLE_LIMIT = 64
 
 
@@ -36,7 +36,7 @@ def _get_org_ids(client: httpx.Client, headers: dict[str, str]) -> list[str]:
     return [str(org["id"]) for org in orgs]
 
 
-def _find_seeded_dataset(
+def _find_smoke_dataset(
     client: httpx.Client, headers: dict[str, str], org_ids: list[str]
 ) -> tuple[str, dict]:
     for org_id in org_ids:
@@ -45,14 +45,14 @@ def _find_seeded_dataset(
         response = client.get(f"{API_URL}/api/v1/datasets", headers=org_headers)
         response.raise_for_status()
         for dataset in response.json():
-            if dataset.get("name") in SEEDED_DATASET_NAMES:
+            if dataset.get("name") in SMOKE_DATASET_NAMES:
                 return org_id, dataset
     raise RuntimeError(
-        "Seeded dataset not found. Run `make seed-imagenet-mock` or `make seed-imagenet-poc` first."
+        "Configured smoke dataset not found. Create it through the normal product import flow first."
     )
 
 
-def _find_seeded_model(
+def _find_smoke_model(
     client: httpx.Client, dataset_id: str, headers: dict[str, str]
 ) -> dict:
     response = client.get(
@@ -61,7 +61,7 @@ def _find_seeded_model(
     response.raise_for_status()
     models = response.json()
     if not models:
-        raise RuntimeError("No seeded model found for ImageNet dataset")
+        raise RuntimeError("No compatible model found for the configured smoke dataset")
     return models[0]
 
 
@@ -116,18 +116,18 @@ def main() -> int:
         print("[1/6] Waiting for API health ...")
         wait_for_api_ready(API_URL, timeout=args.timeout)
 
-        print("[2/6] Logging in as seed user ...")
-        token = login_seed_user(API_URL)
+        print("[2/6] Logging in as configured smoke user ...")
+        token = login_smoke_user(API_URL)
         headers = {"Authorization": f"Bearer {token}"}
 
         with httpx.Client(timeout=30.0) as client:
             print("[3/6] Resolving org context ...")
             org_ids = _get_org_ids(client, headers)
 
-            print("[4/6] Locating seeded dataset/model ...")
-            org_id, dataset = _find_seeded_dataset(client, headers, org_ids)
+            print("[4/6] Locating configured dataset/model ...")
+            org_id, dataset = _find_smoke_dataset(client, headers, org_ids)
             headers["X-Organization-ID"] = org_id
-            model = _find_seeded_model(client, str(dataset["id"]), headers)
+            model = _find_smoke_model(client, str(dataset["id"]), headers)
             sample_ids = _list_sample_ids(
                 client, str(dataset["id"]), headers, args.sample_limit
             )

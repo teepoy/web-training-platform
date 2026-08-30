@@ -8,26 +8,13 @@ import time
 
 import httpx
 
+from smoke_common import login_smoke_user, resolve_smoke_org
+
 API_URL = "http://localhost:8000"
-SEED_EMAIL = "seed@example.com"
-SEED_PASSWORD = "seed1234"
 TERMINAL_STATES = frozenset({"completed", "failed", "cancelled"})
 
 DATASET_ID = "84f7c068-4c9c-440a-b034-b24f529a4dbc"
 MODEL_ID = "286f1f33-ab91-4383-aa2e-ecaf1bdf683b"
-
-
-def _login(api_url: str) -> str:
-    r = httpx.post(
-        f"{api_url}/api/v1/auth/login",
-        json={"email": SEED_EMAIL, "password": SEED_PASSWORD},
-    )
-    r.raise_for_status()
-    return str(r.json()["access_token"])
-
-
-def _org() -> str:
-    return "00000000-0000-0000-0000-000000000001"
 
 
 def _headers(token: str, org_id: str) -> dict[str, str]:
@@ -130,8 +117,8 @@ def _check_export_predictions(export_data: dict) -> dict:
 
 def main() -> int:
     print("[1] Login ...")
-    token = _login(API_URL)
-    org_id = _org()
+    token = login_smoke_user(API_URL)
+    org_id = resolve_smoke_org(API_URL, token)
     h = _headers(token, org_id)
 
     with httpx.Client(timeout=60.0) as client:

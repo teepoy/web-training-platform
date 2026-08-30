@@ -8,8 +8,11 @@ async function globalSetup(config: FullConfig): Promise<void> {
   if (process.env.PLAYWRIGHT_MODE !== "live") return;
 
   const apiUrl = process.env.API_URL || "http://localhost:8000";
-  const email = process.env.PW_SEED_EMAIL || "seed@example.com";
-  const password = process.env.PW_SEED_PASSWORD || "seed1234";
+  const email = process.env.PW_USER_EMAIL;
+  const password = process.env.PW_USER_PASSWORD;
+  if (!email || !password) {
+    throw new Error("PW_USER_EMAIL and PW_USER_PASSWORD are required in live E2E mode");
+  }
 
   let token: string;
   let user: unknown;

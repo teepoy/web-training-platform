@@ -63,7 +63,8 @@ This plan turns ADRs 0001–0014 into incremental, reviewable changes. It is an 
 
 ## Phase 6: Seed and verification
 
-1. Keep default `seed-dev` Automation records paused/disabled.
+1. Do not create default display Automation records; exercise real target-bound
+   automation from explicit upstream-mock events.
 2. Add an explicit deterministic executable scenario for Source discovery, Dataset import/Revision, Collection Snapshot, and incremental prediction. Candidate training remains a documented follow-up until regression safeguards are designed.
 3. Verify repeat execution does not duplicate receipts, imports, memberships, runs, or events.
 4. Run migrations, generation, lint, pyright, backend tests, web unit/build, route E2E, compose builds where relevant, seed twice, and smoke tests.

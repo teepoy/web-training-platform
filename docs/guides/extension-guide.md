@@ -561,15 +561,16 @@ only and must not import Storybook, test, seed, or dummy implementations.
 import "./schemas/image-segmentation";
 ```
 
-#### Seed script (optional but recommended)
+#### Test fixture (optional)
 
-**h. Create** `devtools/seedmaker/datasets/image_segmentation.py` using `SeedConfig` + `SeedRunner`:
+Keep a deterministic builder under an API test helper or a test-only
+`devtools/seedmaker/datasets` module. It must not register a runnable command or
+write to a live platform database. Dataset metadata can use `FixtureConfig`:
 
 ```python
-from seedmaker.config import SeedConfig
-from seedmaker.runner import SeedRunner
+from seedmaker import FixtureConfig
 
-config = SeedConfig(
+config = FixtureConfig(
     name="image-segmentation-mock",
     dataset_name="Segmentation Mock",
     dataset_type="image_segmentation",
@@ -578,11 +579,8 @@ config = SeedConfig(
 )
 ```
 
-**i. Register** in `devtools/seedmaker/datasets/__init__.py`:
-
-```python
-from seedmaker.datasets import image_segmentation  # noqa: F401
-```
+Live source scenarios belong in `devtools/upstream-mock` and must reach the
+platform through its normal ingestion flow.
 
 ### Annotation value for complex types
 

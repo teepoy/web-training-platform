@@ -26,6 +26,11 @@ The current implementation provides:
 - a named, idempotent `dev-showcase` scenario that owns deterministic defects,
   review images, patch archives, object-store writes, and coherent publication.
 
+This is the only supported operational development-scenario surface. It does
+not create platform users, organizations, Datasets, Collections, jobs, or
+Models. Those appear through explicit administration and real platform
+ingestion/automation behavior.
+
 Recurring source-discovery automation remains tracked in
 `docs/todos/stateful-upstream-simulator-and-source-automation.md`.
 

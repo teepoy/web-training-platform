@@ -51,7 +51,12 @@ an explicit behavior/control interface.
   behavior is not implemented as Make targets or direct database/object-store
   scripts.
 - Repository development seeding calls the simulator API for every upstream
-  record. Platform-owned seed data remains in `devtools/seedmaker/`.
+  record. The former decision to keep platform-owned showcase seeding in
+  `devtools/seedmaker/` is superseded by
+  `docs/todos/upstream-mock-seed-ownership.md`: operational development
+  scenarios now belong to the upstream-mock surface, while platform identity
+  and resources are created through explicit administration and real product
+  flows.
 - The initial simulator supports creating and publishing inspections and
   updating mutable fields on published rows. Deletion/tombstones, outages,
   artificial latency, delayed assets, and incomplete publication are deferred.

@@ -7,7 +7,8 @@ QUICKSTART
   make up-dev
 
   # 2. Seed Wafer Demo data
-  make seed-dev
+  publish an inspection through devtools/upstream-mock and import it through
+  the platform
 
   # 3. Run this BDD test
   cd apps/api && uv run pytest tests/temp_bdd_wafer_e2e.py -v -s
@@ -53,9 +54,11 @@ NOTES
 ============================================================
 - Uses httpx (NOT TestClient) → talks to the real running API.
 - Uses minio.Minio client → inspects S3 objects directly.
-- Seed data is expected to already exist (run `make seed-dev` first).
+- An imported SC Dataset is expected to exist from the real upstream-mock and
+  platform import path.
 - For minimal data, use --samples 20 --annotate 5.
-- Auth: uses the seed user (seed@example.com / seed1234) from seed-dev.
+- Auth: requires `BDD_USER_EMAIL` and `BDD_USER_PASSWORD` for an explicitly
+  provisioned platform user.
 """
 
 from __future__ import annotations
@@ -96,8 +99,8 @@ except ImportError:  # pragma: no cover
 #   BDD_PREDICT_TIMEOUT=600
 # ---------------------------------------------------------------------------
 
-SEED_EMAIL = os.environ.get("BDD_SEED_EMAIL", "seed@example.com")
-SEED_PASSWORD = os.environ.get("BDD_SEED_PASSWORD", "seed1234")
+BDD_USER_EMAIL = os.environ.get("BDD_USER_EMAIL", "").strip()
+BDD_USER_PASSWORD = os.environ.get("BDD_USER_PASSWORD", "").strip()
 DEFAULT_ORG_ID = os.environ.get("BDD_ORG_ID", "00000000-0000-0000-0000-000000000001")
 ANNOTATION_LABELS: list[str] = [
     "Scratch", "Particle", "Pattern Defect", "Residue", "Crack",
@@ -162,10 +165,12 @@ def predict_timeout() -> int:
 
 @pytest.fixture(scope="module")
 def auth_token(api_url: str) -> str:
-    """Authenticate as the seed user and return the JWT token."""
+    """Authenticate as the explicitly configured BDD user."""
+    if not BDD_USER_EMAIL or not BDD_USER_PASSWORD:
+        pytest.fail("BDD_USER_EMAIL and BDD_USER_PASSWORD are required")
     r = httpx.post(
         f"{api_url}/api/v1/auth/login",
-        json={"email": SEED_EMAIL, "password": SEED_PASSWORD},
+        json={"email": BDD_USER_EMAIL, "password": BDD_USER_PASSWORD},
         timeout=30.0,
     )
     r.raise_for_status()
@@ -204,7 +209,7 @@ def _find_inspection_bdd(
         raise RuntimeError(
             f"No inspections found in {start}..{end}. "
             "Ensure the wafer-mock store is loaded "
-            "(`make seed-wafer-mock` or equivalent)."
+            "Publish it through upstream mock and import it through the product flow first."
         )
     return str(items[0]["inspection_time"]), int(items[0]["wafer_key"])
 
@@ -333,7 +338,7 @@ def sample_ids(
     if len(items) < needed:
         raise RuntimeError(
             f"Only found {len(items)} samples (via patch_image_v1 view), "
-            f"need {needed}. Re-run `make seed-dev` with more samples "
+            f"need {needed}. Publish/import an upstream-mock scenario with more samples "
             f"or set BDD_SAMPLES={len(items)}."
         )
     return items

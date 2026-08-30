@@ -154,8 +154,11 @@ let _cachedAuth: SeedAuthResult | null = null;
 async function ensureLiveAuth(): Promise<SeedAuthResult> {
   if (_cachedAuth) return _cachedAuth;
 
-  const email = (process.env["PW_SEED_EMAIL"] as string | undefined) ?? "seed@example.com";
-  const password = (process.env["PW_SEED_PASSWORD"] as string | undefined) ?? "seed1234";
+  const email = process.env["PW_USER_EMAIL"] as string | undefined;
+  const password = process.env["PW_USER_PASSWORD"] as string | undefined;
+  if (!email || !password) {
+    throw new Error("PW_USER_EMAIL and PW_USER_PASSWORD are required for live E2E tests");
+  }
 
   getSeedClient(); // patch fetch + configure orval (no token → login is unauthed)
   const auth = await seedLogin({ email, password });

@@ -59,12 +59,17 @@ test.describe("Auth Flow — without existing session", () => {
     await expect(page.getByTestId("nav-avatar")).toBeVisible();
   });
 
-  test("login with seed credentials @live", async ({ page }) => {
+  test("login with configured credentials @live", async ({ page }) => {
+    const email = process.env["PW_USER_EMAIL"];
+    const password = process.env["PW_USER_PASSWORD"];
+    if (!email || !password) {
+      throw new Error("PW_USER_EMAIL and PW_USER_PASSWORD are required");
+    }
     await page.goto("/login");
     await page.getByTestId("login-form").waitFor();
 
-    await page.getByPlaceholder("you@example.com").fill("seed@example.com");
-    await page.getByPlaceholder("Password").fill("seed1234");
+    await page.getByPlaceholder("you@example.com").fill(email);
+    await page.getByPlaceholder("Password").fill(password);
     await page.getByRole("button", { name: "Sign In" }).click();
 
     await expect(page).toHaveURL(/\/library/);
@@ -72,10 +77,12 @@ test.describe("Auth Flow — without existing session", () => {
   });
 
   test("login with invalid password shows error @live", async ({ page }) => {
+    const email = process.env["PW_USER_EMAIL"];
+    if (!email) throw new Error("PW_USER_EMAIL is required");
     await page.goto("/login");
     await page.getByTestId("login-form").waitFor();
 
-    await page.getByPlaceholder("you@example.com").fill("seed@example.com");
+    await page.getByPlaceholder("you@example.com").fill(email);
     await page.getByPlaceholder("Password").fill("wrongpassword");
     await page.getByRole("button", { name: "Sign In" }).click();
 

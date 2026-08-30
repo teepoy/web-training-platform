@@ -95,10 +95,6 @@ MINIO_SECRET_KEY = "minioadmin"
 MINIO_BUCKET = "finetune-artifacts"
 RUNTIME_BUCKET = "finetune-runtime-inputs"
 
-SEED_EMAIL = "seed@example.com"
-SEED_PASSWORD = "seed1234"
-
-# The development seed command creates this user and organization explicitly.
 DEV_ORG_ID = DEFAULT_ORG_ID  # "00000000-0000-0000-0000-000000000001"
 
 SAMPLE_COUNT = 1000
@@ -442,9 +438,15 @@ async def run() -> bool:
 
     # ── Bootstrap ──────────────────────────────────────────────────────────
     api = ApiClient()
+    user_email = os.environ.get("DATA_INTEGRITY_USER_EMAIL", "").strip()
+    user_password = os.environ.get("DATA_INTEGRITY_USER_PASSWORD", "").strip()
+    if not user_email or not user_password:
+        raise RuntimeError(
+            "DATA_INTEGRITY_USER_EMAIL and DATA_INTEGRITY_USER_PASSWORD are required"
+        )
 
     print("\n[0] Bootstrap: login + org + app context")
-    await api.login(SEED_EMAIL, SEED_PASSWORD)
+    await api.login(user_email, user_password)
     orgs = await api.list_orgs()
     org_id = str(orgs[0]["id"]) if orgs else DEV_ORG_ID
     _ok(f"authenticated, org={org_id}")

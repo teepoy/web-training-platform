@@ -1,24 +1,13 @@
-# Seedmaker
+# Test Fixture Builders
 
-This directory owns repository-wide development seed recipes, synthetic data,
-fixture artifacts, and compatibility seeders. It is deliberately outside all
-production application and service source roots.
+This directory contains deterministic builders used by API tests and explicitly
+named legacy compatibility fixtures. It has no developer-facing seed CLI, does
+not provision users, and does not own live development scenarios.
 
-Use the backward-compatible wrapper from the repository root:
-
-```bash
-uv run python scripts/seed.py --list
-uv run python scripts/seed.py <recipe>
-```
-
-The SC showcase recipe calls the separately packaged simulator's authenticated
-HTTP scenario. The legacy SQLite compatibility command remains explicitly
-named and isolated:
-
-```bash
-PYTHONPATH=devtools uv run --package sc-upstream \
-  python -m seedmaker.legacy_sc_sqlite --help
-```
+All supported upstream behavior is created through the standalone Next.js
+`devtools/upstream-mock` HTTP API, TypeScript CLI, or dashboard. The former
+direct SQLite compatibility seeder has been removed.
 
 Production code may not import `seedmaker`. Tests can opt in through the
-explicit `devtools` Python path.
+explicit `devtools` Python path and must supply their own authenticated client
+when exercising product APIs.

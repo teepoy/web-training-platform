@@ -26,7 +26,7 @@ UV_RUN_INSTALLED                 := uv run --no-sync --offline
 LITELLM_LOCAL_MODEL_COST_MAP="True"
 
 # Host API environment
-# Keeps host-run API, worker, seed, and benchmark targets aligned with dev Compose.
+# Keeps host-run API, worker, smoke, and benchmark targets aligned with dev Compose.
 DEV_API_HOST_ENV := \
 	APP_CONFIG_PROFILE=dev \
 	FRONTEND_URL=$(WEB_URL) \
@@ -50,14 +50,6 @@ DEV_API_HOST_ENV := \
 	IMAGE_PARSER_GRPC_ADDR=$(IMAGE_PARSER_GRPC_ADDR_HOST) \
 	SC_DATA_PROVIDER_CACHE_DIR=/tmp/sc-data-provider \
 	SC_DATA_PROVIDER_CACHE_NAMESPACE=sc-data-provider
-
-# Development seed data
-# Controls the repeatable SC inspection and showcase datasets created by seed targets.
-SC_WAFER_MOCK_DEFECTS            ?= 2500
-SC_WAFER_MOCK_INSPECTION_TIME    ?= 2026-08-01T04:00:00+08:00
-DEV_SEED_CLASSIFICATION_SAMPLES  ?= 180
-DEV_SEED_REVIEW_SAMPLES          ?= 96
-DEV_SEED_SC_ANNOTATIONS          ?= 96
 
 # Tests and benchmarks
 # Sets timeout diagnostics and acceptance thresholds for test and SC benchmark targets.
@@ -104,24 +96,18 @@ help: ## Show this help message
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z_-]+:.*##/ {printf "  \033[36m%-24s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 	@printf '\nVariables (override with VAR=value):\n'
 	@printf '\n  Common target arguments\n'
-	@printf '    \033[36m%-43s\033[0m %s\n' "ARGS" "Extra arguments forwarded by supported test, seed, build, and log targets"
+	@printf '    \033[36m%-43s\033[0m %s\n' "ARGS" "Extra arguments forwarded by supported test, build, smoke, and log targets"
 	@printf '    \033[36m%-43s\033[0m %s\n' "MSG" "Alembic revision message used by db-revision"
 	@printf '    \033[36m%-43s\033[0m %s\n' "EMAIL / PASSWORD / NAME" "Super-admin credentials used by create-superadmin"
 	@printf '    \033[36m%-43s\033[0m %s\n' "CONTEXT / QUESTION" "Graph context and query text used by graphify-query"
 	@printf '\n  Development endpoints and host helpers\n'
 	@printf '    \033[36m%-43s\033[0m %s\n' "API_PORT" "Host API port (default: 8000)"
-	@printf '    \033[36m%-43s\033[0m %s\n' "API_URL" "API base URL used by seed, smoke, and live E2E targets (default: http://localhost:API_PORT)"
+	@printf '    \033[36m%-43s\033[0m %s\n' "API_URL" "API base URL used by smoke and live E2E targets (default: http://localhost:API_PORT)"
 	@printf '    \033[36m%-43s\033[0m %s\n' "WEB_PORT" "Frontend development port convention (default: 5173)"
 	@printf '    \033[36m%-43s\033[0m %s\n' "WEB_URL" "Frontend base URL used by live E2E targets (default: http://localhost:5173)"
 	@printf '    \033[36m%-43s\033[0m %s\n' "IMAGE_PARSER_GRPC_ADDR_HOST" "Host image-parser gRPC address injected into host API and workers"
 	@printf '    \033[36m%-43s\033[0m %s\n' "ARTIFACTS_DIR" "Repository-local directory for generated host build artifacts"
 	@printf '    \033[36m%-43s\033[0m %s\n' "MINIO_ENDPOINT_HOST" "Host MinIO endpoint used by host API and benchmark targets"
-	@printf '\n  Development seed data\n'
-	@printf '    \033[36m%-43s\033[0m %s\n' "SC_WAFER_MOCK_DEFECTS" "Number of defects in the repeatable mock SC inspection (default: 2500)"
-	@printf '    \033[36m%-43s\033[0m %s\n' "SC_WAFER_MOCK_INSPECTION_TIME" "Stable inspection timestamp used to make seed runs reusable"
-	@printf '    \033[36m%-43s\033[0m %s\n' "DEV_SEED_CLASSIFICATION_SAMPLES" "Classification showcase sample count (default: 180)"
-	@printf '    \033[36m%-43s\033[0m %s\n' "DEV_SEED_REVIEW_SAMPLES" "Review showcase sample count (default: 96)"
-	@printf '    \033[36m%-43s\033[0m %s\n' "DEV_SEED_SC_ANNOTATIONS" "SC annotation count created by seed-dev (default: 96)"
 	@printf '\n  Tests and SC runtime benchmarks\n'
 	@printf '    \033[36m%-43s\033[0m %s\n' "TEST_TIMEOUT" "Hard timeout for API test execution in seconds (default: 300)"
 	@printf '    \033[36m%-43s\033[0m %s\n' "PYTEST_FAULTHANDLER_TIMEOUT" "Per-test stack-dump timeout in seconds (default: 120)"

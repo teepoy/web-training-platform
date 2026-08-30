@@ -1,5 +1,5 @@
 /**
- * End-to-end smoke script for the seed layer.
+ * End-to-end smoke script for the generated API client.
  *
  * Flow: login → create dataset → add sample → delete → cleanup.
  *
@@ -24,10 +24,13 @@ import type {
   BulkCreateSampleItem,
 } from "../../src/generated/orval/models";
 
-const EMAIL = (process.env["PW_SEED_EMAIL"] as string | undefined) ?? "seed@example.com";
-const PASSWORD = (process.env["PW_SEED_PASSWORD"] as string | undefined) ?? "seed1234";
+const EMAIL = process.env["PW_USER_EMAIL"] as string | undefined;
+const PASSWORD = process.env["PW_USER_PASSWORD"] as string | undefined;
 
 async function main(): Promise<void> {
+  if (!EMAIL || !PASSWORD) {
+    throw new Error("PW_USER_EMAIL and PW_USER_PASSWORD are required");
+  }
   // 1. Configure seed client (no token → login is unauthenticated)
   getSeedClient();
 

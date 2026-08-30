@@ -21,11 +21,6 @@ test-api: ## Run API tests
 test-web: ## Run frontend unit tests (vitest)
 	cd $(WEB_DIR) && pnpm test:unit
 
-.PHONY: test-seed-tools
-test-seed-tools: ## Run repository seed-tool unit tests
-	PYTHONPATH=devtools $(UV_RUN_INSTALLED) python -m pytest devtools/seedmaker/tests/test_upstream_mock.py
-	PYTHONPATH=devtools $(UV_RUN_INSTALLED) --package sc-upstream python -m pytest devtools/seedmaker/tests/test_legacy_sc_sqlite.py
-
 .PHONY: benchmark-sc-prediction
 benchmark-sc-prediction: ## Require >3000 samples/s for bounded SC prediction preprocessing
 	$(UV_RUN_INSTALLED) --package ml-library python libs/ml/benchmarks/sc_prediction_stream_throughput.py --minimum-samples-per-second 3000
@@ -85,22 +80,22 @@ smoke-tests: ## Run all smoke tests (requires: make up-dev)
 #  Config overrides: ARGS="--wafer-db-url /custom/path.db --trainer-id yolo-sc-v1"
 
 .PHONY: smoke-wafer-train-predict
-smoke-wafer-train-predict: ## Run seedmaker wafer images through live train -> predict
+smoke-wafer-train-predict: ## Run synthetic wafer fixtures through live train -> predict
 	@curl --fail --silent --show-error "$(API_URL)/health" >/dev/null || (printf 'API health check failed: %s\n' "$(API_URL)/health" && exit 1)
-	uv run --directory apps/api python ../../scripts/smoke_wafer_train_predict.py $(ARGS)
+	$(DEV_API_HOST_ENV) uv run --directory apps/api python ../../scripts/smoke_wafer_train_predict.py $(ARGS)
 
 # ──────────────────────────────────────────────
 # Regression tests
 # ──────────────────────────────────────────────
 
 .PHONY: test-regression
-test-regression: ## Run pytest-native seed regression tests (SQLite, no Docker needed)
+test-regression: ## Run pytest-native fixture regression tests (SQLite, no Docker needed)
 	cd $(API_DIR) && uv run --extra dev python -m pytest tests/test_seed_regression_*.py -v
 
 .PHONY: smoke-regression
 smoke-regression: ## Run live-stack smoke regression (needs Docker Compose)
 	@curl -s --fail --show-error $(API_URL)/health > /dev/null 2>&1 || (echo "ERROR: API not healthy at $(API_URL)" && exit 1)
-	python scripts/smoke_runner.py --all
+	$(MAKE) smoke-tests $(if $(ARGS),ARGS='$(ARGS)',)
 
 .PHONY: regression
 regression: test-regression ## Run fast regression then live-stack smoke

@@ -8,7 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
-from tests.helpers.test_seed_runner import TestSeedRunner
+from tests.helpers.test_fixture_writer import TestFixtureWriter
 
 from seedmaker.labels import IMAGENET_LABELS
 
@@ -34,22 +34,22 @@ def _synthetic_data_uri() -> str:
 
 
 # ---------------------------------------------------------------------------
-# Seed fixtures
+# Dataset fixtures
 # ---------------------------------------------------------------------------
 
 
 @pytest.fixture(scope="function")
 def seeded_imagenet_mock() -> tuple[str, str]:
-    """Seed an ImageNet-1K Mock dataset with 10 synthetic samples.
+    """Create an ImageNet-1K Mock dataset with 10 synthetic samples.
 
     Creates the dataset, uploads 10 samples, and returns
     ``(dataset_id, dataset_name)``.
-    Uses the seedmaker ``imagenet-mock`` recipe config and item builder.
+    Uses the test-only ``imagenet-mock`` fixture config and item builder.
     """
     from seedmaker.datasets.imagenet_mock import config, build_sample_item
 
     with TestClient(app) as client:
-        runner = TestSeedRunner(client, config)
+        runner = TestFixtureWriter(client, config)
         runner.ensure_dataset()
         assert runner.dataset_id is not None
         runner.upload_samples(10, build_sample_item)
@@ -58,11 +58,11 @@ def seeded_imagenet_mock() -> tuple[str, str]:
 
 @pytest.fixture(scope="function")
 def seeded_imagenet_poc() -> tuple[str, str]:
-    """Seed an ImageNet-1K Real dataset with 5 synthetic samples.
+    """Create an ImageNet-1K Real dataset with 5 synthetic samples.
 
     Creates the dataset, uploads 5 samples, and returns
     ``(dataset_id, dataset_name)``.
-    Uses the seedmaker ``imagenet-real`` recipe config and the
+    Uses the test-only ``imagenet-real`` fixture config and the
     ``imagenet-mock`` item builder (real ImageNet images are too heavy
     for unit tests).
     """
@@ -70,7 +70,7 @@ def seeded_imagenet_poc() -> tuple[str, str]:
     from seedmaker.datasets.imagenet_mock import build_sample_item
 
     with TestClient(app) as client:
-        runner = TestSeedRunner(client, config)
+        runner = TestFixtureWriter(client, config)
         runner.ensure_dataset()
         assert runner.dataset_id is not None
         runner.upload_samples(5, build_sample_item)
@@ -79,9 +79,9 @@ def seeded_imagenet_poc() -> tuple[str, str]:
 
 @pytest.fixture(scope="function")
 def seeded_wafer_demo() -> tuple[str, str]:
-    """Seed a Wafer Demo dataset with 50 samples carrying wafer coordinates.
+    """Create a Wafer Demo dataset with 50 samples carrying wafer coordinates.
 
-    Uses the seedmaker ``wafer-demo`` recipe with SC PatchSample domain
+    Uses the test-only ``wafer-demo`` builder with SC PatchSample domain
     models.
     """
     from app.modules.sc.models import PatchSample
@@ -90,7 +90,7 @@ def seeded_wafer_demo() -> tuple[str, str]:
     from seedmaker.datasets.wafer_demo import config, build_patch_sample
 
     with TestClient(app) as client:
-        runner = TestSeedRunner(client, config)
+        runner = TestFixtureWriter(client, config)
         runner.ensure_dataset()
         assert runner.dataset_id is not None
 
@@ -108,16 +108,16 @@ def seeded_wafer_demo() -> tuple[str, str]:
 
 @pytest.fixture(scope="function")
 def seeded_multi_image_scatter() -> tuple[str, str]:
-    """Seed a Scatter Demo dataset with 6 multi-image samples (3 images each).
+    """Create a Scatter Demo dataset with 6 multi-image samples.
 
     Each sample carries ``scatter_x`` / ``scatter_y`` metadata for a
-    3×2 grid.  Uses the seedmaker ``multi-image-scatter`` recipe config
+    3×2 grid. Uses the test-only ``multi-image-scatter`` fixture config
     and item builder.
     """
     from seedmaker.datasets.multi_image_scatter import config, build_sample_item
 
     with TestClient(app) as client:
-        runner = TestSeedRunner(
+        runner = TestFixtureWriter(
             client,
             replace(
                 config,
@@ -133,16 +133,16 @@ def seeded_multi_image_scatter() -> tuple[str, str]:
 
 @pytest.fixture(scope="function")
 def seeded_mock_multi_image() -> tuple[str, str]:
-    """Seed a Multi-Image Mock dataset with 10 samples (2 synthetic images each).
+    """Create a Multi-Image Mock dataset with 10 synthetic samples.
 
-    Uses the seedmaker ``mock-multi-image`` recipe config for the
+    Uses the test-only ``mock-multi-image`` fixture config for the
     dataset name and CIFAR-100 labels.  Samples use lightweight
     synthetic images so the fixture does not download CIFAR-100.
     """
     from seedmaker.datasets.mock_multi_image import config
 
     with TestClient(app) as client:
-        runner = TestSeedRunner(
+        runner = TestFixtureWriter(
             client,
             replace(
                 config,

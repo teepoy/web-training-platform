@@ -63,7 +63,11 @@ Prefer `make` targets from the repository root.
 | Start compose backend only        | `make up-dev ARGS="--scale web=0"`       |
 | Stop compose                      | `make down`                              |
 
-Seed dev data with `make seed-dev`. Run smoke tests with `make smoke-tests`.
+Publish development upstream behavior through the `devtools/upstream-mock`
+HTTP API, TypeScript CLI, or dashboard on port `8094`. Platform identities are
+provisioned explicitly and are never created by scenario tooling. Run smoke
+tests with `make smoke-tests` and caller-supplied `SMOKE_USER_EMAIL` /
+`SMOKE_USER_PASSWORD`.
 
 The root `Makefile` is the stable entry point and loads focused modules from
 `make/`: `build.mk`, `test.mk`, `lint.mk`, `docker.mk`, `generate.mk`, and

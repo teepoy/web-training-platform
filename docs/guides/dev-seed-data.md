@@ -1,111 +1,75 @@
-# Development showcase data
+# Development upstream scenarios
 
-Use `make seed-dev` after the development stack is healthy. The command creates
-a moderate, deterministic showcase instead of the historical 300,000-row wafer
-fixture. It is intended for exercising management pages, not for performance
-benchmarks.
+Development data starts as observable upstream behavior, not as platform
+database seeding. Start the stack with `make up-dev`, then use the standalone
+Next.js upstream mock on `http://127.0.0.1:8094`.
 
-All seed and synthetic-data implementations live under
-`devtools/seedmaker/`. The compatibility entrypoints under `scripts/` contain
-only thin forwarding code so production application and service packages do
-not own development data generation.
-
-## Default contents
-
-| Area                    | Development fixtures                                                                                                                                                       |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Datasets                | 180 labeled classification samples, 96 mixed labeled/unlabeled multi-image samples, one empty classification dataset, and one 2,500-row sparse SC inspection dataset       |
-| SC annotations          | Labels on the first 96 SC samples, spread across three classes                                                                                                             |
-| Collections             | A two-dataset classification collection and a one-dataset SC collection with saved snapshots, plus one empty dynamic SC Collection for automation tests                    |
-| Training and prediction | Four training jobs and four prediction jobs covering completed, failed, and cancelled states, with event histories                                                         |
-| Models                  | Two metadata-only JSON model display fixtures plus metrics artifacts                                                                                                       |
-| Membership automation   | One active SC rule with a typed `defects >= 1` condition, a 10-record run cap, and a 2,500-row per-Dataset import cap; the internal poller evaluates it every five minutes |
-| Legacy execution data   | Two paused schedules retained for backend compatibility tests; they are not ordinary-user navigation                                                                       |
-| Gallery profile VQA     | Three 64-defect inspections: Gray8 1R/1D/1M, Gray16 1R/1D/1M, and Gray16 2R/2D/1M; each has eight square Review images                                                     |
-
-The model fixtures have `seed_fixture: true` and `runnable: false` metadata and
-are named as display fixtures. The seeded jobs have no external execution IDs.
-`seed-dev` does not run the membership rule, submit training or prediction jobs,
-or run a user schedule. The dynamic Collection stays empty after seeding because
-the baseline upstream records predate rule activation. Publishing a later
-inspection through the simulator is discovered by the next five-minute poll;
-developers can still use explicit Discovery or Backfill controls when testing
-those paths.
-
-## Repeatability
-
-The SC upstream fixture uses the fixed inspection time
-`2026-08-01T04:00:00`. A matching SQLite fixture is reused, including its
-inspection identity, so running the command on another day does not invalidate
-the imported sparse dataset. Fixed dataset, Collection, connector, rule, and
-activity names are reused;
-owned event rows are replaced instead of duplicated. Existing classification
-samples are only topped up to the requested count and are never deleted.
-
-The gallery fixtures share that timestamp and use stable wafer keys and names:
-`81 / GRAY8-1R1D`, `82 / GRAY16-1R1D`, and `83 / GRAY16-2R2D`. Re-running the
-seed replaces only those three inspection identities and their patch archives.
-The baseline 12-bit inspection at wafer key `1` remains available.
-
-If a fixed showcase name already belongs to an incompatible dataset type,
-storage mode, collection view, or unrelated collection members, the seed stops
-with an explicit error instead of changing that data.
-
-## Adjusting the size
-
-Override Make variables when a different local scale is useful:
+The dashboard and TypeScript CLI call the same authenticated HTTP API. They can
+create drafts, append defects/images/archives, publish inspections, update
+mutable source fields, inspect current state, and run the deterministic
+`dev-showcase` scenario.
 
 ```bash
-make seed-dev \
-  SC_WAFER_MOCK_DEFECTS=5000 \
-  SC_GALLERY_PROFILE_DEFECTS=128 \
-  SC_GALLERY_PROFILE_IMAGED=16 \
-  DEV_SEED_CLASSIFICATION_SAMPLES=300 \
-  DEV_SEED_REVIEW_SAMPLES=150 \
-  DEV_SEED_SC_ANNOTATIONS=180
+export UPSTREAM_MOCK_URL=http://127.0.0.1:8094
+export UPSTREAM_MOCK_TOKEN=local-development-upstream-mock-token
+export UPSTREAM_MOCK_TIMEOUT_SECONDS=30
+
+pnpm --filter @devtools/upstream-mock cli -- list
+pnpm --filter @devtools/upstream-mock cli -- dev-showcase --file showcase.json
 ```
 
-Lowering a classification count does not trim an existing dataset. Sparse SC
-imports are immutable, so changing `SC_WAFER_MOCK_DEFECTS` after the first seed
-stops with an explicit size mismatch; remove only the named SC showcase fixtures
-before resizing. Changing
-`SC_WAFER_MOCK_INSPECTION_TIME` intentionally changes the upstream inspection
-identity; remove only the named `Dev SC Inspection` showcase fixtures before
-doing that. Use the separate SC benchmark procedures when a 300,000-row dataset
-is required.
+There is intentionally no `make seed` or `make seed-dev` wrapper. The mock owns
+only upstream records, event timing, PostgreSQL state, and its object fixtures.
+It never creates platform users, organizations, Datasets, Collections, jobs,
+annotations, or Models.
 
-## Runtime data-path benchmark
+## Platform effects
 
-After `make up-dev` and `make seed-dev`, run:
+After an inspection is published, exercise the real platform behavior:
+
+1. Explicitly provision or register the platform user you intend to use.
+2. Configure the SC source connector, import profile, Collection membership
+   rule, and automation through platform APIs/UI.
+3. Publish or update an inspection through the upstream mock.
+4. Observe discovery, import, Collection membership, Snapshot publication, and
+   automated prediction through their normal product surfaces.
+
+The five-minute discovery poll may be used for the normal event path. Explicit
+Discovery or Backfill controls remain available when testing those operations.
+Replaying the same scenario is idempotent and must not create duplicate platform
+resources.
+
+## Identity
+
+Scenario tooling never provisions an administrator. For a local administrator,
+run the explicit operation with caller-chosen credentials:
+
+```bash
+make create-superadmin \
+  EMAIL=developer@example.test \
+  PASSWORD='<local password>' \
+  NAME='Local Developer'
+```
+
+Live smoke and Playwright runs likewise require credentials through
+`SMOKE_USER_EMAIL` / `SMOKE_USER_PASSWORD` and `PW_USER_EMAIL` /
+`PW_USER_PASSWORD`. No repository default account is assumed. Existing Docker
+volumes may retain identities created by older development bootstraps; those
+rows are not renamed or deleted automatically.
+
+## Test fixtures and benchmarks
+
+Deterministic sample/image builders retained under `devtools/seedmaker` are
+test-only fixtures and explicitly named legacy compatibility tools. They are
+not a supported live development command surface.
+
+The SC runtime benchmark consumes an already imported Dataset selected with
+`SC_RUNTIME_BENCHMARK_SOURCE_DATASET_NAME`. Create that Dataset through the real
+upstream import path first, then run:
 
 ```bash
 make benchmark-sc-runtime-data-paths
 ```
 
-This benchmark clones the seeded SC inspection into a temporary Dataset, labels
-every imported row, and invokes the same Runtime callables used by the Prefect
-worker. Training and Prediction open their distinct image-parser gRPC streams;
-the service owns equipment dispatch, source download, cache reuse, and parsing.
-Training then uses the Parquet materializer, while Prediction feeds its bounded
-preprocessing stream and prediction writeback.
-Only the GPU Trainer and Predictor kernels are replaced: the fake Trainer reads
-every Parquet row and the fake Predictor consumes every resolved image pair.
-The temporary Dataset and fake model artifact are removed after the run.
-
-The JSON result reports setup time separately from training materialization and
-prediction Runtime throughput. The local target enforces the established 3,000
-samples/second prediction requirement; this hardware-sensitive benchmark is not
-part of shared CI. The training threshold and either local threshold can be
-overridden explicitly:
-
-```bash
-make benchmark-sc-runtime-data-paths \
-  SC_RUNTIME_BENCHMARK_SAMPLES=50000 \
-  SC_RUNTIME_BENCHMARK_MIN_TRAIN_SPS=500 \
-  SC_RUNTIME_BENCHMARK_MIN_PREDICT_SPS=3000
-```
-
-The requested count is exact: the command fails instead of silently measuring
-a smaller upstream fixture. For steady-state throughput measurements use at
-least 50,000 rows; the default 2,500-row showcase fixture is intended for UI
-development, not performance characterization.
+The benchmark fails if the requested Dataset or exact sample count is absent;
+it does not silently seed or substitute data.

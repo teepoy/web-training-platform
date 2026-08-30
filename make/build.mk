@@ -73,19 +73,6 @@ reset-dev-database: ## Destructively reset the dev database through Alembic
 
 
 # ──────────────────────────────────────────────
-# Seed data
-# ──────────────────────────────────────────────
-
-.PHONY: seed
-seed: ## Run unified seed CLI (usage: make seed ARGS="mock-multi-image --max-samples 1000")
-	@curl --fail --silent --show-error "$(API_URL)/health" >/dev/null || (printf 'API health check failed: %s\n' "$(API_URL)/health" && exit 1)
-	uv run scripts/seed.py --api-url $(API_URL) --compose-file $(COMPOSE) $(ARGS)
-
-.PHONY: seed-dev
-seed-dev: ## Seed moderate, repeatable Library/model/automation showcase data
-	$(DEV_API_HOST_ENV) $(MAKE) seed ARGS="dev-showcase --no-promote --org-slug dev-no-auth --org-name 'Dev No Auth' --classification-samples $(DEV_SEED_CLASSIFICATION_SAMPLES) --review-samples $(DEV_SEED_REVIEW_SAMPLES) --sc-samples $(SC_WAFER_MOCK_DEFECTS) --sc-annotations $(DEV_SEED_SC_ANNOTATIONS) --sc-inspection-time $(SC_WAFER_MOCK_INSPECTION_TIME)"
-
-# ──────────────────────────────────────────────
 # Housekeeping
 # ──────────────────────────────────────────────
 

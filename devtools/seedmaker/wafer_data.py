@@ -1,11 +1,10 @@
-"""Development-only wafer fixture generation.
+"""Test-only wafer fixture generation.
 
 Single source of truth for wafer coordinate generation, class digit
 images, and PatchSample construction.  Used by:
 
-This module lives outside the API package so generated images and demo samples
-cannot become runtime implementations. It is used by seed, smoke, and test
-entrypoints only.
+This module lives outside the API package so generated images and samples
+cannot become runtime implementations. It is used by smoke checks and tests.
 """
 
 from __future__ import annotations

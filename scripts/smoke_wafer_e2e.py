@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """End-to-end wafer inspection smoke test.
 
-Uses the seedmaker wafer fixture generator (``wafer_demo``
-coordinate distribution, digit images, 100 classes) for all upstream data.
-No raw wafer SQLite DB or MinIO seeding is required.
+Consumes inspection data published by the standalone upstream mock and imported
+through the real SC path. The test-only wafer fixture module supplies only the
+expected class labels; no direct SQLite or object-store write is performed.
 
 Steps:
    1. Verify the API is healthy.
-   2. Auth as seed user.
+   2. Authenticate as the configured smoke user.
    3. Resolve organisation context.
    4. Query /sc/inspections for a mock inspection_time + wafer_key.
    5. POST /sc/import (file_shard_sparse) and use the completed direct response.
@@ -38,10 +38,9 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPOSITORY_ROOT / "devtools"))
 
 from seedmaker.wafer_data import LABELS as CLASS_LABELS  # noqa: E402
+from smoke_common import login_smoke_user, resolve_smoke_org  # noqa: E402
 
 API_URL = "http://localhost:8000"
-SEED_EMAIL = "seed@example.com"
-SEED_PASSWORD = "seed1234"
 DEFAULT_ANNOTATE_COUNT = 100
 DEFAULT_TRAINER_ID = "yolo-sc-v1"
 DEFAULT_IMPORT_TIMEOUT = 180
@@ -71,31 +70,6 @@ def _wait_for_api(api_url: str, timeout: int = 120) -> None:
             pass
         time.sleep(2)
     raise RuntimeError("API health check timed out")
-
-
-def _login(api_url: str) -> str:
-    r = httpx.post(
-        f"{api_url}/api/v1/auth/login",
-        json={"email": SEED_EMAIL, "password": SEED_PASSWORD},
-    )
-    r.raise_for_status()
-    return str(r.json()["access_token"])
-
-
-def _resolve_org(api_url: str, token: str) -> str:
-    r = httpx.get(
-        f"{api_url}/api/v1/organizations",
-        headers={"Authorization": f"Bearer {token}"},
-    )
-    r.raise_for_status()
-    orgs = r.json()
-    if not isinstance(orgs, list) or not orgs:
-        raise RuntimeError("No organisations available for seed user")
-    DEFAULT_ORG = "00000000-0000-0000-0000-000000000001"
-    for org in orgs:
-        if org.get("id") == DEFAULT_ORG:
-            return DEFAULT_ORG
-    return str(orgs[0]["id"])
 
 
 def _default_headers(token: str, org_id: str) -> dict[str, str]:
@@ -678,12 +652,12 @@ def main() -> int:
         _wait_for_api(args.api_url)
 
         # ── 2. Login ─────────────────────────────────────────────
-        print("[2/12] Logging in as seed user ...")
-        token = _login(args.api_url)
+        print("[2/12] Logging in as the configured smoke user ...")
+        token = login_smoke_user(args.api_url)
 
         # ── 3. Resolve org ───────────────────────────────────────
         print("[3/12] Resolving organisation context ...")
-        org_id = _resolve_org(args.api_url, token)
+        org_id = resolve_smoke_org(args.api_url, token)
         headers = _default_headers(token, org_id)
 
         with httpx.Client(timeout=60.0) as client:

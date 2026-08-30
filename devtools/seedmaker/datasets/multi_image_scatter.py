@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from seedmaker import SeedConfig, SeedRunner, registry
+from seedmaker import FixtureConfig
 from seedmaker.images import png_data_uri
 
 LABELS = ["cluster-a", "cluster-b", "cluster-c"]
@@ -23,7 +23,7 @@ metadata_schema = {
     },
 }
 
-config = SeedConfig(
+config = FixtureConfig(
     name="multi-image-scatter",
     dataset_name="Scatter Demo - Multi Image Samples",
     description="Multi-image samples with scatter coordinates for interactive demo. Configurable sample count and images per sample.",
@@ -74,27 +74,3 @@ def build_sample_item(idx: int, images_per_sample: int = 3) -> dict:
         },
         "label": label,
     }
-
-
-def run(args, runner: SeedRunner) -> int:
-    samples: int = args.samples if args.samples is not None else 18
-    images_per_sample: int = (
-        args.images_per_sample if args.images_per_sample is not None else 3
-    )
-
-    if samples < 1:
-        print("ERROR: --samples must be >= 1")
-        return 1
-    if images_per_sample < 2:
-        print("ERROR: --images-per-sample must be >= 2")
-        return 1
-
-    def _mk_item(idx: int) -> dict:
-        return build_sample_item(idx, images_per_sample)
-
-    runner.upload_samples(total=samples, item_builder=_mk_item)
-    runner.summary()
-    return 0
-
-
-registry.register(config, run)

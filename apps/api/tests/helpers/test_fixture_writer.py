@@ -7,19 +7,15 @@ from typing import Any
 
 from fastapi.testclient import TestClient
 
-from seedmaker import SeedConfig
+from seedmaker import FixtureConfig
 
 
-class TestSeedRunner:
-    """Thin adapter that mirrors ``SeedRunner``'s API but works with ``TestClient``.
-
-    Skips auth, user registration, and API readiness checks — the test's
-    ``_mock_auth_deps`` autouse fixture handles all of that.
-    """
+class TestFixtureWriter:
+    """Write deterministic test fixtures through the public API."""
 
     __test__ = False  # Not a pytest test class
 
-    def __init__(self, client: TestClient, config: SeedConfig) -> None:
+    def __init__(self, client: TestClient, config: FixtureConfig) -> None:
         self._client = client
         self._config = config
         self._dataset_id: str | None = None

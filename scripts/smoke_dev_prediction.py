@@ -18,9 +18,11 @@ import httpx
 
 sys.path.insert(0, str(Path(__file__).parent))
 from smoke_common import (
+    create_smoke_dataset,
     create_synthetic_image,
-    login_seed_user,
-    resolve_seed_org,
+    login_smoke_user,
+    resolve_smoke_org,
+    smoke_failure,
     wait_for_api_ready,
 )
 
@@ -39,7 +41,7 @@ def _create_training_job(
         json={
             "dataset_id": dataset_id,
             "trainer_id": trainer_id,
-            "created_by": "seed-user",
+            "created_by": "smoke-user",
         },
     )
     response.raise_for_status()
@@ -64,25 +66,9 @@ def _create_annotation(
     response = client.post(
         f"{API_URL}/api/v1/annotations",
         headers=headers,
-        json={"sample_id": sample_id, "label": label, "created_by": "seed-user"},
+        json={"sample_id": sample_id, "label": label, "created_by": "smoke-user"},
     )
     response.raise_for_status()
-
-
-def _create_training_job(
-    client: httpx.Client, dataset_id: str, headers: dict[str, str], trainer_id: str
-) -> str:
-    response = client.post(
-        f"{API_URL}/api/v1/training-jobs",
-        headers=headers,
-        json={
-            "dataset_id": dataset_id,
-            "trainer_id": trainer_id,
-            "created_by": "seed-user",
-        },
-    )
-    response.raise_for_status()
-    return str(response.json()["id"])
 
 
 def _poll_training_job(
@@ -191,17 +177,17 @@ def main() -> int:
         print("[1/8] Waiting for API health ...")
         wait_for_api_ready(API_URL, timeout=args.timeout)
 
-        print("[2/8] Logging in as seed user ...")
-        token = login_seed_user(API_URL)
+        print("[2/8] Logging in as configured smoke user ...")
+        token = login_smoke_user(API_URL)
         headers = {"Authorization": f"Bearer {token}"}
 
         print("[3/8] Resolving org context ...")
-        headers["X-Organization-ID"] = resolve_seed_org(API_URL, token)
+        headers["X-Organization-ID"] = resolve_smoke_org(API_URL, token)
 
         with httpx.Client(timeout=30.0) as client:
             dataset_name = f"{args.dataset_name_prefix} {uuid.uuid4().hex[:8]}"
             print("[4/8] Creating tiny labeled dataset ...")
-            dataset_id = _create_dataset(client, headers, dataset_name)
+            dataset_id = create_smoke_dataset(client, API_URL, headers, dataset_name)
             sample_red = _create_sample(
                 client, dataset_id, headers, create_synthetic_image("red")
             )
@@ -261,7 +247,7 @@ def main() -> int:
             print(f"prediction_successful={summary.get('successful')}")
             return 0
     except Exception as exc:
-        return _fail(str(exc))
+        return smoke_failure(str(exc))
 
 
 if __name__ == "__main__":
