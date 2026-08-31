@@ -6,6 +6,7 @@ import re
 import tempfile
 import zipfile
 from collections.abc import AsyncIterator
+from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -40,7 +41,7 @@ from app.modules.sc.domain.prediction_export import (
     ScPredictionExportResultSource,
 )
 from app.modules.sc.app.services.latest_source import (
-    resolve_latest_sc_source,
+    open_latest_sc_source,
     sc_dataset_source_identity,
 )
 from app.modules.sc.domain.upstream_reader import ScUpstreamReader
@@ -165,26 +166,26 @@ class ScPredictionExportService:
                 "Review Sampling program and seed must be provided together"
             )
 
-        lazy_frame = await self._load_datasets(
+        async with self._open_datasets(
             (dataset,), org_id=org_id, result_source=result_source
-        )
-        return await self._persist_export(
-            org_id=org_id,
-            scope_id=dataset.id,
-            scope_kind="dataset",
-            scope_name=dataset.name,
-            source_dataset_ids=(dataset.id,),
-            selected_member_ids=(),
-            lazy_frame=lazy_frame,
-            created_by=created_by,
-            export_format=export_format,
-            result_source=result_source,
-            klarf_version=klarf_version,
-            sampling_program=sampling_program,
-            sampling_seed=sampling_seed,
-            sampling_extra_filter=sampling_extra_filter,
-            include_images=include_images,
-        )
+        ) as lazy_frame:
+            return await self._persist_export(
+                org_id=org_id,
+                scope_id=dataset.id,
+                scope_kind="dataset",
+                scope_name=dataset.name,
+                source_dataset_ids=(dataset.id,),
+                selected_member_ids=(),
+                lazy_frame=lazy_frame,
+                created_by=created_by,
+                export_format=export_format,
+                result_source=result_source,
+                klarf_version=klarf_version,
+                sampling_program=sampling_program,
+                sampling_seed=sampling_seed,
+                sampling_extra_filter=sampling_extra_filter,
+                include_images=include_images,
+            )
 
     async def export_collection(
         self,
@@ -245,65 +246,71 @@ class ScPredictionExportService:
         )
         for dataset in ordered_datasets:
             self._validate_dataset(dataset)
-        lazy_frame = await self._load_datasets(
+        async with self._open_datasets(
             ordered_datasets, org_id=org_id, result_source=result_source
-        )
-        return await self._persist_export(
-            org_id=org_id,
-            scope_id=collection.id,
-            scope_kind="collection",
-            scope_name=collection.name,
-            source_dataset_ids=tuple(dataset_ids),
-            selected_member_ids=member_ids,
-            lazy_frame=lazy_frame,
-            created_by=created_by,
-            export_format=export_format,
-            result_source=result_source,
-            klarf_version=klarf_version,
-            sampling_program=sampling_program,
-            sampling_seed=sampling_seed,
-            sampling_extra_filter=sampling_extra_filter,
-            include_images=include_images,
-        )
+        ) as lazy_frame:
+            return await self._persist_export(
+                org_id=org_id,
+                scope_id=collection.id,
+                scope_kind="collection",
+                scope_name=collection.name,
+                source_dataset_ids=tuple(dataset_ids),
+                selected_member_ids=member_ids,
+                lazy_frame=lazy_frame,
+                created_by=created_by,
+                export_format=export_format,
+                result_source=result_source,
+                klarf_version=klarf_version,
+                sampling_program=sampling_program,
+                sampling_seed=sampling_seed,
+                sampling_extra_filter=sampling_extra_filter,
+                include_images=include_images,
+            )
 
-    async def _load_datasets(
+    @asynccontextmanager
+    async def _open_datasets(
         self,
         datasets: tuple[Dataset, ...],
         *,
         org_id: str,
         result_source: ScPredictionExportResultSource,
-    ) -> pl.LazyFrame:
-        lazy_frames: list[pl.LazyFrame] = []
-        for dataset in datasets:
-            storage = await self._storage_factory.open(dataset.id, org_id)
-            lazy_rows = await storage.list_samples(
-                with_labels=True,
-                with_predictions=True,
-                return_lazyframe=True,
-            )
-            if not isinstance(lazy_rows, pl.LazyFrame):
-                raise ScPredictionExportError(
-                    "SC prediction export requires a bulk LazyFrame data source"
+    ) -> AsyncIterator[pl.LazyFrame]:
+        async with AsyncExitStack() as source_stack:
+            lazy_frames: list[pl.LazyFrame] = []
+            for dataset in datasets:
+                storage = await self._storage_factory.open(dataset.id, org_id)
+                lazy_rows = await storage.list_samples(
+                    with_labels=True,
+                    with_predictions=True,
+                    return_lazyframe=True,
                 )
-            inspection_time, wafer_key = sc_dataset_source_identity(dataset, dataset.id)
-            resolved = await resolve_latest_sc_source(
-                upstream_reader=self._upstream_reader,
-                membership=lazy_rows,
-                inspection_time=inspection_time,
-                wafer_key=wafer_key,
-                dataset_id=dataset.id,
-                batch_rows=self._source_batch_rows,
-            )
-            lazy_frames.append(
-                resolved.with_columns(
-                    pl.lit(dataset.id).alias("source_dataset_id"),
-                    pl.lit(dataset.name).alias("source_dataset_name"),
+                if not isinstance(lazy_rows, pl.LazyFrame):
+                    raise ScPredictionExportError(
+                        "SC prediction export requires a bulk LazyFrame data source"
+                    )
+                inspection_time, wafer_key = sc_dataset_source_identity(
+                    dataset, dataset.id
                 )
+                resolved = await source_stack.enter_async_context(
+                    open_latest_sc_source(
+                        upstream_reader=self._upstream_reader,
+                        membership=lazy_rows,
+                        inspection_time=inspection_time,
+                        wafer_key=wafer_key,
+                        dataset_id=dataset.id,
+                        batch_rows=self._source_batch_rows,
+                    )
+                )
+                lazy_frames.append(
+                    resolved.with_columns(
+                        pl.lit(dataset.id).alias("source_dataset_id"),
+                        pl.lit(dataset.name).alias("source_dataset_name"),
+                    )
+                )
+            combined = pl.concat(lazy_frames, how="diagonal_relaxed")
+            yield await asyncio.to_thread(
+                _prepare_export_lazyframe, combined, result_source
             )
-        combined = pl.concat(lazy_frames, how="diagonal_relaxed")
-        return await asyncio.to_thread(
-            _prepare_export_lazyframe, combined, result_source
-        )
 
     async def _persist_export(
         self,

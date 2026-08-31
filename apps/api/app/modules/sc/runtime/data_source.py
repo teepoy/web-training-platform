@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass
 import logging
 from typing import cast
@@ -17,7 +17,7 @@ from app.modules.runtime.domain.context import (
     TrainingRuntimeContext,
 )
 from app.modules.sc.app.services.latest_source import (
-    resolve_latest_sc_source,
+    open_latest_sc_source,
     sc_dataset_source_identity,
 )
 from app.modules.sc.domain.upstream_reader import ScUpstreamReader
@@ -77,25 +77,25 @@ async def open_sc_runtime_source(
         inspection_time, wafer_key = sc_dataset_source_identity(
             dataset, source.dataset_id
         )
-        rows = await resolve_latest_sc_source(
+        async with open_latest_sc_source(
             upstream_reader=upstream_reader,
             membership=rows,
             inspection_time=inspection_time,
             wafer_key=wafer_key,
             dataset_id=source.dataset_id,
             batch_rows=batch_rows,
-        )
-        yield ScRuntimeSource(
-            rows=rows,
-            source_identity=source.identity,
-            label_space=tuple(dataset.task_spec.label_space),
-            view_types=tuple(dataset.view_types),
-            dataset_type=dataset.dataset_type,
-            dataset_id=source.dataset_id,
-            collection_id=source.collection_id,
-            collection_revision_id=source.collection_revision_id,
-            source_dataset_ids=(source.dataset_id,),
-        )
+        ) as resolved_rows:
+            yield ScRuntimeSource(
+                rows=resolved_rows,
+                source_identity=source.identity,
+                label_space=tuple(dataset.task_spec.label_space),
+                view_types=tuple(dataset.view_types),
+                dataset_type=dataset.dataset_type,
+                dataset_id=source.dataset_id,
+                collection_id=source.collection_id,
+                collection_revision_id=source.collection_revision_id,
+                source_dataset_ids=(source.dataset_id,),
+            )
         return
 
     assert source.collection_id is not None
@@ -146,61 +146,64 @@ async def open_sc_runtime_source(
     # through the SC runtime router while this module is initializing.
     from app.modules.datasets.port.local import DatasetRevisionReaderPort
 
-    frames = await asyncio.gather(
-        *(
-            _observed_member_rows(
-                storage,
-                dataset_id=dataset_id,
-                member_id=str(member.get("member_id", "")),
-                with_labels=with_labels,
-                with_predictions=with_predictions,
-                upstream_reader=upstream_reader,
-                batch_rows=batch_rows,
+    async with AsyncExitStack() as source_stack:
+        frames: list[pl.LazyFrame] = []
+        for storage, dataset_id, member in zip(
+            storages,
+            source_dataset_ids,
+            selected_members,
+            strict=True,
+        ):
+            frames.append(
+                await source_stack.enter_async_context(
+                    _open_observed_member_rows(
+                        storage,
+                        dataset_id=dataset_id,
+                        member_id=str(member.get("member_id", "")),
+                        with_labels=with_labels,
+                        with_predictions=with_predictions,
+                        upstream_reader=upstream_reader,
+                        batch_rows=batch_rows,
+                    )
+                )
             )
-            for storage, dataset_id, member in zip(
-                storages,
-                source_dataset_ids,
-                selected_members,
-                strict=True,
+        dataset_revision_reader = app_context.injector.get(DatasetRevisionReaderPort)
+        launch_revisions = await asyncio.gather(
+            *(
+                dataset_revision_reader.resolve_or_create_baseline(
+                    dataset_id=dataset_id,
+                    org_id=org_id,
+                    created_by=runtime_ctx.created_by,
+                )
+                for dataset_id in source_dataset_ids
             )
         )
-    )
-    dataset_revision_reader = app_context.injector.get(DatasetRevisionReaderPort)
-    launch_revisions = await asyncio.gather(
-        *(
-            dataset_revision_reader.resolve_or_create_baseline(
-                dataset_id=dataset_id,
-                org_id=org_id,
-                created_by=runtime_ctx.created_by,
-            )
-            for dataset_id in source_dataset_ids
+        resolved_revision_ids = tuple(item.id for item in launch_revisions)
+        _logger.info(
+            "Resolved current Collection runtime source collection_revision=%s "
+            "dataset_revisions=%s reproducible=false",
+            revision.id,
+            resolved_revision_ids,
         )
-    )
-    resolved_revision_ids = tuple(item.id for item in launch_revisions)
-    _logger.info(
-        "Resolved current Collection runtime source collection_revision=%s "
-        "dataset_revisions=%s reproducible=false",
-        revision.id,
-        resolved_revision_ids,
-    )
-    rows = pl.concat(frames, how="diagonal_relaxed")
-    if runtime_ctx.sample_ids is not None:
-        rows = rows.filter(pl.col("sample_id").is_in(runtime_ctx.sample_ids))
-    yield ScRuntimeSource(
-        rows=rows,
-        source_identity=source.identity,
-        label_space=label_space,
-        view_types=(revision.target_view_id,),
-        dataset_type="image_sc_collection",
-        dataset_id=None,
-        collection_id=source.collection_id,
-        collection_revision_id=revision.id,
-        source_dataset_ids=source_dataset_ids,
-        resolved_dataset_revision_ids=resolved_revision_ids,
-    )
+        rows = pl.concat(frames, how="diagonal_relaxed")
+        if runtime_ctx.sample_ids is not None:
+            rows = rows.filter(pl.col("sample_id").is_in(runtime_ctx.sample_ids))
+        yield ScRuntimeSource(
+            rows=rows,
+            source_identity=source.identity,
+            label_space=label_space,
+            view_types=(revision.target_view_id,),
+            dataset_type="image_sc_collection",
+            dataset_id=None,
+            collection_id=source.collection_id,
+            collection_revision_id=revision.id,
+            source_dataset_ids=source_dataset_ids,
+            resolved_dataset_revision_ids=resolved_revision_ids,
+        )
 
 
-async def _observed_member_rows(
+@asynccontextmanager
+async def _open_observed_member_rows(
     storage: DatasetStorageAgg,
     *,
     dataset_id: str,
@@ -209,7 +212,7 @@ async def _observed_member_rows(
     with_predictions: bool,
     upstream_reader: ScUpstreamReader,
     batch_rows: int,
-) -> pl.LazyFrame:
+) -> AsyncIterator[pl.LazyFrame]:
     rows = cast(
         pl.LazyFrame,
         await storage.list_samples(
@@ -221,24 +224,24 @@ async def _observed_member_rows(
     rows = _normalize_storage_rows(rows)
     dataset = cast(Dataset, await storage.get_dataset_metadata())
     inspection_time, wafer_key = sc_dataset_source_identity(dataset, dataset_id)
-    rows = await resolve_latest_sc_source(
+    async with open_latest_sc_source(
         upstream_reader=upstream_reader,
         membership=rows,
         inspection_time=inspection_time,
         wafer_key=wafer_key,
         dataset_id=dataset_id,
         batch_rows=batch_rows,
-    )
-    if "sample_id" not in rows.collect_schema().names():
-        raise ValueError(f"Dataset '{dataset_id}' does not expose sample_id")
-    source_sample = pl.col("sample_id").cast(pl.String)
-    row_key = pl.concat_str([pl.lit(dataset_id), source_sample], separator="::")
-    return rows.with_columns(
-        source_sample.alias("source_sample_id"),
-        pl.lit(dataset_id).alias("source_dataset_id"),
-        pl.lit(member_id).alias("collection_member_id"),
-        row_key.alias("row_key"),
-    ).with_columns(pl.col("row_key").alias("sample_id"))
+    ) as resolved_rows:
+        if "sample_id" not in resolved_rows.collect_schema().names():
+            raise ValueError(f"Dataset '{dataset_id}' does not expose sample_id")
+        source_sample = pl.col("sample_id").cast(pl.String)
+        row_key = pl.concat_str([pl.lit(dataset_id), source_sample], separator="::")
+        yield resolved_rows.with_columns(
+            source_sample.alias("source_sample_id"),
+            pl.lit(dataset_id).alias("source_dataset_id"),
+            pl.lit(member_id).alias("collection_member_id"),
+            row_key.alias("row_key"),
+        ).with_columns(pl.col("row_key").alias("sample_id"))
 
 
 def decode_collection_row_key(

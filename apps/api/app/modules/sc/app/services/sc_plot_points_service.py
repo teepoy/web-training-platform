@@ -14,7 +14,7 @@ from app.modules.sc.app.services.sample_filter import (
     sample_table_filter_requires_label_columns,
 )
 from app.modules.sc.domain.models import _coerce_naive_to_upstream_tz
-from app.modules.sc.app.services.latest_source import resolve_latest_sc_source
+from app.modules.sc.app.services.latest_source import open_latest_sc_source
 from app.modules.sc.domain.upstream_reader import ScUpstreamReader
 from app.modules.sc.proto_adapter import make_wafer_map_response_pb
 from app.shared.api.schemas import DatasetStorageMode
@@ -448,34 +448,34 @@ class ScPlotPointsService:
         origin_index_x = geometry["origin_index_x"]
         origin_index_y = geometry["origin_index_y"]
         wafer_radius_nm = 150_000_000
-        lf = await resolve_latest_sc_source(
+        async with open_latest_sc_source(
             upstream_reader=upstream_reader,
             membership=lf,
             inspection_time=source_inspection_time,
             wafer_key=source_wafer_key,
             dataset_id=dataset_id,
             batch_rows=self._source_batch_rows,
-        )
-        lf = await _join_upstream_image_counts(
-            lf,
-            upstream_reader=upstream_reader,
-            inspection_time=source_inspection_time,
-            wafer_key=source_wafer_key,
-        )
-        lf = _apply_sample_filters(
-            lf,
-            class_number=class_numbers,
-            rough_bin=rough_bins,
-            predicted_label=(
-                [str(value) for value in predictions] if predictions else None
-            ),
-            label=[str(value) for value in annotations] if annotations else None,
-            test_id=test_ids,
-            adder=adders,
-            cluster_id=cluster_ids,
-        )
-        lf = apply_sample_table_filter(lf, filter_params)
-        df: pl.DataFrame = await lf.collect_async()
+        ) as resolved_lf:
+            resolved_lf = await _join_upstream_image_counts(
+                resolved_lf,
+                upstream_reader=upstream_reader,
+                inspection_time=source_inspection_time,
+                wafer_key=source_wafer_key,
+            )
+            resolved_lf = _apply_sample_filters(
+                resolved_lf,
+                class_number=class_numbers,
+                rough_bin=rough_bins,
+                predicted_label=(
+                    [str(value) for value in predictions] if predictions else None
+                ),
+                label=[str(value) for value in annotations] if annotations else None,
+                test_id=test_ids,
+                adder=adders,
+                cluster_id=cluster_ids,
+            )
+            resolved_lf = apply_sample_table_filter(resolved_lf, filter_params)
+            df: pl.DataFrame = await resolved_lf.collect_async()
 
         missing_columns = _REQUIRED_POINT_COLUMNS - set(df.columns)
         if missing_columns:
@@ -575,60 +575,60 @@ class ScPlotPointsService:
         source_inspection_time, source_wafer_key = await _dataset_source_identity(
             dataset.dataset_meta, lf
         )
-        lf = await resolve_latest_sc_source(
+        async with open_latest_sc_source(
             upstream_reader=self._upstream_reader,
             membership=lf,
             inspection_time=source_inspection_time,
             wafer_key=source_wafer_key,
             dataset_id=dataset_id,
             batch_rows=self._source_batch_rows,
-        )
-        if mode == "reticle":
-            geometry = await _current_source_geometry(
-                upstream_reader=self._upstream_reader,
-                inspection_time=source_inspection_time,
-                wafer_key=source_wafer_key,
-            )
-            origin_x = geometry["origin_x"]
-            origin_y = geometry["origin_y"]
-            die_size_x = geometry["die_size_x"]
-            die_size_y = geometry["die_size_y"]
-            origin_index_x = geometry["origin_index_x"]
-            origin_index_y = geometry["origin_index_y"]
-            lf = lf.with_columns(
-                (
-                    pl.col("die_x")
-                    + (
-                        (
-                            (pl.col("wafer_x") - origin_x) // die_size_x
-                            - origin_index_x
-                            + reticle_x_die_shift
+        ) as resolved_lf:
+            if mode == "reticle":
+                geometry = await _current_source_geometry(
+                    upstream_reader=self._upstream_reader,
+                    inspection_time=source_inspection_time,
+                    wafer_key=source_wafer_key,
+                )
+                origin_x = geometry["origin_x"]
+                origin_y = geometry["origin_y"]
+                die_size_x = geometry["die_size_x"]
+                die_size_y = geometry["die_size_y"]
+                origin_index_x = geometry["origin_index_x"]
+                origin_index_y = geometry["origin_index_y"]
+                resolved_lf = resolved_lf.with_columns(
+                    (
+                        pl.col("die_x")
+                        + (
+                            (
+                                (pl.col("wafer_x") - origin_x) // die_size_x
+                                - origin_index_x
+                                + reticle_x_die_shift
+                            )
+                            % reticle_x_die_count
                         )
-                        % reticle_x_die_count
-                    )
-                    * die_size_x
-                ).alias("reticle_x"),
-                (
-                    pl.col("die_y")
-                    + (
-                        (
-                            (pl.col("wafer_y") - origin_y) // die_size_y
-                            - origin_index_y
-                            + reticle_y_die_shift
+                        * die_size_x
+                    ).alias("reticle_x"),
+                    (
+                        pl.col("die_y")
+                        + (
+                            (
+                                (pl.col("wafer_y") - origin_y) // die_size_y
+                                - origin_index_y
+                                + reticle_y_die_shift
+                            )
+                            % reticle_y_die_count
                         )
-                        % reticle_y_die_count
-                    )
-                    * die_size_y
-                ).alias("reticle_y"),
+                        * die_size_y
+                    ).alias("reticle_y"),
+                )
+
+            resolved_lf = apply_sample_table_filter(resolved_lf, filter_params)
+
+            return await filter_box_defect_ids(
+                resolved_lf,
+                mode=mode,
+                x=x,
+                y=y,
+                width=width,
+                height=height,
             )
-
-        lf = apply_sample_table_filter(lf, filter_params)
-
-        return await filter_box_defect_ids(
-            lf,
-            mode=mode,
-            x=x,
-            y=y,
-            width=width,
-            height=height,
-        )

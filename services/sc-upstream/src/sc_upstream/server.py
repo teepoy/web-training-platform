@@ -22,6 +22,18 @@ from .upstream_db import InspectionZipsDB, UpstreamAdapterFactory, UpstreamDB
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+_UPSTREAM_DB_METHODS = (
+    "get_inspection",
+    "list_inspections",
+    "list_discovery_inspections",
+    "list_samples",
+    "get_sample_count",
+    "open_list_samples_stream",
+    "open_membership_samples_stream",
+    "list_review_images",
+)
+_INSPECTION_ZIPS_DB_METHODS = ("get_inspection_patch_zips",)
+
 
 @dataclass(frozen=True)
 class RunningUpstreamServers:
@@ -55,6 +67,7 @@ async def start_servers(
     grpc_port: int,
     flight_port: int,
 ) -> RunningUpstreamServers:
+    _validate_adapter_contract(upstream, zips)
     gserver = grpc.aio.server()
     pb_grpc.add_ScUpstreamServicer_to_server(
         ScUpstreamService(upstream, zips, metadata_cache), gserver
@@ -88,6 +101,24 @@ def _load_adapter_factory(reference: str) -> UpstreamAdapterFactory:
             f"SC_UPSTREAM_ADAPTER_FACTORY does not resolve to a callable: {reference}"
         )
     return cast(UpstreamAdapterFactory, factory)
+
+
+def _validate_adapter_contract(upstream: UpstreamDB, zips: InspectionZipsDB) -> None:
+    missing = [
+        f"UpstreamDB.{method_name}"
+        for method_name in _UPSTREAM_DB_METHODS
+        if not callable(getattr(upstream, method_name, None))
+    ]
+    missing.extend(
+        f"InspectionZipsDB.{method_name}"
+        for method_name in _INSPECTION_ZIPS_DB_METHODS
+        if not callable(getattr(zips, method_name, None))
+    )
+    if missing:
+        raise RuntimeError(
+            "SC upstream adapter does not satisfy the production contract: "
+            + ", ".join(missing)
+        )
 
 
 async def serve() -> None:

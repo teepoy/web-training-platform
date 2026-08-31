@@ -4,11 +4,22 @@ import asyncio
 from datetime import UTC, datetime
 
 from sc_upstream_mock_adapter.http import HttpUpstreamAdapter
+from sc_upstream.server import _validate_adapter_contract
 from sc_upstream.upstream_db import (
     InspectionDiscoveryOrder,
     InspectionDiscoveryQuery,
     InspectionPublicationCursor,
 )
+
+
+def test_mock_adapter_satisfies_the_production_service_contract() -> None:
+    adapter = HttpUpstreamAdapter(
+        base_url="http://source.test",
+        token="test-token",
+        timeout_seconds=1,
+    )
+
+    _validate_adapter_contract(adapter, adapter)
 
 
 def test_sample_stream_pages_without_crossing_requested_count(monkeypatch) -> None:

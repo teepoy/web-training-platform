@@ -134,7 +134,7 @@ async def test_publication_page_sends_complete_keyset_cursor(monkeypatch) -> Non
 
 
 @pytest.mark.asyncio
-async def test_membership_sample_read_splits_ids_into_bounded_flight_tickets(
+async def test_membership_sample_read_sends_one_bounded_flight_ticket(
     monkeypatch,
 ) -> None:
     upstream = GrpcScUpstream()
@@ -146,7 +146,7 @@ async def test_membership_sample_read_splits_ids_into_bounded_flight_tickets(
         async for batch in upstream.stream_membership_sample_batches(
             datetime(2026, 8, 1, tzinfo=timezone.utc),
             9,
-            defect_ids=[1, 2, 3, 4, 5],
+            defect_ids=[1, 2],
             batch_rows=2,
             projection=("defect_id",),
         )
@@ -154,12 +154,27 @@ async def test_membership_sample_read_splits_ids_into_bounded_flight_tickets(
 
     assert [batch.to_pylist() for batch in batches] == [
         [{"defect_id": 1}, {"defect_id": 2}],
-        [{"defect_id": 3}, {"defect_id": 4}],
-        [{"defect_id": 5}],
     ]
-    assert [ticket["defect_ids"] for ticket in client.tickets] == [
-        [1, 2],
-        [3, 4],
-        [5],
-    ]
+    assert [ticket["defect_ids"] for ticket in client.tickets] == [[1, 2]]
     assert all(ticket["projection"] == ["defect_id"] for ticket in client.tickets)
+
+
+@pytest.mark.asyncio
+async def test_membership_sample_read_rejects_an_oversized_ticket(monkeypatch) -> None:
+    upstream = GrpcScUpstream()
+    client = _FlightClient()
+    monkeypatch.setattr(upstream, "_ensure_flight_client", lambda: client)
+
+    with pytest.raises(ValueError, match="must fit within batch_rows"):
+        _ = [
+            batch
+            async for batch in upstream.stream_membership_sample_batches(
+                datetime(2026, 8, 1, tzinfo=timezone.utc),
+                9,
+                defect_ids=[1, 2, 3],
+                batch_rows=2,
+                projection=("defect_id",),
+            )
+        ]
+
+    assert client.tickets == []

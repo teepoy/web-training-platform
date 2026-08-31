@@ -176,6 +176,41 @@ async def test_inspection_and_review_metadata_bypass_tokenless_stale_cache() -> 
     assert database.review_reads == 1
 
 
+class _MissingChangeTokenDB:
+    async def get_inspection(
+        self, inspection_time: object, wafer_key: int
+    ) -> dict[str, object]:
+        return {
+            "inspection_time": str(inspection_time),
+            "wafer_key": wafer_key,
+            "device": "device-current",
+        }
+
+
+@pytest.mark.asyncio
+async def test_inspection_requires_a_positive_change_token() -> None:
+    service = ScUpstreamService(
+        cast(Any, _MissingChangeTokenDB()),
+        cast(Any, object()),
+        cast(Any, object()),
+    )
+    context = AsyncMock()
+
+    response = await service.GetInspection(
+        pb.GetInspectionRequest(
+            inspection_time="2026-08-30T00:00:00+00:00",
+            wafer_key=7,
+        ),
+        context,
+    )
+
+    context.abort.assert_awaited_once_with(
+        grpc.StatusCode.FAILED_PRECONDITION,
+        "upstream inspection change_token must be a positive integer",
+    )
+    assert response == pb.GetInspectionResponse()
+
+
 class _DiscoveryDB:
     def __init__(self) -> None:
         self.query: InspectionDiscoveryQuery | None = None
@@ -191,6 +226,7 @@ class _DiscoveryDB:
                     "wafer_key": 3,
                     "published_at": "2026-08-30T01:00:00+00:00",
                     "layer_id": "M1",
+                    "change_token": 3,
                 }
             ]
         )

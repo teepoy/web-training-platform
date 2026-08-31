@@ -50,7 +50,11 @@ class ScUpstreamService(pb_grpc.ScUpstreamServicer):
         if record is None:
             await context.abort(grpc.StatusCode.NOT_FOUND, "inspection not found")
             return pb.GetInspectionResponse()
-        return _to_inspection_response(record)
+        try:
+            return _to_inspection_response(record)
+        except ValueError as exc:
+            await context.abort(grpc.StatusCode.FAILED_PRECONDITION, str(exc))
+            return pb.GetInspectionResponse()
 
     async def ListInspections(
         self, request: pb.ListInspectionsRequest, context: grpc.aio.ServicerContext
@@ -71,8 +75,7 @@ class ScUpstreamService(pb_grpc.ScUpstreamServicer):
             request.start_time, request.end_time, lot_id, wafer_id, layer_id, device
         )
         if cached is not None:
-            items = [_to_summary_item(r) for r in cached]
-            return pb.ListInspectionsResponse(items=items)
+            return await _to_list_inspections_response(cached, context)
 
         async with self._cache.fill_lock(
             "insps",
@@ -95,8 +98,7 @@ class ScUpstreamService(pb_grpc.ScUpstreamServicer):
                     )
                 )
                 if rows is not None:
-                    items = [_to_summary_item(r) for r in rows]
-                    return pb.ListInspectionsResponse(items=items)
+                    return await _to_list_inspections_response(rows, context)
             else:
                 cached = await self._cache.get_list_inspections(
                     request.start_time,
@@ -107,8 +109,7 @@ class ScUpstreamService(pb_grpc.ScUpstreamServicer):
                     device,
                 )
                 if cached is not None:
-                    items = [_to_summary_item(r) for r in cached]
-                    return pb.ListInspectionsResponse(items=items)
+                    return await _to_list_inspections_response(cached, context)
             lf = await self._db.list_inspections(
                 start, end, lot_id, wafer_id, layer_id, device
             )
@@ -122,8 +123,7 @@ class ScUpstreamService(pb_grpc.ScUpstreamServicer):
             layer_id,
             device,
         )
-        items = [_to_summary_item(r) for r in rows]
-        return pb.ListInspectionsResponse(items=items)
+        return await _to_list_inspections_response(rows, context)
 
     async def ListDiscoveryInspections(
         self,
@@ -181,9 +181,7 @@ class ScUpstreamService(pb_grpc.ScUpstreamServicer):
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(exc))
             return pb.ListInspectionsResponse()
         rows = await self._db.list_discovery_inspections(query)
-        return pb.ListInspectionsResponse(
-            items=[_to_summary_item(row) for row in rows.to_dicts()]
-        )
+        return await _to_list_inspections_response(rows.to_dicts(), context)
 
     async def GetInspectionPatchZips(
         self,
@@ -317,7 +315,7 @@ def _to_inspection_response(record: dict) -> pb.GetInspectionResponse:
         origin_index_x=record.get("origin_index_x", 0),
         origin_index_y=record.get("origin_index_y", 0),
         latest_update=record.get("latest_update", 0),
-        change_token=record.get("change_token", 0),
+        change_token=_positive_change_token(record),
     )
 
 
@@ -353,6 +351,25 @@ def _to_summary_item(record: dict) -> pb.InspectionSummary:
         origin_index_x=record.get("origin_index_x", 0),
         origin_index_y=record.get("origin_index_y", 0),
         latest_update=record.get("latest_update", 0),
-        change_token=record.get("change_token", 0),
+        change_token=_positive_change_token(record),
         published_at=_datetime_text(record.get("published_at")),
     )
+
+
+async def _to_list_inspections_response(
+    rows: list[dict], context: grpc.aio.ServicerContext
+) -> pb.ListInspectionsResponse:
+    try:
+        return pb.ListInspectionsResponse(
+            items=[_to_summary_item(record) for record in rows]
+        )
+    except ValueError as exc:
+        await context.abort(grpc.StatusCode.FAILED_PRECONDITION, str(exc))
+        return pb.ListInspectionsResponse()
+
+
+def _positive_change_token(record: dict) -> int:
+    value = record.get("change_token")
+    if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+        raise ValueError("upstream inspection change_token must be a positive integer")
+    return value

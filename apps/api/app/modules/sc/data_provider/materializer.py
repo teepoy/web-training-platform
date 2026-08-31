@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import json
 from collections.abc import Awaitable, Mapping
+from contextlib import AsyncExitStack
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -17,7 +18,7 @@ from app.modules.dataset_collections.domain.models import DatasetCollectionRevis
 from app.modules.dataset_collections.port.local import (
     DatasetCollectionRevisionReaderPort,
 )
-from app.modules.sc.app.services.latest_source import resolve_latest_sc_source
+from app.modules.sc.app.services.latest_source import open_latest_sc_source
 from app.modules.sc.data_provider.cache import CachedDataObject, ScDataObjectCache
 from app.modules.sc.data_provider.scope import ScDataScope
 from app.modules.sc.domain.models import _coerce_naive_to_upstream_tz
@@ -244,17 +245,22 @@ class ScDataMaterializer:
         freshness = inspection.change_token
         review_task: asyncio.Task[pl.DataFrame] | None = None
         source_task: asyncio.Task[pl.LazyFrame] | None = None
+        source_stack = AsyncExitStack()
 
         async def load_latest_source() -> pl.LazyFrame:
             nonlocal source_task
             if source_task is None:
 
                 async def load() -> pl.LazyFrame:
-                    return await self._resolve_latest_source(
-                        parsed_time,
-                        wafer_key,
-                        await load_sparse_lazyframe(),
-                        dataset_id=scope.identity,
+                    return await source_stack.enter_async_context(
+                        open_latest_sc_source(
+                            upstream_reader=self._upstream_reader,
+                            membership=await load_sparse_lazyframe(),
+                            inspection_time=parsed_time,
+                            wafer_key=wafer_key,
+                            dataset_id=scope.identity,
+                            batch_rows=self._batch_rows,
+                        )
                     )
 
                 source_task = asyncio.create_task(
@@ -298,28 +304,29 @@ class ScDataMaterializer:
                 path,
             )
 
-        review_images, base = await asyncio.gather(
-            self._cache.get_or_build(
-                logical_key=(
-                    f"inspection:{inspection_time}/{wafer_key}:review-images:"
-                    f"{_REVIEW_IMAGES_FORMAT_VERSION}:source-{freshness}"
+        async with source_stack:
+            review_images, base = await asyncio.gather(
+                self._cache.get_or_build(
+                    logical_key=(
+                        f"inspection:{inspection_time}/{wafer_key}:review-images:"
+                        f"{_REVIEW_IMAGES_FORMAT_VERSION}:source-{freshness}"
+                    ),
+                    scope=scope.cache_name,
+                    revision=0,
+                    revision_tracked=False,
+                    builder=build_review_images,
                 ),
-                scope=scope.cache_name,
-                revision=0,
-                revision_tracked=False,
-                builder=build_review_images,
-            ),
-            self._cache.get_or_build_file(
-                logical_key=(
-                    f"dataset:{scope.org_id}/{scope.identity}:samples-base:"
-                    f"{_SAMPLES_BASE_FORMAT_VERSION}:source-{freshness}"
+                self._cache.get_or_build_file(
+                    logical_key=(
+                        f"dataset:{scope.org_id}/{scope.identity}:samples-base:"
+                        f"{_SAMPLES_BASE_FORMAT_VERSION}:source-{freshness}"
+                    ),
+                    scope=scope.cache_name,
+                    revision=0,
+                    revision_tracked=False,
+                    builder=build_samples_base,
                 ),
-                scope=scope.cache_name,
-                revision=0,
-                revision_tracked=False,
-                builder=build_samples_base,
-            ),
-        )
+            )
         overlay_storage = cast(_MutableOverlayStorage, storage)
         (
             (annotation_lf, annotation_fingerprint),
@@ -501,6 +508,7 @@ class ScDataMaterializer:
         ).hexdigest()[:16]
         observed_source_task: asyncio.Task[pl.LazyFrame] | None = None
         reviews_task: asyncio.Task[pl.DataFrame] | None = None
+        source_stack = AsyncExitStack()
 
         async def load_observed_source() -> pl.LazyFrame:
             nonlocal observed_source_task
@@ -519,11 +527,15 @@ class ScDataMaterializer:
                         ),
                     )
                     inspection_time, wafer_key = source_scopes[dataset_id]
-                    rows = await self._resolve_latest_source(
-                        _parse_inspection_time(inspection_time),
-                        wafer_key,
-                        rows,
-                        dataset_id=dataset_id,
+                    rows = await source_stack.enter_async_context(
+                        open_latest_sc_source(
+                            upstream_reader=self._upstream_reader,
+                            membership=rows,
+                            inspection_time=_parse_inspection_time(inspection_time),
+                            wafer_key=wafer_key,
+                            dataset_id=dataset_id,
+                            batch_rows=self._batch_rows,
+                        )
                     )
                     return _observed_collection_member_lazyframe(
                         rows,
@@ -598,28 +610,29 @@ class ScDataMaterializer:
                 )
             ).to_arrow()
 
-        base, review_images = await asyncio.gather(
-            self._cache.get_or_build_file(
-                logical_key=(
-                    f"collection:{scope.org_id}/{scope.identity}:samples-base:"
-                    f"{_SAMPLES_BASE_FORMAT_VERSION}:source-{freshness_key}"
+        async with source_stack:
+            base, review_images = await asyncio.gather(
+                self._cache.get_or_build_file(
+                    logical_key=(
+                        f"collection:{scope.org_id}/{scope.identity}:samples-base:"
+                        f"{_SAMPLES_BASE_FORMAT_VERSION}:source-{freshness_key}"
+                    ),
+                    scope=scope.cache_name,
+                    revision=revision,
+                    revision_tracked=True,
+                    builder=build_samples_base,
                 ),
-                scope=scope.cache_name,
-                revision=revision,
-                revision_tracked=True,
-                builder=build_samples_base,
-            ),
-            self._cache.get_or_build(
-                logical_key=(
-                    f"collection:{scope.org_id}/{scope.identity}:review-images:"
-                    f"{_REVIEW_IMAGES_FORMAT_VERSION}:source-{freshness_key}"
+                self._cache.get_or_build(
+                    logical_key=(
+                        f"collection:{scope.org_id}/{scope.identity}:review-images:"
+                        f"{_REVIEW_IMAGES_FORMAT_VERSION}:source-{freshness_key}"
+                    ),
+                    scope=scope.cache_name,
+                    revision=revision,
+                    revision_tracked=True,
+                    builder=build_review_images,
                 ),
-                scope=scope.cache_name,
-                revision=revision,
-                revision_tracked=True,
-                builder=build_review_images,
-            ),
-        )
+            )
 
         annotation_frames: list[pl.LazyFrame] = []
         prediction_frames: list[pl.LazyFrame] = []
@@ -714,23 +727,6 @@ class ScDataMaterializer:
         return review_df.with_columns(
             pl.col("defect_id").cast(pl.Int32, strict=False),
             pl.col("image_id").cast(pl.Int64, strict=False),
-        )
-
-    async def _resolve_latest_source(
-        self,
-        inspection_time: datetime,
-        wafer_key: int,
-        membership: pl.LazyFrame,
-        *,
-        dataset_id: str,
-    ) -> pl.LazyFrame:
-        return await resolve_latest_sc_source(
-            upstream_reader=self._upstream_reader,
-            membership=membership,
-            inspection_time=inspection_time,
-            wafer_key=wafer_key,
-            dataset_id=dataset_id,
-            batch_rows=self._batch_rows,
         )
 
     async def _write_inspection_samples(

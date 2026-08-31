@@ -300,37 +300,33 @@ class GrpcScUpstream:
             raise ValueError("batch_rows must be greater than zero")
         if not defect_ids:
             return
+        if len(defect_ids) > batch_rows:
+            raise ValueError("defect_ids must fit within batch_rows")
         client = self._ensure_flight_client()
-        for start in range(0, len(defect_ids), batch_rows):
-            defect_id_chunk = list(defect_ids[start : start + batch_rows])
-            ticket = flight.Ticket(  # pyright: ignore[reportPrivateImportUsage]
-                json.dumps(
-                    {
-                        "type": "list_membership_samples",
-                        "inspection_time": inspection_time.isoformat(),
-                        "wafer_key": wafer_key,
-                        "defect_ids": defect_id_chunk,
-                        "batch_rows": batch_rows,
-                        "projection": (
-                            list(projection) if projection is not None else None
-                        ),
-                    }
-                ).encode()
-            )
-            reader = await asyncio.to_thread(client.do_get, ticket)
-            try:
-                while True:
-                    data = await asyncio.to_thread(self._read_flight_chunk, reader)
-                    if data is None:
-                        break
-                    batches = (
-                        data.to_batches() if isinstance(data, pa.Table) else [data]
-                    )
-                    for batch in batches:
-                        yield batch
-            finally:
-                with suppress(Exception):
-                    await asyncio.to_thread(reader.cancel)
+        ticket = flight.Ticket(  # pyright: ignore[reportPrivateImportUsage]
+            json.dumps(
+                {
+                    "type": "list_membership_samples",
+                    "inspection_time": inspection_time.isoformat(),
+                    "wafer_key": wafer_key,
+                    "defect_ids": list(defect_ids),
+                    "batch_rows": batch_rows,
+                    "projection": list(projection) if projection is not None else None,
+                }
+            ).encode()
+        )
+        reader = await asyncio.to_thread(client.do_get, ticket)
+        try:
+            while True:
+                data = await asyncio.to_thread(self._read_flight_chunk, reader)
+                if data is None:
+                    break
+                batches = data.to_batches() if isinstance(data, pa.Table) else [data]
+                for batch in batches:
+                    yield batch
+        finally:
+            with suppress(Exception):
+                await asyncio.to_thread(reader.cancel)
 
     async def list_samples(
         self,
