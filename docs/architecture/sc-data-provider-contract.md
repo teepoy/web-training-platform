@@ -187,10 +187,16 @@ membership with the latest inspection rows. Stored source extras from v2/v3
 shards are ignored. Each source read sends bounded defect-ID chunks and an exact
 projection over Arrow Flight; the SC upstream adapter applies the inspection PK
 and defect-ID predicate before returning rows rather than streaming the full
-inspection for an API-side filter. Inspection freshness and review-image
-metadata reads bypass tokenless metadata caches, and membership sample reads do
-not use the full-inspection cache. Dataset `samples` is then a query-time join of
-that current source projection and the platform overlay. A cache object ID is
+inspection for an API-side filter. The API resolver reads membership through
+streaming Polars batches, joins only one bounded source chunk at a time, and
+writes resolved chunks to a context-owned temporary Parquet file. A disk-backed
+identity index detects duplicates across chunks without retaining all IDs in
+memory. The temporary file is deleted when the consumer closes the resolver
+context and is never a Dataset source of truth. Inspection freshness and
+review-image metadata reads bypass tokenless metadata caches, and membership
+sample reads do not use the full-inspection cache. Dataset `samples` is then a
+query-time join of that current source projection and the platform overlay. A
+cache object ID is
 the SHA-256 of its logical key, source freshness, and platform revision. Redis
 stores object metadata and access order; the file itself stays in the configured
 cache directory.
@@ -200,7 +206,9 @@ configured adapter factory. That external adapter must implement the bounded
 membership-read operation and apply both the canonical inspection-PK predicate
 and defect-ID predicate in its source database before yielding projected Arrow
 batches; filtering a full inspection inside `sc-upstream` is not compatible with
-this contract.
+this contract. Service startup validates that method is present. Inspection
+records must also expose a positive opaque `change_token`; missing or non-positive
+tokens fail with a gRPC precondition error.
 
 Every visible Sample-table column has one authority:
 

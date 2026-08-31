@@ -2,8 +2,8 @@
 
 ## Progress
 
-- **Overall status:** Identity-only runtime behavior complete; legacy Backfill
-  and payload cleanup remain an explicit open decision.
+- **Overall status:** In progress. Identity-only runtime behavior is complete;
+  legacy Backfill and payload cleanup remain an explicit open decision.
 - **Completed intermediate slice:** new imports write schema
   `v4_identity` (`sample_id`, `defect_id`) with an opaque UUID platform
   `sample_id` independent from the upstream `defect_id`; the sparse index keeps
@@ -16,6 +16,15 @@
   required positive Inspection `change_token`. Dataset membership is sent to
   SC upstream in bounded defect-ID chunks, and the upstream database applies
   the Inspection-PK membership predicate before returning projected Arrow rows.
+- **Bounded resolver:** membership is collected as streaming Polars batches,
+  each batch is semi-joined with one bounded upstream request, and resolved rows
+  are written incrementally to a context-owned temporary Parquet file. A
+  disk-backed uniqueness index catches duplicate `defect_id` values across
+  batches. Consumers must finish while the resolver context is open; cleanup is
+  explicit and memory does not grow with total Dataset membership.
+- **Production contract:** startup rejects adapters missing the bounded
+  membership-read method. Inspection metadata without a positive
+  `change_token` fails as a gRPC precondition instead of entering cache logic.
 - **Final slice:** the generic sparse exporter now accepts `v4_identity`, reads
   only the two identity columns, joins annotations for scalable locator-index
   manifests, and emits deterministic patch references from Dataset-level source
